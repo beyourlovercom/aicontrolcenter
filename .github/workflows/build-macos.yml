@@ -1,0 +1,26 @@
+name: Build macOS visible app
+
+on:
+  push:
+    branches: [feature/aicc-visible-app-v0-2]
+
+permissions:
+  contents: read
+
+jobs:
+  build-macos:
+    runs-on: macos-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: dtolnay/rust-toolchain@stable
+      - run: npm install
+      - run: npm run build
+      - uses: tauri-apps/tauri-action@v1
+        with:
+          args: --bundles app,dmg --no-sign
+          uploadWorkflowArtifacts: true
+          workflowArtifactNamePattern: ai-control-center-[arch]-[bundle]
