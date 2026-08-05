@@ -274,6 +274,7 @@ fn validate_root(path: &Path, allow_test_root: bool) -> Result<PathBuf, ControlL
         code: "REPOSITORY_INVALID".into(),
         message: "repository path does not exist".into(),
     })?;
+    let _ = git_args(GitOperation::ShowTopLevel);
     if !allow_test_root && canonical != Path::new(CANONICAL_PATH) {
         return Err(ControlLoopError {
             code: "REPOSITORY_INVALID".into(),
