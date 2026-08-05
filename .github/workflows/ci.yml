@@ -43,14 +43,6 @@ jobs:
         with:
           toolchain: stable
           components: rustfmt, clippy
-      - name: Generate Rust lockfile
-        run: cargo generate-lockfile --manifest-path src-tauri/Cargo.toml
-      - name: Upload generated lockfile
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: generated-cargo-lock
-          path: src-tauri/Cargo.lock
       - name: Rust format
         run: cargo fmt --manifest-path src-tauri/Cargo.toml --check
       - name: Rust clippy

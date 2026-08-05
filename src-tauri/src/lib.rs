@@ -407,8 +407,7 @@ fn evaluate(
         blockers.push(SyncBlocker::PreviousRunOpen);
     }
     if blockers.is_empty()
-        && identity.local_main_sha.as_deref()
-            == authority.remote_main_sha.as_deref()
+        && identity.local_main_sha.as_deref() == authority.remote_main_sha.as_deref()
     {
         blockers.push(SyncBlocker::SyncNotRequired);
     } else if blockers.is_empty() {
