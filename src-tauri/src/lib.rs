@@ -1203,7 +1203,10 @@ mod tests {
         assert!(git_args(GitOperation::MergeOriginMainFastForwardOnly).contains(&"--ff-only"));
     });
     named_contract_test!(sec_08_errors_do_not_expose_canonical_path_or_credentials, {
-        let message = safe_error("https://user:secret@example.com/Users/a/AI/007/AIcontrolcenter");
+        let message = safe_error(&format!(
+            "https://user:secret@example.com{}",
+            CANONICAL_PATH
+        ));
         assert!(!message.contains(CANONICAL_PATH));
         assert!(!message.contains("secret"));
     });
