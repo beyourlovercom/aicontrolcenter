@@ -23,6 +23,6 @@
 
 ## 4. Verification And CI
 
-- [ ] 4.1 Add Rust repository, authority, sync, parser, resolver, and security tests
+- [x] 4.1 Add Rust repository, authority, sync, parser, resolver, and security tests
 - [x] 4.2 Update CI with Node 22 and Rust format/test checks
 - [x] 4.3 Run typecheck, frontend tests, build, Rust fmt, tests, clippy, and scans
