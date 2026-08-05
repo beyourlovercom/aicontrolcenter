@@ -25,3 +25,12 @@ jobs:
         run: npm test
       - name: Production build
         run: npm run build
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.77.2
+          components: rustfmt, clippy
+      - name: Rust format
+        run: cargo fmt --manifest-path src-tauri/Cargo.toml --check
+      - name: Rust tests
+        run: cargo test --manifest-path src-tauri/Cargo.toml
