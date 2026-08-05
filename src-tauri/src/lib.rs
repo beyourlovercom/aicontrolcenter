@@ -597,7 +597,6 @@ fn resolve_next_work_package(
                     records.insert(package.id.clone(), package);
                 }
                 Err(_) => blockers.push(ResolverBlocker::WorkPackageSchemaInvalid),
-                _ => {}
             }
         }
     }

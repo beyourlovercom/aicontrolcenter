@@ -25,6 +25,8 @@ jobs:
         run: npm test
       - name: Production build
         run: npm run build
+      - name: Generate Tauri icons
+        run: npm run pretauri
       - name: Install Tauri system dependencies
         run: |
           sudo apt-get update
