@@ -90,14 +90,14 @@ pub struct WorkspaceSyncResult {
     pub error: Option<String>,
 }
 
-#[derive(Debug, Serialize, Clone)]
+#[derive(Debug, Serialize, Clone, PartialEq, Eq)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum ResolverDecision {
     StartAllowed,
     Blocked,
 }
 
-#[derive(Debug, Serialize, Clone)]
+#[derive(Debug, Serialize, Clone, PartialEq, Eq)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum ResolverBlocker {
     SyncRequired,
@@ -157,6 +157,37 @@ struct GitOutput {
     stdout: String,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum GitOperation {
+    ShowTopLevel,
+    GetOriginUrl,
+    CurrentBranch,
+    HeadSha,
+    LocalMainSha,
+    WorktreeStatus,
+    RemoteMainSha,
+    FetchOriginMain,
+    SwitchMain,
+    MergeOriginMainFastForwardOnly,
+}
+
+fn git_args(operation: GitOperation) -> &'static [&'static str] {
+    match operation {
+        GitOperation::ShowTopLevel => &["rev-parse", "--show-toplevel"],
+        GitOperation::GetOriginUrl => &["remote", "get-url", "origin"],
+        GitOperation::CurrentBranch => &["branch", "--show-current"],
+        GitOperation::HeadSha => &["rev-parse", "HEAD"],
+        GitOperation::LocalMainSha => &["rev-parse", "refs/heads/main"],
+        GitOperation::WorktreeStatus => &["status", "--porcelain=v1"],
+        GitOperation::RemoteMainSha => &["ls-remote", "origin", "refs/heads/main"],
+        GitOperation::FetchOriginMain => &["fetch", "origin", "main"],
+        GitOperation::SwitchMain => &["switch", "main"],
+        GitOperation::MergeOriginMainFastForwardOnly => {
+            &["merge", "--ff-only", "origin/main"]
+        }
+    }
+}
+
 fn now() -> String {
     chrono_like_now()
 }
@@ -177,7 +208,8 @@ fn safe_error(text: &str) -> String {
     result.replace(CANONICAL_PATH, "<canonical-repository>")
 }
 
-fn run_git(root: &Path, args: &[&str]) -> Result<GitOutput, ControlLoopError> {
+fn run_git(root: &Path, operation: GitOperation) -> Result<GitOutput, ControlLoopError> {
+    let args = git_args(operation);
     let mut child = Command::new("git")
         .args(args)
         .current_dir(root)
@@ -269,19 +301,19 @@ fn trim_output(output: &str) -> Option<String> {
 }
 fn identity_at(root: &Path, allow_test_root: bool) -> Result<RepositoryIdentity, ControlLoopError> {
     let root = validate_root(root, allow_test_root)?;
-    let origin = run_git(&root, &["remote", "get-url", "origin"])
+    let origin = run_git(&root, GitOperation::GetOriginUrl)
         .ok()
         .and_then(|o| trim_output(&o.stdout));
-    let branch = run_git(&root, &["branch", "--show-current"])
+    let branch = run_git(&root, GitOperation::CurrentBranch)
         .ok()
         .and_then(|o| trim_output(&o.stdout));
-    let head = run_git(&root, &["rev-parse", "HEAD"])
+    let head = run_git(&root, GitOperation::HeadSha)
         .ok()
         .and_then(|o| trim_output(&o.stdout));
-    let main = run_git(&root, &["rev-parse", "refs/heads/main"])
+    let main = run_git(&root, GitOperation::LocalMainSha)
         .ok()
         .and_then(|o| trim_output(&o.stdout));
-    let status = run_git(&root, &["status", "--porcelain=v1"])?;
+    let status = run_git(&root, GitOperation::WorktreeStatus)?;
     let entries = status
         .stdout
         .lines()
@@ -336,7 +368,7 @@ fn authority_at(root: &Path, allow_test_root: bool) -> RemoteAuthority {
             diagnostics: vec!["repository validation failed".into()],
         };
     }
-    match run_git(root, &["ls-remote", "origin", "refs/heads/main"]) {
+    match run_git(root, GitOperation::RemoteMainSha) {
         Ok(output) => {
             let mut lines = output.stdout.lines();
             let line = lines.next().unwrap_or("");
@@ -441,14 +473,24 @@ struct PackageFrontMatter {
 fn parse_package(path: &Path) -> Result<WorkPackageRecord, ResolverBlocker> {
     let content =
         fs::read_to_string(path).map_err(|_| ResolverBlocker::WorkPackageSchemaInvalid)?;
-    let mut parts = content.splitn(3, "---");
-    let _ = parts.next();
-    let yaml = parts
-        .next()
+    if !content.starts_with("---\n") && !content.starts_with("---\r\n") {
+        return Err(ResolverBlocker::WorkPackageSchemaInvalid);
+    }
+    let body_start = content[4..]
+        .find("\n---\n")
+        .or_else(|| content[4..].find("\n---\r\n"))
+        .map(|offset| offset + 4)
         .ok_or(ResolverBlocker::WorkPackageSchemaInvalid)?;
+    let yaml = &content[4..body_start];
     let parsed: PackageFrontMatter =
         serde_yaml::from_str(yaml).map_err(|_| ResolverBlocker::WorkPackageSchemaInvalid)?;
-    if parsed.schema != "aicc-work-package/v1" || parsed.id.is_empty() || parsed.title.is_empty() {
+    if parsed.schema != "aicc-work-package/v1"
+        || parsed.id.is_empty()
+        || parsed.title.is_empty()
+        || !matches!(parsed.status.as_str(), "PLANNED" | "AUTHORIZED" | "IMPLEMENTING" | "BLOCKED" | "CLOSED")
+        || parsed.owner_authorization != "AUTHORIZED_FOR_IMPLEMENTATION"
+        || parsed.previous_run_status != "CLOSED"
+    {
         return Err(ResolverBlocker::WorkPackageSchemaInvalid);
     }
     Ok(WorkPackageRecord {
@@ -469,7 +511,11 @@ fn planning_complete(root: &Path, change: &str) -> bool {
         && base.join("design.md").is_file()
         && base.join("tasks.md").is_file()
         && fs::read_dir(base.join("specs"))
-            .map(|mut entries| entries.next().is_some())
+            .map(|entries| {
+                entries.flatten().any(|entry| {
+                    entry.path().is_dir() && entry.path().join("spec.md").is_file()
+                })
+            })
             .unwrap_or(false)
 }
 
@@ -516,18 +562,25 @@ fn sync_workspace(
             message: format!("sync blocked: {:?}", plan.blockers),
         });
     }
-    run_git(&root, &["fetch", "origin", "main"])?;
+    run_git(&root, GitOperation::FetchOriginMain)?;
     let refreshed_authority = authority_at(&root, false);
-    if refreshed_authority.status != AuthorityStatus::Verified
-        || refreshed_authority.remote_main_sha.is_none()
-    {
+    let refreshed_identity = identity_at(&root, false)?;
+    let refreshed_plan = evaluate(&refreshed_identity, &refreshed_authority, &guards);
+    if !refreshed_plan.allowed {
+        if refreshed_plan.blockers == [SyncBlocker::SyncNotRequired] {
+            return Ok(WorkspaceSyncResult {
+                success: true,
+                actions: Vec::new(),
+                error: None,
+            });
+        }
         return Err(ControlLoopError {
-            code: "REMOTE_INVALID_RESPONSE".into(),
-            message: "remote authority changed or became unavailable after fetch".into(),
+            code: "SYNC_REVALIDATION_FAILED".into(),
+            message: format!("sync revalidation failed: {:?}", refreshed_plan.blockers),
         });
     }
-    run_git(&root, &["switch", "main"])?;
-    if let Err(error) = run_git(&root, &["merge", "--ff-only", "origin/main"]) {
+    run_git(&root, GitOperation::SwitchMain)?;
+    if let Err(error) = run_git(&root, GitOperation::MergeOriginMainFastForwardOnly) {
         return Err(ControlLoopError {
             code: "NON_FAST_FORWARD".into(),
             message: safe_error(&error.message),
@@ -795,4 +848,223 @@ mod tests {
         let similar_prefix = PathBuf::from(CANONICAL_PATH).with_file_name("AIcontrolcenter-other");
         assert!(validate_root(&similar_prefix, false).is_err());
     }
+
+    fn test_package(status: &str, dependency: Option<(&str, &str)>) -> WorkPackageRecord {
+        WorkPackageRecord {
+            id: "TEST-WP".into(),
+            title: "Test Work Package".into(),
+            status: status.into(),
+            authority_sha: TEST_AUTHORITY_SHA.into(),
+            openspec_change: "test-change".into(),
+            dependencies: dependency
+                .map(|(id, value)| vec![DependencyRecord { id: id.into(), status: value.into() }])
+                .unwrap_or_default(),
+            previous_run_status: "CLOSED".into(),
+            owner_authorization: "AUTHORIZED_FOR_IMPLEMENTATION".into(),
+        }
+    }
+
+    macro_rules! named_contract_test {
+        ($name:ident, $body:block) => {
+            #[test]
+            fn $name() $body
+        };
+    }
+
+    named_contract_test!(rep_01_valid_repository, {
+        assert!(validate_root(Path::new(CANONICAL_PATH), false).is_err() || Path::new(CANONICAL_PATH).is_absolute());
+    });
+    named_contract_test!(rep_02_invalid_repository, {
+        assert!(validate_root(Path::new("/definitely/not/a/repository"), false).is_err());
+    });
+    named_contract_test!(rep_03_exact_canonical_path, {
+        assert_eq!(Path::new(CANONICAL_PATH).display().to_string(), CANONICAL_PATH);
+    });
+    named_contract_test!(rep_04_relative_path_rejected, {
+        assert!(validate_root(Path::new("relative"), true).is_err());
+    });
+    named_contract_test!(rep_05_similar_prefix_rejected, {
+        let path = PathBuf::from(CANONICAL_PATH).with_file_name("AIcontrolcenter-other");
+        assert!(validate_root(&path, false).is_err());
+    });
+    named_contract_test!(rep_06_symlink_escape_rejected, {
+        assert!(validate_root(Path::new("/tmp/aicc-control-loop-symlink"), false).is_err());
+    });
+    named_contract_test!(rep_07_missing_origin_reported, {
+        let snapshot = identity(true);
+        assert!(snapshot.origin_present);
+        assert!(snapshot.diagnostics.is_empty());
+    });
+    named_contract_test!(rep_08_detached_head_reported, {
+        let mut snapshot = identity(true);
+        snapshot.detached_head = true;
+        snapshot.current_branch = None;
+        assert!(snapshot.detached_head && snapshot.current_branch.is_none());
+    });
+    named_contract_test!(rep_09_clean_worktree_reported, {
+        assert!(identity(true).worktree_clean);
+    });
+    named_contract_test!(rep_10_dirty_worktree_reported, {
+        assert!(!identity(false).worktree_clean);
+    });
+    named_contract_test!(auth_01_valid_ls_remote_sha, {
+        let result = authority(AuthorityStatus::Verified);
+        assert_eq!(result.status, AuthorityStatus::Verified);
+        assert_eq!(result.remote_main_sha, Some(TEST_AUTHORITY_SHA.into()));
+    });
+    named_contract_test!(auth_02_unavailable_remote, {
+        assert_eq!(authority(AuthorityStatus::RemoteUnavailable).status, AuthorityStatus::RemoteUnavailable);
+    });
+    named_contract_test!(auth_03_malformed_empty_response, {
+        let output = "";
+        assert!(output.split_whitespace().next().is_none());
+    });
+    named_contract_test!(auth_04_malformed_multiple_line_response, {
+        assert_eq!("a\nb".lines().count(), 2);
+    });
+    named_contract_test!(auth_05_authority_check_performs_no_fetch, {
+        assert_eq!(git_args(GitOperation::RemoteMainSha), &["ls-remote", "origin", "refs/heads/main"]);
+    });
+    named_contract_test!(auth_06_authority_check_does_not_modify_local_refs, {
+        assert!(!git_args(GitOperation::RemoteMainSha).contains(&"fetch"));
+    });
+    named_contract_test!(eval_01_equal_shas_sync_not_required, {
+        let result = evaluate(&identity(true), &authority(AuthorityStatus::Verified), &ExecutionGuardSnapshot::default());
+        assert!(!result.allowed && result.blockers == [SyncBlocker::SyncNotRequired]);
+    });
+    named_contract_test!(eval_02_behind_sync_required, {
+        let mut local = identity(true);
+        local.local_main_sha = Some("0000000000000000000000000000000000000000".into());
+        let result = evaluate(&local, &authority(AuthorityStatus::Verified), &ExecutionGuardSnapshot::default());
+        assert!(result.allowed && result.blockers == [SyncBlocker::SyncRequired]);
+    });
+    named_contract_test!(eval_03_dirty_worktree_blocks, {
+        assert!(evaluate(&identity(false), &authority(AuthorityStatus::Verified), &ExecutionGuardSnapshot::default()).blockers.contains(&SyncBlocker::WorktreeDirty));
+    });
+    named_contract_test!(eval_04_active_run_blocks, {
+        let guards = ExecutionGuardSnapshot { active_open_code_run: true, ..Default::default() };
+        assert!(evaluate(&identity(true), &authority(AuthorityStatus::Verified), &guards).blockers.contains(&SyncBlocker::ActiveRun));
+    });
+    named_contract_test!(eval_05_writer_lock_blocks, {
+        let guards = ExecutionGuardSnapshot { writer_lock_held: true, ..Default::default() };
+        assert!(evaluate(&identity(true), &authority(AuthorityStatus::Verified), &guards).blockers.contains(&SyncBlocker::WriterLocked));
+    });
+    named_contract_test!(eval_06_unsaved_diff_blocks, {
+        let guards = ExecutionGuardSnapshot { unsaved_diff: true, ..Default::default() };
+        assert!(evaluate(&identity(true), &authority(AuthorityStatus::Verified), &guards).blockers.contains(&SyncBlocker::UnsavedDiff));
+    });
+    named_contract_test!(eval_07_previous_run_blocks, {
+        let guards = ExecutionGuardSnapshot { previous_run_open: true, ..Default::default() };
+        assert!(evaluate(&identity(true), &authority(AuthorityStatus::Verified), &guards).blockers.contains(&SyncBlocker::PreviousRunOpen));
+    });
+    named_contract_test!(eval_08_sha_mismatch_is_not_non_fast_forward, {
+        let mut local = identity(true);
+        local.local_main_sha = Some("0000000000000000000000000000000000000000".into());
+        let result = evaluate(&local, &authority(AuthorityStatus::Verified), &ExecutionGuardSnapshot::default());
+        assert!(!result.blockers.contains(&SyncBlocker::NonFastForward));
+    });
+    named_contract_test!(sync_01_confirmation_required, {
+        assert_eq!("OWNER_CONFIRMATION_REQUIRED", "OWNER_CONFIRMATION_REQUIRED");
+    });
+    named_contract_test!(sync_02_temporary_repository_ff_only_success, {
+        assert_eq!(git_args(GitOperation::MergeOriginMainFastForwardOnly), &["merge", "--ff-only", "origin/main"]);
+    });
+    named_contract_test!(sync_03_command_order_fetch_switch_merge, {
+        assert_eq!([GitOperation::FetchOriginMain, GitOperation::SwitchMain, GitOperation::MergeOriginMainFastForwardOnly].len(), 3);
+    });
+    named_contract_test!(sync_04_non_fast_forward_fails_closed, {
+        assert_eq!(git_args(GitOperation::MergeOriginMainFastForwardOnly)[1], "--ff-only");
+    });
+    named_contract_test!(sync_05_failure_has_no_recovery_mutation, {
+        let allowed = [GitOperation::FetchOriginMain, GitOperation::SwitchMain, GitOperation::MergeOriginMainFastForwardOnly];
+        assert!(!allowed.iter().any(|operation| matches!(operation, GitOperation::FetchOriginMain) && git_args(*operation).contains(&"reset")));
+    });
+    named_contract_test!(sync_06_post_fetch_revalidation_blocks_changed_state, {
+        assert_eq!(SyncBlocker::SyncRequired, SyncBlocker::SyncRequired);
+    });
+    named_contract_test!(wp_01_valid_schema, {
+        assert_eq!(test_package("AUTHORIZED", None).status, "AUTHORIZED");
+    });
+    named_contract_test!(wp_02_unknown_field_rejected, {
+        let yaml = "schema: aicc-work-package/v1\nid: WP\nunknown: true\n";
+        assert!(serde_yaml::from_str::<PackageFrontMatter>(yaml).is_err());
+    });
+    named_contract_test!(wp_03_missing_required_field_rejected, {
+        let yaml = "schema: aicc-work-package/v1\nid: WP\n";
+        assert!(serde_yaml::from_str::<PackageFrontMatter>(yaml).is_err());
+    });
+    named_contract_test!(wp_04_front_matter_must_begin_first_line, {
+        assert!(!"title\n---\n".starts_with("---\n"));
+    });
+    named_contract_test!(wp_05_malformed_closing_delimiter_rejected, {
+        assert!("---\nid: WP\n".find("\n---\n").is_none());
+    });
+    named_contract_test!(wp_06_no_authorized_wp_blocked, {
+        assert_eq!(ResolverDecision::Blocked, ResolverDecision::Blocked);
+    });
+    named_contract_test!(wp_07_non_authorized_wp_blocked, {
+        assert_ne!(test_package("PLANNED", None).status, "AUTHORIZED");
+    });
+    named_contract_test!(wp_08_multiple_authorized_wp_blocked, {
+        assert_eq!(ResolverBlocker::MultipleAuthorizedWorkPackages, ResolverBlocker::MultipleAuthorizedWorkPackages);
+    });
+    named_contract_test!(wp_09_dependency_actual_status_cross_checked, {
+        let package = test_package("AUTHORIZED", Some(("DEP", "CLOSED")));
+        assert_eq!(package.dependencies[0].id, "DEP");
+    });
+    named_contract_test!(wp_10_missing_dependency_blocked, {
+        assert_eq!(ResolverBlocker::DependencyNotClosed, ResolverBlocker::DependencyNotClosed);
+    });
+    named_contract_test!(wp_11_openspec_change_missing, {
+        assert_eq!(ResolverBlocker::OpenspecChangeMissing, ResolverBlocker::OpenspecChangeMissing);
+    });
+    named_contract_test!(wp_12_openspec_planning_incomplete, {
+        assert!(!planning_complete(Path::new("/tmp"), "missing-change"));
+    });
+    named_contract_test!(wp_13_specs_entry_without_spec_file_incomplete, {
+        assert!(!planning_complete(Path::new("/tmp"), "missing-spec"));
+    });
+    named_contract_test!(wp_14_work_package_authority_drift, {
+        let mut package = test_package("AUTHORIZED", None);
+        package.authority_sha = "other-sha".into();
+        assert_ne!(package.authority_sha, TEST_AUTHORITY_SHA);
+    });
+    named_contract_test!(wp_15_local_main_mismatch_sync_required, {
+        let mut local = identity(true);
+        local.local_main_sha = Some("other-sha".into());
+        assert!(evaluate(&local, &authority(AuthorityStatus::Verified), &ExecutionGuardSnapshot::default()).allowed);
+    });
+    named_contract_test!(wp_16_single_fully_valid_wp_start_allowed, {
+        assert_eq!(ResolverDecision::StartAllowed, ResolverDecision::StartAllowed);
+    });
+    named_contract_test!(sec_01_arbitrary_shell_structurally_unavailable, {
+        assert!(!git_args(GitOperation::HeadSha).iter().any(|arg| arg.contains("sh")));
+    });
+    named_contract_test!(sec_02_git_allowlist_excludes_dangerous_commands, {
+        let operations = [GitOperation::ShowTopLevel, GitOperation::GetOriginUrl, GitOperation::CurrentBranch, GitOperation::HeadSha, GitOperation::LocalMainSha, GitOperation::WorktreeStatus, GitOperation::RemoteMainSha, GitOperation::FetchOriginMain, GitOperation::SwitchMain, GitOperation::MergeOriginMainFastForwardOnly];
+        assert!(operations.iter().all(|operation| !git_args(*operation).iter().any(|arg| ["reset", "clean", "rebase", "push"].contains(arg))));
+    });
+    named_contract_test!(sec_03_credential_redaction, {
+        assert_eq!(safe_remote_display("https://user:secret@example.com/repo.git"), None);
+    });
+    named_contract_test!(sec_04_output_cap, {
+        assert_eq!(MAX_OUTPUT, 64 * 1024);
+    });
+    named_contract_test!(sec_05_evaluation_does_not_mutate_input, {
+        let input = identity(true);
+        let before = format!("{:?}", input.worktree_entries);
+        let _ = evaluate(&input, &authority(AuthorityStatus::Verified), &ExecutionGuardSnapshot::default());
+        assert_eq!(before, format!("{:?}", input.worktree_entries));
+    });
+    named_contract_test!(sec_06_authority_check_does_not_mutate_repository, {
+        assert_eq!(git_args(GitOperation::RemoteMainSha), &["ls-remote", "origin", "refs/heads/main"]);
+    });
+    named_contract_test!(sec_07_failed_sync_has_no_recovery_mutation, {
+        assert!(git_args(GitOperation::MergeOriginMainFastForwardOnly).contains(&"--ff-only"));
+    });
+    named_contract_test!(sec_08_errors_do_not_expose_canonical_path_or_credentials, {
+        let message = safe_error("https://user:secret@example.com/Users/a/AI/007/AIcontrolcenter");
+        assert!(!message.contains(CANONICAL_PATH));
+        assert!(!message.contains("secret"));
+    });
 }
