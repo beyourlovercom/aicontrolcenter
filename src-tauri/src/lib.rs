@@ -965,59 +965,49 @@ mod tests {
         assert!(result.allowed && result.blockers == [SyncBlocker::SyncRequired]);
     });
     named_contract_test!(eval_03_dirty_worktree_blocks, {
-        assert!(
-            evaluate(
-                &identity(false),
-                &authority(AuthorityStatus::Verified),
-                &ExecutionGuardSnapshot::default()
-            )
-            .blockers
-            .contains(&SyncBlocker::WorktreeDirty)
-        );
+        assert!(evaluate(
+            &identity(false),
+            &authority(AuthorityStatus::Verified),
+            &ExecutionGuardSnapshot::default()
+        )
+        .blockers
+        .contains(&SyncBlocker::WorktreeDirty));
     });
     named_contract_test!(eval_04_active_run_blocks, {
         let guards = ExecutionGuardSnapshot {
             active_open_code_run: true,
             ..Default::default()
         };
-        assert!(
-            evaluate(&identity(true), &authority(AuthorityStatus::Verified), &guards)
-                .blockers
-                .contains(&SyncBlocker::ActiveRun)
-        );
+        assert!(evaluate(&identity(true), &authority(AuthorityStatus::Verified), &guards)
+            .blockers
+            .contains(&SyncBlocker::ActiveRun));
     });
     named_contract_test!(eval_05_writer_lock_blocks, {
         let guards = ExecutionGuardSnapshot {
             writer_lock_held: true,
             ..Default::default()
         };
-        assert!(
-            evaluate(&identity(true), &authority(AuthorityStatus::Verified), &guards)
-                .blockers
-                .contains(&SyncBlocker::WriterLocked)
-        );
+        assert!(evaluate(&identity(true), &authority(AuthorityStatus::Verified), &guards)
+            .blockers
+            .contains(&SyncBlocker::WriterLocked));
     });
     named_contract_test!(eval_06_unsaved_diff_blocks, {
         let guards = ExecutionGuardSnapshot {
             unsaved_diff: true,
             ..Default::default()
         };
-        assert!(
-            evaluate(&identity(true), &authority(AuthorityStatus::Verified), &guards)
-                .blockers
-                .contains(&SyncBlocker::UnsavedDiff)
-        );
+        assert!(evaluate(&identity(true), &authority(AuthorityStatus::Verified), &guards)
+            .blockers
+            .contains(&SyncBlocker::UnsavedDiff));
     });
     named_contract_test!(eval_07_previous_run_blocks, {
         let guards = ExecutionGuardSnapshot {
             previous_run_open: true,
             ..Default::default()
         };
-        assert!(
-            evaluate(&identity(true), &authority(AuthorityStatus::Verified), &guards)
-                .blockers
-                .contains(&SyncBlocker::PreviousRunOpen)
-        );
+        assert!(evaluate(&identity(true), &authority(AuthorityStatus::Verified), &guards)
+            .blockers
+            .contains(&SyncBlocker::PreviousRunOpen));
     });
     named_contract_test!(eval_08_sha_mismatch_is_not_non_fast_forward, {
         let mut local = identity(true);
