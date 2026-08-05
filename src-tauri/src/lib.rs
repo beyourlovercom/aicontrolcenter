@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
 use std::{
+    collections::HashMap,
     fs,
     io::Read,
     path::{Path, PathBuf},
@@ -8,7 +9,6 @@ use std::{
     time::{Duration, Instant},
 };
 
-pub const AUTHORITY_SHA: &str = "dc6d20ec9fb9d33683ad43148d10a5cb5c667552";
 pub const CANONICAL_PATH: &str = "/Users/a/AI/007/AIcontrolcenter";
 const MAX_OUTPUT: usize = 64 * 1024;
 const COMMAND_TIMEOUT: Duration = Duration::from_secs(20);
@@ -331,7 +331,7 @@ fn authority_at(root: &Path, allow_test_root: bool) -> RemoteAuthority {
         return RemoteAuthority {
             status: AuthorityStatus::RepositoryInvalid,
             remote_main_sha: None,
-            authority_sha: AUTHORITY_SHA.into(),
+            authority_sha: String::new(),
             checked_at,
             diagnostics: vec!["repository validation failed".into()],
         };
@@ -350,20 +350,16 @@ fn authority_at(root: &Path, allow_test_root: bool) -> RemoteAuthority {
                 return RemoteAuthority {
                     status: AuthorityStatus::RemoteInvalidResponse,
                     remote_main_sha: None,
-                    authority_sha: AUTHORITY_SHA.into(),
+                    authority_sha: String::new(),
                     checked_at,
                     diagnostics: vec!["ls-remote response is malformed".into()],
                 };
             }
             let sha = fields[0].to_ascii_lowercase();
             RemoteAuthority {
-                status: if sha == AUTHORITY_SHA {
-                    AuthorityStatus::Verified
-                } else {
-                    AuthorityStatus::Drift
-                },
+                status: AuthorityStatus::Verified,
                 remote_main_sha: Some(sha),
-                authority_sha: AUTHORITY_SHA.into(),
+                authority_sha: fields[0].to_ascii_lowercase(),
                 checked_at,
                 diagnostics: Vec::new(),
             }
@@ -371,7 +367,7 @@ fn authority_at(root: &Path, allow_test_root: bool) -> RemoteAuthority {
         Err(error) => RemoteAuthority {
             status: AuthorityStatus::RemoteUnavailable,
             remote_main_sha: None,
-            authority_sha: AUTHORITY_SHA.into(),
+            authority_sha: String::new(),
             checked_at,
             diagnostics: vec![safe_error(&error.message)],
         },
@@ -387,8 +383,13 @@ fn evaluate(
     if !identity.repository_valid {
         blockers.push(SyncBlocker::RepositoryInvalid);
     }
-    if authority.status != AuthorityStatus::Verified {
+    if authority.status == AuthorityStatus::RemoteUnavailable
+        || authority.status == AuthorityStatus::RemoteInvalidResponse
+    {
         blockers.push(SyncBlocker::RemoteUnavailable);
+    }
+    if authority.status == AuthorityStatus::RepositoryInvalid || !identity.repository_valid {
+        blockers.push(SyncBlocker::RepositoryInvalid);
     }
     if !identity.worktree_clean {
         blockers.push(SyncBlocker::WorktreeDirty);
@@ -405,17 +406,16 @@ fn evaluate(
     if guards.previous_run_open {
         blockers.push(SyncBlocker::PreviousRunOpen);
     }
-    if identity.current_branch.as_deref() != Some("main")
-        || identity.local_main_sha.as_deref()
-            != Some(authority.remote_main_sha.as_deref().unwrap_or(""))
+    if blockers.is_empty()
+        && identity.local_main_sha.as_deref()
+            == authority.remote_main_sha.as_deref()
     {
-        blockers.push(SyncBlocker::NonFastForward);
-    }
-    if blockers.is_empty() {
         blockers.push(SyncBlocker::SyncNotRequired);
+    } else if blockers.is_empty() {
+        blockers.push(SyncBlocker::SyncRequired);
     }
     WorkspaceSyncEvaluation {
-        allowed: blockers == [SyncBlocker::SyncNotRequired],
+        allowed: blockers == [SyncBlocker::SyncRequired],
         blockers,
         planned_actions: vec![
             "git fetch origin main".into(),
@@ -517,13 +517,22 @@ fn sync_workspace(
             message: format!("sync blocked: {:?}", plan.blockers),
         });
     }
-    let commands: [&[&str]; 3] = [
-        ["fetch", "origin", "main"].as_slice(),
-        ["switch", "main"].as_slice(),
-        ["merge", "--ff-only", "origin/main"].as_slice(),
-    ];
-    for args in commands {
-        run_git(&root, args)?;
+    run_git(&root, &["fetch", "origin", "main"])?;
+    let refreshed_authority = authority_at(&root, false);
+    if refreshed_authority.status != AuthorityStatus::Verified
+        || refreshed_authority.remote_main_sha.is_none()
+    {
+        return Err(ControlLoopError {
+            code: "REMOTE_INVALID_RESPONSE".into(),
+            message: "remote authority changed or became unavailable after fetch".into(),
+        });
+    }
+    run_git(&root, &["switch", "main"])?;
+    if let Err(error) = run_git(&root, &["merge", "--ff-only", "origin/main"]) {
+        return Err(ControlLoopError {
+            code: "NON_FAST_FORWARD".into(),
+            message: safe_error(&error.message),
+        });
     }
     Ok(WorkspaceSyncResult {
         success: true,
@@ -560,15 +569,18 @@ fn resolve_next_work_package(
     }
     if authority.status == AuthorityStatus::Drift
         || authority.status == AuthorityStatus::RemoteInvalidResponse
-        || authority.status == AuthorityStatus::RepositoryInvalid
     {
         blockers.push(ResolverBlocker::AuthorityDrift);
+    }
+    if authority.status == AuthorityStatus::RepositoryInvalid || !identity.repository_valid {
+        blockers.push(ResolverBlocker::RepositoryInvalid);
     }
     if identity.local_main_sha != authority.remote_main_sha {
         blockers.push(ResolverBlocker::SyncRequired);
     }
     let dir = root.join("docs/60_Operations/work-packages");
     let mut candidates = Vec::new();
+    let mut records = HashMap::new();
     for entry in fs::read_dir(dir).map_err(|_| ControlLoopError {
         code: "WORK_PACKAGE_SCHEMA_INVALID".into(),
         message: "work package directory unavailable".into(),
@@ -579,7 +591,12 @@ fn resolve_next_work_package(
         })?;
         if entry.path().extension().and_then(|v| v.to_str()) == Some("md") {
             match parse_package(&entry.path()) {
-                Ok(package) if package.status == "AUTHORIZED" => candidates.push(package),
+                Ok(package) => {
+                    if package.status == "AUTHORIZED" {
+                        candidates.push(package.clone());
+                    }
+                    records.insert(package.id.clone(), package);
+                }
                 Err(_) => blockers.push(ResolverBlocker::WorkPackageSchemaInvalid),
                 _ => {}
             }
@@ -588,13 +605,16 @@ fn resolve_next_work_package(
     if candidates.len() > 1 {
         blockers.push(ResolverBlocker::MultipleAuthorizedWorkPackages);
     }
+    if candidates.is_empty() {
+        blockers.push(ResolverBlocker::WorkPackageNotAuthorized);
+    }
     let selected = if candidates.len() == 1 {
         candidates.into_iter().next()
     } else {
         None
     };
     if let Some(package) = &selected {
-        if package.authority_sha != AUTHORITY_SHA {
+        if package.authority_sha != authority.remote_main_sha.clone().unwrap_or_default() {
             blockers.push(ResolverBlocker::AuthorityDrift);
         }
         if package.previous_run_status != "CLOSED" {
@@ -603,10 +623,19 @@ fn resolve_next_work_package(
         if package.owner_authorization != "AUTHORIZED_FOR_IMPLEMENTATION" {
             blockers.push(ResolverBlocker::WorkPackageNotAuthorized);
         }
-        if package.dependencies.iter().any(|d| d.status != "CLOSED") {
-            blockers.push(ResolverBlocker::DependencyNotClosed);
+        for dependency in &package.dependencies {
+            if records
+                .get(&dependency.id)
+                .map(|record| record.status.as_str() != "CLOSED")
+                .unwrap_or(true)
+            {
+                blockers.push(ResolverBlocker::DependencyNotClosed);
+            }
         }
-        if !planning_complete(&root, &package.openspec_change) {
+        let change_root = root.join("openspec/changes").join(&package.openspec_change);
+        if !change_root.is_dir() {
+            blockers.push(ResolverBlocker::OpenspecChangeMissing);
+        } else if !planning_complete(&root, &package.openspec_change) {
             blockers.push(ResolverBlocker::OpenspecPlanningIncomplete);
         }
     }
@@ -639,6 +668,8 @@ pub fn run() {
 mod tests {
     use super::*;
 
+    const TEST_AUTHORITY_SHA: &str = "dc6d20ec9fb9d33683ad43148d10a5cb5c667552";
+
     fn identity(clean: bool) -> RepositoryIdentity {
         RepositoryIdentity {
             canonical_path: CANONICAL_PATH.into(),
@@ -646,8 +677,8 @@ mod tests {
             origin_present: true,
             origin_display: Some("owner/repository".into()),
             current_branch: Some("main".into()),
-            local_head: Some(AUTHORITY_SHA.into()),
-            local_main_sha: Some(AUTHORITY_SHA.into()),
+            local_head: Some(TEST_AUTHORITY_SHA.into()),
+            local_main_sha: Some(TEST_AUTHORITY_SHA.into()),
             worktree_clean: clean,
             worktree_entries: Vec::new(),
             detached_head: false,
@@ -659,8 +690,8 @@ mod tests {
     fn authority(status: AuthorityStatus) -> RemoteAuthority {
         RemoteAuthority {
             status,
-            remote_main_sha: Some(AUTHORITY_SHA.into()),
-            authority_sha: AUTHORITY_SHA.into(),
+            remote_main_sha: Some(TEST_AUTHORITY_SHA.into()),
+            authority_sha: TEST_AUTHORITY_SHA.into(),
             checked_at: "test".into(),
             diagnostics: Vec::new(),
         }
@@ -686,6 +717,44 @@ mod tests {
         );
         assert!(result.blockers.contains(&SyncBlocker::WorktreeDirty));
         assert!(!result.allowed);
+    }
+
+    #[test]
+    fn behind_workspace_requires_owner_sync() {
+        let mut local = identity(true);
+        local.local_main_sha = Some("0000000000000000000000000000000000000000".into());
+        let result = evaluate(
+            &local,
+            &authority(AuthorityStatus::Verified),
+            &ExecutionGuardSnapshot::default(),
+        );
+        assert!(result.allowed);
+        assert_eq!(result.blockers, vec![SyncBlocker::SyncRequired]);
+    }
+
+    #[test]
+    fn current_branch_does_not_block_planned_sync() {
+        let mut local = identity(true);
+        local.current_branch = Some("feature/test".into());
+        local.local_main_sha = Some("0000000000000000000000000000000000000000".into());
+        let result = evaluate(
+            &local,
+            &authority(AuthorityStatus::Verified),
+            &ExecutionGuardSnapshot::default(),
+        );
+        assert!(result.allowed);
+        assert!(!result.blockers.contains(&SyncBlocker::NonFastForward));
+    }
+
+    #[test]
+    fn unavailable_remote_blocks_without_verified_state() {
+        let result = evaluate(
+            &identity(true),
+            &authority(AuthorityStatus::RemoteUnavailable),
+            &ExecutionGuardSnapshot::default(),
+        );
+        assert!(!result.allowed);
+        assert!(result.blockers.contains(&SyncBlocker::RemoteUnavailable));
     }
 
     #[test]
@@ -725,6 +794,7 @@ mod tests {
     #[test]
     fn relative_and_prefixed_paths_fail_closed() {
         assert!(validate_root(Path::new("."), true).is_err());
-        assert!(validate_root(Path::new("/Users/a/AI/007/AIcontrolcenter-other"), false).is_err());
+        let similar_prefix = PathBuf::from(CANONICAL_PATH).with_file_name("AIcontrolcenter-other");
+        assert!(validate_root(&similar_prefix, false).is_err());
     }
 }
