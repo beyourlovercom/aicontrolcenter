@@ -182,9 +182,7 @@ fn git_args(operation: GitOperation) -> &'static [&'static str] {
         GitOperation::RemoteMainSha => &["ls-remote", "origin", "refs/heads/main"],
         GitOperation::FetchOriginMain => &["fetch", "origin", "main"],
         GitOperation::SwitchMain => &["switch", "main"],
-        GitOperation::MergeOriginMainFastForwardOnly => {
-            &["merge", "--ff-only", "origin/main"]
-        }
+        GitOperation::MergeOriginMainFastForwardOnly => &["merge", "--ff-only", "origin/main"],
     }
 }
 
@@ -487,7 +485,10 @@ fn parse_package(path: &Path) -> Result<WorkPackageRecord, ResolverBlocker> {
     if parsed.schema != "aicc-work-package/v1"
         || parsed.id.is_empty()
         || parsed.title.is_empty()
-        || !matches!(parsed.status.as_str(), "PLANNED" | "AUTHORIZED" | "IMPLEMENTING" | "BLOCKED" | "CLOSED")
+        || !matches!(
+            parsed.status.as_str(),
+            "PLANNED" | "AUTHORIZED" | "IMPLEMENTING" | "BLOCKED" | "CLOSED"
+        )
         || parsed.owner_authorization != "AUTHORIZED_FOR_IMPLEMENTATION"
         || parsed.previous_run_status != "CLOSED"
     {
@@ -512,9 +513,9 @@ fn planning_complete(root: &Path, change: &str) -> bool {
         && base.join("tasks.md").is_file()
         && fs::read_dir(base.join("specs"))
             .map(|entries| {
-                entries.flatten().any(|entry| {
-                    entry.path().is_dir() && entry.path().join("spec.md").is_file()
-                })
+                entries
+                    .flatten()
+                    .any(|entry| entry.path().is_dir() && entry.path().join("spec.md").is_file())
             })
             .unwrap_or(false)
 }
@@ -857,7 +858,12 @@ mod tests {
             authority_sha: TEST_AUTHORITY_SHA.into(),
             openspec_change: "test-change".into(),
             dependencies: dependency
-                .map(|(id, value)| vec![DependencyRecord { id: id.into(), status: value.into() }])
+                .map(|(id, value)| {
+                    vec![DependencyRecord {
+                        id: id.into(),
+                        status: value.into(),
+                    }]
+                })
                 .unwrap_or_default(),
             previous_run_status: "CLOSED".into(),
             owner_authorization: "AUTHORIZED_FOR_IMPLEMENTATION".into(),
@@ -872,13 +878,19 @@ mod tests {
     }
 
     named_contract_test!(rep_01_valid_repository, {
-        assert!(validate_root(Path::new(CANONICAL_PATH), false).is_err() || Path::new(CANONICAL_PATH).is_absolute());
+        assert!(
+            validate_root(Path::new(CANONICAL_PATH), false).is_err()
+                || Path::new(CANONICAL_PATH).is_absolute()
+        );
     });
     named_contract_test!(rep_02_invalid_repository, {
         assert!(validate_root(Path::new("/definitely/not/a/repository"), false).is_err());
     });
     named_contract_test!(rep_03_exact_canonical_path, {
-        assert_eq!(Path::new(CANONICAL_PATH).display().to_string(), CANONICAL_PATH);
+        assert_eq!(
+            Path::new(CANONICAL_PATH).display().to_string(),
+            CANONICAL_PATH
+        );
     });
     named_contract_test!(rep_04_relative_path_rejected, {
         assert!(validate_root(Path::new("relative"), true).is_err());
@@ -913,7 +925,10 @@ mod tests {
         assert_eq!(result.remote_main_sha, Some(TEST_AUTHORITY_SHA.into()));
     });
     named_contract_test!(auth_02_unavailable_remote, {
-        assert_eq!(authority(AuthorityStatus::RemoteUnavailable).status, AuthorityStatus::RemoteUnavailable);
+        assert_eq!(
+            authority(AuthorityStatus::RemoteUnavailable).status,
+            AuthorityStatus::RemoteUnavailable
+        );
     });
     named_contract_test!(auth_03_malformed_empty_response, {
         let output = "";
@@ -923,61 +938,133 @@ mod tests {
         assert_eq!("a\nb".lines().count(), 2);
     });
     named_contract_test!(auth_05_authority_check_performs_no_fetch, {
-        assert_eq!(git_args(GitOperation::RemoteMainSha), &["ls-remote", "origin", "refs/heads/main"]);
+        assert_eq!(
+            git_args(GitOperation::RemoteMainSha),
+            &["ls-remote", "origin", "refs/heads/main"]
+        );
     });
     named_contract_test!(auth_06_authority_check_does_not_modify_local_refs, {
         assert!(!git_args(GitOperation::RemoteMainSha).contains(&"fetch"));
     });
     named_contract_test!(eval_01_equal_shas_sync_not_required, {
-        let result = evaluate(&identity(true), &authority(AuthorityStatus::Verified), &ExecutionGuardSnapshot::default());
+        let result = evaluate(
+            &identity(true),
+            &authority(AuthorityStatus::Verified),
+            &ExecutionGuardSnapshot::default(),
+        );
         assert!(!result.allowed && result.blockers == [SyncBlocker::SyncNotRequired]);
     });
     named_contract_test!(eval_02_behind_sync_required, {
         let mut local = identity(true);
         local.local_main_sha = Some("0000000000000000000000000000000000000000".into());
-        let result = evaluate(&local, &authority(AuthorityStatus::Verified), &ExecutionGuardSnapshot::default());
+        let result = evaluate(
+            &local,
+            &authority(AuthorityStatus::Verified),
+            &ExecutionGuardSnapshot::default(),
+        );
         assert!(result.allowed && result.blockers == [SyncBlocker::SyncRequired]);
     });
     named_contract_test!(eval_03_dirty_worktree_blocks, {
-        assert!(evaluate(&identity(false), &authority(AuthorityStatus::Verified), &ExecutionGuardSnapshot::default()).blockers.contains(&SyncBlocker::WorktreeDirty));
+        assert!(
+            evaluate(
+                &identity(false),
+                &authority(AuthorityStatus::Verified),
+                &ExecutionGuardSnapshot::default()
+            )
+            .blockers
+            .contains(&SyncBlocker::WorktreeDirty)
+        );
     });
     named_contract_test!(eval_04_active_run_blocks, {
-        let guards = ExecutionGuardSnapshot { active_open_code_run: true, ..Default::default() };
-        assert!(evaluate(&identity(true), &authority(AuthorityStatus::Verified), &guards).blockers.contains(&SyncBlocker::ActiveRun));
+        let guards = ExecutionGuardSnapshot {
+            active_open_code_run: true,
+            ..Default::default()
+        };
+        assert!(
+            evaluate(&identity(true), &authority(AuthorityStatus::Verified), &guards)
+                .blockers
+                .contains(&SyncBlocker::ActiveRun)
+        );
     });
     named_contract_test!(eval_05_writer_lock_blocks, {
-        let guards = ExecutionGuardSnapshot { writer_lock_held: true, ..Default::default() };
-        assert!(evaluate(&identity(true), &authority(AuthorityStatus::Verified), &guards).blockers.contains(&SyncBlocker::WriterLocked));
+        let guards = ExecutionGuardSnapshot {
+            writer_lock_held: true,
+            ..Default::default()
+        };
+        assert!(
+            evaluate(&identity(true), &authority(AuthorityStatus::Verified), &guards)
+                .blockers
+                .contains(&SyncBlocker::WriterLocked)
+        );
     });
     named_contract_test!(eval_06_unsaved_diff_blocks, {
-        let guards = ExecutionGuardSnapshot { unsaved_diff: true, ..Default::default() };
-        assert!(evaluate(&identity(true), &authority(AuthorityStatus::Verified), &guards).blockers.contains(&SyncBlocker::UnsavedDiff));
+        let guards = ExecutionGuardSnapshot {
+            unsaved_diff: true,
+            ..Default::default()
+        };
+        assert!(
+            evaluate(&identity(true), &authority(AuthorityStatus::Verified), &guards)
+                .blockers
+                .contains(&SyncBlocker::UnsavedDiff)
+        );
     });
     named_contract_test!(eval_07_previous_run_blocks, {
-        let guards = ExecutionGuardSnapshot { previous_run_open: true, ..Default::default() };
-        assert!(evaluate(&identity(true), &authority(AuthorityStatus::Verified), &guards).blockers.contains(&SyncBlocker::PreviousRunOpen));
+        let guards = ExecutionGuardSnapshot {
+            previous_run_open: true,
+            ..Default::default()
+        };
+        assert!(
+            evaluate(&identity(true), &authority(AuthorityStatus::Verified), &guards)
+                .blockers
+                .contains(&SyncBlocker::PreviousRunOpen)
+        );
     });
     named_contract_test!(eval_08_sha_mismatch_is_not_non_fast_forward, {
         let mut local = identity(true);
         local.local_main_sha = Some("0000000000000000000000000000000000000000".into());
-        let result = evaluate(&local, &authority(AuthorityStatus::Verified), &ExecutionGuardSnapshot::default());
+        let result = evaluate(
+            &local,
+            &authority(AuthorityStatus::Verified),
+            &ExecutionGuardSnapshot::default(),
+        );
         assert!(!result.blockers.contains(&SyncBlocker::NonFastForward));
     });
     named_contract_test!(sync_01_confirmation_required, {
         assert_eq!("OWNER_CONFIRMATION_REQUIRED", "OWNER_CONFIRMATION_REQUIRED");
     });
     named_contract_test!(sync_02_temporary_repository_ff_only_success, {
-        assert_eq!(git_args(GitOperation::MergeOriginMainFastForwardOnly), &["merge", "--ff-only", "origin/main"]);
+        assert_eq!(
+            git_args(GitOperation::MergeOriginMainFastForwardOnly),
+            &["merge", "--ff-only", "origin/main"]
+        );
     });
     named_contract_test!(sync_03_command_order_fetch_switch_merge, {
-        assert_eq!([GitOperation::FetchOriginMain, GitOperation::SwitchMain, GitOperation::MergeOriginMainFastForwardOnly].len(), 3);
+        assert_eq!(
+            [
+                GitOperation::FetchOriginMain,
+                GitOperation::SwitchMain,
+                GitOperation::MergeOriginMainFastForwardOnly
+            ]
+            .len(),
+            3
+        );
     });
     named_contract_test!(sync_04_non_fast_forward_fails_closed, {
-        assert_eq!(git_args(GitOperation::MergeOriginMainFastForwardOnly)[1], "--ff-only");
+        assert_eq!(
+            git_args(GitOperation::MergeOriginMainFastForwardOnly)[1],
+            "--ff-only"
+        );
     });
     named_contract_test!(sync_05_failure_has_no_recovery_mutation, {
-        let allowed = [GitOperation::FetchOriginMain, GitOperation::SwitchMain, GitOperation::MergeOriginMainFastForwardOnly];
-        assert!(!allowed.iter().any(|operation| matches!(operation, GitOperation::FetchOriginMain) && git_args(*operation).contains(&"reset")));
+        let allowed = [
+            GitOperation::FetchOriginMain,
+            GitOperation::SwitchMain,
+            GitOperation::MergeOriginMainFastForwardOnly,
+        ];
+        assert!(!allowed.iter().any(|operation| {
+            matches!(operation, GitOperation::FetchOriginMain)
+                && git_args(*operation).contains(&"reset")
+        }));
     });
     named_contract_test!(sync_06_post_fetch_revalidation_blocks_changed_state, {
         assert_eq!(SyncBlocker::SyncRequired, SyncBlocker::SyncRequired);
@@ -1006,17 +1093,26 @@ mod tests {
         assert_ne!(test_package("PLANNED", None).status, "AUTHORIZED");
     });
     named_contract_test!(wp_08_multiple_authorized_wp_blocked, {
-        assert_eq!(ResolverBlocker::MultipleAuthorizedWorkPackages, ResolverBlocker::MultipleAuthorizedWorkPackages);
+        assert_eq!(
+            ResolverBlocker::MultipleAuthorizedWorkPackages,
+            ResolverBlocker::MultipleAuthorizedWorkPackages
+        );
     });
     named_contract_test!(wp_09_dependency_actual_status_cross_checked, {
         let package = test_package("AUTHORIZED", Some(("DEP", "CLOSED")));
         assert_eq!(package.dependencies[0].id, "DEP");
     });
     named_contract_test!(wp_10_missing_dependency_blocked, {
-        assert_eq!(ResolverBlocker::DependencyNotClosed, ResolverBlocker::DependencyNotClosed);
+        assert_eq!(
+            ResolverBlocker::DependencyNotClosed,
+            ResolverBlocker::DependencyNotClosed
+        );
     });
     named_contract_test!(wp_11_openspec_change_missing, {
-        assert_eq!(ResolverBlocker::OpenspecChangeMissing, ResolverBlocker::OpenspecChangeMissing);
+        assert_eq!(
+            ResolverBlocker::OpenspecChangeMissing,
+            ResolverBlocker::OpenspecChangeMissing
+        );
     });
     named_contract_test!(wp_12_openspec_planning_incomplete, {
         assert!(!planning_complete(Path::new("/tmp"), "missing-change"));
@@ -1032,20 +1128,50 @@ mod tests {
     named_contract_test!(wp_15_local_main_mismatch_sync_required, {
         let mut local = identity(true);
         local.local_main_sha = Some("other-sha".into());
-        assert!(evaluate(&local, &authority(AuthorityStatus::Verified), &ExecutionGuardSnapshot::default()).allowed);
+        assert!(
+            evaluate(
+                &local,
+                &authority(AuthorityStatus::Verified),
+                &ExecutionGuardSnapshot::default()
+            )
+            .allowed
+        );
     });
     named_contract_test!(wp_16_single_fully_valid_wp_start_allowed, {
-        assert_eq!(ResolverDecision::StartAllowed, ResolverDecision::StartAllowed);
+        assert_eq!(
+            ResolverDecision::StartAllowed,
+            ResolverDecision::StartAllowed
+        );
     });
     named_contract_test!(sec_01_arbitrary_shell_structurally_unavailable, {
-        assert!(!git_args(GitOperation::HeadSha).iter().any(|arg| arg.contains("sh")));
+        assert!(!git_args(GitOperation::HeadSha)
+            .iter()
+            .any(|arg| arg.contains("sh")));
     });
     named_contract_test!(sec_02_git_allowlist_excludes_dangerous_commands, {
-        let operations = [GitOperation::ShowTopLevel, GitOperation::GetOriginUrl, GitOperation::CurrentBranch, GitOperation::HeadSha, GitOperation::LocalMainSha, GitOperation::WorktreeStatus, GitOperation::RemoteMainSha, GitOperation::FetchOriginMain, GitOperation::SwitchMain, GitOperation::MergeOriginMainFastForwardOnly];
-        assert!(operations.iter().all(|operation| !git_args(*operation).iter().any(|arg| ["reset", "clean", "rebase", "push"].contains(arg))));
+        let operations = [
+            GitOperation::ShowTopLevel,
+            GitOperation::GetOriginUrl,
+            GitOperation::CurrentBranch,
+            GitOperation::HeadSha,
+            GitOperation::LocalMainSha,
+            GitOperation::WorktreeStatus,
+            GitOperation::RemoteMainSha,
+            GitOperation::FetchOriginMain,
+            GitOperation::SwitchMain,
+            GitOperation::MergeOriginMainFastForwardOnly,
+        ];
+        assert!(operations.iter().all(|operation| {
+            !git_args(*operation)
+                .iter()
+                .any(|arg| ["reset", "clean", "rebase", "push"].contains(arg))
+        }));
     });
     named_contract_test!(sec_03_credential_redaction, {
-        assert_eq!(safe_remote_display("https://user:secret@example.com/repo.git"), None);
+        assert_eq!(
+            safe_remote_display("https://user:secret@example.com/repo.git"),
+            None
+        );
     });
     named_contract_test!(sec_04_output_cap, {
         assert_eq!(MAX_OUTPUT, 64 * 1024);
@@ -1053,11 +1179,18 @@ mod tests {
     named_contract_test!(sec_05_evaluation_does_not_mutate_input, {
         let input = identity(true);
         let before = format!("{:?}", input.worktree_entries);
-        let _ = evaluate(&input, &authority(AuthorityStatus::Verified), &ExecutionGuardSnapshot::default());
+        let _ = evaluate(
+            &input,
+            &authority(AuthorityStatus::Verified),
+            &ExecutionGuardSnapshot::default(),
+        );
         assert_eq!(before, format!("{:?}", input.worktree_entries));
     });
     named_contract_test!(sec_06_authority_check_does_not_mutate_repository, {
-        assert_eq!(git_args(GitOperation::RemoteMainSha), &["ls-remote", "origin", "refs/heads/main"]);
+        assert_eq!(
+            git_args(GitOperation::RemoteMainSha),
+            &["ls-remote", "origin", "refs/heads/main"]
+        );
     });
     named_contract_test!(sec_07_failed_sync_has_no_recovery_mutation, {
         assert!(git_args(GitOperation::MergeOriginMainFastForwardOnly).contains(&"--ff-only"));
