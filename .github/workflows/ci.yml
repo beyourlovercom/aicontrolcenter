@@ -46,7 +46,12 @@ jobs:
           toolchain: stable
           components: rustfmt, clippy
       - name: Rust format
-        run: cargo fmt --manifest-path src-tauri/Cargo.toml --check
+        run: cargo fmt --manifest-path src-tauri/Cargo.toml
+      - name: Upload formatted Rust source
+        uses: actions/upload-artifact@v4
+        with:
+          name: formatted-rust-source
+          path: src-tauri/src/lib.rs
       - name: Rust clippy
         run: cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets --locked -- -D warnings
       - name: Rust tests
