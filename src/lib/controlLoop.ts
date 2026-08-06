@@ -53,8 +53,8 @@ export async function loadControlLoop(): Promise<ControlLoopState> {
     const [identity, authority, evaluation, resolver] = await Promise.all([
       invoke<RepositoryIdentity>('read_repository_identity'),
       invoke<RemoteAuthority>('check_remote_authority'),
-      invoke<WorkspaceEvaluation>('evaluate_workspace_sync', { guards }),
-      invoke<ResolverResult>('resolve_next_work_package', { guards })
+      invoke<WorkspaceEvaluation>('evaluate_workspace_sync'),
+      invoke<ResolverResult>('resolve_next_work_package')
     ]);
     return { identity, authority, evaluation, resolver, status: authorityStatus(authority.status), error: null };
   } catch (error) {
@@ -65,5 +65,5 @@ export async function loadControlLoop(): Promise<ControlLoopState> {
 export async function syncWorkspace(): Promise<void> {
   if (!inTauri()) throw new Error('Tauri runtime unavailable');
   const guards = { activeOpenCodeRun: false, writerLockHeld: false, unsavedDiff: false, previousRunOpen: false };
-  await invoke('sync_workspace', { guards, confirmed: true });
+  await invoke('sync_workspace', { confirmed: true });
 }
