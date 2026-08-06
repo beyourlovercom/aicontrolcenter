@@ -1027,7 +1027,10 @@ mod tests {
         let other = temp("divergent-remote");
         git(&other, &["clone", remote.to_str().unwrap(), "."]);
         git(&other, &["config", "user.name", "AICC Test"]);
-        git(&other, &["config", "user.email", "aicc-test@example.invalid"]);
+        git(
+            &other,
+            &["config", "user.email", "aicc-test@example.invalid"],
+        );
         fs::write(other.join("remote"), "x").unwrap();
         git(&other, &["add", "."]);
         git(&other, &["commit", "-m", "remote-diverge"]);
@@ -1069,7 +1072,10 @@ mod tests {
         let other = temp("guard-remote");
         git(&other, &["clone", remote.to_str().unwrap(), "."]);
         git(&other, &["config", "user.name", "AICC Test"]);
-        git(&other, &["config", "user.email", "aicc-test@example.invalid"]);
+        git(
+            &other,
+            &["config", "user.email", "aicc-test@example.invalid"],
+        );
         fs::write(other.join("remote-ahead"), "x").unwrap();
         git(&other, &["add", "."]);
         git(&other, &["commit", "-m", "remote-ahead"]);
