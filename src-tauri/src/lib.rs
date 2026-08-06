@@ -1183,6 +1183,70 @@ mod tests {
             &["rev-parse", "refs/remotes/origin/main"]
         );
     }
+    fn write_resolver_fixture(root: &Path, authority_sha: &str, dependency: &str) {
+        let packages = root.join("docs/60_Operations/work-packages");
+        fs::create_dir_all(&packages).unwrap();
+        fs::write(
+            packages.join("candidate.md"),
+            format!(
+                "---\nschema: aicc-work-package/v1\nid: CANDIDATE\ntitle: Candidate\nstatus: AUTHORIZED\nauthority_sha: {authority_sha}\nopenspec_change: candidate-change\ndependencies: {dependency}\nprevious_run_status: CLOSED\nowner_authorization: AUTHORIZED_FOR_IMPLEMENTATION\n---\n"
+            ),
+        )
+        .unwrap();
+        let change = root.join("openspec/changes/candidate-change");
+        fs::create_dir_all(change.join("specs/capability")).unwrap();
+        for file in ["proposal.md", "design.md", "tasks.md"] {
+            fs::write(change.join(file), "complete\n").unwrap();
+        }
+        fs::write(change.join("specs/capability/spec.md"), "complete\n").unwrap();
+    }
+    #[test]
+    fn resolver_starts_single_authorized_complete_temporary_work_package() {
+        let (local, _) = repo();
+        let remote = authority(&ProductionGitRunner, &local, false)
+            .remote_main_sha
+            .unwrap();
+        git(&local, &["switch", "-c", "candidate"]);
+        write_resolver_fixture(&local, &remote, "[]");
+        git(&local, &["add", "docs", "openspec"]);
+        git(&local, &["commit", "-m", "resolver-fixture"]);
+        let result = resolve(
+            &ProductionGitRunner,
+            &local,
+            false,
+            &ExecutionGuardSnapshot::default(),
+        )
+        .unwrap();
+        assert_eq!(result.decision, ResolverDecision::StartAllowed);
+        assert_eq!(result.work_package.unwrap().id, "CANDIDATE");
+        assert!(result.blockers.is_empty());
+    }
+    #[test]
+    fn resolver_blocks_temporary_work_package_with_unclosed_dependency() {
+        let (local, _) = repo();
+        let remote = authority(&ProductionGitRunner, &local, false)
+            .remote_main_sha
+            .unwrap();
+        git(&local, &["switch", "-c", "candidate"]);
+        write_resolver_fixture(
+            &local,
+            &remote,
+            "\n  - id: MISSING\n    status: CLOSED",
+        );
+        git(&local, &["add", "docs", "openspec"]);
+        git(&local, &["commit", "-m", "resolver-fixture"]);
+        let result = resolve(
+            &ProductionGitRunner,
+            &local,
+            false,
+            &ExecutionGuardSnapshot::default(),
+        )
+        .unwrap();
+        assert_eq!(result.decision, ResolverDecision::Blocked);
+        assert!(result
+            .blockers
+            .contains(&ResolverBlocker::DependencyNotClosed));
+    }
     struct FakeRunner {
         operation: GitOperation,
         output: GitOutput,
