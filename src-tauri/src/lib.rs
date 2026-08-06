@@ -1020,10 +1020,18 @@ mod tests {
     }
     #[test]
     fn divergent_ff_only_fails() {
-        let (local, _) = repo();
+        let (local, remote) = repo();
         fs::write(local.join("local"), "x").unwrap();
         git(&local, &["add", "."]);
         git(&local, &["commit", "-m", "diverge"]);
+        let other = temp("divergent-remote");
+        git(&other, &["clone", remote.to_str().unwrap(), "."]);
+        git(&other, &["config", "user.name", "AICC Test"]);
+        git(&other, &["config", "user.email", "aicc-test@example.invalid"]);
+        fs::write(other.join("remote"), "x").unwrap();
+        git(&other, &["add", "."]);
+        git(&other, &["commit", "-m", "remote-diverge"]);
+        git(&other, &["push", "origin", "main"]);
         let service = ControlLoopService {
             runner: ProductionGitRunner,
             guards: LocalControlState,
@@ -1057,7 +1065,15 @@ mod tests {
     }
     #[test]
     fn post_fetch_guard_blocks_writer() {
-        let (local, _) = repo();
+        let (local, remote) = repo();
+        let other = temp("guard-remote");
+        git(&other, &["clone", remote.to_str().unwrap(), "."]);
+        git(&other, &["config", "user.name", "AICC Test"]);
+        git(&other, &["config", "user.email", "aicc-test@example.invalid"]);
+        fs::write(other.join("remote-ahead"), "x").unwrap();
+        git(&other, &["add", "."]);
+        git(&other, &["commit", "-m", "remote-ahead"]);
+        git(&other, &["push", "origin", "main"]);
         let service = ControlLoopService {
             runner: ProductionGitRunner,
             guards: SequenceGuardProvider {
