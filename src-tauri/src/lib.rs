@@ -1228,11 +1228,7 @@ mod tests {
             .remote_main_sha
             .unwrap();
         git(&local, &["switch", "-c", "candidate"]);
-        write_resolver_fixture(
-            &local,
-            &remote,
-            "\n  - id: MISSING\n    status: CLOSED",
-        );
+        write_resolver_fixture(&local, &remote, "\n  - id: MISSING\n    status: CLOSED");
         git(&local, &["add", "docs", "openspec"]);
         git(&local, &["commit", "-m", "resolver-fixture"]);
         let result = resolve(
