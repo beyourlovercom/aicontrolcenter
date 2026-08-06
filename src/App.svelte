@@ -1,5 +1,7 @@
 <script lang="ts">
+  import { onMount } from 'svelte';
   import { agents, roadmap, type WorkItem } from './lib/data';
+  import { emptyState, loadControlLoop, syncAllowed, syncWorkspace, type ControlLoopState } from './lib/controlLoop';
 
   type Tab = 'overview' | 'openspec' | 'agents' | 'validation';
 
@@ -9,6 +11,7 @@
   let refreshing = false;
   let toast = '';
   let expanded = new Set(['foundation', 'owner-control']);
+  let controlLoop: ControlLoopState = emptyState;
 
   const evidence = [
     ['C', 'Project Charter', 'docs/00_Governance/01_PROJECT_CHARTER.md'],
@@ -44,13 +47,25 @@
     }, 1900);
   }
 
-  function refresh() {
+  async function refresh() {
     refreshing = true;
-    window.setTimeout(() => {
-      refreshing = false;
-      announce('Authority、OpenSpec 与 OmO Slim 已只读刷新；未执行 git fetch 或启动 Agent。');
-    }, 700);
+    controlLoop = await loadControlLoop();
+    refreshing = false;
+    announce(controlLoop.status === 'VERIFIED' ? 'Remote Authority 已验证；未执行 fetch。' : `Authority 状态：${controlLoop.status}`);
   }
+
+  async function syncLocalMain() {
+    if (!syncAllowed(controlLoop.evaluation) || !window.confirm('确认同步本地 main？仅执行固定 fast-forward 序列。')) return;
+    try {
+      await syncWorkspace();
+      announce('本地 main 已同步；正在重新验证状态。');
+      await refresh();
+    } catch (error) {
+      announce(`同步被阻止：${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  onMount(refresh);
 </script>
 
 <div class="app-shell">
@@ -73,7 +88,7 @@
     <div class="authority-cell">
       <div>
         <div class="micro-label">Remote Authority</div>
-        <div class="authority-value">origin/main · VERIFIED</div>
+        <div class="authority-value">origin/main · {controlLoop.status}</div>
       </div>
       <button class="primary-button" type="button" onclick={refresh}>{refreshing ? '验证中…' : '刷新状态'}</button>
     </div>
@@ -162,8 +177,8 @@
           <div class="metric-grid">
             <article class="metric-card">
               <div class="eyebrow">Authority</div>
-              <div class="metric-value">VERIFIED</div>
-              <div class="metric-note mono">origin/main · 20d1c9d</div>
+              <div class="metric-value">{controlLoop.status}</div>
+              <div class="metric-note mono">origin/main · {controlLoop.authority?.remoteMainSha ?? 'unknown'}</div>
             </article>
             <article class="metric-card">
               <div class="eyebrow">Current Gate</div>
@@ -187,6 +202,42 @@
               <div><dt>OpenSpec Change</dt><dd class="mono">{selected.change}</dd></div>
               <div><dt>远端策略</dt><dd>只读查询 remote main，不执行 git fetch</dd></div>
             </dl>
+          </article>
+
+          <article class="content-card">
+            <div class="section-title-row"><h3>Workspace Sync Evaluation</h3><span class:allow={syncAllowed(controlLoop.evaluation)} class="accent-chip">{syncAllowed(controlLoop.evaluation) ? 'ALLOWED' : 'BLOCKED'}</span></div>
+            <dl class="contract-grid">
+              <div><dt>Remote Main SHA</dt><dd class="mono">{controlLoop.authority?.remoteMainSha ?? 'unknown'}</dd></div>
+              <div><dt>Local Main SHA</dt><dd class="mono">{controlLoop.identity?.localMainSha ?? 'unknown'}</dd></div>
+              <div><dt>Current Branch</dt><dd>{controlLoop.identity?.currentBranch ?? 'detached / unknown'}</dd></div>
+              <div><dt>Current HEAD</dt><dd class="mono">{controlLoop.identity?.localHead ?? 'unknown'}</dd></div>
+              <div><dt>Worktree</dt><dd>{controlLoop.identity?.worktreeClean ? 'CLEAN' : 'DIRTY'}</dd></div>
+              <div><dt>Checked At</dt><dd>{controlLoop.authority?.checkedAt ?? 'not checked'}</dd></div>
+            </dl>
+            <div class="criteria-grid">
+              {#each controlLoop.evaluation?.blockers ?? ['CHECKING'] as blocker}
+                <div class="criterion"><b>!</b><span>{blocker}</span></div>
+              {/each}
+            </div>
+            <button class="primary-button" type="button" disabled={!syncAllowed(controlLoop.evaluation)} onclick={syncLocalMain}>同步本地 main</button>
+          </article>
+
+          <article class="content-card">
+            <div class="section-title-row"><h3>Next Authorized Work Package</h3><span class="accent-chip">{controlLoop.resolver?.decision ?? 'UNKNOWN'}</span></div>
+            {#if controlLoop.resolver?.workPackage}
+              <dl class="contract-grid">
+                <div><dt>WP ID</dt><dd class="mono">{controlLoop.resolver.workPackage.id}</dd></div>
+                <div><dt>Title</dt><dd>{controlLoop.resolver.workPackage.title}</dd></div>
+                <div><dt>Authority SHA</dt><dd class="mono">{controlLoop.resolver.workPackage.authoritySha}</dd></div>
+                <div><dt>OpenSpec Change</dt><dd class="mono">{controlLoop.resolver.workPackage.openspecChange}</dd></div>
+                <div><dt>Dependencies</dt><dd>{controlLoop.resolver.workPackage.dependencies.map((dependency) => `${dependency.id}=${dependency.status}`).join(', ')}</dd></div>
+              </dl>
+            {/if}
+            <div class="criteria-grid">
+              {#each controlLoop.resolver?.blockers ?? ['UNKNOWN'] as blocker}
+                <div class="criterion"><b>!</b><span>{blocker}</span></div>
+              {/each}
+            </div>
           </article>
 
           <article class="content-card">

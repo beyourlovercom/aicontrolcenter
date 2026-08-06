@@ -2,23 +2,27 @@
 
 ## Current milestone
 
-`M1 — First Visible Self-hosted App`
+`M2 — Authority And Workspace Control`
 
 ## Authority
 
-Initial remote authority: `20d1c9d1608795afebddfe1c2da0127237214735`
+Current Authority: `dc6d20ec9fb9d33683ad43148d10a5cb5c667552`
+
+Closed Work Packages: `AICC-VISIBLE-SLICE-001`, `AICC-OPENSPEC-READMODEL-001`
+
+Current Work Package: `AICC-CONTROL-LOOP-001A`
+
+Next Work Packages: `001B OpenSpec Binding`, `001C OpenCode Runtime Observer`, `001D Governed Runtime Control`
 
 ## Delivery sequence
 
-1. AICC-BOOTSTRAP-001 — minimal Tauri and Svelte shell.
-2. AICC-VISIBLE-SLICE-001 — installable macOS visual app.
-3. AICC-READONLY-MVP-001 — reliable project readers and drift detection.
-4. AICC-OWNER-GATE-001 — governed Owner controls.
-5. AICC-OPENSPEC-CONTROL-001 — governed OpenSpec actions.
-6. AICC-OMO-SLIM-RUNNER-001 — controlled multi-agent runtime.
-7. AICC-LEVEL3-RUNNER-001 — end-to-end controlled execution.
-8. AICC-MULTIPROJECT-001 — adapter platform.
+1. AICC-VISIBLE-SLICE-001 — closed installable macOS visual app.
+2. AICC-OPENSPEC-READMODEL-001 — closed local OpenSpec read model.
+3. AICC-CONTROL-LOOP-001A — authority, workspace sync, and next Work Package resolver.
+4. 001B — OpenSpec Binding.
+5. 001C — OpenCode Runtime Observer.
+6. 001D — Governed Runtime Control.
 
 ## Current safety state
 
-The visible app is read-only. It uses embedded demonstration state and does not start OpenCode, invoke OpenSpec, execute Oh My OpenCode Slim agents, or mutate a repository.
+The application is authority-first. It uses fixed typed repository commands, fails closed on unknown authority, requires explicit Owner confirmation for workspace sync, and never exposes arbitrary shell or product-runtime Push, PR, Merge, migration, deployment, or release actions.

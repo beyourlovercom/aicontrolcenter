@@ -1,10 +1,30 @@
+---
+schema: aicc-work-package/v1
+id: AICC-VISIBLE-SLICE-001
+title: First Readable Self-Control App
+status: CLOSED
+authority_sha: dc6d20ec9fb9d33683ad43148d10a5cb5c667552
+openspec_change: aicc-visible-slice-001
+dependencies: []
+previous_run_status: CLOSED
+owner_authorization: AUTHORIZED_FOR_IMPLEMENTATION
+scope:
+  - Tauri and Svelte visual application
+  - read-only three-column interface
+acceptance:
+  accepted_sha: 9c5002316e183cf004777c2b9ab43fe68b0cdbbc
+  criteria:
+    - Frontend production build passes
+    - macOS application workflow exists
+---
+
 # AICC-VISIBLE-SLICE-001
 
 ## First Readable Self-Control App
 
-Status: `IMPLEMENTED_FOR_BUILD_VALIDATION`
+Status: `CLOSED`
 
-Authority SHA: `20d1c9d1608795afebddfe1c2da0127237214735`
+Authority SHA: `dc6d20ec9fb9d33683ad43148d10a5cb5c667552`
 
 ## Scope
 
