@@ -2,7 +2,7 @@
 schema: aicc-work-package/v1
 id: AICC-CONTROL-LOOP-001A
 title: GitHub Authority, Workspace Sync, and Next Work Package Resolver
-status: AUTHORIZED
+status: CLOSED
 authority_sha: dc6d20ec9fb9d33683ad43148d10a5cb5c667552
 openspec_change: aicc-control-loop-001a
 dependencies:
@@ -19,6 +19,10 @@ scope:
   - machine-readable Work Package parsing and resolver
   - corresponding read and control UI
 acceptance:
+  accepted_sha: 0daa089a7edc8d1852df949636a7f11d19bcecee
+  merged_pr: 3
+  final_ci_run: 31080045542
+  openspec_tasks: 17/17
   criteria:
     - Fixed typed Tauri commands are registered
     - Git process execution uses an allowlist and no shell
@@ -30,4 +34,4 @@ acceptance:
 
 # AICC-CONTROL-LOOP-001A
 
-This contract is machine-readable only through the YAML front matter. Formal status is never inferred from the prose below.
+Closed at accepted SHA `0daa089a7edc8d1852df949636a7f11d19bcecee`. The contract remains unarchived for read-only evidence and historical traceability.
