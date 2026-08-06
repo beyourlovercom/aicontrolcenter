@@ -47,19 +47,6 @@ jobs:
           components: rustfmt, clippy
       - name: Rust format
         run: cargo fmt --manifest-path src-tauri/Cargo.toml --check
-      - name: Generate rustfmt remediation patch
-        if: failure()
-        run: |
-          cargo fmt --manifest-path src-tauri/Cargo.toml
-          git diff --binary -- src-tauri/src/lib.rs > rustfmt.patch
-          test -s rustfmt.patch
-      - name: Upload rustfmt remediation patch
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: rustfmt-remediation
-          path: rustfmt.patch
-          if-no-files-found: error
       - name: Rust clippy
         run: cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets --locked -- -D warnings
       - name: Rust tests
