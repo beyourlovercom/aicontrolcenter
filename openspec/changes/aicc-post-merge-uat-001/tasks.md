@@ -15,4 +15,5 @@
 
 - [x] 3.1 Add strict OpenSpec validation to CI.
 - [x] 3.2 Add deterministic secret and absolute-path scans to CI.
-- [ ] 3.3 Run local OpenSpec validation and repository checks; human macOS UAT remains pending.
+- [x] 3.3 Run local and CI OpenSpec/repository verification.
+- [ ] 3.4 Complete Human macOS UAT against the SHA-bound main artifact.

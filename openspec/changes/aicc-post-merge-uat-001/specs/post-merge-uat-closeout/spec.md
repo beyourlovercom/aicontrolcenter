@@ -1,6 +1,6 @@
 ## Purpose
 
-Provides formal closeout evidence and a reproducible macOS UAT package without authorizing later execution.
+Provides formal closeout evidence and a reproducible macOS UAT package without authorizing later execution. The closeout remains `AUTHORIZED` and current while the SHA-bound artifact and Human UAT are pending.
 
 ## ADDED Requirements
 
@@ -13,23 +13,23 @@ The repository SHALL record AICC-CONTROL-LOOP-001A as `CLOSED` at authority SHA 
 - **WHEN** the closeout documents are validated
 - **THEN** 001A is `CLOSED` at the exact accepted SHA and its OpenSpec directory remains present
 
-### Requirement: Roadmap preserves future order
+### Requirement: Closeout lifecycle remains pending Human UAT
 
-The Living Roadmap SHALL use the accepted SHA as current authority, list 001A and the closeout as closed, and preserve 001B OpenSpec Binding before 001C OpenCode Runtime Observer and 001D Governed Runtime Control.
+The Living Roadmap SHALL use the accepted SHA as current authority, retain `AICC-POST-MERGE-UAT-001` as the current Work Package, and preserve 001B OpenSpec Binding before 001C OpenCode Runtime Observer and 001D Governed Runtime Control. The closeout SHALL remain `AUTHORIZED` and SHALL NOT be marked `CLOSED` in this change while the SHA-bound artifact and Human UAT are pending. After the merged-main artifact exists and Human UAT explicitly passes, a separate bounded Post-UAT Closure SHALL update it to `CLOSED`.
 
 #### Scenario: Future package order remains explicit
 
-- **WHEN** the roadmap is read after closeout
-- **THEN** 001B precedes 001C and 001D, and no future package is authorized
+- **WHEN** the roadmap is read while the closeout artifact or Human UAT is pending
+- **THEN** the closeout remains current and `AUTHORIZED`, 001B precedes 001C and 001D, and no future package is authorized
 
 ### Requirement: UAT workflow is reproducible and non-publishing
 
-The macOS workflow SHALL run on `main` pushes or `workflow_dispatch`, use `npm ci`, assert checkout identity against `GITHUB_SHA`, and emit names containing both full and short commit SHA values.
+The macOS workflow SHALL run on `main` pushes or `workflow_dispatch`, use `npm ci`, assert checkout identity against `GITHUB_SHA`, capture an allowed actual runner architecture, and emit names containing full and short commit SHA values plus that architecture.
 
 #### Scenario: UAT artifacts are produced
 
 - **WHEN** the workflow completes successfully
-- **THEN** it uploads an app zip, DMG, SHA256SUMS.txt, codesign-details.txt, and explicit commit SHA evidence
+- **THEN** it uploads an app zip, DMG, SHA256SUMS.txt, codesign-details.txt, and explicit commit/build identity evidence including the actual architecture
 
 #### Scenario: Publishing is unavailable
 
@@ -53,7 +53,7 @@ The macOS workflow SHALL run on `main` pushes or `workflow_dispatch`, use `npm c
 | 001A remains readable | `openspec/changes/aicc-control-loop-001a` remains present and validates |
 | 001B is non-authorizing | Front matter and explicit exclusions use `PLANNED` / `NOT_AUTHORIZED` |
 | Manual/main triggers | Workflow `on` contains `workflow_dispatch` and `push.branches: [main]` |
-| Artifact identity | Full/short SHA capture, filename prefix, checksum, and evidence file are present |
+| Artifact identity | Full/short SHA and actual architecture capture, filename prefix, checksum, and evidence file are present |
 | CI hygiene | Strict OpenSpec, secret, and absolute-path checks are defined |
 
 ## Explicit Exclusions
