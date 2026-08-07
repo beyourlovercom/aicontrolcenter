@@ -19,6 +19,24 @@ jobs:
           cache: npm
       - name: Install dependencies
         run: npm ci
+      - name: Validate OpenSpec changes
+        run: npx --no-install openspec validate --all --strict --no-interactive
+      - name: Scan for secrets
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git grep -nE '(AKIA[0-9A-Z]{16}|gh[pousr]_[A-Za-z0-9_]{20,}|BEGIN [A-Z ]*PRIVATE KEY)' -- .github docs openspec ':!package-lock.json'; then
+            echo 'Potential secret detected'
+            exit 1
+          fi
+      - name: Scan for absolute local paths
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git grep -nE '(/Users/|/home/|[A-Za-z]:\\\\Users\\\\)' -- .github docs openspec ':!package-lock.json' ':!.github/workflows/ci.yml'; then
+            echo 'Absolute local path detected'
+            exit 1
+          fi
       - name: Typecheck
         run: npx tsc --noEmit
       - name: Tests

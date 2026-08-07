@@ -1,8 +1,9 @@
 name: Build macOS visible app
 
 on:
+  workflow_dispatch:
   push:
-    branches: [feature/aicc-visible-app-v0-2]
+    branches: [main]
 
 permissions:
   contents: read
@@ -13,6 +14,8 @@ jobs:
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - uses: actions/setup-node@v4
         with:
@@ -21,7 +24,27 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
 
       - name: Install dependencies
-        run: npm install
+        run: npm ci
+
+      - name: Capture commit identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          FULL_SHA="${GITHUB_SHA}"
+          SHORT_SHA="${GITHUB_SHA:0:12}"
+          ARCH="$(uname -m)"
+          case "$ARCH" in
+            arm64|x86_64) ;;
+            *)
+              echo "Unsupported macOS architecture: $ARCH"
+              exit 1
+              ;;
+          esac
+          printf 'SHORT_SHA=%s\n' "$SHORT_SHA" >> "$GITHUB_ENV"
+          printf 'ARCH=%s\n' "$ARCH" >> "$GITHUB_ENV"
+          printf 'full_sha=%s\nshort_sha=%s\narchitecture=%s\n' "$FULL_SHA" "$SHORT_SHA" "$ARCH" | tee "$RUNNER_TEMP/commit-identity.txt"
+          printf 'full_sha=%s\nshort_sha=%s\narchitecture=%s\n' "$FULL_SHA" "$SHORT_SHA" "$ARCH" > commit-sha.txt
+          test "$(git rev-parse HEAD)" = "$FULL_SHA"
 
       - name: Build web application
         run: npm run build
@@ -29,7 +52,7 @@ jobs:
       - name: Build unsigned macOS app bundle
         run: npm run tauri build -- --bundles app --no-sign
 
-      - name: Apply ad-hoc code signature and verify bundle integrity
+      - name: Apply ad-hoc UAT signature and verify bundle integrity
         shell: bash
         run: |
           set -euo pipefail
@@ -40,15 +63,18 @@ jobs:
           codesign --verify --deep --strict --verbose=2 "$APP_PATH"
           codesign -dv --verbose=4 "$APP_PATH" 2>&1 | tee codesign-details.txt
 
-      - name: Package signed app and DMG
+      - name: Package commit-addressed UAT app and DMG
         shell: bash
         run: |
           set -euo pipefail
           APP_PATH="src-tauri/target/release/bundle/macos/AI Control Center.app"
           OUT_DIR="$RUNNER_TEMP/aicc-dist"
           STAGE_DIR="$RUNNER_TEMP/aicc-dmg-stage"
+          FULL_SHA="${GITHUB_SHA}"
+          SHORT_SHA="${GITHUB_SHA:0:12}"
+          PREFIX="AI-Control-Center-${FULL_SHA}-${SHORT_SHA}-macOS-${ARCH}-adhoc"
           mkdir -p "$OUT_DIR" "$STAGE_DIR"
-          ditto -c -k --sequesterRsrc --keepParent "$APP_PATH" "$OUT_DIR/AI-Control-Center-v0.2.0-macOS-arm64-adhoc-APP.zip"
+          ditto -c -k --sequesterRsrc --keepParent "$APP_PATH" "$OUT_DIR/${PREFIX}.app.zip"
           ditto "$APP_PATH" "$STAGE_DIR/AI Control Center.app"
           ln -s /Applications "$STAGE_DIR/Applications"
           hdiutil create \
@@ -56,14 +82,15 @@ jobs:
             -srcfolder "$STAGE_DIR" \
             -ov \
             -format UDZO \
-            "$OUT_DIR/AI-Control-Center-v0.2.0-macOS-arm64-adhoc.dmg"
-          shasum -a 256 "$OUT_DIR"/* | tee "$OUT_DIR/SHA256SUMS.txt"
+             "$OUT_DIR/${PREFIX}.dmg"
           cp codesign-details.txt "$OUT_DIR/codesign-details.txt"
+          cp commit-sha.txt "$OUT_DIR/commit-sha.txt"
+          (cd "$OUT_DIR" && shasum -a 256 -- *.app.zip *.dmg codesign-details.txt commit-sha.txt) > "$OUT_DIR/SHA256SUMS.txt"
 
-      - name: Upload ad-hoc signed macOS packages
+      - name: Upload ad-hoc UAT packages
         uses: actions/upload-artifact@v4
         with:
-          name: ai-control-center-macos-arm64-adhoc
+          name: ai-control-center-macos-${{ env.ARCH }}-adhoc-${{ github.sha }}-${{ env.SHORT_SHA }}
           path: ${{ runner.temp }}/aicc-dist/*
           if-no-files-found: error
           retention-days: 30
