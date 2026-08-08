@@ -151,6 +151,7 @@ pub struct RoadmapMilestone {
     pub id: String,
     pub title: String,
     pub work_packages: Vec<String>,
+    pub future_items: Vec<String>,
     pub progress_percent: u8,
 }
 
@@ -661,7 +662,7 @@ fn parse_milestones(content: &str) -> Result<Vec<RoadmapMilestone>, ControlLoopE
     }
     let mut milestones = Vec::new();
     let mut current: Option<RoadmapMilestone> = None;
-    let mut reading_packages = false;
+    let mut reading: Option<bool> = None;
     for line in lines {
         let trimmed = line.trim();
         if trimmed.starts_with("## ") && trimmed != "## Milestones" {
@@ -669,7 +670,7 @@ fn parse_milestones(content: &str) -> Result<Vec<RoadmapMilestone>, ControlLoopE
         }
         if let Some(value) = trimmed.strip_prefix("### ") {
             if let Some(milestone) = current.take() {
-                if milestone.work_packages.is_empty() {
+                if milestone.work_packages.is_empty() && milestone.future_items.is_empty() {
                     return Err(err(
                         "ROADMAP_HIERARCHY_INVALID",
                         "milestone has no Work Packages",
@@ -684,18 +685,27 @@ fn parse_milestones(content: &str) -> Result<Vec<RoadmapMilestone>, ControlLoopE
                 id: id.trim().to_string(),
                 title: title.trim().to_string(),
                 work_packages: Vec::new(),
+                future_items: Vec::new(),
                 progress_percent: 0,
             });
-            reading_packages = false;
-        } else if trimmed == "Work Packages:" {
+            reading = None;
+        } else if trimmed == "Work Packages:" || trimmed == "Formal Work Packages:" {
             if current.is_none() {
                 return Err(err(
                     "ROADMAP_HIERARCHY_INVALID",
                     "Work Packages has no milestone",
                 ));
             }
-            reading_packages = true;
-        } else if reading_packages {
+            reading = Some(true);
+        } else if trimmed == "Future Work Packages:" {
+            if current.is_none() {
+                return Err(err(
+                    "ROADMAP_HIERARCHY_INVALID",
+                    "Future Work Packages has no milestone",
+                ));
+            }
+            reading = Some(false);
+        } else if reading.is_some() {
             if let Some(milestone) = current.as_mut() {
                 let mut rest = trimmed;
                 while let Some(start) = rest.find('`') {
@@ -707,20 +717,25 @@ fn parse_milestones(content: &str) -> Result<Vec<RoadmapMilestone>, ControlLoopE
                         )
                     })?;
                     let id = &after_start[..end];
-                    if id.is_empty() || milestone.work_packages.iter().any(|item| item == id) {
+                    let target = if reading == Some(true) {
+                        &mut milestone.work_packages
+                    } else {
+                        &mut milestone.future_items
+                    };
+                    if id.is_empty() || target.iter().any(|item| item == id) {
                         return Err(err(
                             "ROADMAP_HIERARCHY_INVALID",
                             "duplicate or empty Work Package",
                         ));
                     }
-                    milestone.work_packages.push(id.to_string());
+                    target.push(id.to_string());
                     rest = &after_start[end + 1..];
                 }
             }
         }
     }
     if let Some(milestone) = current {
-        if milestone.work_packages.is_empty() {
+        if milestone.work_packages.is_empty() && milestone.future_items.is_empty() {
             return Err(err(
                 "ROADMAP_HIERARCHY_INVALID",
                 "milestone has no Work Packages",
