@@ -1,18 +1,20 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { agents } from './lib/data';
-  import { cancelSync as cancelledSync, emptyState, loadControlLoop, requestSync, syncAllowed, syncOutcome, syncWorkspace, type ControlLoopState, type RoadmapEntry, type SyncState } from './lib/controlLoop';
+  import { cancelSync as cancelledSync, emptyState, loadControlLoop, ownerBlocker, requestSync, syncAllowed, syncOutcome, syncState as getSyncState, syncWorkspace, type ControlLoopState, type RoadmapEntry, type SyncState } from './lib/controlLoop';
 
   type Tab = 'overview' | 'openspec' | 'agents' | 'validation';
 
   type WorkItem = RoadmapEntry & { key: string; summary: string; gate: string; progress: string; progressPercent: number; parent: string; dependency: string; change: string; path: string; spec: string; task: string; run: string; criteria: string[] };
-  let selected: WorkItem = { key: 'loading', id: 'LOADING', title: 'Loading formal roadmap', summary: 'Reading repository evidence.', status: 'CURRENT', authorization: 'CHECKING', gate: 'CHECKING', progress: '0 / 0', progressPercent: 0, parent: 'Living Roadmap', dependency: 'none', change: 'unknown', path: 'docs/10_Planning_Roadmap/01_LIVING_ROADMAP.md', spec: 'unknown', task: 'unknown', run: 'unknown', criteria: [] };
+  let selected: WorkItem = { key: 'loading', id: 'LOADING', title: '正在读取正式路线图', summary: '正在读取仓库证据。', status: 'CURRENT', authorization: 'CHECKING', gate: 'CHECKING', progress: '0 / 0', progressPercent: 0, parent: '项目路线图', dependency: 'unknown', change: 'unknown', path: 'docs/10_Planning_Roadmap/01_LIVING_ROADMAP.md', spec: 'unknown', task: 'unknown', run: 'unknown', criteria: [] };
   let activeTab: Tab = 'overview';
   let query = '';
   let refreshing = false;
   let toast = '';
   let controlLoop: ControlLoopState = emptyState;
   let syncState: SyncState = { kind: 'idle' };
+  $: syncCode = controlLoop.evaluation?.blockers[0] ?? getSyncState(controlLoop.evaluation);
+  $: syncCopy = ownerBlocker(syncCode);
 
   const evidence = [
     ['C', 'Project Charter', 'docs/00_Governance/01_PROJECT_CHARTER.md'],
@@ -29,8 +31,8 @@
     summary: `${entry.status} / ${entry.authorization}`,
     gate: entry.status,
     progress: `${entry.status}`,
-    progressPercent: entry.status === 'CLOSED' ? 100 : entry.id === controlLoop.roadmap?.currentWorkPackage ? controlLoop.roadmap?.progressPercent ?? 0 : 0,
-    parent: controlLoop.roadmap?.currentMilestone ?? 'Living Roadmap',
+    progressPercent: entry.status === 'CLOSED' ? 100 : 0,
+    parent: entry.milestone ?? 'UNASSIGNED',
     dependency: 'Formal Work Package evidence',
     change: entry.id.toLowerCase(),
     path: `docs/60_Operations/work-packages/${entry.id}.md`,
@@ -116,16 +118,18 @@
   <div class="workspace">
     <aside class="roadmap-pane">
       <div class="pane-heading">
-        <div class="eyebrow">Project Roadmap</div>
+        <div class="eyebrow">项目路线图</div>
         <div class="heading-row">
-          <h2>{controlLoop.roadmap?.currentMilestone ?? 'Living Roadmap'}</h2>
+          <h2>{controlLoop.roadmap?.project ?? 'AI Control Center'}</h2>
           <span class="accent-chip">{controlLoop.roadmap?.progressPercent ?? 0}%</span>
         </div>
-        <p>正式 Roadmap / Work Package evidence · 当前：{controlLoop.roadmap?.currentWorkPackage ?? 'CHECKING'}</p>
+        <p>项目 → 里程碑 → 工作包 · 当前：{controlLoop.roadmap?.currentMilestone ?? 'CHECKING'}</p>
       </div>
 
       <div class="roadmap-scroll">
-        {#each filteredRoadmap as item}
+        {#each controlLoop.roadmap?.milestones ?? [] as milestone}
+          <div class="milestone-summary"><strong>{milestone.id} — {milestone.title}</strong><b>{milestone.progressPercent}%</b></div>
+          {#each filteredRoadmap.filter((item) => item.parent === milestone.id) as item}
           <button class:active={selected.key === item.key} class="work-row" type="button" onclick={() => choose(item)}>
             <span class="node-icon">{item.id.slice(-3)}</span>
             <span class="tree-copy">
@@ -135,6 +139,7 @@
             </span>
             <span class:done={item.status === 'CLOSED'} class:current={item.id === controlLoop.roadmap?.currentWorkPackage} class="status-dot"></span>
           </button>
+          {/each}
         {/each}
       </div>
 
@@ -167,17 +172,17 @@
         <section class="tab-panel">
           <div class="metric-grid">
             <article class="metric-card">
-              <div class="eyebrow">Authority</div>
+              <div class="eyebrow">正式 Authority</div>
               <div class="metric-value">{controlLoop.status}</div>
               <div class="metric-note mono">origin/main · {controlLoop.authority?.remoteMainSha ?? 'unknown'}</div>
             </article>
             <article class="metric-card">
-              <div class="eyebrow">Current Gate</div>
+              <div class="eyebrow">当前关卡</div>
               <div class="metric-value">{selected.gate}</div>
               <div class="metric-note">{selected.authorization}</div>
             </article>
             <article class="metric-card">
-              <div class="eyebrow">Progress</div>
+              <div class="eyebrow">全局进度</div>
               <div class="metric-value">{controlLoop.roadmap?.progressPercent ?? 0}%</div>
               <div class="progress-track"><span style={`width:${controlLoop.roadmap?.progressPercent ?? 0}%`}></span></div>
             </article>
@@ -196,7 +201,8 @@
           </article>
 
           <article class="content-card">
-            <div class="section-title-row"><h3>Workspace Sync Evaluation</h3><span class:allow={syncAllowed(controlLoop.evaluation)} class="accent-chip">{syncAllowed(controlLoop.evaluation) ? 'ALLOWED' : 'BLOCKED'}</span></div>
+            <div class="section-title-row"><h3>本地 main 同步状态</h3><span class="accent-chip">{getSyncState(controlLoop.evaluation)}</span></div>
+            <div class="sync-explanation"><strong>{syncCopy.reason}</strong><span class="mono">{syncCode}</span><small>下一步：{syncCopy.nextStep}</small></div>
             <dl class="contract-grid">
               <div><dt>Remote Main SHA</dt><dd class="mono">{controlLoop.authority?.remoteMainSha ?? 'unknown'}</dd></div>
               <div><dt>Local Main SHA</dt><dd class="mono">{controlLoop.identity?.localMainSha ?? 'unknown'}</dd></div>
@@ -207,7 +213,7 @@
             </dl>
             <div class="criteria-grid">
               {#each controlLoop.evaluation?.blockers ?? ['CHECKING'] as blocker}
-                <div class="criterion"><b>!</b><span>{blocker}</span></div>
+                <div class="criterion"><b>!</b><span>{ownerBlocker(blocker).reason}<small class="mono">{blocker}</small></span></div>
               {/each}
             </div>
             <button class="primary-button" type="button" disabled={!syncAllowed(controlLoop.evaluation) || syncState.kind === 'loading'} onclick={syncLocalMain}>同步本地 main</button>
@@ -228,7 +234,8 @@
           </article>
 
           <article class="content-card">
-            <div class="section-title-row"><h3>Next Authorized Work Package</h3><span class="accent-chip">{controlLoop.resolver?.decision ?? 'UNKNOWN'}</span></div>
+            <div class="section-title-row"><h3>下一工作包执行判定</h3><span class="accent-chip">Next Work Package Gate</span></div>
+            <div class="resolver-summary"><strong>当前候选工作包</strong><span>{controlLoop.resolver?.workPackage?.id ?? '暂无候选工作包'}</span><strong>执行</strong><span>{controlLoop.resolver?.decision ?? 'UNKNOWN'}</span></div>
             {#if controlLoop.resolver?.workPackage}
               <dl class="contract-grid">
                 <div><dt>WP ID</dt><dd class="mono">{controlLoop.resolver.workPackage.id}</dd></div>
@@ -240,13 +247,13 @@
             {/if}
             <div class="criteria-grid">
               {#each controlLoop.resolver?.blockers ?? ['UNKNOWN'] as blocker}
-                <div class="criterion"><b>!</b><span>{blocker}</span></div>
+                <div class="criterion"><b>!</b><span>{blocker === 'WORK_PACKAGE_NOT_AUTHORIZED' ? '等待 Owner 授权' : '存在执行阻塞'}<small class="mono">{blocker}</small><small>下一步：完成当前 Post-UAT Closure / Owner Authorization</small></span></div>
               {/each}
             </div>
           </article>
 
           <article class="content-card">
-            <div class="section-title-row"><h3>Formal Roadmap State</h3><span class="secondary-note">{controlLoop.roadmap?.entries.length ?? 0} packages</span></div>
+            <div class="section-title-row"><h3>正式路线图证据</h3><span class="secondary-note">{controlLoop.roadmap?.entries.length ?? 0} 个工作包</span></div>
             <div class="criteria-grid">
               {#each controlLoop.roadmap?.entries ?? [] as item, index}
                 <div class="criterion"><b>{String(index + 1).padStart(2, '0')}</b><span>{item.id}: {item.status} / {item.authorization}</span></div>

@@ -1,4 +1,4 @@
-import { authorityStatus, cancelSync, hasRuntimeStartAction, requestSync, resolverDecision, syncAllowed, syncOutcome } from './controlLoop.ts';
+import { authorityStatus, cancelSync, hasRuntimeStartAction, ownerBlocker, requestSync, resolverDecision, syncAllowed, syncOutcome, syncState } from './controlLoop.ts';
 
 function assert(condition: unknown, message: string): asserts condition { if (!condition) throw new Error(message); }
 
@@ -7,6 +7,9 @@ assert(authorityStatus('DRIFT') === 'DRIFT', 'drift status maps to drift');
 assert(authorityStatus('REMOTE_UNAVAILABLE') === 'UNAVAILABLE', 'unknown authority fails closed');
 assert(syncAllowed({ allowed: true, blockers: [], plannedActions: [] }), 'allowed evaluation enables sync');
 assert(!syncAllowed({ allowed: false, blockers: ['WORKTREE_DIRTY'], plannedActions: [] }), 'blocker disables sync');
+assert(syncState({ allowed: false, blockers: ['SYNC_NOT_REQUIRED'], plannedActions: [] }) === 'UP_TO_DATE', 'up to date state is explicit');
+assert(syncState({ allowed: false, blockers: ['WORKTREE_DIRTY'], plannedActions: [] }) === 'BLOCKED', 'blocked state is explicit');
+assert(ownerBlocker('WORKTREE_DIRTY').reason === '工作区存在未提交修改', 'dirty blocker is owner-readable');
 assert(resolverDecision({ decision: 'START_ALLOWED', workPackage: null, blockers: [] }) === 'START_ALLOWED', 'resolver decision is displayed');
 assert(resolverDecision(null) === 'UNKNOWN', 'missing resolver is unknown');
 assert(hasRuntimeStartAction() === false, 'runtime start action is never exposed');

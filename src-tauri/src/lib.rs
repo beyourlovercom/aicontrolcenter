@@ -75,6 +75,14 @@ pub struct WorkspaceSyncEvaluation {
     pub allowed: bool,
     pub blockers: Vec<SyncBlocker>,
     pub planned_actions: Vec<String>,
+    pub state: SyncState,
+}
+#[derive(Debug, Serialize, Clone, PartialEq, Eq)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum SyncState {
+    UpToDate,
+    SyncRequired,
+    Blocked,
 }
 #[derive(Debug, Serialize, Clone)]
 #[serde(rename_all = "camelCase")]
@@ -134,17 +142,29 @@ pub struct RoadmapEntry {
     pub title: String,
     pub status: String,
     pub authorization: String,
+    pub milestone: String,
+}
+
+#[derive(Debug, Serialize, Clone, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct RoadmapMilestone {
+    pub id: String,
+    pub title: String,
+    pub work_packages: Vec<String>,
+    pub progress_percent: u8,
 }
 
 #[derive(Debug, Serialize, Clone, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct RoadmapEvidence {
+    pub project: String,
     pub current_milestone: String,
     pub authority_sha: String,
     pub current_work_package: String,
     pub closed_work_packages: Vec<String>,
     pub next_work_packages: Vec<String>,
     pub progress_percent: u8,
+    pub milestones: Vec<RoadmapMilestone>,
     pub entries: Vec<RoadmapEntry>,
 }
 #[derive(Debug, Serialize, Clone)]
@@ -468,9 +488,13 @@ fn evaluate(
             blockers.push(SyncBlocker::SyncRequired);
         }
     }
+    let state = if blockers.iter().any(|blocker| *blocker == SyncBlocker::WorktreeDirty || *blocker == SyncBlocker::ActiveRun || *blocker == SyncBlocker::WriterLocked || *blocker == SyncBlocker::UnsavedDiff || *blocker == SyncBlocker::PreviousRunOpen || *blocker == SyncBlocker::RemoteUnavailable || *blocker == SyncBlocker::RepositoryInvalid) {
+        SyncState::Blocked
+    } else if identity.local_main_sha == authority.remote_main_sha { SyncState::UpToDate } else { SyncState::SyncRequired };
     WorkspaceSyncEvaluation {
         allowed: blockers == [SyncBlocker::SyncRequired],
         blockers,
+        state,
         planned_actions: vec![
             "git fetch origin main".into(),
             "git switch main".into(),
@@ -638,6 +662,27 @@ fn load_roadmap_evidence(root: &Path) -> Result<RoadmapEvidence, ControlLoopErro
         .map(|value| value.trim().trim_matches('`').to_string())
         .filter(|value| !value.is_empty())
         .collect::<Vec<_>>();
+    let project = "AI Control Center".to_string();
+    let mut milestones = Vec::new();
+    let mut active_milestone: Option<(String, String, Vec<String>)> = None;
+    for line in content.lines() {
+        if let Some(value) = line.strip_prefix("### ") {
+            if let Some((id, title, work_packages)) = active_milestone.take() {
+                milestones.push(RoadmapMilestone { id, title, work_packages, progress_percent: 0 });
+            }
+            let mut parts = value.splitn(2, " — ");
+            let id = parts.next().unwrap_or("UNKNOWN").trim().to_string();
+            let title = parts.next().unwrap_or(value).trim().to_string();
+            active_milestone = Some((id, title, Vec::new()));
+        } else if let Some(value) = line.strip_prefix("Work Packages:") {
+            if let Some((_, _, packages)) = active_milestone.as_mut() {
+                packages.extend(value.split(',').map(|item| item.trim().trim_matches('`').to_string()).filter(|item| !item.is_empty()));
+            }
+        }
+    }
+    if let Some((id, title, work_packages)) = active_milestone.take() {
+        milestones.push(RoadmapMilestone { id, title, work_packages, progress_percent: 0 });
+    }
     let packages_root = root.join("docs/60_Operations/work-packages");
     let mut entries = Vec::new();
     for entry in fs::read_dir(packages_root).map_err(|_| {
@@ -658,27 +703,37 @@ fn load_roadmap_evidence(root: &Path) -> Result<RoadmapEvidence, ControlLoopErro
             continue;
         }
         if let Ok(package) = parse_package(&path) {
+            let milestone = milestones.iter().find(|milestone| milestone.work_packages.contains(&package.id)).map(|milestone| milestone.id.clone()).unwrap_or_else(|| "UNASSIGNED".into());
             entries.push(RoadmapEntry {
                 id: package.id,
                 title: package.title,
                 status: package.status,
                 authorization: package.owner_authorization,
+                milestone,
             });
         }
     }
     entries.sort_by(|left, right| left.id.cmp(&right.id));
+    for milestone in &mut milestones {
+        let items = entries.iter().filter(|entry| entry.milestone == milestone.id).collect::<Vec<_>>();
+        let total = items.len().max(1);
+        let closed = items.iter().filter(|entry| entry.status == "CLOSED").count();
+        milestone.progress_percent = ((closed * 100) / total) as u8;
+    }
     let total = entries.len().max(1);
     let closed = entries
         .iter()
         .filter(|entry| entry.status == "CLOSED")
         .count();
     Ok(RoadmapEvidence {
+        project,
         current_milestone,
         authority_sha,
         current_work_package,
         closed_work_packages,
         next_work_packages,
         progress_percent: ((closed * 100) / total) as u8,
+        milestones,
         entries,
     })
 }
