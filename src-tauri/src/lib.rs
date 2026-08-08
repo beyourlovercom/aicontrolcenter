@@ -1449,19 +1449,23 @@ mod tests {
         let planned = "---\nschema: aicc-work-package/v1\nid: AICC-CONTROL-LOOP-001B\ntitle: Binding\nstatus: PLANNED\nauthority_sha: authority\nopenspec_change: binding\ndependencies: []\nprevious_run_status: CLOSED\nowner_authorization: NOT_AUTHORIZED\n---\n";
         let closed = "---\nschema: aicc-work-package/v1\nid: AICC-CLOSED\ntitle: Closed\nstatus: CLOSED\nauthority_sha: authority\nopenspec_change: closed\ndependencies: []\nprevious_run_status: CLOSED\nowner_authorization: AUTHORIZED_FOR_IMPLEMENTATION\n---\n";
         let runtime = "---\nschema: aicc-work-package/v1\nid: AICC-RUNTIME-001\ntitle: Runtime\nstatus: PLANNED\nauthority_sha: authority\nopenspec_change: runtime\ndependencies: []\nprevious_run_status: CLOSED\nowner_authorization: NOT_AUTHORIZED\n---\n";
-        fs::write(root.join("docs/60_Operations/work-packages/r2.md"), package).unwrap();
         fs::write(
-            root.join("docs/60_Operations/work-packages/planned.md"),
+            root.join("docs/60_Operations/work-packages/AICC-POST-MERGE-UAT-001-R2.md"),
+            package,
+        )
+        .unwrap();
+        fs::write(
+            root.join("docs/60_Operations/work-packages/AICC-CONTROL-LOOP-001B.md"),
             planned,
         )
         .unwrap();
         fs::write(
-            root.join("docs/60_Operations/work-packages/closed.md"),
+            root.join("docs/60_Operations/work-packages/AICC-CLOSED.md"),
             closed,
         )
         .unwrap();
         fs::write(
-            root.join("docs/60_Operations/work-packages/runtime.md"),
+            root.join("docs/60_Operations/work-packages/AICC-RUNTIME-001.md"),
             runtime,
         )
         .unwrap();
