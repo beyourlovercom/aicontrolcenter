@@ -770,10 +770,7 @@ fn load_roadmap_evidence(root: &Path) -> Result<RoadmapEvidence, ControlLoopErro
         }
         if let Ok(package) = parse_package(&path) {
             let milestone = milestone_for_work_package(&package.id).to_string();
-            if let Some(group) = milestones
-                .iter_mut()
-                .find(|group| group.id == milestone)
-            {
+            if let Some(group) = milestones.iter_mut().find(|group| group.id == milestone) {
                 if !group.work_packages.contains(&package.id) {
                     group.work_packages.push(package.id.clone());
                 }
@@ -1419,11 +1416,7 @@ mod tests {
         let package = "---\nschema: aicc-work-package/v1\nid: AICC-POST-MERGE-UAT-001-R2\ntitle: R2\nstatus: AUTHORIZED\nauthority_sha: authority\nopenspec_change: current\ndependencies: []\nprevious_run_status: HUMAN_UAT_FAIL\nowner_authorization: AUTHORIZED_FOR_IMPLEMENTATION\n---\n";
         let planned = "---\nschema: aicc-work-package/v1\nid: AICC-CONTROL-LOOP-001B\ntitle: Binding\nstatus: PLANNED\nauthority_sha: authority\nopenspec_change: binding\ndependencies: []\nprevious_run_status: CLOSED\nowner_authorization: NOT_AUTHORIZED\n---\n";
         let closed = "---\nschema: aicc-work-package/v1\nid: AICC-CLOSED\ntitle: Closed\nstatus: CLOSED\nauthority_sha: authority\nopenspec_change: closed\ndependencies: []\nprevious_run_status: CLOSED\nowner_authorization: AUTHORIZED_FOR_IMPLEMENTATION\n---\n";
-        fs::write(
-            root.join("docs/60_Operations/work-packages/r2.md"),
-            package,
-        )
-        .unwrap();
+        fs::write(root.join("docs/60_Operations/work-packages/r2.md"), package).unwrap();
         fs::write(
             root.join("docs/60_Operations/work-packages/planned.md"),
             planned,
