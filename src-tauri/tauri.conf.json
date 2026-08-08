@@ -31,7 +31,7 @@
     "targets": ["app", "dmg"],
     "category": "DeveloperTool",
     "shortDescription": "Governed AI project control center",
-    "longDescription": "A read-only macOS control plane for Roadmap, Work Package, Authority, OpenSpec and Oh My OpenCode Slim visibility.",
+    "longDescription": "A governed Codex-only macOS control plane for Roadmap, Work Package, Authority, OpenSpec, Owner authorization, and Human UAT evidence.",
     "macOS": {
       "minimumSystemVersion": "10.15"
     }

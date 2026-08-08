@@ -6,13 +6,13 @@
 
 ## Authority
 
-Current Authority: `7f72b0a32013c1fd0ee410199e41eb1b3f9bc935`
+Current Authority: `fcd41386fafd6ee2083e73cdee71bee68a3a1e09`
 
 Closed Work Packages: `AICC-VISIBLE-SLICE-001`, `AICC-OPENSPEC-READMODEL-001`, `AICC-CONTROL-LOOP-001A`
 
-Current Work Package: `AICC-POST-MERGE-UAT-001-R2`
+Current Work Package: `AICC-CODEX-ONLY-MIGRATION-001`
 
-Next Work Packages: `001B OpenSpec Binding`, `001C OpenCode Runtime Observer`, `001D Governed Runtime Control`
+Next Work Packages: `001B OpenSpec Binding`, `001C Codex Runtime Observer`, `001D Owner Authorization & Governed Codex Runtime`, `001E Codex PR Runner`, `001F Autonomous Delivery Loop`
 
 ## Milestones
 
@@ -29,6 +29,7 @@ Work Packages:
 `AICC-POST-MERGE-UAT-001`,
 `AICC-POST-MERGE-UAT-001-R1`,
 `AICC-POST-MERGE-UAT-001-R2`,
+`AICC-CODEX-ONLY-MIGRATION-001`,
 `AICC-CONTROL-LOOP-001B`
 
 ### M3 — Runtime
@@ -37,7 +38,9 @@ Formal Work Packages:
 
 Future Work Packages:
 `AICC-CONTROL-LOOP-001C`,
-`AICC-CONTROL-LOOP-001D`
+`AICC-CONTROL-LOOP-001D`,
+`AICC-CONTROL-LOOP-001E`,
+`AICC-CONTROL-LOOP-001F`
 
 ## Delivery sequence
 
@@ -46,13 +49,16 @@ Future Work Packages:
 3. AICC-CONTROL-LOOP-001A — closed authority, workspace sync, and next Work Package resolver.
 4. AICC-POST-MERGE-UAT-001 — 001A closeout, roadmap authority update, and macOS UAT build.
 5. AICC-POST-MERGE-UAT-001-R1 — first Human UAT remediation (Human UAT failed).
-6. AICC-POST-MERGE-UAT-001-R2 — current Human UAT remediation (not closed; Human UAT pending).
-7. 001B — OpenSpec Binding (planned, owner authorization not authorized).
-8. 001C — OpenCode Runtime Observer.
-9. 001D — Governed Runtime Control.
+6. AICC-POST-MERGE-UAT-001-R2 — Human UAT remediation remains unresolved and blocked by the Codex-only architecture migration; it is not closed and Human UAT remains pending.
+7. AICC-CODEX-ONLY-MIGRATION-001 — current Codex-only migration through a new main-bound Human UAT artifact.
+8. 001B — OpenSpec Binding (planned, owner authorization not authorized).
+9. 001C — Codex Runtime Observer (future placeholder; no formal WP record).
+10. 001D — Owner Authorization & Governed Codex Runtime (future placeholder; no formal WP record).
+11. 001E — Codex PR Runner (future placeholder; no formal WP record).
+12. 001F — Autonomous Delivery Loop (future placeholder; no formal WP record).
 
 ## Current safety state
 
-The application is authority-first. It uses fixed typed repository commands, fails closed on unknown authority, requires explicit Owner confirmation for workspace sync, and never exposes arbitrary shell or product-runtime Push, PR, Merge, migration, deployment, or release actions.
+The application is authority-first and Codex-only. It uses fixed typed repository and Codex operations, fails closed on unknown authority, requires evidence-bound Owner authorization and explicit confirmation, and never exposes arbitrary shell input.
 
-The closeout build is an unsigned/ad-hoc UAT artifact only. It does not create a Release, Deploy, or any product-runtime mutation. R2 remains current and pending Human UAT; it does not close the Post-UAT package. 001B, 001C, and 001D remain ordered future Work Packages; no later package is authorized by this roadmap.
+The build is an unsigned/ad-hoc UAT artifact only. It does not create a Release or Deploy. R2 remains unresolved and Human UAT remains pending. 001B remains `PLANNED` / `NOT_AUTHORIZED`; 001C through 001F are future placeholders and receive no fabricated status, authorization, or formal Work Package path.
