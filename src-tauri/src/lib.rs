@@ -67,10 +67,28 @@ pub struct OwnerAuthorizationRecord {
     pub authority_sha: String,
     pub branch: String,
     pub worktree: String,
-    pub scope: String,
+    #[serde(deserialize_with = "deserialize_string_or_vec")]
+    pub scope: Vec<String>,
     pub allowed_capabilities: Vec<String>,
     pub forbidden_capabilities: Vec<String>,
     pub authorized_at: String,
+}
+
+fn deserialize_string_or_vec<'de, D>(deserializer: D) -> Result<Vec<String>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    #[derive(Deserialize)]
+    #[serde(untagged)]
+    enum StringOrVec {
+        String(String),
+        Vec(Vec<String>),
+    }
+
+    Ok(match StringOrVec::deserialize(deserializer)? {
+        StringOrVec::String(value) => vec![value],
+        StringOrVec::Vec(values) => values,
+    })
 }
 
 #[derive(Debug, Serialize, Clone, PartialEq, Eq)]
@@ -212,6 +230,8 @@ pub enum ResolverBlocker {
     RemoteUnavailable,
     RepositoryInvalid,
     WorkPackageSchemaInvalid,
+    AuthorizationContractMissing,
+    AuthorizationContractInvalid,
     MultipleAuthorizedWorkPackages,
 }
 #[derive(Debug, Deserialize, Serialize, Clone, PartialEq, Eq)]
@@ -231,6 +251,9 @@ pub struct WorkPackageRecord {
     pub dependencies: Vec<DependencyRecord>,
     pub previous_run_status: String,
     pub owner_authorization: String,
+    pub authorization_scope: Option<Vec<String>>,
+    pub allowed_capabilities: Option<Vec<String>>,
+    pub forbidden_capabilities: Option<Vec<String>>,
 }
 
 #[derive(Debug, Serialize, Clone, PartialEq, Eq)]
@@ -723,7 +746,93 @@ struct PackageFrontMatter {
     dependencies: Vec<DependencyRecord>,
     previous_run_status: String,
     owner_authorization: String,
+    #[serde(default)]
+    authorization_scope: Option<Vec<String>>,
+    #[serde(default)]
+    allowed_capabilities: Option<Vec<String>>,
+    #[serde(default)]
+    forbidden_capabilities: Option<Vec<String>>,
 }
+
+struct FormalAuthorizationContract<'a> {
+    scope: &'a [String],
+    allowed_capabilities: &'a [String],
+    forbidden_capabilities: &'a [String],
+}
+
+fn authorization_contract(
+    package: &WorkPackageRecord,
+) -> Result<FormalAuthorizationContract<'_>, ResolverBlocker> {
+    let scope = package
+        .authorization_scope
+        .as_deref()
+        .ok_or(ResolverBlocker::AuthorizationContractMissing)?;
+    let allowed = package
+        .allowed_capabilities
+        .as_deref()
+        .ok_or(ResolverBlocker::AuthorizationContractMissing)?;
+    let forbidden = package
+        .forbidden_capabilities
+        .as_deref()
+        .ok_or(ResolverBlocker::AuthorizationContractMissing)?;
+    if scope.is_empty()
+        || scope.iter().any(|value| value.trim().is_empty())
+        || allowed.is_empty()
+        || allowed.iter().any(|value| value.trim().is_empty())
+        || forbidden.is_empty()
+        || forbidden.iter().any(|value| value.trim().is_empty())
+        || allowed.iter().any(|value| forbidden.contains(value))
+    {
+        return Err(ResolverBlocker::AuthorizationContractInvalid);
+    }
+    Ok(FormalAuthorizationContract {
+        scope,
+        allowed_capabilities: allowed,
+        forbidden_capabilities: forbidden,
+    })
+}
+
+fn authorization_contract_code(blocker: &ResolverBlocker) -> &'static str {
+    match blocker {
+        ResolverBlocker::AuthorizationContractMissing => "AUTHORIZATION_CONTRACT_MISSING",
+        ResolverBlocker::AuthorizationContractInvalid => "AUTHORIZATION_CONTRACT_INVALID",
+        _ => "AUTHORIZATION_CONTRACT_INVALID",
+    }
+}
+
+fn malformed_authorization_contract_field(path: &Path) -> bool {
+    let Ok(content) = fs::read_to_string(path) else {
+        return false;
+    };
+    if !content.starts_with("---\n") && !content.starts_with("---\r\n") {
+        return false;
+    }
+    let Some(close) = content[4..].find("\n---").map(|n| n + 4) else {
+        return false;
+    };
+    let Ok(value) = serde_yaml::from_str::<serde_yaml::Value>(&content[4..close]) else {
+        return false;
+    };
+    let Some(mapping) = value.as_mapping() else {
+        return false;
+    };
+    [
+        "authorization_scope",
+        "allowed_capabilities",
+        "forbidden_capabilities",
+    ]
+    .iter()
+    .any(
+        |field| match mapping.get(serde_yaml::Value::String((*field).to_string())) {
+            None => false,
+            Some(serde_yaml::Value::Sequence(values)) => {
+                values.iter().any(|value| value.as_str().is_none())
+            }
+            Some(_) => true,
+        },
+    )
+}
+
 fn parse_package(path: &Path) -> Result<WorkPackageRecord, ResolverBlocker> {
     let content =
         fs::read_to_string(path).map_err(|_| ResolverBlocker::WorkPackageSchemaInvalid)?;
@@ -758,6 +867,9 @@ fn parse_package(path: &Path) -> Result<WorkPackageRecord, ResolverBlocker> {
         dependencies: parsed.dependencies,
         previous_run_status: parsed.previous_run_status,
         owner_authorization: parsed.owner_authorization,
+        authorization_scope: parsed.authorization_scope,
+        allowed_capabilities: parsed.allowed_capabilities,
+        forbidden_capabilities: parsed.forbidden_capabilities,
     })
 }
 
@@ -1174,16 +1286,39 @@ fn authorization_evidence<R: GitRunner>(
     let package_path = repository_root
         .join("docs/60_Operations/work-packages")
         .join(format!("{}.md", record.work_package_id));
-    let package = parse_package(&package_path).map_err(|_| {
-        err(
-            "AUTHORIZATION_BINDING_INVALID",
-            "bound Work Package evidence is invalid",
-        )
-    })?;
+    let package = match parse_package(&package_path) {
+        Ok(package) => package,
+        Err(_) if malformed_authorization_contract_field(&package_path) => {
+            return Ok(OwnerAuthorizationEvidence {
+                status: "NOT_AUTHORIZED".into(),
+                valid: false,
+                blocker: Some("AUTHORIZATION_CONTRACT_INVALID".into()),
+                record: Some(record),
+            });
+        }
+        Err(_) => {
+            return Err(err(
+                "AUTHORIZATION_BINDING_INVALID",
+                "bound Work Package evidence is invalid",
+            ));
+        }
+    };
+    let contract = authorization_contract(&package);
+    let contract_drift = contract.as_ref().is_ok_and(|contract| {
+        record.scope != contract.scope
+            || record.allowed_capabilities != contract.allowed_capabilities
+            || record.forbidden_capabilities != contract.forbidden_capabilities
+    });
     let blocker = if package.status != "AUTHORIZED"
         || package.owner_authorization != "AUTHORIZED_FOR_IMPLEMENTATION"
     {
         Some("WORK_PACKAGE_NOT_AUTHORIZED")
+    } else if package.id != record.work_package_id {
+        Some("AUTHORIZATION_CONTRACT_DRIFT")
+    } else if let Err(contract_blocker) = &contract {
+        Some(authorization_contract_code(contract_blocker))
+    } else if contract_drift {
+        Some("AUTHORIZATION_CONTRACT_DRIFT")
     } else if remote.remote_main_sha.as_deref() != Some(record.authority_sha.as_str())
         || package.authority_sha != record.authority_sha
     {
@@ -1265,50 +1400,52 @@ fn authorize_owner<R: GitRunner>(
             "worktree must be clean before authorization",
         ));
     }
-    let package = parse_package(
-        &repository_root
-            .join("docs/60_Operations/work-packages")
-            .join(format!("{work_package_id}.md")),
-    )
-    .map_err(|_| err("WORK_PACKAGE_SCHEMA_INVALID", "Work Package is invalid"))?;
+    let package_path = repository_root
+        .join("docs/60_Operations/work-packages")
+        .join(format!("{work_package_id}.md"));
+    let package = parse_package(&package_path).map_err(|_| {
+        err(
+            if malformed_authorization_contract_field(&package_path) {
+                "AUTHORIZATION_CONTRACT_INVALID"
+            } else {
+                "WORK_PACKAGE_SCHEMA_INVALID"
+            },
+            "Work Package is invalid",
+        )
+    })?;
     let authority_sha = remote.remote_main_sha.unwrap_or_default();
     if package.id != work_package_id
         || package.status != "AUTHORIZED"
         || package.owner_authorization != "AUTHORIZED_FOR_IMPLEMENTATION"
-        || package.authority_sha != authority_sha
     {
         return Err(err(
             "WORK_PACKAGE_NOT_AUTHORIZED",
             "formal Work Package authorization does not match Authority",
         ));
     }
+    if package.authority_sha != authority_sha {
+        return Err(err(
+            "AUTHORITY_DRIFT",
+            "formal Work Package Authority does not match verified origin/main",
+        ));
+    }
+    let contract = authorization_contract(&package).map_err(|blocker| {
+        err(
+            authorization_contract_code(&blocker),
+            "formal Work Package authorization contract is missing or invalid",
+        )
+    })?;
     let branch = repository
         .current_branch
         .ok_or_else(|| err("DETACHED_HEAD", "authorization requires a named branch"))?;
     let record = OwnerAuthorizationRecord {
-        work_package_id: package.id,
+        work_package_id: package.id.clone(),
         authority_sha,
         branch,
         worktree: repository.canonical_path,
-        scope: "Codex-only migration, validation, independent review, scoped PR, exact-head CI, squash merge, and main-bound Human UAT artifact".into(),
-        allowed_capabilities: vec![
-            "REPOSITORY_SCOPED_EDIT".into(),
-            "STANDARD_VALIDATION".into(),
-            "INDEPENDENT_REVIEW".into(),
-            "SCOPED_PR".into(),
-            "EXACT_HEAD_CI".into(),
-            "SQUASH_MERGE".into(),
-            "BUILD_UAT_ARTIFACT".into(),
-        ],
-        forbidden_capabilities: vec![
-            "ARBITRARY_SHELL_UI".into(),
-            "FORCE_PUSH".into(),
-            "OPENSPEC_SYNC".into(),
-            "PRODUCTION_DEPLOY".into(),
-            "DESTRUCTIVE_DATABASE".into(),
-            "SECRETS_MUTATION".into(),
-            "HUMAN_UAT_SELF_PASS".into(),
-        ],
+        scope: contract.scope.to_vec(),
+        allowed_capabilities: contract.allowed_capabilities.to_vec(),
+        forbidden_capabilities: contract.forbidden_capabilities.to_vec(),
         authorized_at: timestamp(),
     };
     write_json(&authorization_path(state_root), &record)?;
@@ -1380,7 +1517,7 @@ fn codex_prompt(record: &OwnerAuthorizationRecord) -> String {
     format!(
         "Execute formal Work Package {} within scope: {}. Preserve all forbidden capabilities: {}. Use formal repository evidence, run standard validation, and stop with truthful evidence if blocked. Do not widen scope.",
         record.work_package_id,
-        record.scope,
+        record.scope.join(", "),
         record.forbidden_capabilities.join(", ")
     )
 }
@@ -2422,6 +2559,37 @@ mod tests {
         git(&local, &["push", "-u", "origin", "main"]);
         (local, remote)
     }
+    fn authorization_contract_fixture() -> &'static str {
+        "authorization_scope:\n  - Codex-only migration\n  - repository-standard validation\n  - independent review\nallowed_capabilities:\n  - REPOSITORY_SCOPED_EDIT\n  - STANDARD_VALIDATION\nforbidden_capabilities:\n  - ARBITRARY_SHELL_UI\n  - FORCE_PUSH\n"
+    }
+    fn authorization_fixture(contract: &str) -> (PathBuf, PathBuf, String) {
+        let (local, _) = repo();
+        let authority_sha = git(&local, &["rev-parse", "HEAD"]);
+        git(&local, &["switch", "-c", "authorization-binding"]);
+        let packages = local.join("docs/60_Operations/work-packages");
+        fs::create_dir_all(&packages).unwrap();
+        fs::write(
+            packages.join("AUTHORIZATION-WP.md"),
+            format!(
+                "---\nschema: aicc-work-package/v1\nid: AUTHORIZATION-WP\ntitle: Authorization fixture\nstatus: AUTHORIZED\nauthority_sha: {authority_sha}\nopenspec_change: authorization-fixture\ndependencies: []\nprevious_run_status: HUMAN_UAT_FAIL\nowner_authorization: AUTHORIZED_FOR_IMPLEMENTATION\n{contract}---\n"
+            ),
+        )
+        .unwrap();
+        git(&local, &["add", "docs"]);
+        git(&local, &["commit", "-m", "authorization-fixture"]);
+        (local, temp("authorization-state"), authority_sha)
+    }
+    fn authorize_fixture(local: &Path, state: &Path) -> OwnerAuthorizationEvidence {
+        authorize_owner(
+            &ProductionGitRunner,
+            local,
+            state,
+            false,
+            "AUTHORIZATION-WP",
+            true,
+        )
+        .unwrap()
+    }
     struct RecordingGitRunner {
         inner: ProductionGitRunner,
         history: Arc<Mutex<Vec<GitOperation>>>,
@@ -2744,6 +2912,197 @@ mod tests {
         );
     }
     #[test]
+    fn authorization_copies_formal_work_package_contract_exactly() {
+        let (local, state, authority_sha) = authorization_fixture(authorization_contract_fixture());
+        let evidence = authorize_fixture(&local, &state);
+        let record = evidence.record.unwrap();
+        assert!(evidence.valid);
+        assert_eq!(record.work_package_id, "AUTHORIZATION-WP");
+        assert_eq!(record.authority_sha, authority_sha);
+        assert_eq!(
+            record.scope,
+            vec![
+                "Codex-only migration",
+                "repository-standard validation",
+                "independent review"
+            ]
+        );
+        assert_eq!(
+            record.allowed_capabilities,
+            vec!["REPOSITORY_SCOPED_EDIT", "STANDARD_VALIDATION"]
+        );
+        assert_eq!(
+            record.forbidden_capabilities,
+            vec!["ARBITRARY_SHELL_UI", "FORCE_PUSH"]
+        );
+        assert!(authorization_path(&state).is_file());
+    }
+    #[test]
+    fn authorization_missing_contract_fails_closed_without_record() {
+        let (local, state, _) = authorization_fixture("");
+        let error = authorize_owner(
+            &ProductionGitRunner,
+            &local,
+            &state,
+            false,
+            "AUTHORIZATION-WP",
+            true,
+        )
+        .unwrap_err();
+        assert_eq!(error.code, "AUTHORIZATION_CONTRACT_MISSING");
+        assert!(!authorization_path(&state).exists());
+    }
+    #[test]
+    fn authorization_formal_authority_drift_fails_closed_without_record() {
+        let (local, state, authority_sha) = authorization_fixture(authorization_contract_fixture());
+        let package = local.join("docs/60_Operations/work-packages/AUTHORIZATION-WP.md");
+        let content = fs::read_to_string(&package).unwrap();
+        fs::write(
+            &package,
+            content.replace(
+                &format!("authority_sha: {authority_sha}"),
+                "authority_sha: different-authority",
+            ),
+        )
+        .unwrap();
+        git(&local, &["add", "docs"]);
+        git(&local, &["commit", "-m", "authorization-authority-drift"]);
+        let error = authorize_owner(
+            &ProductionGitRunner,
+            &local,
+            &state,
+            false,
+            "AUTHORIZATION-WP",
+            true,
+        )
+        .unwrap_err();
+        assert_eq!(error.code, "AUTHORITY_DRIFT");
+        assert!(!authorization_path(&state).exists());
+    }
+    #[test]
+    fn authorization_malformed_contract_fails_closed_without_record() {
+        let contract = "authorization_scope:\n  - scoped work\nallowed_capabilities:\n  - STANDARD_VALIDATION\nforbidden_capabilities:\n  - STANDARD_VALIDATION\n";
+        let (local, state, _) = authorization_fixture(contract);
+        let error = authorize_owner(
+            &ProductionGitRunner,
+            &local,
+            &state,
+            false,
+            "AUTHORIZATION-WP",
+            true,
+        )
+        .unwrap_err();
+        assert_eq!(error.code, "AUTHORIZATION_CONTRACT_INVALID");
+        assert!(!authorization_path(&state).exists());
+    }
+    #[test]
+    fn authorization_wrong_contract_field_type_fails_closed_without_record() {
+        let contract = "authorization_scope:\n  - scoped work\nallowed_capabilities: STANDARD_VALIDATION\nforbidden_capabilities:\n  - FORCE_PUSH\n";
+        let (local, state, _) = authorization_fixture(contract);
+        let error = authorize_owner(
+            &ProductionGitRunner,
+            &local,
+            &state,
+            false,
+            "AUTHORIZATION-WP",
+            true,
+        )
+        .unwrap_err();
+        assert_eq!(error.code, "AUTHORIZATION_CONTRACT_INVALID");
+        assert!(!authorization_path(&state).exists());
+    }
+    #[test]
+    fn authorization_scope_drift_invalidates_persisted_authorization() {
+        let (local, state, _) = authorization_fixture(authorization_contract_fixture());
+        authorize_fixture(&local, &state);
+        let package = local.join("docs/60_Operations/work-packages/AUTHORIZATION-WP.md");
+        let content = fs::read_to_string(&package).unwrap();
+        fs::write(
+            &package,
+            content.replace("Codex-only migration", "changed scope"),
+        )
+        .unwrap();
+        let evidence = authorization_evidence(&ProductionGitRunner, &local, &state, false).unwrap();
+        assert_eq!(
+            evidence.blocker.as_deref(),
+            Some("AUTHORIZATION_CONTRACT_DRIFT")
+        );
+        assert!(!evidence.valid);
+    }
+    #[test]
+    fn authorization_allowed_capability_drift_invalidates_persisted_authorization() {
+        let (local, state, _) = authorization_fixture(authorization_contract_fixture());
+        authorize_fixture(&local, &state);
+        let package = local.join("docs/60_Operations/work-packages/AUTHORIZATION-WP.md");
+        let content = fs::read_to_string(&package).unwrap();
+        fs::write(
+            &package,
+            content.replace("STANDARD_VALIDATION", "ALTERNATE_VALIDATION"),
+        )
+        .unwrap();
+        let evidence = authorization_evidence(&ProductionGitRunner, &local, &state, false).unwrap();
+        assert_eq!(
+            evidence.blocker.as_deref(),
+            Some("AUTHORIZATION_CONTRACT_DRIFT")
+        );
+        assert!(!evidence.valid);
+    }
+    #[test]
+    fn authorization_forbidden_capability_drift_invalidates_persisted_authorization() {
+        let (local, state, _) = authorization_fixture(authorization_contract_fixture());
+        authorize_fixture(&local, &state);
+        let package = local.join("docs/60_Operations/work-packages/AUTHORIZATION-WP.md");
+        let content = fs::read_to_string(&package).unwrap();
+        fs::write(&package, content.replace("FORCE_PUSH", "NO_FORCE_PUSH")).unwrap();
+        let evidence = authorization_evidence(&ProductionGitRunner, &local, &state, false).unwrap();
+        assert_eq!(
+            evidence.blocker.as_deref(),
+            Some("AUTHORIZATION_CONTRACT_DRIFT")
+        );
+        assert!(!evidence.valid);
+    }
+    #[test]
+    fn authorization_branch_mismatch_blocks_start() {
+        let (local, state, _) = authorization_fixture(authorization_contract_fixture());
+        authorize_fixture(&local, &state);
+        git(&local, &["switch", "-c", "authorization-binding-other"]);
+        let evidence = authorization_evidence(&ProductionGitRunner, &local, &state, false).unwrap();
+        assert_eq!(evidence.blocker.as_deref(), Some("BRANCH_MISMATCH"));
+        assert!(!evidence.valid);
+    }
+    #[test]
+    fn authorization_worktree_mismatch_blocks_start() {
+        let (local, state, _) = authorization_fixture(authorization_contract_fixture());
+        let record = authorize_fixture(&local, &state).record.unwrap();
+        write_json(
+            &authorization_path(&state),
+            &OwnerAuthorizationRecord {
+                worktree: "/different/worktree".into(),
+                ..record
+            },
+        )
+        .unwrap();
+        let evidence = authorization_evidence(&ProductionGitRunner, &local, &state, false).unwrap();
+        assert_eq!(evidence.blocker.as_deref(), Some("WORKTREE_MISMATCH"));
+        assert!(!evidence.valid);
+    }
+    #[test]
+    fn authorization_authority_drift_blocks_start() {
+        let (local, state, _) = authorization_fixture(authorization_contract_fixture());
+        let record = authorize_fixture(&local, &state).record.unwrap();
+        write_json(
+            &authorization_path(&state),
+            &OwnerAuthorizationRecord {
+                authority_sha: "different-authority".into(),
+                ..record
+            },
+        )
+        .unwrap();
+        let evidence = authorization_evidence(&ProductionGitRunner, &local, &state, false).unwrap();
+        assert_eq!(evidence.blocker.as_deref(), Some("AUTHORITY_DRIFT"));
+        assert!(!evidence.valid);
+    }
+    #[test]
     fn parser_valid_front_matter() {
         let p = temp("wp").join("wp.md");
         fs::write(&p, "---\nschema: aicc-work-package/v1\nid: WP\ntitle: Test\nstatus: CLOSED\nauthority_sha: x\nopenspec_change: x\ndependencies: []\nprevious_run_status: CLOSED\nowner_authorization: AUTHORIZED_FOR_IMPLEMENTATION\n---\nstatus: AUTHORIZED\n").unwrap();
@@ -2785,7 +3144,7 @@ mod tests {
                 authority_sha: "authority".into(),
                 branch: "feature/runtime".into(),
                 worktree: "/repo".into(),
-                scope: "runtime supervision".into(),
+                scope: vec!["runtime supervision".into()],
                 allowed_capabilities: vec![],
                 forbidden_capabilities: vec![],
                 authorized_at: "1".into(),
@@ -3010,7 +3369,7 @@ mod tests {
             authority_sha: "authority".into(),
             branch: "feature/runtime".into(),
             worktree: "/repo".into(),
-            scope: "runtime supervision".into(),
+            scope: vec!["runtime supervision".into()],
             allowed_capabilities: vec![],
             forbidden_capabilities: vec![],
             authorized_at: "1".into(),

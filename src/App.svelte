@@ -287,7 +287,7 @@
               <div><dt>Authority SHA</dt><dd class="mono">{controlLoop.authorization?.record?.authoritySha ?? 'UNKNOWN'}</dd></div>
               <div><dt>分支</dt><dd>{controlLoop.authorization?.record?.branch ?? 'UNKNOWN'}</dd></div>
               <div><dt>工作区</dt><dd class="mono">{controlLoop.authorization?.record?.worktree ?? 'UNKNOWN'}</dd></div>
-              <div><dt>范围</dt><dd>{controlLoop.authorization?.record?.scope ?? 'UNKNOWN'}</dd></div>
+              <div><dt>范围</dt><dd>{controlLoop.authorization?.record?.scope.join(', ') ?? 'UNKNOWN'}</dd></div>
               <div><dt>允许能力</dt><dd class="mono">{controlLoop.authorization?.record?.allowedCapabilities.join(', ') ?? 'UNKNOWN'}</dd></div>
               <div><dt>禁止能力</dt><dd class="mono">{controlLoop.authorization?.record?.forbiddenCapabilities.join(', ') ?? 'UNKNOWN'}</dd></div>
               <div><dt>授权时间</dt><dd>{controlLoop.authorization?.record?.authorizedAt ?? 'UNKNOWN'}</dd></div>

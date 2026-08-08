@@ -24,6 +24,9 @@ const futureMilestone: RoadmapMilestone = { id: 'M3', title: 'Runtime', workPack
 assert(futureMilestone.futureItems.length === 2, 'future items are represented in the TypeScript read model');
 assert(futureMilestone.workPackages.length === 0 && futureMilestone.progressPercent === 0, 'future placeholders are distinct and excluded from progress');
 const appSource = readFileSync(new URL('../App.svelte', import.meta.url), 'utf8');
+const controlLoopSource = readFileSync(new URL('./controlLoop.ts', import.meta.url), 'utf8');
+assert(controlLoopSource.includes('scope: string[]'), 'authorization scope is represented as formal persisted list evidence');
+assert(appSource.includes("record?.scope.join(', ')"), 'Owner UI renders the persisted authorization scope list without demo values');
 for (const label of ['远端 Authority', '当前安全模式', '只读 V1', '概览', 'Codex 状态', '验证', '正式合同', '当前里程碑', '后续工作包', '仓库状态', 'Authority 健康度', '执行状态', '正式证据', '受控验证流程', 'OpenSpec 操作策略']) {
   assert(appSource.includes(label), `Owner UI label is Chinese-first: ${label}`);
 }

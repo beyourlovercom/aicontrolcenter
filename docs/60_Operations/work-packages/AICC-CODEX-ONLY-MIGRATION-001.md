@@ -10,6 +10,30 @@ dependencies:
     status: CLOSED
 previous_run_status: HUMAN_UAT_FAIL
 owner_authorization: AUTHORIZED_FOR_IMPLEMENTATION
+authorization_scope:
+  - Codex-only migration
+  - repository-standard validation
+  - independent review
+  - scoped PR
+  - exact-head CI
+  - squash merge
+  - main-bound Human UAT artifact
+allowed_capabilities:
+  - REPOSITORY_SCOPED_EDIT
+  - STANDARD_VALIDATION
+  - INDEPENDENT_REVIEW
+  - SCOPED_PR
+  - EXACT_HEAD_CI
+  - SQUASH_MERGE
+  - BUILD_UAT_ARTIFACT
+forbidden_capabilities:
+  - ARBITRARY_SHELL_UI
+  - FORCE_PUSH
+  - OPENSPEC_SYNC
+  - PRODUCTION_DEPLOY
+  - DESTRUCTIVE_DATABASE
+  - SECRETS_MUTATION
+  - HUMAN_UAT_SELF_PASS
 ---
 
 # AICC-CODEX-ONLY-MIGRATION-001
