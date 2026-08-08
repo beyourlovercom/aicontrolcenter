@@ -1,39 +1,48 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { agents, roadmap, type WorkItem } from './lib/data';
-  import { emptyState, loadControlLoop, syncAllowed, syncWorkspace, type ControlLoopState } from './lib/controlLoop';
+  import { agents } from './lib/data';
+  import { cancelSync as cancelledSync, emptyState, loadControlLoop, requestSync, syncAllowed, syncOutcome, syncWorkspace, type ControlLoopState, type RoadmapEntry, type SyncState } from './lib/controlLoop';
 
   type Tab = 'overview' | 'openspec' | 'agents' | 'validation';
 
-  let selected: WorkItem = roadmap[0].items[1];
+  type WorkItem = RoadmapEntry & { key: string; summary: string; gate: string; progress: string; progressPercent: number; parent: string; dependency: string; change: string; path: string; spec: string; task: string; run: string; criteria: string[] };
+  let selected: WorkItem = { key: 'loading', id: 'LOADING', title: 'Loading formal roadmap', summary: 'Reading repository evidence.', status: 'CURRENT', authorization: 'CHECKING', gate: 'CHECKING', progress: '0 / 0', progressPercent: 0, parent: 'Living Roadmap', dependency: 'none', change: 'unknown', path: 'docs/10_Planning_Roadmap/01_LIVING_ROADMAP.md', spec: 'unknown', task: 'unknown', run: 'unknown', criteria: [] };
   let activeTab: Tab = 'overview';
   let query = '';
   let refreshing = false;
   let toast = '';
-  let expanded = new Set(['foundation', 'owner-control']);
   let controlLoop: ControlLoopState = emptyState;
+  let syncState: SyncState = { kind: 'idle' };
 
   const evidence = [
     ['C', 'Project Charter', 'docs/00_Governance/01_PROJECT_CHARTER.md'],
     ['R', 'Living Roadmap', 'docs/10_Planning_Roadmap/01_LIVING_ROADMAP.md'],
-    ['W', 'Current Work Package', selected.path],
+    ['W', 'Current Work Package', 'docs/60_Operations/work-packages/AICC-POST-MERGE-UAT-001.md'],
     ['P', 'OpenSpec Proposal', 'openspec/changes/aicc-visible-slice-001/proposal.md'],
     ['T', 'OpenSpec Tasks', 'openspec/changes/aicc-visible-slice-001/tasks.md'],
     ['OM', 'OmO Slim Config', '.opencode/oh-my-opencode-slim.json']
   ];
 
-  $: filteredRoadmap = roadmap.map((phase) => ({
-    ...phase,
-    items: phase.items.filter((item) => {
-      const needle = query.trim().toLowerCase();
-      return !needle || `${item.id} ${item.title} ${item.summary}`.toLowerCase().includes(needle);
-    })
-  }));
-
-  function togglePhase(key: string) {
-    const next = new Set(expanded);
-    next.has(key) ? next.delete(key) : next.add(key);
-    expanded = next;
+  $: formalItems = (controlLoop.roadmap?.entries ?? []).map((entry) => ({
+    ...entry,
+    key: entry.id,
+    summary: `${entry.status} / ${entry.authorization}`,
+    gate: entry.status,
+    progress: `${entry.status}`,
+    progressPercent: entry.status === 'CLOSED' ? 100 : entry.id === controlLoop.roadmap?.currentWorkPackage ? controlLoop.roadmap?.progressPercent ?? 0 : 0,
+    parent: controlLoop.roadmap?.currentMilestone ?? 'Living Roadmap',
+    dependency: 'Formal Work Package evidence',
+    change: entry.id.toLowerCase(),
+    path: `docs/60_Operations/work-packages/${entry.id}.md`,
+    spec: 'formal', task: 'formal', run: 'read-only', criteria: []
+  } satisfies WorkItem));
+  $: filteredRoadmap = formalItems.filter((item) => {
+    const needle = query.trim().toLowerCase();
+    return !needle || `${item.id} ${item.title} ${item.summary}`.toLowerCase().includes(needle);
+  });
+  $: if (selected.key === 'loading') {
+    const current = formalItems.find((item) => item.id === controlLoop.roadmap?.currentWorkPackage);
+    if (current) selected = current;
   }
 
   function choose(item: WorkItem) {
@@ -55,13 +64,23 @@
   }
 
   async function syncLocalMain() {
-    if (!syncAllowed(controlLoop.evaluation) || !window.confirm('确认同步本地 main？仅执行固定 fast-forward 序列。')) return;
+    if (!syncAllowed(controlLoop.evaluation)) return;
+    syncState = requestSync(controlLoop.evaluation);
+  }
+
+  function cancelSync() {
+    syncState = cancelledSync();
+  }
+
+  async function confirmSync() {
+    syncState = { kind: 'loading' };
     try {
-      await syncWorkspace();
-      announce('本地 main 已同步；正在重新验证状态。');
+      const result = await syncWorkspace();
+      syncState = syncOutcome(result);
+      if (!result.success) return;
       await refresh();
     } catch (error) {
-      announce(`同步被阻止：${error instanceof Error ? error.message : String(error)}`);
+      syncState = { kind: 'failure', message: `同步被阻止：${error instanceof Error ? error.message : String(error)}` };
     }
   }
 
@@ -99,51 +118,23 @@
       <div class="pane-heading">
         <div class="eyebrow">Project Roadmap</div>
         <div class="heading-row">
-          <h2>AI Control Center</h2>
-          <span class="accent-chip">12 ITEMS</span>
+          <h2>{controlLoop.roadmap?.currentMilestone ?? 'Living Roadmap'}</h2>
+          <span class="accent-chip">{controlLoop.roadmap?.progressPercent ?? 0}%</span>
         </div>
-        <p>折叠层级 · 独立滚动 · SPEC / TASK / RUN</p>
+        <p>正式 Roadmap / Work Package evidence · 当前：{controlLoop.roadmap?.currentWorkPackage ?? 'CHECKING'}</p>
       </div>
 
       <div class="roadmap-scroll">
-        {#each filteredRoadmap as phase}
-          <section class="roadmap-group">
-            <button class="phase-row" type="button" onclick={() => togglePhase(phase.key)}>
-              <span class:collapsed={!expanded.has(phase.key)} class="chevron">⌄</span>
-              <span class="node-icon">{phase.icon}</span>
-              <span class="tree-copy">
-                <span class="tree-name">{phase.label}</span>
-                <span class="tree-code">{phase.subtitle}</span>
-              </span>
-              <span class:current={phase.key === 'foundation'} class="status-dot"></span>
-            </button>
-
-            {#if expanded.has(phase.key)}
-              <div class="phase-children">
-                {#each phase.items as item, index}
-                  <button
-                    class:active={selected.key === item.key}
-                    class:level-two={phase.key === 'execution' && index > 0}
-                    class="work-row"
-                    type="button"
-                    onclick={() => choose(item)}
-                  >
-                    <span class="node-icon">{item.title.split(' ').map((word) => word[0]).join('').slice(0, 2)}</span>
-                    <span class="tree-copy">
-                      <span class="tree-name">{item.title}</span>
-                      <span class="tree-code">{item.id}</span>
-                      <span class="mini-metrics">
-                        <span>SPEC {item.spec}</span>
-                        <span>TASK {item.task}</span>
-                        <span>RUN {item.run}</span>
-                      </span>
-                    </span>
-                    <span class:done={item.status === 'PLANNED'} class:current={item.status === 'CURRENT'} class="status-dot"></span>
-                  </button>
-                {/each}
-              </div>
-            {/if}
-          </section>
+        {#each filteredRoadmap as item}
+          <button class:active={selected.key === item.key} class="work-row" type="button" onclick={() => choose(item)}>
+            <span class="node-icon">{item.id.slice(-3)}</span>
+            <span class="tree-copy">
+              <span class="tree-name">{item.title}</span>
+              <span class="tree-code">{item.id}</span>
+              <span class="mini-metrics"><span>{item.status}</span><span>{item.authorization}</span></span>
+            </span>
+            <span class:done={item.status === 'CLOSED'} class:current={item.id === controlLoop.roadmap?.currentWorkPackage} class="status-dot"></span>
+          </button>
         {/each}
       </div>
 
@@ -187,8 +178,8 @@
             </article>
             <article class="metric-card">
               <div class="eyebrow">Progress</div>
-              <div class="metric-value">{selected.progress}</div>
-              <div class="progress-track"><span style={`width:${selected.progressPercent}%`}></span></div>
+              <div class="metric-value">{controlLoop.roadmap?.progressPercent ?? 0}%</div>
+              <div class="progress-track"><span style={`width:${controlLoop.roadmap?.progressPercent ?? 0}%`}></span></div>
             </article>
           </div>
 
@@ -197,9 +188,9 @@
             <dl class="contract-grid">
               <div><dt>正式文件</dt><dd class="mono">{selected.path}</dd></div>
               <div><dt>授权状态</dt><dd>{selected.authorization}</dd></div>
-              <div><dt>上级 Roadmap</dt><dd>{selected.parent}</dd></div>
-              <div><dt>前置依赖</dt><dd>{selected.dependency}</dd></div>
-              <div><dt>OpenSpec Change</dt><dd class="mono">{selected.change}</dd></div>
+              <div><dt>Current Milestone</dt><dd>{controlLoop.roadmap?.currentMilestone ?? selected.parent}</dd></div>
+              <div><dt>Roadmap Authority</dt><dd class="mono">{controlLoop.roadmap?.authoritySha ?? 'unknown'}</dd></div>
+              <div><dt>Next Work Packages</dt><dd>{controlLoop.roadmap?.nextWorkPackages.join(', ') ?? 'unknown'}</dd></div>
               <div><dt>远端策略</dt><dd>只读查询 remote main，不执行 git fetch</dd></div>
             </dl>
           </article>
@@ -219,7 +210,21 @@
                 <div class="criterion"><b>!</b><span>{blocker}</span></div>
               {/each}
             </div>
-            <button class="primary-button" type="button" disabled={!syncAllowed(controlLoop.evaluation)} onclick={syncLocalMain}>同步本地 main</button>
+            <button class="primary-button" type="button" disabled={!syncAllowed(controlLoop.evaluation) || syncState.kind === 'loading'} onclick={syncLocalMain}>同步本地 main</button>
+            {#if syncState.kind === 'confirming'}
+              <div class="confirm-box" role="dialog" aria-label="确认同步">
+                <strong>确认同步本地 main？</strong>
+                <span>仅执行固定 fetch → revalidate → switch → ff-only merge。</span>
+                <div class="confirm-actions">
+                  <button class="secondary-button" type="button" onclick={cancelSync}>取消</button>
+                  <button class="primary-button" type="button" onclick={confirmSync}>确认同步</button>
+                </div>
+              </div>
+            {:else if syncState.kind === 'loading'}
+              <div class="sync-status" role="status">同步中…</div>
+            {:else if syncState.kind === 'success' || syncState.kind === 'failure' || syncState.kind === 'cancelled'}
+              <div class:success={syncState.kind === 'success'} class:failure={syncState.kind === 'failure'} class="sync-status" role="status">{syncState.message}</div>
+            {/if}
           </article>
 
           <article class="content-card">
@@ -241,10 +246,10 @@
           </article>
 
           <article class="content-card">
-            <div class="section-title-row"><h3>Acceptance Criteria</h3><span class="secondary-note">{selected.criteria.length} criteria</span></div>
+            <div class="section-title-row"><h3>Formal Roadmap State</h3><span class="secondary-note">{controlLoop.roadmap?.entries.length ?? 0} packages</span></div>
             <div class="criteria-grid">
-              {#each selected.criteria as criterion, index}
-                <div class="criterion"><b>{String(index + 1).padStart(2, '0')}</b><span>{criterion}</span></div>
+              {#each controlLoop.roadmap?.entries ?? [] as item, index}
+                <div class="criterion"><b>{String(index + 1).padStart(2, '0')}</b><span>{item.id}: {item.status} / {item.authorization}</span></div>
               {/each}
             </div>
           </article>
@@ -350,7 +355,7 @@
         {#each evidence as file}
           <button type="button" onclick={() => announce(`原型操作：打开 ${file[1]}`)}>
             <span class="stack-icon">{file[0]}</span>
-            <span><strong>{file[1]}</strong><small>{file[1] === 'Current Work Package' ? selected.path : file[2]}</small></span>
+            <span><strong>{file[1]}</strong><small>{file[1] === 'Current Work Package' ? 'docs/60_Operations/work-packages/AICC-POST-MERGE-UAT-001.md' : file[2]}</small></span>
             <b>›</b>
           </button>
         {/each}

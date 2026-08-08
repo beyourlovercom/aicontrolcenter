@@ -126,6 +126,27 @@ pub struct WorkPackageRecord {
     pub previous_run_status: String,
     pub owner_authorization: String,
 }
+
+#[derive(Debug, Serialize, Clone, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct RoadmapEntry {
+    pub id: String,
+    pub title: String,
+    pub status: String,
+    pub authorization: String,
+}
+
+#[derive(Debug, Serialize, Clone, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct RoadmapEvidence {
+    pub current_milestone: String,
+    pub authority_sha: String,
+    pub current_work_package: String,
+    pub closed_work_packages: Vec<String>,
+    pub next_work_packages: Vec<String>,
+    pub progress_percent: u8,
+    pub entries: Vec<RoadmapEntry>,
+}
 #[derive(Debug, Serialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct ResolverDecisionResult {
@@ -561,9 +582,13 @@ fn parse_package(path: &Path) -> Result<WorkPackageRecord, ResolverBlocker> {
     if !matches!(
         parsed.status.as_str(),
         "PLANNED" | "AUTHORIZED" | "IMPLEMENTING" | "BLOCKED" | "CLOSED"
-    ) || parsed.owner_authorization != "AUTHORIZED_FOR_IMPLEMENTATION"
-        || parsed.previous_run_status != "CLOSED"
-        || parsed.schema != "aicc-work-package/v1"
+    ) || !matches!(
+        parsed.previous_run_status.as_str(),
+        "PLANNED" | "AUTHORIZED" | "IMPLEMENTING" | "BLOCKED" | "CLOSED" | "HUMAN_UAT_FAIL"
+    ) || !matches!(
+        parsed.owner_authorization.as_str(),
+        "AUTHORIZED_FOR_IMPLEMENTATION" | "NOT_AUTHORIZED"
+    ) || parsed.schema != "aicc-work-package/v1"
     {
         return Err(ResolverBlocker::WorkPackageSchemaInvalid);
     }
@@ -576,6 +601,85 @@ fn parse_package(path: &Path) -> Result<WorkPackageRecord, ResolverBlocker> {
         dependencies: parsed.dependencies,
         previous_run_status: parsed.previous_run_status,
         owner_authorization: parsed.owner_authorization,
+    })
+}
+
+fn roadmap_line(content: &str, label: &str) -> String {
+    content
+        .lines()
+        .find_map(|line| {
+            line.strip_prefix(label)
+                .map(str::trim)
+                .map(|value| value.trim_matches('`').to_string())
+        })
+        .unwrap_or_else(|| "UNKNOWN".into())
+}
+
+fn load_roadmap_evidence(root: &Path) -> Result<RoadmapEvidence, ControlLoopError> {
+    let content = fs::read_to_string(root.join("docs/10_Planning_Roadmap/01_LIVING_ROADMAP.md"))
+        .map_err(|_| err("ROADMAP_UNAVAILABLE", "Living Roadmap is unavailable"))?;
+    let current_work_package = roadmap_line(&content, "Current Work Package:");
+    let current_milestone = content
+        .lines()
+        .skip_while(|line| !line.contains("## Current milestone"))
+        .skip(1)
+        .map(str::trim)
+        .find(|line| !line.is_empty())
+        .map(|line| line.trim_matches('`').to_string())
+        .unwrap_or_else(|| "UNKNOWN".into());
+    let authority_sha = roadmap_line(&content, "Current Authority:");
+    let closed_work_packages = roadmap_line(&content, "Closed Work Packages:")
+        .split(',')
+        .map(|value| value.trim().trim_matches('`').to_string())
+        .filter(|value| !value.is_empty())
+        .collect::<Vec<_>>();
+    let next_work_packages = roadmap_line(&content, "Next Work Packages:")
+        .split(',')
+        .map(|value| value.trim().trim_matches('`').to_string())
+        .filter(|value| !value.is_empty())
+        .collect::<Vec<_>>();
+    let packages_root = root.join("docs/60_Operations/work-packages");
+    let mut entries = Vec::new();
+    for entry in fs::read_dir(packages_root).map_err(|_| {
+        err(
+            "WORK_PACKAGE_UNAVAILABLE",
+            "Work Package evidence is unavailable",
+        )
+    })? {
+        let path = entry
+            .map_err(|_| {
+                err(
+                    "WORK_PACKAGE_UNAVAILABLE",
+                    "Work Package entry is unavailable",
+                )
+            })?
+            .path();
+        if path.extension().and_then(|extension| extension.to_str()) != Some("md") {
+            continue;
+        }
+        if let Ok(package) = parse_package(&path) {
+            entries.push(RoadmapEntry {
+                id: package.id,
+                title: package.title,
+                status: package.status,
+                authorization: package.owner_authorization,
+            });
+        }
+    }
+    entries.sort_by(|left, right| left.id.cmp(&right.id));
+    let total = entries.len().max(1);
+    let closed = entries
+        .iter()
+        .filter(|entry| entry.status == "CLOSED")
+        .count();
+    Ok(RoadmapEvidence {
+        current_milestone,
+        authority_sha,
+        current_work_package,
+        closed_work_packages,
+        next_work_packages,
+        progress_percent: ((closed * 100) / total) as u8,
+        entries,
     })
 }
 fn planning_complete(root: &Path, change: &str) -> bool {
@@ -719,6 +823,12 @@ fn resolve_next_work_package() -> Result<ResolverDecisionResult, ControlLoopErro
     let root = service.root()?;
     resolve(&service.runner, &root, true, &service.guards.snapshot())
 }
+#[tauri::command]
+fn read_roadmap_evidence() -> Result<RoadmapEvidence, ControlLoopError> {
+    let service = production_service();
+    let root = service.root()?;
+    load_roadmap_evidence(&root)
+}
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -727,7 +837,8 @@ pub fn run() {
             check_remote_authority,
             evaluate_workspace_sync,
             sync_workspace,
-            resolve_next_work_package
+            resolve_next_work_package,
+            read_roadmap_evidence
         ])
         .run(tauri::generate_context!())
         .expect("error while running AI Control Center");
@@ -737,15 +848,20 @@ pub fn run() {
 mod tests {
     use super::*;
     use std::{
-        sync::{Arc, Mutex},
+        sync::{
+            atomic::{AtomicU64, Ordering},
+            Arc, Mutex,
+        },
         time::{SystemTime, UNIX_EPOCH},
     };
+    static TEMP_COUNTER: AtomicU64 = AtomicU64::new(0);
     fn temp(name: &str) -> PathBuf {
         let n = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap()
             .as_nanos();
-        let p = std::env::temp_dir().join(format!("aicc-{name}-{n}"));
+        let counter = TEMP_COUNTER.fetch_add(1, Ordering::Relaxed);
+        let p = std::env::temp_dir().join(format!("aicc-{name}-{n}-{counter}"));
         fs::create_dir_all(&p).unwrap();
         p
     }
@@ -1122,6 +1238,97 @@ mod tests {
         let p = temp("wp").join("wp.md");
         fs::write(&p, "---\nschema: aicc-work-package/v1\nid: WP\ntitle: T\nstatus: NOPE\nauthority_sha: x\nopenspec_change: x\ndependencies: []\nprevious_run_status: CLOSED\nowner_authorization: AUTHORIZED_FOR_IMPLEMENTATION\n---\n").unwrap();
         assert!(parse_package(&p).is_err());
+    }
+    #[test]
+    fn parser_previous_run_status_closed_is_accepted() {
+        let p = temp("wp").join("wp.md");
+        fs::write(&p, "---\nschema: aicc-work-package/v1\nid: WP\ntitle: T\nstatus: AUTHORIZED\nauthority_sha: x\nopenspec_change: x\ndependencies: []\nprevious_run_status: CLOSED\nowner_authorization: AUTHORIZED_FOR_IMPLEMENTATION\n---\n").unwrap();
+        assert_eq!(parse_package(&p).unwrap().previous_run_status, "CLOSED");
+    }
+    #[test]
+    fn parser_previous_run_status_human_uat_fail_is_accepted() {
+        let p = temp("wp").join("wp.md");
+        fs::write(&p, "---\nschema: aicc-work-package/v1\nid: WP\ntitle: T\nstatus: AUTHORIZED\nauthority_sha: x\nopenspec_change: x\ndependencies: []\nprevious_run_status: HUMAN_UAT_FAIL\nowner_authorization: AUTHORIZED_FOR_IMPLEMENTATION\n---\n").unwrap();
+        assert_eq!(
+            parse_package(&p).unwrap().previous_run_status,
+            "HUMAN_UAT_FAIL"
+        );
+    }
+    #[test]
+    fn parser_malformed_previous_run_status_rejects_with_schema_blocker() {
+        let p = temp("wp").join("wp.md");
+        fs::write(&p, "---\nschema: aicc-work-package/v1\nid: WP\ntitle: T\nstatus: AUTHORIZED\nauthority_sha: x\nopenspec_change: x\ndependencies: []\nprevious_run_status: NOT_A_LIFECYCLE_STATUS\nowner_authorization: AUTHORIZED_FOR_IMPLEMENTATION\n---\n").unwrap();
+        assert_eq!(
+            parse_package(&p),
+            Err(ResolverBlocker::WorkPackageSchemaInvalid)
+        );
+    }
+    #[test]
+    fn parser_valid_planned_not_authorized_record_is_not_schema_invalid() {
+        let p = temp("planned-wp").join("wp.md");
+        fs::write(&p, "---\nschema: aicc-work-package/v1\nid: PLANNED\ntitle: Planned\nstatus: PLANNED\nauthority_sha: x\nopenspec_change: x\ndependencies: []\nprevious_run_status: HUMAN_UAT_FAIL\nowner_authorization: NOT_AUTHORIZED\n---\n").unwrap();
+        let parsed = parse_package(&p).unwrap();
+        assert_eq!(parsed.status, "PLANNED");
+        assert_eq!(parsed.owner_authorization, "NOT_AUTHORIZED");
+    }
+    #[test]
+    fn living_roadmap_evidence_preserves_current_and_planned_states() {
+        let root = temp("roadmap");
+        fs::create_dir_all(root.join("docs/10_Planning_Roadmap")).unwrap();
+        fs::create_dir_all(root.join("docs/60_Operations/work-packages")).unwrap();
+        fs::write(
+            root.join("docs/10_Planning_Roadmap/01_LIVING_ROADMAP.md"),
+            "## Current milestone\n\n`M2 — Authority And Workspace Control`\n\nCurrent Authority: `authority`\nClosed Work Packages: `AICC-001A`\nCurrent Work Package: `AICC-CURRENT`\nNext Work Packages: `001B OpenSpec Binding`",
+        )
+        .unwrap();
+        let package = "---\nschema: aicc-work-package/v1\nid: AICC-CURRENT\ntitle: Current\nstatus: AUTHORIZED\nauthority_sha: authority\nopenspec_change: current\ndependencies: []\nprevious_run_status: CLOSED\nowner_authorization: AUTHORIZED_FOR_IMPLEMENTATION\n---\n";
+        let planned = "---\nschema: aicc-work-package/v1\nid: AICC-CONTROL-LOOP-001B\ntitle: Binding\nstatus: PLANNED\nauthority_sha: authority\nopenspec_change: binding\ndependencies: []\nprevious_run_status: CLOSED\nowner_authorization: NOT_AUTHORIZED\n---\n";
+        fs::write(
+            root.join("docs/60_Operations/work-packages/current.md"),
+            package,
+        )
+        .unwrap();
+        fs::write(
+            root.join("docs/60_Operations/work-packages/planned.md"),
+            planned,
+        )
+        .unwrap();
+        let evidence = load_roadmap_evidence(&root).unwrap();
+        assert_eq!(
+            evidence.current_milestone,
+            "M2 — Authority And Workspace Control"
+        );
+        assert_eq!(evidence.current_work_package, "AICC-CURRENT");
+        assert!(evidence
+            .entries
+            .iter()
+            .any(|entry| entry.id == "AICC-CONTROL-LOOP-001B"
+                && entry.status == "PLANNED"
+                && entry.authorization == "NOT_AUTHORIZED"));
+    }
+    #[test]
+    fn resolver_preserves_valid_unauthorized_package_without_schema_blocker() {
+        let (local, _) = repo();
+        git(&local, &["switch", "-c", "candidate"]);
+        fs::create_dir_all(local.join("docs/60_Operations/work-packages")).unwrap();
+        fs::write(
+            local.join("docs/60_Operations/work-packages/planned.md"),
+            "---\nschema: aicc-work-package/v1\nid: PLANNED\ntitle: Planned\nstatus: PLANNED\nauthority_sha: x\nopenspec_change: planned-change\ndependencies: []\nprevious_run_status: HUMAN_UAT_FAIL\nowner_authorization: NOT_AUTHORIZED\n---\n",
+        )
+        .unwrap();
+        let result = resolve(
+            &ProductionGitRunner,
+            &local,
+            false,
+            &ExecutionGuardSnapshot::default(),
+        )
+        .unwrap();
+        assert!(result
+            .blockers
+            .contains(&ResolverBlocker::WorkPackageNotAuthorized));
+        assert!(!result
+            .blockers
+            .contains(&ResolverBlocker::WorkPackageSchemaInvalid));
     }
     #[test]
     fn parser_prose_cannot_override_status() {

@@ -75,6 +75,14 @@ button { color: inherit; }
   cursor: pointer;
 }
 .primary-button:hover { background: #0a3ba8; }
+.primary-button:disabled { cursor: not-allowed; opacity: .55; }
+.secondary-button { border: 1px solid #cbd7ea; border-radius: 11px; background: #fff; padding: 9px 12px; color: #172033; font-size: 11px; font-weight: 750; cursor: pointer; }
+.confirm-box { display: grid; gap: 7px; margin-top: 12px; border: 1px solid #b9ccef; border-radius: 13px; background: #f5f8ff; padding: 12px; font-size: 10px; }
+.confirm-box span { color: #60708a; line-height: 1.45; }
+.confirm-actions { display: flex; justify-content: flex-end; gap: 7px; }
+.sync-status { margin-top: 10px; border-radius: 10px; background: #edf4ff; padding: 9px 10px; color: #0d47c7; font-size: 10px; }
+.sync-status.success { background: #effaf3; color: #269c56; }
+.sync-status.failure { background: #fff1f1; color: #c14f4f; }
 
 .workspace { display: grid; grid-template-columns: 315px minmax(0, 1fr) 315px; min-height: calc(100vh - 82px); }
 .roadmap-pane, .detail-pane, .evidence-pane { min-width: 0; }
@@ -139,6 +147,7 @@ h3 { margin-bottom: 0; font-size: 13px; }
 .status-dot { width: 8px; height: 8px; flex: 0 0 auto; border-radius: 999px; background: #bcc4d0; }
 .status-dot.current { background: #ffb13b; }
 .status-dot.done { background: #31bd68; }
+.work-row .mini-metrics span { max-width: 118px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 .security-area { margin-top: auto; border-top: 1px solid #e4e9f1; padding: 14px 17px 17px; }
 .security-card { border-radius: 16px; background: linear-gradient(145deg,#0d47c7,#07358f); padding: 14px; color: white; }
