@@ -119,6 +119,11 @@ h3 { margin-bottom: 0; font-size: 13px; }
 }
 .phase-row:hover, .work-row:hover { background: #f0f5ff; }
 .work-row { padding-left: 28px; }
+.future-work-row { position: relative; display: flex; min-height: 43px; align-items: center; gap: 8px; margin: 0 0 2px; padding: 8px 8px 8px 28px; color: #60708a; }
+.future-work-row::before { content: ""; position: absolute; top: -7px; bottom: -7px; left: 17px; width: 1px; background: #e4e9f1; }
+.future-node { display: grid; width: 25px; height: 25px; flex: 0 0 auto; place-items: center; border: 1px dashed #9eb4d7; border-radius: 8px; color: #0d47c7; font-size: 15px; }
+.milestone-summary { display: flex; align-items: center; justify-content: space-between; margin: 12px 8px 4px; color: #172033; font-size: 10px; }
+.milestone-summary b { color: #0d47c7; font-size: 9px; }
 .work-row.level-two { padding-left: 50px; }
 .work-row::before {
   content: "";
@@ -141,6 +146,8 @@ h3 { margin-bottom: 0; font-size: 13px; }
 .tree-name { font-size: 11px; font-weight: 750; }
 .tree-code { margin-top: 2px; color: #7c8799; font-size: 8px; }
 .active .tree-code { color: rgba(255,255,255,.76); }
+.future-work-row .tree-name { color: #46658f; }
+.future-work-row .tree-code { color: #0d47c7; }
 .mini-metrics { display: flex; flex-wrap: wrap; gap: 3px; margin-top: 5px; }
 .mini-metrics span { border: 1px solid #e4e9f1; border-radius: 999px; background: #fff; padding: 2px 5px; color: #7c8799; font-size: 7px; font-weight: 700; }
 .active .mini-metrics span { border-color: rgba(255,255,255,.25); background: rgba(255,255,255,.12); color: white; }
@@ -180,6 +187,9 @@ h3 { margin-bottom: 0; font-size: 13px; }
 .contract-grid dd { margin: 0; }
 .mono { font-family: ui-monospace,SFMono-Regular,Menlo,monospace; word-break: break-word; }
 .criteria-grid, .agent-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 8px; margin-top: 12px; }
+.sync-explanation, .resolver-summary { display: grid; gap: 4px; margin-top: 12px; border-radius: 12px; background: #edf4ff; padding: 11px; font-size: 10px; }
+.sync-explanation span, .sync-explanation small, .resolver-summary span { color: #7c8799; }
+.criterion small { display: block; margin-top: 3px; color: #7c8799; font-size: 8px; }
 .criterion, .agent-card { border: 1px solid #e4e9f1; border-radius: 13px; background: #f8faff; padding: 10px; font-size: 10px; line-height: 1.45; }
 .criterion { display: flex; gap: 8px; }
 .criterion b { color: #0d47c7; }

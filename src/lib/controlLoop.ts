@@ -27,12 +27,22 @@ export type RemoteAuthority = {
   diagnostics: string[];
 };
 
-export type WorkspaceEvaluation = { allowed: boolean; blockers: Blocker[]; plannedActions: string[] };
+export type WorkspaceEvaluation = { allowed: boolean; blockers: Blocker[]; plannedActions: string[]; state?: 'UP_TO_DATE' | 'SYNC_REQUIRED' | 'BLOCKED' };
 export type WorkPackage = { id: string; title: string; status: string; authoritySha: string; openspecChange: string; dependencies: { id: string; status: string }[]; previousRunStatus: string; ownerAuthorization: string };
 export type ResolverResult = { decision: ResolverDecision; workPackage: WorkPackage | null; blockers: Blocker[] };
-export type RoadmapEntry = { id: string; title: string; status: string; authorization: string };
-export type RoadmapEvidence = { currentMilestone: string; authoritySha: string; currentWorkPackage: string; closedWorkPackages: string[]; nextWorkPackages: string[]; progressPercent: number; entries: RoadmapEntry[] };
+export type RoadmapEntry = { id: string; title: string; status: string; authorization: string; milestone?: string };
+export type RoadmapMilestone = { id: string; title: string; workPackages: string[]; futureItems: string[]; progressPercent: number };
+export type RoadmapEvidence = { project: string; currentMilestone: string; authoritySha: string; currentWorkPackage: string; closedWorkPackages: string[]; nextWorkPackages: string[]; progressPercent: number; milestones: RoadmapMilestone[]; entries: RoadmapEntry[] };
 export type ControlLoopState = { identity: RepositoryIdentity | null; authority: RemoteAuthority | null; evaluation: WorkspaceEvaluation | null; resolver: ResolverResult | null; roadmap: RoadmapEvidence | null; status: AuthorityStatus; error: string | null };
+
+export type RepositoryStatusEvidence = {
+  localHead: string;
+  remoteMain: string;
+  worktree: 'CLEAN' | 'DIRTY' | 'UNKNOWN';
+  authority: AuthorityStatus;
+  currentWorkPackage: string;
+  nextWpGate: ResolverDecision | 'UNKNOWN';
+};
 
 export const emptyState: ControlLoopState = { identity: null, authority: null, evaluation: null, resolver: null, roadmap: null, status: 'CHECKING', error: null };
 
@@ -67,8 +77,41 @@ export function authorityStatus(status: RemoteAuthority['status'] | undefined): 
 }
 
 export function syncAllowed(evaluation: WorkspaceEvaluation | null): boolean { return evaluation?.allowed === true; }
+export function syncState(evaluation: WorkspaceEvaluation | null): 'UP_TO_DATE' | 'SYNC_REQUIRED' | 'BLOCKED' | 'UNKNOWN' {
+  if (!evaluation) return 'UNKNOWN';
+  if (evaluation.state) return evaluation.state;
+  return evaluation.allowed ? 'SYNC_REQUIRED' : evaluation.blockers.includes('SYNC_NOT_REQUIRED') ? 'UP_TO_DATE' : 'BLOCKED';
+}
+export function ownerBlocker(blocker: string): { reason: string; nextStep: string } {
+  const copy: Record<string, { reason: string; nextStep: string }> = {
+    WORKTREE_DIRTY: { reason: '工作区存在未提交修改', nextStep: '提交或暂存修改后重新检查' },
+    ACTIVE_RUN: { reason: '存在正在运行的任务', nextStep: '等待当前任务结束后重新检查' },
+    WRITER_LOCKED: { reason: '写入锁已被占用', nextStep: '等待写入锁释放后重新检查' },
+    UNSAVED_DIFF: { reason: '存在未保存差异', nextStep: '保存或清理差异后重新检查' },
+    PREVIOUS_RUN_OPEN: { reason: '上一次运行仍未关闭', nextStep: '关闭上一运行后重新检查' },
+    REMOTE_UNAVAILABLE: { reason: '远端 Authority 不可用', nextStep: '检查网络和 origin/main 后重试' },
+    SYNC_REQUIRED: { reason: '远端 main 领先本地 main', nextStep: '确认后同步本地 main' },
+    SYNC_NOT_REQUIRED: { reason: '本地 main 已是最新', nextStep: '无需同步' }
+  };
+  return copy[blocker] ?? { reason: '同步前置条件未满足', nextStep: '修复前置条件后重新检查' };
+}
 export function resolverDecision(result: ResolverResult | null): ResolverDecision | 'UNKNOWN' { return result?.decision ?? 'UNKNOWN'; }
 export function hasRuntimeStartAction(): boolean { return false; }
+
+export function shortSha(sha: string | null | undefined): string {
+  return sha ? sha.slice(0, 7) : 'UNKNOWN';
+}
+
+export function repositoryStatusEvidence(state: ControlLoopState): RepositoryStatusEvidence {
+  return {
+    localHead: shortSha(state.identity?.localHead),
+    remoteMain: shortSha(state.authority?.remoteMainSha),
+    worktree: state.identity ? (state.identity.worktreeClean ? 'CLEAN' : 'DIRTY') : 'UNKNOWN',
+    authority: state.status,
+    currentWorkPackage: state.roadmap?.currentWorkPackage ?? 'UNKNOWN',
+    nextWpGate: resolverDecision(state.resolver)
+  };
+}
 
 function inTauri(): boolean { return typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window; }
 
