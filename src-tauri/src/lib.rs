@@ -654,7 +654,10 @@ fn roadmap_line(content: &str, label: &str) -> String {
 fn parse_milestones(content: &str) -> Result<Vec<RoadmapMilestone>, ControlLoopError> {
     let mut lines = content.lines();
     if !lines.by_ref().any(|line| line.trim() == "## Milestones") {
-        return Err(err("ROADMAP_HIERARCHY_INVALID", "Milestones section is missing"));
+        return Err(err(
+            "ROADMAP_HIERARCHY_INVALID",
+            "Milestones section is missing",
+        ));
     }
     let mut milestones = Vec::new();
     let mut current: Option<RoadmapMilestone> = None;
@@ -667,7 +670,10 @@ fn parse_milestones(content: &str) -> Result<Vec<RoadmapMilestone>, ControlLoopE
         if let Some(value) = trimmed.strip_prefix("### ") {
             if let Some(milestone) = current.take() {
                 if milestone.work_packages.is_empty() {
-                    return Err(err("ROADMAP_HIERARCHY_INVALID", "milestone has no Work Packages"));
+                    return Err(err(
+                        "ROADMAP_HIERARCHY_INVALID",
+                        "milestone has no Work Packages",
+                    ));
                 }
                 milestones.push(milestone);
             }
@@ -683,7 +689,10 @@ fn parse_milestones(content: &str) -> Result<Vec<RoadmapMilestone>, ControlLoopE
             reading_packages = false;
         } else if trimmed == "Work Packages:" {
             if current.is_none() {
-                return Err(err("ROADMAP_HIERARCHY_INVALID", "Work Packages has no milestone"));
+                return Err(err(
+                    "ROADMAP_HIERARCHY_INVALID",
+                    "Work Packages has no milestone",
+                ));
             }
             reading_packages = true;
         } else if reading_packages {
@@ -692,11 +701,17 @@ fn parse_milestones(content: &str) -> Result<Vec<RoadmapMilestone>, ControlLoopE
                 while let Some(start) = rest.find('`') {
                     let after_start = &rest[start + 1..];
                     let end = after_start.find('`').ok_or_else(|| {
-                        err("ROADMAP_HIERARCHY_INVALID", "Work Package identifier is unterminated")
+                        err(
+                            "ROADMAP_HIERARCHY_INVALID",
+                            "Work Package identifier is unterminated",
+                        )
                     })?;
                     let id = &after_start[..end];
                     if id.is_empty() || milestone.work_packages.iter().any(|item| item == id) {
-                        return Err(err("ROADMAP_HIERARCHY_INVALID", "duplicate or empty Work Package"));
+                        return Err(err(
+                            "ROADMAP_HIERARCHY_INVALID",
+                            "duplicate or empty Work Package",
+                        ));
                     }
                     milestone.work_packages.push(id.to_string());
                     rest = &after_start[end + 1..];
@@ -706,7 +721,10 @@ fn parse_milestones(content: &str) -> Result<Vec<RoadmapMilestone>, ControlLoopE
     }
     if let Some(milestone) = current {
         if milestone.work_packages.is_empty() {
-            return Err(err("ROADMAP_HIERARCHY_INVALID", "milestone has no Work Packages"));
+            return Err(err(
+                "ROADMAP_HIERARCHY_INVALID",
+                "milestone has no Work Packages",
+            ));
         }
         milestones.push(milestone);
     }
@@ -779,13 +797,22 @@ fn load_roadmap_evidence(root: &Path) -> Result<RoadmapEvidence, ControlLoopErro
         for work_package_id in &milestone.work_packages {
             let path = packages_root.join(format!("{work_package_id}.md"));
             let package = fs::read_to_string(&path).map_err(|_| {
-                err("ROADMAP_HIERARCHY_INVALID", "milestone references missing Work Package")
+                err(
+                    "ROADMAP_HIERARCHY_INVALID",
+                    "milestone references missing Work Package",
+                )
             })?;
             parse_package(&path).map_err(|_| {
-                err("ROADMAP_HIERARCHY_INVALID", "milestone references malformed Work Package")
+                err(
+                    "ROADMAP_HIERARCHY_INVALID",
+                    "milestone references malformed Work Package",
+                )
             })?;
             if package.is_empty() {
-                return Err(err("ROADMAP_HIERARCHY_INVALID", "Work Package evidence is empty"));
+                return Err(err(
+                    "ROADMAP_HIERARCHY_INVALID",
+                    "Work Package evidence is empty",
+                ));
             }
         }
     }
@@ -1487,15 +1514,27 @@ mod tests {
         fs::create_dir_all(root.join("docs/10_Planning_Roadmap")).unwrap();
         fs::create_dir_all(root.join("docs/60_Operations/work-packages")).unwrap();
         let header = "## Current milestone\n\n`M2 — Authority And Workspace Control`\n\nCurrent Authority: `authority`\nCurrent Work Package: `R2`\n\n## Milestones\n\n### M2 — Authority And Workspace Control\n\nWork Packages:\n`R2`\n\n### M3 — Runtime\n\nWork Packages:\n`RUNTIME`\n";
-        fs::write(root.join("docs/10_Planning_Roadmap/01_LIVING_ROADMAP.md"), header).unwrap();
+        fs::write(
+            root.join("docs/10_Planning_Roadmap/01_LIVING_ROADMAP.md"),
+            header,
+        )
+        .unwrap();
         let r2 = "---\nschema: aicc-work-package/v1\nid: R2\ntitle: R2\nstatus: AUTHORIZED\nauthority_sha: authority\nopenspec_change: r2\ndependencies: []\nprevious_run_status: HUMAN_UAT_FAIL\nowner_authorization: AUTHORIZED_FOR_IMPLEMENTATION\n---\n";
         let runtime = "---\nschema: aicc-work-package/v1\nid: RUNTIME\ntitle: Runtime\nstatus: PLANNED\nauthority_sha: authority\nopenspec_change: runtime\ndependencies: []\nprevious_run_status: CLOSED\nowner_authorization: NOT_AUTHORIZED\n---\n";
         fs::write(root.join("docs/60_Operations/work-packages/R2.md"), r2).unwrap();
-        fs::write(root.join("docs/60_Operations/work-packages/RUNTIME.md"), runtime).unwrap();
+        fs::write(
+            root.join("docs/60_Operations/work-packages/RUNTIME.md"),
+            runtime,
+        )
+        .unwrap();
         let first = load_roadmap_evidence(&root).unwrap();
         assert_eq!(first.entries[0].milestone, "M2");
         let moved_header = "## Current milestone\n\n`M2 — Authority And Workspace Control`\n\n## Authority\n\nCurrent Authority: `authority`\nCurrent Work Package: `R2`\n\n## Milestones\n\n### M2 — Authority And Workspace Control\n\nWork Packages:\n`RUNTIME`\n\n### M3 — Runtime\n\nWork Packages:\n`R2`";
-        fs::write(root.join("docs/10_Planning_Roadmap/01_LIVING_ROADMAP.md"), moved_header).unwrap();
+        fs::write(
+            root.join("docs/10_Planning_Roadmap/01_LIVING_ROADMAP.md"),
+            moved_header,
+        )
+        .unwrap();
         let moved = load_roadmap_evidence(&root).unwrap();
         assert_eq!(moved.entries[0].milestone, "M3");
     }
@@ -1509,7 +1548,10 @@ mod tests {
             "## Current milestone\n\n`M2`\n\n## Authority\n\nCurrent Work Package: `R2`\n\n## Milestones\n\n### M2 — Control\n\nWork Packages:\n`MISSING`",
         )
         .unwrap();
-        assert_eq!(load_roadmap_evidence(&root).unwrap_err().code, "ROADMAP_HIERARCHY_INVALID");
+        assert_eq!(
+            load_roadmap_evidence(&root).unwrap_err().code,
+            "ROADMAP_HIERARCHY_INVALID"
+        );
     }
     #[test]
     fn resolver_preserves_valid_unauthorized_package_without_schema_blocker() {
