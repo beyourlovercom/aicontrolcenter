@@ -31,9 +31,18 @@ export type WorkspaceEvaluation = { allowed: boolean; blockers: Blocker[]; plann
 export type WorkPackage = { id: string; title: string; status: string; authoritySha: string; openspecChange: string; dependencies: { id: string; status: string }[]; previousRunStatus: string; ownerAuthorization: string };
 export type ResolverResult = { decision: ResolverDecision; workPackage: WorkPackage | null; blockers: Blocker[] };
 export type RoadmapEntry = { id: string; title: string; status: string; authorization: string; milestone?: string };
-export type RoadmapMilestone = { id: string; title: string; workPackages: string[]; progressPercent: number };
+export type RoadmapMilestone = { id: string; title: string; workPackages: string[]; futureItems: string[]; progressPercent: number };
 export type RoadmapEvidence = { project: string; currentMilestone: string; authoritySha: string; currentWorkPackage: string; closedWorkPackages: string[]; nextWorkPackages: string[]; progressPercent: number; milestones: RoadmapMilestone[]; entries: RoadmapEntry[] };
 export type ControlLoopState = { identity: RepositoryIdentity | null; authority: RemoteAuthority | null; evaluation: WorkspaceEvaluation | null; resolver: ResolverResult | null; roadmap: RoadmapEvidence | null; status: AuthorityStatus; error: string | null };
+
+export type RepositoryStatusEvidence = {
+  localHead: string;
+  remoteMain: string;
+  worktree: 'CLEAN' | 'DIRTY' | 'UNKNOWN';
+  authority: AuthorityStatus;
+  currentWorkPackage: string;
+  nextWpGate: ResolverDecision | 'UNKNOWN';
+};
 
 export const emptyState: ControlLoopState = { identity: null, authority: null, evaluation: null, resolver: null, roadmap: null, status: 'CHECKING', error: null };
 
@@ -88,6 +97,21 @@ export function ownerBlocker(blocker: string): { reason: string; nextStep: strin
 }
 export function resolverDecision(result: ResolverResult | null): ResolverDecision | 'UNKNOWN' { return result?.decision ?? 'UNKNOWN'; }
 export function hasRuntimeStartAction(): boolean { return false; }
+
+export function shortSha(sha: string | null | undefined): string {
+  return sha ? sha.slice(0, 7) : 'UNKNOWN';
+}
+
+export function repositoryStatusEvidence(state: ControlLoopState): RepositoryStatusEvidence {
+  return {
+    localHead: shortSha(state.identity?.localHead),
+    remoteMain: shortSha(state.authority?.remoteMainSha),
+    worktree: state.identity ? (state.identity.worktreeClean ? 'CLEAN' : 'DIRTY') : 'UNKNOWN',
+    authority: state.status,
+    currentWorkPackage: state.roadmap?.currentWorkPackage ?? 'UNKNOWN',
+    nextWpGate: resolverDecision(state.resolver)
+  };
+}
 
 function inTauri(): boolean { return typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window; }
 

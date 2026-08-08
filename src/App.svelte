@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { agents } from './lib/data';
-  import { cancelSync as cancelledSync, emptyState, loadControlLoop, ownerBlocker, requestSync, syncAllowed, syncOutcome, syncState as getSyncState, syncWorkspace, type ControlLoopState, type RoadmapEntry, type SyncState } from './lib/controlLoop';
+  import { cancelSync as cancelledSync, emptyState, loadControlLoop, ownerBlocker, repositoryStatusEvidence, requestSync, syncAllowed, syncOutcome, syncState as getSyncState, syncWorkspace, type ControlLoopState, type RoadmapEntry, type SyncState } from './lib/controlLoop';
 
   type Tab = 'overview' | 'openspec' | 'agents' | 'validation';
 
@@ -15,14 +15,15 @@
   let syncState: SyncState = { kind: 'idle' };
   $: syncCode = controlLoop.evaluation?.blockers[0] ?? getSyncState(controlLoop.evaluation);
   $: syncCopy = ownerBlocker(syncCode);
+  $: repositoryStatus = repositoryStatusEvidence(controlLoop);
 
   const evidence = [
-    ['C', 'Project Charter', 'docs/00_Governance/01_PROJECT_CHARTER.md'],
-    ['R', 'Living Roadmap', 'docs/10_Planning_Roadmap/01_LIVING_ROADMAP.md'],
-    ['W', 'Current Work Package', 'docs/60_Operations/work-packages/AICC-POST-MERGE-UAT-001.md'],
-    ['P', 'OpenSpec Proposal', 'openspec/changes/aicc-visible-slice-001/proposal.md'],
-    ['T', 'OpenSpec Tasks', 'openspec/changes/aicc-visible-slice-001/tasks.md'],
-    ['OM', 'OmO Slim Config', '.opencode/oh-my-opencode-slim.json']
+    ['C', '项目章程 Project Charter', 'docs/00_Governance/01_PROJECT_CHARTER.md'],
+    ['R', '在用路线图 Living Roadmap', 'docs/10_Planning_Roadmap/01_LIVING_ROADMAP.md'],
+    ['W', '当前工作包 Current Work Package', 'docs/60_Operations/work-packages/AICC-POST-MERGE-UAT-001.md'],
+    ['P', 'OpenSpec 提案 Proposal', 'openspec/changes/aicc-visible-slice-001/proposal.md'],
+    ['T', 'OpenSpec 任务 Tasks', 'openspec/changes/aicc-visible-slice-001/tasks.md'],
+    ['OM', 'OmO Slim 配置 Config', '.opencode/oh-my-opencode-slim.json']
   ];
 
   $: formalItems = (controlLoop.roadmap?.entries ?? []).map((entry) => ({
@@ -62,7 +63,7 @@
     refreshing = true;
     controlLoop = await loadControlLoop();
     refreshing = false;
-    announce(controlLoop.status === 'VERIFIED' ? 'Remote Authority 已验证；未执行 fetch。' : `Authority 状态：${controlLoop.status}`);
+    announce(controlLoop.status === 'VERIFIED' ? '远端 Authority 已验证；未执行 fetch。' : `Authority 状态：${controlLoop.status}`);
   }
 
   async function syncLocalMain() {
@@ -108,7 +109,7 @@
 
     <div class="authority-cell">
       <div>
-        <div class="micro-label">Remote Authority</div>
+        <div class="micro-label">远端 Authority</div>
         <div class="authority-value">origin/main · {controlLoop.status}</div>
       </div>
       <button class="primary-button" type="button" onclick={refresh}>{refreshing ? '验证中…' : '刷新状态'}</button>
@@ -140,13 +141,22 @@
             <span class:done={item.status === 'CLOSED'} class:current={item.id === controlLoop.roadmap?.currentWorkPackage} class="status-dot"></span>
           </button>
           {/each}
+          {#each milestone.futureItems.filter((item) => item.toLowerCase().includes(query.trim().toLowerCase())) as futureItem}
+            <div class="future-work-row" data-kind="future-placeholder">
+              <span class="future-node">○</span>
+              <span class="tree-copy">
+                <span class="tree-name">{futureItem}</span>
+                <span class="tree-code">未来规划 / 尚未正式化</span>
+              </span>
+            </div>
+          {/each}
         {/each}
       </div>
 
       <div class="security-area">
         <div class="security-card">
-          <div class="security-label">CURRENT SECURITY MODE</div>
-          <strong>Read-only V1</strong>
+          <div class="security-label">当前安全模式</div>
+          <strong>只读 V1</strong>
           <p>OpenSpec 只解析；OmO Slim 只读取配置；Agent、Apply 与仓库写入全部禁用。</p>
         </div>
       </div>
@@ -162,8 +172,8 @@
         <button class="primary-button" type="button" onclick={() => announce(`原型操作：打开 ${selected.id}`)}>打开正式 WP</button>
       </div>
 
-      <nav class="tabs" aria-label="Work Package details">
-        {#each [['overview', 'Overview'], ['openspec', 'OpenSpec'], ['agents', 'Agents'], ['validation', 'Validation']] as tab}
+      <nav class="tabs" aria-label="工作包详情">
+        {#each [['overview', '概览'], ['openspec', 'OpenSpec'], ['agents', 'Agent 状态'], ['validation', '验证']] as tab}
           <button class:active={activeTab === tab[0]} type="button" onclick={() => activeTab = tab[0] as Tab}>{tab[1]}</button>
         {/each}
       </nav>
@@ -189,13 +199,13 @@
           </div>
 
           <article class="content-card">
-            <div class="section-title-row"><h3>Formal Contract</h3><span class="accent-chip">{selected.status}</span></div>
+            <div class="section-title-row"><h3>正式合同</h3><span class="accent-chip">{selected.status}</span></div>
             <dl class="contract-grid">
               <div><dt>正式文件</dt><dd class="mono">{selected.path}</dd></div>
               <div><dt>授权状态</dt><dd>{selected.authorization}</dd></div>
-              <div><dt>Current Milestone</dt><dd>{controlLoop.roadmap?.currentMilestone ?? selected.parent}</dd></div>
-              <div><dt>Roadmap Authority</dt><dd class="mono">{controlLoop.roadmap?.authoritySha ?? 'unknown'}</dd></div>
-              <div><dt>Next Work Packages</dt><dd>{controlLoop.roadmap?.nextWorkPackages.join(', ') ?? 'unknown'}</dd></div>
+              <div><dt>当前里程碑</dt><dd>{controlLoop.roadmap?.currentMilestone ?? selected.parent}</dd></div>
+              <div><dt>路线图 Authority</dt><dd class="mono">{controlLoop.roadmap?.authoritySha ?? 'unknown'}</dd></div>
+              <div><dt>后续工作包</dt><dd>{controlLoop.roadmap?.nextWorkPackages.join(', ') ?? 'unknown'}</dd></div>
               <div><dt>远端策略</dt><dd>只读查询 remote main，不执行 git fetch</dd></div>
             </dl>
           </article>
@@ -204,12 +214,12 @@
             <div class="section-title-row"><h3>本地 main 同步状态</h3><span class="accent-chip">{getSyncState(controlLoop.evaluation)}</span></div>
             <div class="sync-explanation"><strong>{syncCopy.reason}</strong><span class="mono">{syncCode}</span><small>下一步：{syncCopy.nextStep}</small></div>
             <dl class="contract-grid">
-              <div><dt>Remote Main SHA</dt><dd class="mono">{controlLoop.authority?.remoteMainSha ?? 'unknown'}</dd></div>
-              <div><dt>Local Main SHA</dt><dd class="mono">{controlLoop.identity?.localMainSha ?? 'unknown'}</dd></div>
-              <div><dt>Current Branch</dt><dd>{controlLoop.identity?.currentBranch ?? 'detached / unknown'}</dd></div>
-              <div><dt>Current HEAD</dt><dd class="mono">{controlLoop.identity?.localHead ?? 'unknown'}</dd></div>
-              <div><dt>Worktree</dt><dd>{controlLoop.identity?.worktreeClean ? 'CLEAN' : 'DIRTY'}</dd></div>
-              <div><dt>Checked At</dt><dd>{controlLoop.authority?.checkedAt ?? 'not checked'}</dd></div>
+              <div><dt>远端 Main SHA</dt><dd class="mono">{controlLoop.authority?.remoteMainSha ?? 'unknown'}</dd></div>
+              <div><dt>本地 Main SHA</dt><dd class="mono">{controlLoop.identity?.localMainSha ?? 'unknown'}</dd></div>
+              <div><dt>当前分支</dt><dd>{controlLoop.identity?.currentBranch ?? 'detached / unknown'}</dd></div>
+              <div><dt>当前 HEAD</dt><dd class="mono">{controlLoop.identity?.localHead ?? 'unknown'}</dd></div>
+              <div><dt>工作区</dt><dd>{controlLoop.identity?.worktreeClean ? 'CLEAN' : 'DIRTY'}</dd></div>
+              <div><dt>检查时间</dt><dd>{controlLoop.authority?.checkedAt ?? 'not checked'}</dd></div>
             </dl>
             <div class="criteria-grid">
               {#each controlLoop.evaluation?.blockers ?? ['CHECKING'] as blocker}
@@ -234,15 +244,15 @@
           </article>
 
           <article class="content-card">
-            <div class="section-title-row"><h3>下一工作包执行判定</h3><span class="accent-chip">Next Work Package Gate</span></div>
+            <div class="section-title-row"><h3>下一工作包执行判定</h3><span class="accent-chip">后续工作包关卡</span></div>
             <div class="resolver-summary"><strong>当前候选工作包</strong><span>{controlLoop.resolver?.workPackage?.id ?? '暂无候选工作包'}</span><strong>执行</strong><span>{controlLoop.resolver?.decision ?? 'UNKNOWN'}</span></div>
             {#if controlLoop.resolver?.workPackage}
               <dl class="contract-grid">
                 <div><dt>WP ID</dt><dd class="mono">{controlLoop.resolver.workPackage.id}</dd></div>
-                <div><dt>Title</dt><dd>{controlLoop.resolver.workPackage.title}</dd></div>
+                <div><dt>标题</dt><dd>{controlLoop.resolver.workPackage.title}</dd></div>
                 <div><dt>Authority SHA</dt><dd class="mono">{controlLoop.resolver.workPackage.authoritySha}</dd></div>
-                <div><dt>OpenSpec Change</dt><dd class="mono">{controlLoop.resolver.workPackage.openspecChange}</dd></div>
-                <div><dt>Dependencies</dt><dd>{controlLoop.resolver.workPackage.dependencies.map((dependency) => `${dependency.id}=${dependency.status}`).join(', ')}</dd></div>
+                <div><dt>OpenSpec 变更</dt><dd class="mono">{controlLoop.resolver.workPackage.openspecChange}</dd></div>
+                <div><dt>依赖关系</dt><dd>{controlLoop.resolver.workPackage.dependencies.map((dependency) => `${dependency.id}=${dependency.status}`).join(', ')}</dd></div>
               </dl>
             {/if}
             <div class="criteria-grid">
@@ -265,8 +275,8 @@
         <section class="tab-panel">
           <article class="content-card no-top-margin">
             <div class="section-title-row">
-              <div><h3>OpenSpec Artifact Graph</h3><span class="secondary-note mono">Change: {selected.change}</span></div>
-              <span class="accent-chip">READ ONLY</span>
+              <div><h3>OpenSpec 工件图</h3><span class="secondary-note mono">Change: {selected.change}</span></div>
+              <span class="accent-chip">只读</span>
             </div>
             <div class="artifact-grid">
               {#each [['01','Proposal','COMPLETE'],['02','Specs','COMPLETE'],['03','Design','COMPLETE'],['04','Tasks',selected.task],['05','Validation','NOT STARTED']] as artifact, index}
@@ -280,7 +290,7 @@
           </article>
 
           <article class="content-card">
-            <div class="section-title-row"><h3>OpenSpec Action Policy</h3><span class="secondary-note">V1 and future gates</span></div>
+            <div class="section-title-row"><h3>OpenSpec 操作策略</h3><span class="secondary-note">V1 与未来关卡</span></div>
             <div class="policy-row"><span>读取 Artifacts</span><b class="allow">ALLOW</b></div>
             <div class="policy-row"><span>Explore / Propose / Update / Verify</span><b class="future">FUTURE GOVERNED ACTION</b></div>
             <div class="policy-row"><span>Apply</span><b class="deny">OWNER AUTHORIZATION REQUIRED</b></div>
@@ -292,12 +302,12 @@
         <section class="tab-panel">
           <div class="metric-grid">
             <article class="metric-card"><div class="eyebrow">OmO Slim</div><div class="metric-value">DETECTED</div><div class="metric-note">Configuration view</div></article>
-            <article class="metric-card"><div class="eyebrow">Active Preset</div><div class="metric-value">PROJECT CONFIG</div><div class="metric-note">7 configured agents</div></article>
-            <article class="metric-card"><div class="eyebrow">Runtime</div><div class="metric-value">OFF</div><div class="metric-note">No session · no writer lock</div></article>
+            <article class="metric-card"><div class="eyebrow">当前预设</div><div class="metric-value">PROJECT CONFIG</div><div class="metric-note">7 个已配置 Agent</div></article>
+            <article class="metric-card"><div class="eyebrow">Runtime 状态</div><div class="metric-value">OFF</div><div class="metric-note">无会话 · 无写入锁</div></article>
           </div>
 
           <article class="content-card">
-            <div class="section-title-row"><h3>OmO Slim Agent Team</h3><span class="accent-chip">CONFIG VIEW</span></div>
+            <div class="section-title-row"><h3>OmO Slim Agent 团队</h3><span class="accent-chip">配置视图</span></div>
             <div class="agent-grid">
               {#each agents as agent}
                 <div class="agent-card">
@@ -313,16 +323,16 @@
       {:else}
         <section class="tab-panel">
           <article class="content-card no-top-margin">
-            <div class="section-title-row"><h3>Controlled Validation Pipeline</h3><span class="accent-chip">NO ACTIVE RUN</span></div>
+            <div class="section-title-row"><h3>受控验证流程</h3><span class="accent-chip">无活动运行</span></div>
             <div class="pipeline">
               {#each [
-                ['01','Authority Gate','Remote main and formal WP verified','PASS','pass'],
-                ['02','OpenSpec Parse','Artifacts and task graph detected','PASS','pass'],
-                ['03','Owner Authorization','Required before Apply or runtime','WAITING','wait'],
-                ['04','OmO Delegation Plan','Parallel reads, single write lane','LOCKED','locked'],
-                ['05','Implementation and Tests','Disabled in read-only V1','LOCKED','locked'],
-                ['06','Independent Review','Separate evidence contract','LOCKED','locked'],
-                ['07','Owner Handoff','Stops at WAITING_OWNER_ACCEPTANCE','LOCKED','locked']
+                ['01','Authority 关卡','远端 main 与正式 WP 已检查','PASS','pass'],
+                ['02','OpenSpec 解析','工件与任务图已检测','PASS','pass'],
+                ['03','Owner 授权','Apply 或 Runtime 前必须授权','WAITING','wait'],
+                ['04','OmO 委派计划','并行读取，单一写入通道','LOCKED','locked'],
+                ['05','实现与测试','只读 V1 中已禁用','LOCKED','locked'],
+                ['06','独立审查','独立证据合同','LOCKED','locked'],
+                ['07','Owner 交接','停止于 WAITING_OWNER_ACCEPTANCE','LOCKED','locked']
               ] as step}
                 <div class="pipeline-step">
                   <span class="step-number">{step[0]}</span>
@@ -338,31 +348,32 @@
 
     <aside class="evidence-pane">
       <div class="section-title-row">
-        <div><div class="eyebrow">Repository Status</div><h3>Authority Health</h3></div>
-        <span class="accent-chip">100%</span>
+        <div><div class="eyebrow">仓库状态</div><h3>Authority 健康度</h3></div>
+        <span class="accent-chip">{controlLoop.roadmap?.progressPercent ?? 0}%</span>
       </div>
 
       <div class="health-card">
-        <div><span>Local HEAD</span><b class="mono">20d1c9d</b></div>
-        <div><span>Remote main</span><b class="mono">20d1c9d</b></div>
-        <div><span>Formal WP</span><b class="allow">MATCHED</b></div>
-        <div><span>Authority Drift</span><b class="allow">NONE</b></div>
-        <div><span>Owner Gate</span><b class="future">PLANNING</b></div>
+        <div><span>本地 HEAD</span><b class="mono">{repositoryStatus.localHead}</b></div>
+        <div><span>远端 main</span><b class="mono">{repositoryStatus.remoteMain}</b></div>
+        <div><span>工作区</span><b class:allow={repositoryStatus.worktree === 'CLEAN'} class:deny={repositoryStatus.worktree === 'DIRTY'}>{repositoryStatus.worktree}</b></div>
+        <div><span>Authority</span><b>{repositoryStatus.authority}</b></div>
+        <div><span>当前工作包</span><b class="mono">{repositoryStatus.currentWorkPackage}</b></div>
+        <div><span>后续工作包关卡</span><b>{repositoryStatus.nextWpGate}</b></div>
       </div>
 
-      <div class="section-title-row stack-heading"><h3>Execution Stack</h3><span class="secondary-note">Read-only probe</span></div>
+      <div class="section-title-row stack-heading"><h3>执行状态</h3><span class="secondary-note">只读探测</span></div>
       <div class="stack-list">
-        {#each [['OS','OpenSpec','Artifacts parsed','DETECTED'],['OM','OmO Slim','Preset and agents parsed','DETECTED'],['OC','OpenCode','Runtime not started','AVAILABLE'],['RN','Active Run','No bound session','NONE'],['WL','Writer Lock','Write lane disabled','NOT HELD']] as item}
+        {#each [['OS','OpenSpec','已解析正式工件','DETECTED'],['OM','OmO Slim','已解析预设与 Agent','DETECTED'],['OC','OpenCode','Runtime 未启动','AVAILABLE'],['RN','Active Run','无绑定会话','NONE'],['WL','Writer Lock','写入通道已禁用','NOT HELD']] as item}
           <div class="stack-row"><span class="stack-icon">{item[0]}</span><div><strong>{item[1]}</strong><span>{item[2]}</span></div><b>{item[3]}</b></div>
         {/each}
       </div>
 
-      <div class="section-title-row stack-heading"><h3>Formal Evidence</h3><span class="secondary-note">Read-only sources</span></div>
+      <div class="section-title-row stack-heading"><h3>正式证据</h3><span class="secondary-note">只读来源</span></div>
       <div class="evidence-list">
         {#each evidence as file}
           <button type="button" onclick={() => announce(`原型操作：打开 ${file[1]}`)}>
             <span class="stack-icon">{file[0]}</span>
-            <span><strong>{file[1]}</strong><small>{file[1] === 'Current Work Package' ? 'docs/60_Operations/work-packages/AICC-POST-MERGE-UAT-001.md' : file[2]}</small></span>
+            <span><strong>{file[1]}</strong><small>{file[0] === 'W' ? 'docs/60_Operations/work-packages/AICC-POST-MERGE-UAT-001.md' : file[2]}</small></span>
             <b>›</b>
           </button>
         {/each}
