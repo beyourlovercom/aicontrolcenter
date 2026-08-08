@@ -1457,13 +1457,12 @@ mod tests {
         fs::create_dir_all(root.join("docs/60_Operations/work-packages")).unwrap();
         fs::write(
             root.join("docs/10_Planning_Roadmap/01_LIVING_ROADMAP.md"),
-            "# AI Control Center Living Roadmap\n\n## Current milestone\n\n`M2 — Authority And Workspace Control`\n\n## Authority\n\nCurrent Authority: `authority`\n\nClosed Work Packages: `AICC-CLOSED`\n\nCurrent Work Package: `AICC-POST-MERGE-UAT-001-R2`\n\nNext Work Packages: `001B OpenSpec Binding`, `001C OpenCode Runtime Observer`\n\n## Milestones\n\n### M1 — Visible Foundation\n\nWork Packages:\n`AICC-CLOSED`\n\n### M2 — Authority And Workspace Control\n\nWork Packages:\n`AICC-POST-MERGE-UAT-001-R2`,\n`AICC-CONTROL-LOOP-001B`\n\n### M3 — Runtime\n\nWork Packages:\n`AICC-RUNTIME-001`\n\n## Delivery sequence\n\n1. AICC-CLOSED — closed foundation.\n2. AICC-POST-MERGE-UAT-001-R2 — current Human UAT remediation.\n3. 001B — OpenSpec Binding (planned, owner authorization not authorized).\n\n## Current safety state\n\nThe application remains fail closed.",
+            "# AI Control Center Living Roadmap\n\n## Current milestone\n\n`M2 — Authority And Workspace Control`\n\n## Authority\n\nCurrent Authority: `authority`\n\nClosed Work Packages: `AICC-CLOSED`\n\nCurrent Work Package: `AICC-POST-MERGE-UAT-001-R2`\n\nNext Work Packages: `001B OpenSpec Binding`, `001C OpenCode Runtime Observer`\n\n## Milestones\n\n### M1 — Visible Foundation\n\nWork Packages:\n`AICC-CLOSED`\n\n### M2 — Authority And Workspace Control\n\nWork Packages:\n`AICC-POST-MERGE-UAT-001-R2`,\n`AICC-CONTROL-LOOP-001B`\n\n### M3 — Runtime\n\nFuture Work Packages:\n`AICC-CONTROL-LOOP-001C`,\n`AICC-CONTROL-LOOP-001D`\n\n## Delivery sequence\n\n1. AICC-CLOSED — closed foundation.\n2. AICC-POST-MERGE-UAT-001-R2 — current Human UAT remediation.\n3. 001B — OpenSpec Binding (planned, owner authorization not authorized).\n\n## Current safety state\n\nThe application remains fail closed.",
         )
         .unwrap();
         let package = "---\nschema: aicc-work-package/v1\nid: AICC-POST-MERGE-UAT-001-R2\ntitle: R2\nstatus: AUTHORIZED\nauthority_sha: authority\nopenspec_change: current\ndependencies: []\nprevious_run_status: HUMAN_UAT_FAIL\nowner_authorization: AUTHORIZED_FOR_IMPLEMENTATION\n---\n";
         let planned = "---\nschema: aicc-work-package/v1\nid: AICC-CONTROL-LOOP-001B\ntitle: Binding\nstatus: PLANNED\nauthority_sha: authority\nopenspec_change: binding\ndependencies: []\nprevious_run_status: CLOSED\nowner_authorization: NOT_AUTHORIZED\n---\n";
         let closed = "---\nschema: aicc-work-package/v1\nid: AICC-CLOSED\ntitle: Closed\nstatus: CLOSED\nauthority_sha: authority\nopenspec_change: closed\ndependencies: []\nprevious_run_status: CLOSED\nowner_authorization: AUTHORIZED_FOR_IMPLEMENTATION\n---\n";
-        let runtime = "---\nschema: aicc-work-package/v1\nid: AICC-RUNTIME-001\ntitle: Runtime\nstatus: PLANNED\nauthority_sha: authority\nopenspec_change: runtime\ndependencies: []\nprevious_run_status: CLOSED\nowner_authorization: NOT_AUTHORIZED\n---\n";
         fs::write(
             root.join("docs/60_Operations/work-packages/AICC-POST-MERGE-UAT-001-R2.md"),
             package,
@@ -1477,11 +1476,6 @@ mod tests {
         fs::write(
             root.join("docs/60_Operations/work-packages/AICC-CLOSED.md"),
             closed,
-        )
-        .unwrap();
-        fs::write(
-            root.join("docs/60_Operations/work-packages/AICC-RUNTIME-001.md"),
-            runtime,
         )
         .unwrap();
         let evidence = load_roadmap_evidence(&root).unwrap();
@@ -1499,6 +1493,19 @@ mod tests {
             .unwrap()
             .work_packages
             .contains(&"AICC-CLOSED".to_string()));
+        let runtime_milestone = evidence
+            .milestones
+            .iter()
+            .find(|milestone| milestone.id == "M3")
+            .unwrap();
+        assert!(runtime_milestone.work_packages.is_empty());
+        assert_eq!(
+            runtime_milestone.future_items,
+            vec![
+                "AICC-CONTROL-LOOP-001C".to_string(),
+                "AICC-CONTROL-LOOP-001D".to_string()
+            ]
+        );
         assert_eq!(
             evidence
                 .entries
