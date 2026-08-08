@@ -583,6 +583,9 @@ fn parse_package(path: &Path) -> Result<WorkPackageRecord, ResolverBlocker> {
         parsed.status.as_str(),
         "PLANNED" | "AUTHORIZED" | "IMPLEMENTING" | "BLOCKED" | "CLOSED"
     ) || !matches!(
+        parsed.previous_run_status.as_str(),
+        "PLANNED" | "AUTHORIZED" | "IMPLEMENTING" | "BLOCKED" | "CLOSED" | "HUMAN_UAT_FAIL"
+    ) || !matches!(
         parsed.owner_authorization.as_str(),
         "AUTHORIZED_FOR_IMPLEMENTATION" | "NOT_AUTHORIZED"
     ) || parsed.schema != "aicc-work-package/v1"
@@ -1235,6 +1238,30 @@ mod tests {
         let p = temp("wp").join("wp.md");
         fs::write(&p, "---\nschema: aicc-work-package/v1\nid: WP\ntitle: T\nstatus: NOPE\nauthority_sha: x\nopenspec_change: x\ndependencies: []\nprevious_run_status: CLOSED\nowner_authorization: AUTHORIZED_FOR_IMPLEMENTATION\n---\n").unwrap();
         assert!(parse_package(&p).is_err());
+    }
+    #[test]
+    fn parser_previous_run_status_closed_is_accepted() {
+        let p = temp("wp").join("wp.md");
+        fs::write(&p, "---\nschema: aicc-work-package/v1\nid: WP\ntitle: T\nstatus: AUTHORIZED\nauthority_sha: x\nopenspec_change: x\ndependencies: []\nprevious_run_status: CLOSED\nowner_authorization: AUTHORIZED_FOR_IMPLEMENTATION\n---\n").unwrap();
+        assert_eq!(parse_package(&p).unwrap().previous_run_status, "CLOSED");
+    }
+    #[test]
+    fn parser_previous_run_status_human_uat_fail_is_accepted() {
+        let p = temp("wp").join("wp.md");
+        fs::write(&p, "---\nschema: aicc-work-package/v1\nid: WP\ntitle: T\nstatus: AUTHORIZED\nauthority_sha: x\nopenspec_change: x\ndependencies: []\nprevious_run_status: HUMAN_UAT_FAIL\nowner_authorization: AUTHORIZED_FOR_IMPLEMENTATION\n---\n").unwrap();
+        assert_eq!(
+            parse_package(&p).unwrap().previous_run_status,
+            "HUMAN_UAT_FAIL"
+        );
+    }
+    #[test]
+    fn parser_malformed_previous_run_status_rejects_with_schema_blocker() {
+        let p = temp("wp").join("wp.md");
+        fs::write(&p, "---\nschema: aicc-work-package/v1\nid: WP\ntitle: T\nstatus: AUTHORIZED\nauthority_sha: x\nopenspec_change: x\ndependencies: []\nprevious_run_status: NOT_A_LIFECYCLE_STATUS\nowner_authorization: AUTHORIZED_FOR_IMPLEMENTATION\n---\n").unwrap();
+        assert_eq!(
+            parse_package(&p),
+            Err(ResolverBlocker::WorkPackageSchemaInvalid)
+        );
     }
     #[test]
     fn parser_valid_planned_not_authorized_record_is_not_schema_invalid() {
