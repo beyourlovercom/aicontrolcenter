@@ -1,6 +1,6 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
-  import { cancelSync as cancelledSync, authorizeWorkPackage, controlCodex, emptyState, loadControlLoop, ownerBlocker, repositoryStatusEvidence, requestSync, runtimePhaseCopy, runtimeSupportsControl, syncAllowed, syncOutcome, syncState as getSyncState, syncWorkspace, type CodexControlAction, type ControlLoopState, type RoadmapEntry, type SyncState } from './lib/controlLoop';
+  import { onDestroy, onMount } from 'svelte';
+  import { cancelSync as cancelledSync, authorizeWorkPackage, controlCodex, createCodexRuntimePoller, emptyState, loadControlLoop, ownerBlocker, readCodexRuntime, repositoryStatusEvidence, requestSync, runtimePhaseCopy, runtimeSupportsControl, syncAllowed, syncOutcome, syncState as getSyncState, syncWorkspace, type CodexControlAction, type ControlLoopState, type RoadmapEntry, type SyncState } from './lib/controlLoop';
 
   type Tab = 'overview' | 'openspec' | 'codex' | 'validation';
 
@@ -14,10 +14,22 @@
   let syncState: SyncState = { kind: 'idle' };
   let authorizationConfirming = false;
   let controlPending = false;
+  let runtimeObservationError = '';
   $: syncCode = controlLoop.evaluation?.blockers[0] ?? getSyncState(controlLoop.evaluation);
   $: syncCopy = ownerBlocker(syncCode);
   $: repositoryStatus = repositoryStatusEvidence(controlLoop);
   $: codexRuntime = controlLoop.codexRuntime;
+
+  const runtimePoller = createCodexRuntimePoller({
+    read: readCodexRuntime,
+    onRuntime: (runtime) => {
+      controlLoop = { ...controlLoop, codexRuntime: runtime };
+      runtimeObservationError = '';
+    },
+    onError: (message) => {
+      runtimeObservationError = message;
+    }
+  });
 
   const evidence = [
     ['C', '项目章程 Project Charter', 'docs/00_Governance/01_PROJECT_CHARTER.md'],
@@ -65,6 +77,8 @@
     refreshing = true;
     controlLoop = await loadControlLoop();
     refreshing = false;
+    if (controlLoop.codexRuntime) runtimeObservationError = '';
+    runtimePoller.start(controlLoop.codexRuntime);
     announce(controlLoop.status === 'VERIFIED' ? '远端 Authority 已验证；未执行 fetch。' : `Authority 状态：${controlLoop.status}`);
   }
 
@@ -93,7 +107,10 @@
     if (controlPending) return;
     controlPending = true;
     try {
-      controlLoop = { ...controlLoop, codexRuntime: await controlCodex(action) };
+      const runtime = await controlCodex(action);
+      controlLoop = { ...controlLoop, codexRuntime: runtime };
+      runtimeObservationError = '';
+      runtimePoller.start(runtime);
     } catch (error) {
       announce(`Codex 操作被阻止：${error instanceof Error ? error.message : String(error)}`);
     } finally {
@@ -122,7 +139,10 @@
     }
   }
 
-  onMount(refresh);
+  onMount(() => {
+    void refresh();
+  });
+  onDestroy(() => runtimePoller.stop());
 </script>
 
 <div class="app-shell">
@@ -373,6 +393,9 @@
 
           <article class="content-card">
             <div class="section-title-row"><h3>Codex 运行观察</h3><span class="accent-chip">{codexRuntime?.sessionState ?? 'UNKNOWN'}</span></div>
+            {#if runtimeObservationError}
+              <div class="sync-status failure" role="alert">Runtime 观察失败：<span class="mono">{runtimeObservationError}</span>。自动观察已停止，请刷新状态后重试。</div>
+            {/if}
             <dl class="contract-grid">
               <div><dt>进程 PID</dt><dd class="mono">{codexRuntime?.processId ?? 'UNKNOWN'}</dd></div>
               <div><dt>进程状态</dt><dd class="mono">{codexRuntime?.processState ?? 'UNKNOWN'}</dd></div>

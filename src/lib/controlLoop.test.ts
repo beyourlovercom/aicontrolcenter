@@ -1,4 +1,4 @@
-import { authorityStatus, cancelSync, hasRuntimeStartAction, ownerBlocker, repositoryStatusEvidence, requestSync, resolverDecision, runtimePhaseCopy, runtimeSupportsControl, shortSha, syncAllowed, syncOutcome, syncState, type CodexRuntimeObserver, type ControlLoopState, type RoadmapMilestone } from './controlLoop.ts';
+import { authorityStatus, cancelSync, createCodexRuntimePoller, hasRuntimeStartAction, ownerBlocker, repositoryStatusEvidence, requestSync, resolverDecision, runtimePhaseCopy, runtimeSupportsControl, shortSha, shouldPollCodexRuntime, syncAllowed, syncOutcome, syncState, type CodexRuntimeObserver, type CodexRuntimePhase, type ControlLoopState, type RoadmapMilestone } from './controlLoop.ts';
 import { readFileSync } from 'node:fs';
 
 function assert(condition: unknown, message: string): asserts condition { if (!condition) throw new Error(message); }
@@ -59,5 +59,104 @@ for (const fakeStatus of ['Codex CLI 未启动', '无绑定会话', 'Writer Lock
 }
 assert(appSource.includes('UNSUPPORTED_CONTROL') && appSource.includes('runtimeSupportsControl'), 'unsupported controls are visibly disabled');
 assert(!appSource.includes('OmO Slim') && !appSource.includes('OpenCode'), 'active Owner UI has no obsolete execution architecture');
+
+const activePhases: CodexRuntimePhase[] = ['STARTING', 'RUNNING', 'TESTING', 'REVIEWING', 'PR_OPEN', 'CI_RUNNING', 'MERGING', 'BUILDING_UAT'];
+const inactivePhases: CodexRuntimePhase[] = ['IDLE', 'READY_FOR_HUMAN_UAT', 'FAILED', 'BLOCKED', 'WAITING_OWNER_AUTHORIZATION', 'PAUSED'];
+assert(activePhases.every(shouldPollCodexRuntime), 'all active and transitional runtime phases enable polling');
+assert(inactivePhases.every((phase) => !shouldPollCodexRuntime(phase)), 'terminal and non-active runtime phases stop polling');
+
+function createFakeScheduler() {
+  const callbacks = new Map<number, () => void>();
+  const delays: number[] = [];
+  let nextHandle = 1;
+  return {
+    schedule(callback: () => void, delay: number) {
+      const handle = nextHandle++;
+      callbacks.set(handle, callback);
+      delays.push(delay);
+      return handle;
+    },
+    cancel(handle: unknown) {
+      callbacks.delete(handle as number);
+    },
+    runNext() {
+      const pending = callbacks.entries().next().value as [number, () => void] | undefined;
+      assert(pending, 'a scheduled runtime observation is available');
+      callbacks.delete(pending[0]);
+      pending[1]();
+    },
+    pending: () => callbacks.size,
+    delays
+  };
+}
+
+const freshRuntime: CodexRuntimeObserver = {
+  ...codexRuntime,
+  processId: 5252,
+  threadId: 'thread-2',
+  turnId: 'turn-2',
+  lastActivity: '2',
+  currentEvent: 'item/updated',
+  currentTask: 'focused runtime polling'
+};
+const terminalRuntime: CodexRuntimeObserver = {
+  ...freshRuntime,
+  processId: null,
+  processState: 'EXITED',
+  sessionState: 'READY_FOR_HUMAN_UAT',
+  currentPhase: 'READY_FOR_HUMAN_UAT',
+  activeRun: false,
+  writerLockHeld: false,
+  exitStatus: '0',
+  nextAction: 'BEGIN_HUMAN_UAT'
+};
+const scheduler = createFakeScheduler();
+const observedRuntimes: CodexRuntimeObserver[] = [];
+const runtimeReads = [freshRuntime, terminalRuntime];
+const poller = createCodexRuntimePoller({
+  read: async () => {
+    const runtime = runtimeReads.shift();
+    assert(runtime, 'fresh runtime evidence is available');
+    return runtime;
+  },
+  onRuntime: (runtime) => observedRuntimes.push(runtime),
+  onError: (message) => { throw new Error(`unexpected runtime observation failure: ${message}`); },
+  schedule: scheduler.schedule,
+  cancel: scheduler.cancel
+});
+poller.start(codexRuntime);
+poller.start(codexRuntime);
+assert(scheduler.pending() === 1, 'repeated active starts never create duplicate polling loops');
+assert(scheduler.delays[0] === 1_000, 'runtime polling uses the focused one-second interval');
+scheduler.runNext();
+await new Promise<void>((resolve) => setImmediate(resolve));
+assert(observedRuntimes[0]?.processId === 5252 && observedRuntimes[0]?.currentEvent === 'item/updated' && observedRuntimes[0]?.currentTask === 'focused runtime polling', 'polling publishes fresh runtime evidence');
+assert(scheduler.pending() === 1, 'active fresh evidence schedules the next focused observation');
+scheduler.runNext();
+await new Promise<void>((resolve) => setImmediate(resolve));
+assert(observedRuntimes[1]?.currentPhase === 'READY_FOR_HUMAN_UAT', 'terminal fresh evidence is published before polling stops');
+assert(!poller.isPolling() && scheduler.pending() === 0, 'terminal runtime evidence stops active polling');
+
+const errorScheduler = createFakeScheduler();
+let observationError = '';
+let fabricatedUpdates = 0;
+const failingPoller = createCodexRuntimePoller({
+  read: async () => { throw new Error('APP_SERVER_CHANNEL_CLOSED'); },
+  onRuntime: () => { fabricatedUpdates += 1; },
+  onError: (message) => { observationError = message; },
+  schedule: errorScheduler.schedule,
+  cancel: errorScheduler.cancel
+});
+failingPoller.start(codexRuntime);
+errorScheduler.runNext();
+await new Promise<void>((resolve) => setImmediate(resolve));
+assert(observationError === 'APP_SERVER_CHANNEL_CLOSED', 'runtime observation exposes the original read failure');
+assert(fabricatedUpdates === 0, 'runtime observation failures never fabricate runtime evidence');
+assert(!failingPoller.isPolling() && errorScheduler.pending() === 0, 'runtime observation failure stops active polling');
+
+assert(appSource.includes('readCodexRuntime') && appSource.includes('createCodexRuntimePoller'), 'Owner UI uses the focused runtime observer instead of full refresh polling');
+assert(appSource.includes('onDestroy(() => runtimePoller.stop())'), 'component teardown stops runtime polling');
+assert(appSource.includes('controlLoop = { ...controlLoop, codexRuntime: runtime }'), 'fresh observations update only Codex runtime state');
+assert(appSource.includes('Runtime 观察失败：') && appSource.includes('runtimeObservationError'), 'runtime observation error is visibly and truthfully rendered');
 
 console.log('control loop frontend contract tests passed');

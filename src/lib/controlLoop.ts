@@ -111,6 +111,95 @@ export function runtimePhaseCopy(phase: CodexRuntimePhase): string {
   return copy[phase];
 }
 
+const ACTIVE_CODEX_RUNTIME_PHASES = new Set<CodexRuntimePhase>([
+  'STARTING',
+  'RUNNING',
+  'TESTING',
+  'REVIEWING',
+  'PR_OPEN',
+  'CI_RUNNING',
+  'MERGING',
+  'BUILDING_UAT'
+]);
+
+export function shouldPollCodexRuntime(phase: CodexRuntimePhase): boolean {
+  return ACTIVE_CODEX_RUNTIME_PHASES.has(phase);
+}
+
+type CodexRuntimePollerOptions = {
+  read: () => Promise<CodexRuntimeObserver>;
+  onRuntime: (runtime: CodexRuntimeObserver) => void;
+  onError: (message: string) => void;
+  schedule?: (callback: () => void, delay: number) => unknown;
+  cancel?: (handle: unknown) => void;
+  intervalMs?: number;
+};
+
+export function createCodexRuntimePoller(options: CodexRuntimePollerOptions) {
+  const schedule = options.schedule ?? ((callback: () => void, delay: number) => window.setTimeout(callback, delay));
+  const cancel = options.cancel ?? ((handle: unknown) => window.clearTimeout(handle as number));
+  const intervalMs = options.intervalMs ?? 1_000;
+  let timer: unknown | null = null;
+  let polling = false;
+  let readInFlight = false;
+  let generation = 0;
+
+  function scheduleNext(expectedGeneration: number) {
+    if (!polling || generation !== expectedGeneration || timer !== null || readInFlight) return;
+    timer = schedule(() => {
+      timer = null;
+      void poll(expectedGeneration);
+    }, intervalMs);
+  }
+
+  async function poll(expectedGeneration: number) {
+    if (!polling || generation !== expectedGeneration || readInFlight) return;
+    readInFlight = true;
+    try {
+      const runtime = await options.read();
+      if (!polling || generation !== expectedGeneration) return;
+      options.onRuntime(runtime);
+      if (!shouldPollCodexRuntime(runtime.currentPhase)) {
+        polling = false;
+        generation += 1;
+      }
+    } catch (error) {
+      if (polling && generation === expectedGeneration) {
+        options.onError(error instanceof Error ? error.message : String(error));
+        polling = false;
+        generation += 1;
+      }
+    } finally {
+      readInFlight = false;
+      if (polling) scheduleNext(generation);
+    }
+  }
+
+  function stop() {
+    polling = false;
+    generation += 1;
+    if (timer !== null) {
+      cancel(timer);
+      timer = null;
+    }
+  }
+
+  return {
+    start(runtime: CodexRuntimeObserver | null) {
+      if (!runtime || !shouldPollCodexRuntime(runtime.currentPhase)) {
+        stop();
+        return;
+      }
+      if (polling) return;
+      polling = true;
+      generation += 1;
+      scheduleNext(generation);
+    },
+    stop,
+    isPolling: () => polling
+  };
+}
+
 export function shortSha(sha: string | null | undefined): string {
   return sha ? sha.slice(0, 7) : 'UNKNOWN';
 }
@@ -138,7 +227,7 @@ export async function loadControlLoop(): Promise<ControlLoopState> {
       invoke<ResolverResult>('resolve_next_work_package'),
       invoke<RoadmapEvidence>('read_roadmap_evidence'),
       invoke<OwnerAuthorizationEvidence>('read_owner_authorization'),
-      invoke<CodexRuntimeObserver>('read_codex_runtime')
+      readCodexRuntime()
     ]);
     return { identity, authority, evaluation, resolver, roadmap, authorization, codexRuntime, status: authorityStatus(authority.status), error: null };
   } catch (error) {
@@ -159,4 +248,9 @@ export async function authorizeWorkPackage(workPackageId: string, confirmed: boo
 export async function controlCodex(action: CodexControlAction): Promise<CodexRuntimeObserver> {
   if (!inTauri()) throw new Error('Tauri runtime unavailable');
   return invoke('control_codex', { action });
+}
+
+export async function readCodexRuntime(): Promise<CodexRuntimeObserver> {
+  if (!inTauri()) throw new Error('Tauri runtime unavailable');
+  return invoke('read_codex_runtime');
 }
