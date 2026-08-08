@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { cancelSync as cancelledSync, authorizeWorkPackage, controlCodex, emptyState, loadControlLoop, ownerBlocker, repositoryStatusEvidence, requestSync, runtimePhaseCopy, syncAllowed, syncOutcome, syncState as getSyncState, syncWorkspace, type CodexControlAction, type ControlLoopState, type RoadmapEntry, type SyncState } from './lib/controlLoop';
+  import { cancelSync as cancelledSync, authorizeWorkPackage, controlCodex, emptyState, loadControlLoop, ownerBlocker, repositoryStatusEvidence, requestSync, runtimePhaseCopy, runtimeSupportsControl, syncAllowed, syncOutcome, syncState as getSyncState, syncWorkspace, type CodexControlAction, type ControlLoopState, type RoadmapEntry, type SyncState } from './lib/controlLoop';
 
   type Tab = 'overview' | 'openspec' | 'codex' | 'validation';
 
@@ -17,6 +17,7 @@
   $: syncCode = controlLoop.evaluation?.blockers[0] ?? getSyncState(controlLoop.evaluation);
   $: syncCopy = ownerBlocker(syncCode);
   $: repositoryStatus = repositoryStatusEvidence(controlLoop);
+  $: codexRuntime = controlLoop.codexRuntime;
 
   const evidence = [
     ['C', '项目章程 Project Charter', 'docs/00_Governance/01_PROJECT_CHARTER.md'],
@@ -24,7 +25,7 @@
     ['W', '当前工作包 Current Work Package', 'docs/60_Operations/work-packages/AICC-CODEX-ONLY-MIGRATION-001.md'],
     ['P', 'OpenSpec 提案 Proposal', 'openspec/changes/aicc-visible-slice-001/proposal.md'],
     ['T', 'OpenSpec 任务 Tasks', 'openspec/changes/aicc-visible-slice-001/tasks.md'],
-    ['CX', 'Codex CLI 配置 Config', 'Codex profile: sol']
+    ['CX', 'Codex App Server 配置 Config', 'Codex profile: sol']
   ];
 
   $: formalItems = (controlLoop.roadmap?.entries ?? []).map((entry) => ({
@@ -130,7 +131,7 @@
       <div class="brand-mark">✓</div>
       <div>
         <div class="brand-name">AI Control Center</div>
-        <div class="brand-subtitle">Authority · OpenSpec · Codex CLI</div>
+        <div class="brand-subtitle">Authority · OpenSpec · Codex App Server</div>
       </div>
     </div>
 
@@ -365,38 +366,46 @@
       {:else if activeTab === 'codex'}
         <section class="tab-panel">
           <div class="metric-grid">
-            <article class="metric-card"><div class="eyebrow">Codex 引擎</div><div class="metric-value">{controlLoop.codexRuntime?.engine ?? 'Codex CLI'}</div><div class="metric-note">profile: {controlLoop.codexRuntime?.profile ?? 'sol'}</div></article>
-            <article class="metric-card"><div class="eyebrow">当前运行状态</div><div class="metric-value">{controlLoop.codexRuntime ? runtimePhaseCopy(controlLoop.codexRuntime.currentPhase) : '未知'}</div><div class="metric-note mono">{controlLoop.codexRuntime?.currentPhase ?? 'UNKNOWN'}</div></article>
-            <article class="metric-card"><div class="eyebrow">当前任务</div><div class="metric-value">{controlLoop.codexRuntime?.currentTask ?? '未知'}</div><div class="metric-note">不显示未观察到的运行证据</div></article>
+            <article class="metric-card"><div class="eyebrow">Codex 引擎</div><div class="metric-value">{codexRuntime?.engine ?? 'UNKNOWN'}</div><div class="metric-note">profile: {codexRuntime?.profile ?? 'UNKNOWN'}</div></article>
+            <article class="metric-card"><div class="eyebrow">当前运行状态</div><div class="metric-value">{codexRuntime ? runtimePhaseCopy(codexRuntime.currentPhase) : '未知'}</div><div class="metric-note mono">{codexRuntime?.currentPhase ?? 'UNKNOWN'}</div></article>
+            <article class="metric-card"><div class="eyebrow">当前任务</div><div class="metric-value">{codexRuntime?.currentTask ?? 'UNKNOWN'}</div><div class="metric-note mono">{codexRuntime?.currentEvent ?? 'NO_OBSERVED_EVENT'}</div></article>
           </div>
 
           <article class="content-card">
-            <div class="section-title-row"><h3>Codex 运行观察</h3><span class="accent-chip">{controlLoop.codexRuntime?.sessionState ?? 'UNKNOWN'}</span></div>
+            <div class="section-title-row"><h3>Codex 运行观察</h3><span class="accent-chip">{codexRuntime?.sessionState ?? 'UNKNOWN'}</span></div>
             <dl class="contract-grid">
-              <div><dt>当前工作包</dt><dd class="mono">{controlLoop.codexRuntime?.activeWorkPackage ?? 'UNKNOWN'}</dd></div>
-              <div><dt>分支</dt><dd>{controlLoop.codexRuntime?.branch ?? 'UNKNOWN'}</dd></div>
-              <div><dt>工作区</dt><dd class="mono">{controlLoop.codexRuntime?.worktree ?? 'UNKNOWN'}</dd></div>
-              <div><dt>最后活动</dt><dd>{controlLoop.codexRuntime?.lastActivity ?? 'UNKNOWN'}</dd></div>
-              <div><dt>测试状态</dt><dd class="mono">{controlLoop.codexRuntime?.testState ?? 'UNKNOWN'}</dd></div>
-              <div><dt>独立审查</dt><dd class="mono">{controlLoop.codexRuntime?.reviewState ?? 'UNKNOWN'}</dd></div>
-              <div><dt>PR</dt><dd class="mono">{controlLoop.codexRuntime?.pullRequest ?? 'UNKNOWN'}</dd></div>
-              <div><dt>CI 状态</dt><dd class="mono">{controlLoop.codexRuntime?.ciState ?? 'UNKNOWN'}</dd></div>
-              <div><dt>阻塞</dt><dd class="mono">{controlLoop.codexRuntime?.blocker ?? 'NONE'}</dd></div>
-              <div><dt>下一步</dt><dd>{controlLoop.codexRuntime?.nextAction ?? 'UNKNOWN'}</dd></div>
+              <div><dt>进程 PID</dt><dd class="mono">{codexRuntime?.processId ?? 'UNKNOWN'}</dd></div>
+              <div><dt>进程状态</dt><dd class="mono">{codexRuntime?.processState ?? 'UNKNOWN'}</dd></div>
+              <div><dt>Session</dt><dd class="mono">{codexRuntime?.sessionId ?? 'UNKNOWN'}</dd></div>
+              <div><dt>Thread</dt><dd class="mono">{codexRuntime?.threadId ?? 'UNKNOWN'}</dd></div>
+              <div><dt>Turn</dt><dd class="mono">{codexRuntime?.turnId ?? 'UNKNOWN'}</dd></div>
+              <div><dt>当前工作包</dt><dd class="mono">{codexRuntime?.activeWorkPackage ?? 'UNKNOWN'}</dd></div>
+              <div><dt>分支</dt><dd>{codexRuntime?.branch ?? 'UNKNOWN'}</dd></div>
+              <div><dt>工作区</dt><dd class="mono">{codexRuntime?.worktree ?? 'UNKNOWN'}</dd></div>
+              <div><dt>最后活动</dt><dd>{codexRuntime?.lastActivity ?? 'UNKNOWN'}</dd></div>
+              <div><dt>Writer Lock</dt><dd class="mono">{codexRuntime ? (codexRuntime.writerLockHeld ? 'HELD' : 'NOT_HELD') : 'UNKNOWN'}</dd></div>
+              <div><dt>退出状态</dt><dd class="mono">{codexRuntime?.exitStatus ?? 'NOT_OBSERVED'}</dd></div>
+              <div><dt>失败证据</dt><dd class="mono">{codexRuntime?.failure ?? 'NONE'}</dd></div>
+              <div><dt>测试状态</dt><dd class="mono">{codexRuntime?.testState ?? 'UNKNOWN'}</dd></div>
+              <div><dt>独立审查</dt><dd class="mono">{codexRuntime?.reviewState ?? 'UNKNOWN'}</dd></div>
+              <div><dt>PR</dt><dd class="mono">{codexRuntime?.pullRequest ?? 'UNKNOWN'}</dd></div>
+              <div><dt>CI 状态</dt><dd class="mono">{codexRuntime?.ciState ?? 'UNKNOWN'}</dd></div>
+              <div><dt>阻塞</dt><dd class="mono">{codexRuntime?.blocker ?? 'NONE'}</dd></div>
+              <div><dt>下一步</dt><dd>{codexRuntime?.nextAction ?? 'UNKNOWN'}</dd></div>
             </dl>
             <div class="runtime-controls">
               {#each [['START','启动 Codex'],['PAUSE','暂停'],['RESUME','恢复'],['STOP_AFTER_CURRENT_STEP','当前步骤后停止'],['RETRY','重试']] as action}
-                <button class="secondary-button" type="button" disabled={controlPending} onclick={() => runCodexControl(action[0] as CodexControlAction)}>{action[1]}</button>
+                <button class="secondary-button" type="button" title={runtimeSupportsControl(codexRuntime, action[0] as CodexControlAction) ? '' : 'UNSUPPORTED_CONTROL'} disabled={controlPending || !runtimeSupportsControl(codexRuntime, action[0] as CodexControlAction)} onclick={() => runCodexControl(action[0] as CodexControlAction)}>{action[1]}{runtimeSupportsControl(codexRuntime, action[0] as CodexControlAction) ? '' : '（不支持）'}</button>
               {/each}
             </div>
           </article>
 
-          <div class="callout"><strong>Codex 能力策略：</strong>Codex CLI 使用固定 profile `sol` 和预定义能力。Owner UI 不接受 shell 文本；任何仓库写入必须保持唯一 Writer Lock、范围绑定和独立审查。</div>
+          <div class="callout"><strong>Codex 能力策略：</strong>Codex App Server 使用固定 profile `sol` 和预定义能力。Owner UI 不接受 shell 文本；任何仓库写入必须保持唯一 Writer Lock、范围绑定和独立审查。</div>
         </section>
       {:else}
         <section class="tab-panel">
           <article class="content-card no-top-margin">
-            <div class="section-title-row"><h3>受控验证流程</h3><span class="accent-chip">无活动运行</span></div>
+            <div class="section-title-row"><h3>受控验证流程</h3><span class="accent-chip">{codexRuntime?.currentPhase ?? 'UNKNOWN'}</span></div>
             <div class="pipeline">
               {#each [
                 ['01','Authority 关卡','远端 main 与正式 WP 已检查','PASS','pass'],
@@ -436,7 +445,7 @@
 
       <div class="section-title-row stack-heading"><h3>执行状态</h3><span class="secondary-note">只读探测</span></div>
       <div class="stack-list">
-        {#each [['OS','OpenSpec','已解析正式工件','DETECTED'],['CX','Codex CLI','profile: sol · 未启动','AVAILABLE'],['RN','Codex Run','无绑定会话','NONE'],['WL','Writer Lock','写入通道已禁用','NOT HELD']] as item}
+        {#each [['OS','OpenSpec','已解析正式工件','DETECTED'],['CX','Codex App Server',`profile: ${codexRuntime?.profile ?? 'UNKNOWN'} · PID ${codexRuntime?.processId ?? 'UNKNOWN'}`,codexRuntime?.processState ?? 'UNKNOWN'],['RN','Codex Run',codexRuntime?.threadId ?? 'NO_OBSERVED_THREAD',codexRuntime?.currentPhase ?? 'UNKNOWN'],['WL','Writer Lock',codexRuntime?.activeWorkPackage ?? 'NO_ACTIVE_WORK_PACKAGE',codexRuntime ? (codexRuntime.writerLockHeld ? 'HELD' : 'NOT_HELD') : 'UNKNOWN']] as item}
           <div class="stack-row"><span class="stack-icon">{item[0]}</span><div><strong>{item[1]}</strong><span>{item[2]}</span></div><b>{item[3]}</b></div>
         {/each}
       </div>

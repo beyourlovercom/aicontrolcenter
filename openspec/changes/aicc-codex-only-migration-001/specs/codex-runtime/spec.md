@@ -16,21 +16,31 @@ The system SHALL require explicit Owner confirmation and persist the Work Packag
 
 ### Requirement: Codex runtime is typed and observable
 
-The runtime SHALL support `IDLE`, `WAITING_OWNER_AUTHORIZATION`, `STARTING`, `RUNNING`, `TESTING`, `REVIEWING`, `PR_OPEN`, `CI_RUNNING`, `MERGING`, `BUILDING_UAT`, `READY_FOR_HUMAN_UAT`, `BLOCKED`, `FAILED`, and `PAUSED`. It SHALL expose active Work Package, session state, branch, worktree, phase, last activity, current task, test state, review state, PR, CI state, blocker, and next action without fabricated values.
+The runtime SHALL supervise a managed Codex App Server child process and bidirectional JSONL channel. It SHALL support `IDLE`, `WAITING_OWNER_AUTHORIZATION`, `STARTING`, `RUNNING`, `TESTING`, `REVIEWING`, `PR_OPEN`, `CI_RUNNING`, `MERGING`, `BUILDING_UAT`, `READY_FOR_HUMAN_UAT`, `BLOCKED`, `FAILED`, and `PAUSED`. It SHALL expose process, session, thread, turn, active Work Package, branch, worktree, phase, last activity, current event, current task, exit status, failure, blocker, and next action without fabricated values.
 
 #### Scenario: No runtime evidence exists
 
 - **WHEN** the observer has no persisted run
 - **THEN** it reports `IDLE` or `WAITING_OWNER_AUTHORIZATION` and uses `UNKNOWN` or empty evidence rather than demo values
 
+#### Scenario: Persisted liveness is stale
+
+- **WHEN** persisted evidence claims STARTING or RUNNING but no managed App Server process exists
+- **THEN** the observer reports the missing process and releases active-run and Writer Lock claims instead of preserving stale liveness
+
 ### Requirement: Owner controls are bounded
 
-The UI SHALL expose only START, PAUSE, RESUME, STOP AFTER CURRENT STEP, and RETRY. The backend SHALL reject invalid transitions and SHALL NOT accept arbitrary shell commands.
+The UI SHALL expose only START, PAUSE, RESUME, STOP AFTER CURRENT STEP, and RETRY. The backend SHALL reject invalid transitions and SHALL NOT accept arbitrary shell commands. Controls without an equivalent installed App Server protocol operation SHALL be disabled and return `UNSUPPORTED_CONTROL` without mutating runtime state.
 
 #### Scenario: Unauthorized start
 
 - **WHEN** START is requested without a matching valid authorization
 - **THEN** the runtime reports `WAITING_OWNER_AUTHORIZATION` or `BLOCKED` and does not start Codex
+
+#### Scenario: Unsupported control is requested
+
+- **WHEN** PAUSE, RESUME, or STOP AFTER CURRENT STEP is requested against the installed App Server contract
+- **THEN** the backend returns `UNSUPPORTED_CONTROL` and does not fabricate a successful state transition
 
 ### Requirement: Delivery preserves independent gates
 

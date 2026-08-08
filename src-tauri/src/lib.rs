@@ -1,10 +1,12 @@
 use serde::{Deserialize, Serialize};
+use serde_json::{json, Value};
 use std::{
     collections::HashMap,
     fs,
-    io::Read,
+    io::{BufRead, BufReader, Read, Write},
     path::{Path, PathBuf},
-    process::{Command, Stdio},
+    process::{Child, ChildStdin, Command, Stdio},
+    sync::{Arc, Mutex},
     thread,
     time::{Duration, Instant},
 };
@@ -13,6 +15,7 @@ use tauri::Manager;
 pub const CANONICAL_PATH: &str = "/Users/a/AI/007/AIcontrolcenter";
 const MAX_OUTPUT: usize = 64 * 1024;
 const COMMAND_TIMEOUT: Duration = Duration::from_secs(20);
+const APP_SERVER_START_TIMEOUT: Duration = Duration::from_secs(20);
 
 #[derive(Debug, Serialize, Clone)]
 #[serde(rename_all = "camelCase")]
@@ -113,20 +116,42 @@ pub enum CodexControlAction {
 pub struct CodexRuntimeObserver {
     pub engine: String,
     pub profile: String,
+    #[serde(default)]
+    pub process_id: Option<u32>,
+    #[serde(default)]
+    pub process_state: String,
+    #[serde(default)]
+    pub session_id: Option<String>,
+    #[serde(default)]
+    pub thread_id: Option<String>,
+    #[serde(default)]
+    pub turn_id: Option<String>,
     pub active_work_package: Option<String>,
     pub session_state: CodexRuntimePhase,
     pub branch: Option<String>,
     pub worktree: Option<String>,
     pub current_phase: CodexRuntimePhase,
     pub last_activity: Option<String>,
+    #[serde(default)]
+    pub current_event: Option<String>,
     pub current_task: Option<String>,
     pub test_state: String,
     pub review_state: String,
     pub pull_request: Option<String>,
     pub ci_state: String,
     pub blocker: Option<String>,
+    #[serde(default)]
+    pub failure: Option<String>,
+    #[serde(default)]
+    pub exit_status: Option<String>,
+    #[serde(default)]
+    pub active_run: bool,
+    #[serde(default)]
+    pub writer_lock_held: bool,
     pub next_action: String,
     pub stop_after_current_step: bool,
+    #[serde(default = "supported_codex_controls")]
+    pub supported_controls: Vec<CodexControlAction>,
 }
 #[derive(Debug, Serialize, Clone, PartialEq, Eq)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
@@ -340,10 +365,32 @@ impl GitRunner for ProductionGitRunner {
 pub trait GuardProvider {
     fn snapshot(&self) -> ExecutionGuardSnapshot;
 }
-pub struct LocalControlState;
+#[derive(Clone, Default)]
+pub struct ManagedCodexRuntime {
+    inner: Arc<Mutex<CodexRuntimeManager>>,
+}
+
+impl ManagedCodexRuntime {
+    fn snapshot(&self) -> ExecutionGuardSnapshot {
+        self.inner
+            .lock()
+            .map(|mut runtime| runtime.guard_snapshot())
+            .unwrap_or(ExecutionGuardSnapshot {
+                active_codex_run: true,
+                writer_lock_held: true,
+                unsaved_diff: false,
+                previous_run_open: true,
+            })
+    }
+}
+
+#[derive(Clone, Default)]
+pub struct LocalControlState {
+    runtime: ManagedCodexRuntime,
+}
 impl GuardProvider for LocalControlState {
     fn snapshot(&self) -> ExecutionGuardSnapshot {
-        ExecutionGuardSnapshot::default()
+        self.runtime.snapshot()
     }
 }
 fn err(code: &str, message: &str) -> ControlLoopError {
@@ -1056,10 +1103,12 @@ fn resolve<R: GitRunner>(
     })
 }
 
-fn production_service() -> ControlLoopService<ProductionGitRunner, LocalControlState> {
+fn production_service(
+    runtime: ManagedCodexRuntime,
+) -> ControlLoopService<ProductionGitRunner, LocalControlState> {
     ControlLoopService {
         runner: ProductionGitRunner,
-        guards: LocalControlState,
+        guards: LocalControlState { runtime },
         root_path: PathBuf::from(CANONICAL_PATH),
         production: true,
     }
@@ -1163,17 +1212,13 @@ fn start_allowed_authorization<R: GitRunner>(
     repository_root: &Path,
     state_root: &Path,
     production: bool,
+    guards: &ExecutionGuardSnapshot,
 ) -> Result<OwnerAuthorizationEvidence, ControlLoopError> {
     let mut evidence = authorization_evidence(runner, repository_root, state_root, production)?;
     if !evidence.valid {
         return Ok(evidence);
     }
-    let resolved = resolve(
-        runner,
-        repository_root,
-        production,
-        &ExecutionGuardSnapshot::default(),
-    )?;
+    let resolved = resolve(runner, repository_root, production, guards)?;
     let bound_id = evidence
         .record
         .as_ref()
@@ -1270,6 +1315,10 @@ fn authorize_owner<R: GitRunner>(
     authorization_evidence(runner, repository_root, state_root, production)
 }
 
+fn supported_codex_controls() -> Vec<CodexControlAction> {
+    vec![CodexControlAction::Start, CodexControlAction::Retry]
+}
+
 fn default_runtime(authorization: &OwnerAuthorizationEvidence) -> CodexRuntimeObserver {
     let phase = if authorization.status == "START_ALLOWED" {
         CodexRuntimePhase::Idle
@@ -1279,12 +1328,14 @@ fn default_runtime(authorization: &OwnerAuthorizationEvidence) -> CodexRuntimeOb
         CodexRuntimePhase::WaitingOwnerAuthorization
     };
     CodexRuntimeObserver {
-        engine: "Codex CLI".into(),
+        engine: "Codex App Server".into(),
         profile: "sol".into(),
-        active_work_package: authorization
-            .record
-            .as_ref()
-            .map(|record| record.work_package_id.clone()),
+        process_id: None,
+        process_state: "NOT_STARTED".into(),
+        session_id: None,
+        thread_id: None,
+        turn_id: None,
+        active_work_package: None,
         session_state: phase.clone(),
         branch: authorization
             .record
@@ -1296,6 +1347,7 @@ fn default_runtime(authorization: &OwnerAuthorizationEvidence) -> CodexRuntimeOb
             .map(|record| record.worktree.clone()),
         current_phase: phase,
         last_activity: None,
+        current_event: None,
         current_task: None,
         test_state: "UNKNOWN".into(),
         review_state: "UNKNOWN".into(),
@@ -1308,6 +1360,10 @@ fn default_runtime(authorization: &OwnerAuthorizationEvidence) -> CodexRuntimeOb
         } else {
             Some("OWNER_AUTHORIZATION_REQUIRED".into())
         },
+        failure: None,
+        exit_status: None,
+        active_run: false,
+        writer_lock_held: false,
         next_action: if authorization.status == "START_ALLOWED" {
             "START".into()
         } else if authorization.valid {
@@ -1316,21 +1372,8 @@ fn default_runtime(authorization: &OwnerAuthorizationEvidence) -> CodexRuntimeOb
             "AUTHORIZE_WORK_PACKAGE".into()
         },
         stop_after_current_step: false,
+        supported_controls: supported_codex_controls(),
     }
-}
-
-fn read_runtime(
-    state_root: &Path,
-    authorization: &OwnerAuthorizationEvidence,
-) -> Result<CodexRuntimeObserver, ControlLoopError> {
-    let path = runtime_path(state_root);
-    if !path.is_file() {
-        return Ok(default_runtime(authorization));
-    }
-    let content = fs::read_to_string(path)
-        .map_err(|_| err("RUNTIME_UNAVAILABLE", "Codex runtime state is unreadable"))?;
-    serde_json::from_str(&content)
-        .map_err(|_| err("RUNTIME_INVALID", "Codex runtime state is malformed"))
 }
 
 fn codex_prompt(record: &OwnerAuthorizationRecord) -> String {
@@ -1342,27 +1385,810 @@ fn codex_prompt(record: &OwnerAuthorizationRecord) -> String {
     )
 }
 
-fn spawn_codex(record: &OwnerAuthorizationRecord) -> Result<(), ControlLoopError> {
-    Command::new("codex")
-        .args([
-            "exec",
-            "-p",
-            "sol",
-            "-C",
-            &record.worktree,
-            "--sandbox",
-            "workspace-write",
-            "--ask-for-approval",
-            "never",
-            "--",
-            &codex_prompt(record),
-        ])
-        .stdin(Stdio::null())
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .spawn()
-        .map(|_| ())
-        .map_err(|_| err("CODEX_START_FAILED", "Codex CLI could not be started"))
+fn codex_app_server_args() -> &'static [&'static str] {
+    &["-p", "sol", "app-server"]
+}
+
+fn initialize_request() -> Value {
+    json!({
+        "method": "initialize",
+        "id": 0,
+        "params": {"clientInfo": {"name": "ai_control_center", "title": "AI Control Center", "version": "0.2.0"}}
+    })
+}
+
+fn initialized_notification() -> Value {
+    json!({"method": "initialized", "params": {}})
+}
+
+fn thread_start_request(record: &OwnerAuthorizationRecord) -> Value {
+    json!({
+        "method": "thread/start",
+        "id": 1,
+        "params": {"cwd": record.worktree, "approvalPolicy": "never", "sandbox": "workspace-write"}
+    })
+}
+
+fn turn_start_request(thread_id: &str, record: &OwnerAuthorizationRecord) -> Value {
+    json!({
+        "method": "turn/start",
+        "id": 2,
+        "params": {"threadId": thread_id, "input": [{"type": "text", "text": codex_prompt(record)}]}
+    })
+}
+
+#[derive(Default)]
+struct CodexRuntimeManager {
+    child: Option<Child>,
+    stdin: Option<ChildStdin>,
+    observer: Option<CodexRuntimeObserver>,
+    responses: HashMap<u64, Value>,
+    state_root: Option<PathBuf>,
+    turn_started: bool,
+}
+
+impl Drop for CodexRuntimeManager {
+    fn drop(&mut self) {
+        if let Some(mut child) = self.child.take() {
+            let _ = child.kill();
+            let _ = child.wait();
+        }
+    }
+}
+
+impl CodexRuntimeManager {
+    fn persist(&self) {
+        if let (Some(state_root), Some(observer)) = (&self.state_root, &self.observer) {
+            let _ = write_json(&runtime_path(state_root), observer);
+        }
+    }
+
+    fn observer_mut(&mut self) -> Option<&mut CodexRuntimeObserver> {
+        self.observer.as_mut()
+    }
+
+    fn normalize_observer(&mut self) {
+        let has_managed_process = self.child.is_some();
+        if let Some(observer) = self.observer_mut() {
+            observer.engine = "Codex App Server".into();
+            observer.profile = "sol".into();
+            observer.supported_controls = supported_codex_controls();
+            observer.stop_after_current_step = false;
+            if observer.process_state.is_empty() {
+                observer.process_state = if has_managed_process {
+                    "RUNNING".into()
+                } else {
+                    "NOT_STARTED".into()
+                };
+            }
+            if !has_managed_process && !observer.active_run {
+                observer.active_work_package = None;
+                observer.writer_lock_held = false;
+            }
+        }
+    }
+
+    fn reconcile_process(&mut self) {
+        let exit = match self.child.as_mut().map(Child::try_wait) {
+            Some(Err(_)) => {
+                if let Some(observer) = self.observer_mut() {
+                    observer.current_phase = CodexRuntimePhase::Blocked;
+                    observer.session_state = CodexRuntimePhase::Blocked;
+                    observer.active_run = true;
+                    observer.writer_lock_held = true;
+                    observer.last_activity = Some(timestamp());
+                    observer.current_event = Some("app-server/process-observation-failed".into());
+                    observer.blocker = Some("CODEX_PROCESS_OBSERVATION_FAILED".into());
+                    observer.failure =
+                        Some("Managed process liveness could not be observed".into());
+                    observer.next_action = "RESOLVE_BLOCKER".into();
+                }
+                self.persist();
+                return;
+            }
+            Some(Ok(status)) => status,
+            None => None,
+        };
+        if let Some(status) = exit {
+            self.child = None;
+            self.stdin = None;
+            if let Some(observer) = self.observer_mut() {
+                let was_active = observer.active_run
+                    || matches!(
+                        observer.current_phase,
+                        CodexRuntimePhase::Starting
+                            | CodexRuntimePhase::Running
+                            | CodexRuntimePhase::Testing
+                            | CodexRuntimePhase::Reviewing
+                    );
+                observer.process_state = "EXITED".into();
+                observer.exit_status = Some(status.to_string());
+                observer.active_run = false;
+                observer.writer_lock_held = false;
+                observer.active_work_package = None;
+                observer.last_activity = Some(timestamp());
+                observer.current_event = Some("app-server/exited".into());
+                if was_active {
+                    observer.current_phase = CodexRuntimePhase::Failed;
+                    observer.session_state = CodexRuntimePhase::Failed;
+                    observer.blocker = Some("CODEX_APP_SERVER_EXITED".into());
+                    observer.failure = Some(format!("App Server exited: {status}"));
+                    observer.next_action = "RETRY".into();
+                }
+            }
+            self.persist();
+        } else if self.child.is_some() {
+            if let Some(observer) = self.observer_mut() {
+                observer.process_state = "RUNNING".into();
+            }
+        }
+    }
+
+    fn reconcile_missing_process(&mut self) {
+        if self.child.is_some() {
+            return;
+        }
+        if let Some(observer) = self.observer_mut() {
+            let persisted_process_claim =
+                matches!(observer.process_state.as_str(), "RUNNING" | "STARTING");
+            let stale_active_run = observer.active_run
+                || matches!(
+                    observer.current_phase,
+                    CodexRuntimePhase::Starting
+                        | CodexRuntimePhase::Running
+                        | CodexRuntimePhase::Testing
+                        | CodexRuntimePhase::Reviewing
+                        | CodexRuntimePhase::Paused
+                );
+            if stale_active_run || persisted_process_claim {
+                observer.process_id = None;
+                observer.process_state = "MISSING".into();
+                observer.active_run = false;
+                observer.writer_lock_held = false;
+                observer.active_work_package = None;
+                observer.last_activity = Some(timestamp());
+                observer.current_event = Some("app-server/process-missing".into());
+                observer.blocker = Some("CODEX_APP_SERVER_PROCESS_MISSING".into());
+                observer.failure =
+                    Some("Persisted runtime has no managed App Server process".into());
+                if stale_active_run {
+                    observer.current_phase = CodexRuntimePhase::Failed;
+                    observer.session_state = CodexRuntimePhase::Failed;
+                    observer.next_action = "RETRY".into();
+                } else {
+                    observer.current_phase = CodexRuntimePhase::Idle;
+                    observer.session_state = CodexRuntimePhase::Idle;
+                    observer.next_action = "START".into();
+                }
+                self.persist();
+            }
+        }
+    }
+
+    fn guard_snapshot(&mut self) -> ExecutionGuardSnapshot {
+        self.reconcile_process();
+        self.reconcile_missing_process();
+        let observer = self.observer.as_ref();
+        ExecutionGuardSnapshot {
+            active_codex_run: observer.map(|value| value.active_run).unwrap_or(false),
+            writer_lock_held: observer
+                .map(|value| value.writer_lock_held)
+                .unwrap_or(false),
+            unsaved_diff: false,
+            previous_run_open: false,
+        }
+    }
+
+    fn handle_protocol_message(&mut self, message: Value) {
+        let method = message.get("method").and_then(Value::as_str);
+        if message.get("id").is_some() && method.is_some() {
+            if let Some(observer) = self.observer_mut() {
+                let method = method.unwrap_or("unknown");
+                observer.last_activity = Some(timestamp());
+                observer.current_event = Some(method.to_string());
+                observer.current_phase = CodexRuntimePhase::Blocked;
+                observer.session_state = CodexRuntimePhase::Blocked;
+                observer.blocker = Some("CODEX_SERVER_REQUEST_UNSUPPORTED".into());
+                observer.failure =
+                    Some(format!("App Server requested unsupported input: {method}"));
+                observer.next_action = "RESOLVE_BLOCKER".into();
+            }
+            if let Some(child) = self.child.as_mut() {
+                let _ = child.kill();
+            }
+            self.persist();
+            return;
+        }
+        if let Some(id) = message.get("id").and_then(Value::as_u64) {
+            if let Some(observer) = self.observer_mut() {
+                observer.last_activity = Some(timestamp());
+                observer.current_event = Some(format!("response/{id}"));
+            }
+            self.responses.insert(id, message);
+            self.persist();
+            return;
+        }
+        let Some(method) = method else {
+            return;
+        };
+        if method == "turn/started" {
+            self.turn_started = true;
+        }
+        let params = message.get("params").cloned().unwrap_or(Value::Null);
+        let now = timestamp();
+        if let Some(observer) = self.observer_mut() {
+            observer.last_activity = Some(now);
+            observer.current_event = Some(method.to_string());
+            match method {
+                "thread/started" => {
+                    observer.thread_id = json_string(&params, "/thread/id");
+                    observer.session_id = json_string(&params, "/thread/sessionId");
+                }
+                "turn/started" => {
+                    observer.thread_id =
+                        json_string(&params, "/threadId").or_else(|| observer.thread_id.clone());
+                    observer.turn_id = json_string(&params, "/turn/id");
+                    observer.current_phase = CodexRuntimePhase::Running;
+                    observer.session_state = CodexRuntimePhase::Running;
+                    observer.active_run = true;
+                    observer.writer_lock_held = true;
+                    observer.blocker = None;
+                    observer.failure = None;
+                    observer.next_action = "OBSERVE_CODEX_SESSION".into();
+                }
+                "item/started" | "item/completed" => {
+                    let kind = params
+                        .pointer("/item/type")
+                        .and_then(Value::as_str)
+                        .unwrap_or("unknown");
+                    let item_id = params
+                        .pointer("/item/id")
+                        .and_then(Value::as_str)
+                        .unwrap_or("unknown");
+                    observer.current_task = Some(format!("{kind}: {item_id}"));
+                }
+                "turn/completed" => {
+                    let status = params
+                        .pointer("/turn/status")
+                        .and_then(Value::as_str)
+                        .unwrap_or("unknown");
+                    observer.turn_id =
+                        json_string(&params, "/turn/id").or_else(|| observer.turn_id.clone());
+                    observer.active_run = false;
+                    observer.writer_lock_held = false;
+                    observer.active_work_package = None;
+                    observer.current_task = Some(format!("turn {status}"));
+                    if status == "completed" {
+                        observer.current_phase = CodexRuntimePhase::Idle;
+                        observer.session_state = CodexRuntimePhase::Idle;
+                        observer.blocker = None;
+                        observer.failure = None;
+                        observer.next_action = "REVIEW_RUNTIME_RESULT".into();
+                    } else {
+                        observer.current_phase = CodexRuntimePhase::Failed;
+                        observer.session_state = CodexRuntimePhase::Failed;
+                        observer.blocker = Some(format!("CODEX_TURN_{}", status.to_uppercase()));
+                        observer.failure = params
+                            .pointer("/turn/error/message")
+                            .and_then(Value::as_str)
+                            .map(redact)
+                            .or_else(|| Some(format!("Codex turn ended with {status}")));
+                        observer.next_action = "RETRY".into();
+                    }
+                }
+                "error" => {
+                    let will_retry = params
+                        .get("willRetry")
+                        .and_then(Value::as_bool)
+                        .unwrap_or(false);
+                    observer.blocker = Some("CODEX_APP_SERVER_ERROR".into());
+                    observer.failure = params
+                        .pointer("/error/message")
+                        .and_then(Value::as_str)
+                        .map(redact);
+                    if !will_retry {
+                        observer.current_phase = CodexRuntimePhase::Failed;
+                        observer.session_state = CodexRuntimePhase::Failed;
+                        observer.active_run = false;
+                        observer.writer_lock_held = false;
+                        observer.active_work_package = None;
+                        observer.next_action = "RETRY".into();
+                    }
+                }
+                _ => {}
+            }
+        }
+        self.persist();
+    }
+}
+
+fn json_string(value: &Value, pointer: &str) -> Option<String> {
+    value
+        .pointer(pointer)
+        .and_then(Value::as_str)
+        .map(str::to_string)
+}
+
+fn protocol_error(response: &Value) -> Option<String> {
+    response
+        .pointer("/error/message")
+        .and_then(Value::as_str)
+        .map(redact)
+}
+
+impl ManagedCodexRuntime {
+    fn ensure_loaded(&self, state_root: &Path) -> Result<(), ControlLoopError> {
+        let mut manager = self.inner.lock().map_err(|_| {
+            err(
+                "RUNTIME_LOCK_FAILED",
+                "Codex runtime manager is unavailable",
+            )
+        })?;
+        manager.state_root = Some(state_root.to_path_buf());
+        if manager.observer.is_none() {
+            let path = runtime_path(state_root);
+            if path.is_file() {
+                let content = fs::read_to_string(path)
+                    .map_err(|_| err("RUNTIME_UNAVAILABLE", "Codex runtime state is unreadable"))?;
+                manager.observer = Some(
+                    serde_json::from_str(&content)
+                        .map_err(|_| err("RUNTIME_INVALID", "Codex runtime state is malformed"))?,
+                );
+            }
+        }
+        manager.normalize_observer();
+        manager.reconcile_process();
+        manager.reconcile_missing_process();
+        Ok(())
+    }
+
+    fn read(
+        &self,
+        state_root: &Path,
+        authorization: &OwnerAuthorizationEvidence,
+    ) -> Result<CodexRuntimeObserver, ControlLoopError> {
+        self.ensure_loaded(state_root)?;
+        let mut manager = self.inner.lock().map_err(|_| {
+            err(
+                "RUNTIME_LOCK_FAILED",
+                "Codex runtime manager is unavailable",
+            )
+        })?;
+        if manager.observer.is_none() {
+            manager.observer = Some(default_runtime(authorization));
+        }
+        manager.normalize_observer();
+        manager.reconcile_process();
+        manager.reconcile_missing_process();
+        manager.observer.clone().ok_or_else(|| {
+            err(
+                "RUNTIME_UNAVAILABLE",
+                "Codex runtime evidence is unavailable",
+            )
+        })
+    }
+
+    fn send(&self, request: Value) -> Result<(), ControlLoopError> {
+        let mut manager = self.inner.lock().map_err(|_| {
+            err(
+                "RUNTIME_LOCK_FAILED",
+                "Codex runtime manager is unavailable",
+            )
+        })?;
+        let stdin = manager
+            .stdin
+            .as_mut()
+            .ok_or_else(|| err("CODEX_CHANNEL_CLOSED", "App Server stdin is unavailable"))?;
+        serde_json::to_writer(&mut *stdin, &request).map_err(|_| {
+            err(
+                "CODEX_PROTOCOL_WRITE_FAILED",
+                "App Server request could not be encoded",
+            )
+        })?;
+        stdin
+            .write_all(b"\n")
+            .and_then(|_| stdin.flush())
+            .map_err(|_| {
+                err(
+                    "CODEX_PROTOCOL_WRITE_FAILED",
+                    "App Server request could not be sent",
+                )
+            })
+    }
+
+    fn wait_response(&self, id: u64) -> Result<Value, ControlLoopError> {
+        let start = Instant::now();
+        loop {
+            {
+                let mut manager = self.inner.lock().map_err(|_| {
+                    err(
+                        "RUNTIME_LOCK_FAILED",
+                        "Codex runtime manager is unavailable",
+                    )
+                })?;
+                manager.reconcile_process();
+                if let Some(response) = manager.responses.remove(&id) {
+                    if let Some(message) = protocol_error(&response) {
+                        return Err(err("CODEX_PROTOCOL_ERROR", &message));
+                    }
+                    return Ok(response);
+                }
+                if let Some(observer) = &manager.observer {
+                    if matches!(
+                        observer.current_phase,
+                        CodexRuntimePhase::Failed | CodexRuntimePhase::Blocked
+                    ) {
+                        return Err(err(
+                            observer.blocker.as_deref().unwrap_or("CODEX_START_FAILED"),
+                            observer
+                                .failure
+                                .as_deref()
+                                .unwrap_or("Codex App Server failed during startup"),
+                        ));
+                    }
+                }
+                if manager.child.is_none() {
+                    return Err(err(
+                        "CODEX_APP_SERVER_EXITED",
+                        "App Server exited before responding",
+                    ));
+                }
+            }
+            if start.elapsed() > APP_SERVER_START_TIMEOUT {
+                return Err(err(
+                    "CODEX_PROTOCOL_TIMEOUT",
+                    "App Server did not respond before the startup deadline",
+                ));
+            }
+            thread::sleep(Duration::from_millis(20));
+        }
+    }
+
+    fn wait_running(&self) -> Result<CodexRuntimeObserver, ControlLoopError> {
+        let start = Instant::now();
+        loop {
+            {
+                let mut manager = self.inner.lock().map_err(|_| {
+                    err(
+                        "RUNTIME_LOCK_FAILED",
+                        "Codex runtime manager is unavailable",
+                    )
+                })?;
+                manager.reconcile_process();
+                if let Some(observer) = &manager.observer {
+                    if matches!(
+                        observer.current_phase,
+                        CodexRuntimePhase::Failed | CodexRuntimePhase::Blocked
+                    ) {
+                        return Err(err(
+                            observer.blocker.as_deref().unwrap_or("CODEX_START_FAILED"),
+                            observer
+                                .failure
+                                .as_deref()
+                                .unwrap_or("Codex App Server failed during startup"),
+                        ));
+                    }
+                    if manager.turn_started
+                        && observer.process_state == "RUNNING"
+                        && observer.process_id.is_some()
+                        && observer.thread_id.is_some()
+                        && observer.session_id.is_some()
+                        && observer.turn_id.is_some()
+                    {
+                        return Ok(observer.clone());
+                    }
+                }
+            }
+            if start.elapsed() > APP_SERVER_START_TIMEOUT {
+                return Err(err(
+                    "CODEX_START_TIMEOUT",
+                    "App Server did not report a running turn before the startup deadline",
+                ));
+            }
+            thread::sleep(Duration::from_millis(20));
+        }
+    }
+
+    fn fail_start(&self, failure: &ControlLoopError) {
+        if let Ok(mut manager) = self.inner.lock() {
+            if let Some(mut child) = manager.child.take() {
+                let _ = child.kill();
+                let _ = child.wait();
+            }
+            manager.stdin = None;
+            if let Some(observer) = manager.observer_mut() {
+                observer.process_state = "EXITED".into();
+                observer.current_phase = CodexRuntimePhase::Failed;
+                observer.session_state = CodexRuntimePhase::Failed;
+                observer.active_run = false;
+                observer.writer_lock_held = false;
+                observer.active_work_package = None;
+                observer.last_activity = Some(timestamp());
+                observer.current_event = Some("app-server/start-failed".into());
+                observer.blocker = Some(failure.code.clone());
+                observer.failure = Some(failure.message.clone());
+                observer.next_action = "RETRY".into();
+            }
+            manager.persist();
+        }
+    }
+
+    fn start(
+        &self,
+        record: &OwnerAuthorizationRecord,
+        state_root: &Path,
+    ) -> Result<CodexRuntimeObserver, ControlLoopError> {
+        {
+            let mut manager = self.inner.lock().map_err(|_| {
+                err(
+                    "RUNTIME_LOCK_FAILED",
+                    "Codex runtime manager is unavailable",
+                )
+            })?;
+            manager.reconcile_process();
+            if manager
+                .observer
+                .as_ref()
+                .map(|observer| observer.active_run || observer.writer_lock_held)
+                .unwrap_or(false)
+            {
+                return Err(err("ACTIVE_RUN", "a managed Codex run is already active"));
+            }
+            if let Some(mut inactive_child) = manager.child.take() {
+                let _ = inactive_child.kill();
+                let _ = inactive_child.wait();
+                manager.stdin = None;
+            }
+        }
+        let mut child = Command::new("codex")
+            .args(codex_app_server_args())
+            .current_dir(&record.worktree)
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .map_err(|_| {
+                err(
+                    "CODEX_START_FAILED",
+                    "Codex App Server could not be started",
+                )
+            })?;
+        let process_id = child.id();
+        let Some(stdin) = child.stdin.take() else {
+            let _ = child.kill();
+            let _ = child.wait();
+            return Err(err(
+                "CODEX_CHANNEL_CLOSED",
+                "App Server stdin is unavailable",
+            ));
+        };
+        let Some(stdout) = child.stdout.take() else {
+            let _ = child.kill();
+            let _ = child.wait();
+            return Err(err(
+                "CODEX_CHANNEL_CLOSED",
+                "App Server stdout is unavailable",
+            ));
+        };
+        let stderr = child.stderr.take();
+        {
+            let mut manager = match self.inner.lock() {
+                Ok(manager) => manager,
+                Err(_) => {
+                    let _ = child.kill();
+                    let _ = child.wait();
+                    return Err(err(
+                        "RUNTIME_LOCK_FAILED",
+                        "Codex runtime manager is unavailable",
+                    ));
+                }
+            };
+            if manager.child.is_some()
+                || manager
+                    .observer
+                    .as_ref()
+                    .map(|observer| observer.active_run || observer.writer_lock_held)
+                    .unwrap_or(false)
+            {
+                let _ = child.kill();
+                let _ = child.wait();
+                return Err(err("ACTIVE_RUN", "a managed Codex run is already active"));
+            }
+            let mut observer = default_runtime(&OwnerAuthorizationEvidence {
+                status: "START_ALLOWED".into(),
+                valid: true,
+                blocker: None,
+                record: Some(record.clone()),
+            });
+            observer.process_id = Some(process_id);
+            observer.process_state = "RUNNING".into();
+            observer.active_work_package = Some(record.work_package_id.clone());
+            observer.current_phase = CodexRuntimePhase::Starting;
+            observer.session_state = CodexRuntimePhase::Starting;
+            observer.active_run = true;
+            observer.last_activity = Some(timestamp());
+            observer.current_event = Some("app-server/spawned".into());
+            observer.current_task = Some("initialize".into());
+            observer.blocker = None;
+            observer.next_action = "INITIALIZE_APP_SERVER".into();
+            manager.child = Some(child);
+            manager.stdin = Some(stdin);
+            manager.observer = Some(observer);
+            manager.responses.clear();
+            manager.turn_started = false;
+            manager.state_root = Some(state_root.to_path_buf());
+            manager.persist();
+        }
+
+        let runtime = Arc::downgrade(&self.inner);
+        thread::spawn(move || {
+            for line in BufReader::new(stdout).lines() {
+                let Ok(line) = line else {
+                    break;
+                };
+                let Ok(message) = serde_json::from_str::<Value>(&line) else {
+                    if let Some(runtime) = runtime.upgrade() {
+                        if let Ok(mut manager) = runtime.lock() {
+                            if let Some(observer) = manager.observer_mut() {
+                                observer.current_event = Some("app-server/invalid-jsonl".into());
+                                observer.current_phase = CodexRuntimePhase::Blocked;
+                                observer.session_state = CodexRuntimePhase::Blocked;
+                                observer.active_run = true;
+                                observer.writer_lock_held = true;
+                                observer.blocker = Some("CODEX_PROTOCOL_INVALID".into());
+                                observer.failure =
+                                    Some("App Server emitted malformed JSONL".into());
+                                observer.next_action = "RESOLVE_BLOCKER".into();
+                            }
+                            if let Some(child) = manager.child.as_mut() {
+                                let _ = child.kill();
+                            }
+                            manager.persist();
+                        }
+                    }
+                    break;
+                };
+                let Some(runtime) = runtime.upgrade() else {
+                    break;
+                };
+                let Ok(mut manager) = runtime.lock() else {
+                    break;
+                };
+                manager.handle_protocol_message(message);
+            }
+            let Some(runtime) = runtime.upgrade() else {
+                return;
+            };
+            let Ok(mut manager) = runtime.lock() else {
+                return;
+            };
+            let channel_failed = manager
+                .observer
+                .as_ref()
+                .map(|observer| observer.active_run)
+                .unwrap_or(false);
+            if channel_failed {
+                if let Some(observer) = manager.observer_mut() {
+                    observer.current_event = Some("app-server/stdout-closed".into());
+                    observer.current_phase = CodexRuntimePhase::Blocked;
+                    observer.session_state = CodexRuntimePhase::Blocked;
+                    observer.writer_lock_held = true;
+                    if observer.blocker.is_none() {
+                        observer.blocker = Some("CODEX_CHANNEL_CLOSED".into());
+                        observer.failure = Some("App Server stdout channel closed".into());
+                    }
+                    observer.next_action = "RESOLVE_BLOCKER".into();
+                }
+                if let Some(child) = manager.child.as_mut() {
+                    let _ = child.kill();
+                }
+                manager.persist();
+            }
+        });
+        if let Some(stderr) = stderr {
+            let runtime = Arc::downgrade(&self.inner);
+            thread::spawn(move || {
+                for line in BufReader::new(stderr).lines() {
+                    if line.is_err() {
+                        break;
+                    }
+                    let Some(runtime) = runtime.upgrade() else {
+                        break;
+                    };
+                    let Ok(mut manager) = runtime.lock() else {
+                        break;
+                    };
+                    if let Some(observer) = manager.observer_mut() {
+                        observer.last_activity = Some(timestamp());
+                        observer.current_event = Some("app-server/stderr".into());
+                    }
+                    manager.persist();
+                }
+            });
+        }
+
+        let startup = (|| {
+            self.send(initialize_request())?;
+            self.wait_response(0)?;
+            self.send(initialized_notification())?;
+            self.send(thread_start_request(record))?;
+            let thread_response = self.wait_response(1)?;
+            let thread_id =
+                json_string(&thread_response, "/result/thread/id").ok_or_else(|| {
+                    err(
+                        "CODEX_PROTOCOL_INVALID",
+                        "thread/start returned no thread id",
+                    )
+                })?;
+            let session_id =
+                json_string(&thread_response, "/result/thread/sessionId").ok_or_else(|| {
+                    err(
+                        "CODEX_PROTOCOL_INVALID",
+                        "thread/start returned no session id",
+                    )
+                })?;
+            {
+                let mut manager = self.inner.lock().map_err(|_| {
+                    err(
+                        "RUNTIME_LOCK_FAILED",
+                        "Codex runtime manager is unavailable",
+                    )
+                })?;
+                if let Some(observer) = manager.observer_mut() {
+                    observer.thread_id = Some(thread_id.clone());
+                    observer.session_id = Some(session_id);
+                    observer.current_event = Some("thread/start".into());
+                    observer.current_task = Some("turn/start".into());
+                }
+                manager.persist();
+            }
+            self.send(turn_start_request(&thread_id, record))?;
+            let turn_response = self.wait_response(2)?;
+            let turn_id = json_string(&turn_response, "/result/turn/id")
+                .ok_or_else(|| err("CODEX_PROTOCOL_INVALID", "turn/start returned no turn id"))?;
+            {
+                let mut manager = self.inner.lock().map_err(|_| {
+                    err(
+                        "RUNTIME_LOCK_FAILED",
+                        "Codex runtime manager is unavailable",
+                    )
+                })?;
+                if let Some(observer) = manager.observer_mut() {
+                    observer.turn_id = Some(turn_id);
+                }
+                manager.persist();
+            }
+            self.wait_running()
+        })();
+        if let Err(failure) = &startup {
+            self.fail_start(failure);
+        }
+        startup
+    }
+
+    #[cfg(test)]
+    fn observe_message(
+        &self,
+        observer: CodexRuntimeObserver,
+        message: Value,
+    ) -> CodexRuntimeObserver {
+        let mut manager = self.inner.lock().unwrap();
+        manager.observer = Some(observer);
+        manager.handle_protocol_message(message);
+        manager.observer.clone().unwrap()
+    }
+}
+
+fn unsupported_control(action: &CodexControlAction) -> Option<ControlLoopError> {
+    match action {
+        CodexControlAction::Pause
+        | CodexControlAction::Resume
+        | CodexControlAction::StopAfterCurrentStep => Some(err(
+            "UNSUPPORTED_CONTROL",
+            "installed Codex App Server contract does not support this control",
+        )),
+        CodexControlAction::Start | CodexControlAction::Retry => None,
+    }
 }
 
 fn control_codex_runtime<R: GitRunner>(
@@ -1370,96 +2196,32 @@ fn control_codex_runtime<R: GitRunner>(
     repository_root: &Path,
     state_root: &Path,
     production: bool,
+    managed_runtime: &ManagedCodexRuntime,
     action: CodexControlAction,
 ) -> Result<CodexRuntimeObserver, ControlLoopError> {
-    let authorization =
-        start_allowed_authorization(runner, repository_root, state_root, production)?;
-    let mut runtime = read_runtime(state_root, &authorization)?;
-    match action {
-        CodexControlAction::Start | CodexControlAction::Retry => {
-            if authorization.status != "START_ALLOWED" {
-                runtime.current_phase = CodexRuntimePhase::WaitingOwnerAuthorization;
-                runtime.session_state = runtime.current_phase.clone();
-                runtime.blocker = authorization.blocker;
-                runtime.next_action = "AUTHORIZE_WORK_PACKAGE".into();
-            } else if !matches!(
-                runtime.current_phase,
-                CodexRuntimePhase::Idle
-                    | CodexRuntimePhase::Failed
-                    | CodexRuntimePhase::Blocked
-                    | CodexRuntimePhase::Paused
-                    | CodexRuntimePhase::WaitingOwnerAuthorization
-            ) {
-                return Err(err(
-                    "INVALID_RUNTIME_TRANSITION",
-                    "START is not allowed now",
-                ));
-            } else {
-                let record = authorization.record.ok_or_else(|| {
-                    err("OWNER_AUTHORIZATION_REQUIRED", "authorization is missing")
-                })?;
-                runtime.active_work_package = Some(record.work_package_id.clone());
-                runtime.branch = Some(record.branch.clone());
-                runtime.worktree = Some(record.worktree.clone());
-                runtime.current_phase = CodexRuntimePhase::Starting;
-                runtime.session_state = CodexRuntimePhase::Starting;
-                runtime.last_activity = Some(timestamp());
-                runtime.current_task = Some("启动受控 Codex 实现".into());
-                runtime.blocker = None;
-                runtime.next_action = "OBSERVE_CODEX_SESSION".into();
-                spawn_codex(&record)?;
-            }
-        }
-        CodexControlAction::Pause => {
-            if !matches!(
-                runtime.current_phase,
-                CodexRuntimePhase::Starting
-                    | CodexRuntimePhase::Running
-                    | CodexRuntimePhase::Testing
-                    | CodexRuntimePhase::Reviewing
-            ) {
-                return Err(err(
-                    "INVALID_RUNTIME_TRANSITION",
-                    "PAUSE is not allowed now",
-                ));
-            }
-            runtime.current_phase = CodexRuntimePhase::Paused;
-            runtime.session_state = CodexRuntimePhase::Paused;
-            runtime.last_activity = Some(timestamp());
-            runtime.next_action = "RESUME".into();
-        }
-        CodexControlAction::Resume => {
-            if runtime.current_phase != CodexRuntimePhase::Paused {
-                return Err(err(
-                    "INVALID_RUNTIME_TRANSITION",
-                    "RESUME is not allowed now",
-                ));
-            }
-            runtime.current_phase = CodexRuntimePhase::Running;
-            runtime.session_state = CodexRuntimePhase::Running;
-            runtime.last_activity = Some(timestamp());
-            runtime.next_action = "OBSERVE_CODEX_SESSION".into();
-        }
-        CodexControlAction::StopAfterCurrentStep => {
-            if !matches!(
-                runtime.current_phase,
-                CodexRuntimePhase::Starting
-                    | CodexRuntimePhase::Running
-                    | CodexRuntimePhase::Testing
-                    | CodexRuntimePhase::Reviewing
-            ) {
-                return Err(err(
-                    "INVALID_RUNTIME_TRANSITION",
-                    "STOP_AFTER_CURRENT_STEP is not allowed now",
-                ));
-            }
-            runtime.stop_after_current_step = true;
-            runtime.last_activity = Some(timestamp());
-            runtime.next_action = "STOP_AFTER_CURRENT_STEP".into();
-        }
+    if let Some(error) = unsupported_control(&action) {
+        return Err(error);
     }
-    write_json(&runtime_path(state_root), &runtime)?;
-    Ok(runtime)
+    let guards = managed_runtime.snapshot();
+    let authorization =
+        start_allowed_authorization(runner, repository_root, state_root, production, &guards)?;
+    if authorization.status != "START_ALLOWED" {
+        return Err(err(
+            authorization
+                .blocker
+                .as_deref()
+                .unwrap_or("OWNER_AUTHORIZATION_REQUIRED"),
+            "Codex start requires matching Owner authorization and START_ALLOWED",
+        ));
+    }
+    let current = managed_runtime.read(state_root, &authorization)?;
+    if current.active_run || current.writer_lock_held {
+        return Err(err("ACTIVE_RUN", "a managed Codex run is already active"));
+    }
+    let record = authorization
+        .record
+        .ok_or_else(|| err("OWNER_AUTHORIZATION_REQUIRED", "authorization is missing"))?;
+    managed_runtime.start(&record, state_root)
 }
 
 fn app_state_root(app: &tauri::AppHandle) -> Result<PathBuf, ControlLoopError> {
@@ -1471,48 +2233,78 @@ fn app_state_root(app: &tauri::AppHandle) -> Result<PathBuf, ControlLoopError> {
     })
 }
 #[tauri::command]
-fn read_repository_identity() -> Result<RepositoryIdentity, ControlLoopError> {
-    production_service().read_identity()
+fn read_repository_identity(
+    runtime: tauri::State<'_, ManagedCodexRuntime>,
+) -> Result<RepositoryIdentity, ControlLoopError> {
+    production_service(runtime.inner().clone()).read_identity()
 }
 #[tauri::command]
-fn check_remote_authority() -> Result<RemoteAuthority, ControlLoopError> {
-    production_service().check_authority()
+fn check_remote_authority(
+    runtime: tauri::State<'_, ManagedCodexRuntime>,
+) -> Result<RemoteAuthority, ControlLoopError> {
+    production_service(runtime.inner().clone()).check_authority()
 }
 #[tauri::command]
-fn evaluate_workspace_sync() -> Result<WorkspaceSyncEvaluation, ControlLoopError> {
-    production_service().evaluate_sync()
+fn evaluate_workspace_sync(
+    app: tauri::AppHandle,
+    runtime: tauri::State<'_, ManagedCodexRuntime>,
+) -> Result<WorkspaceSyncEvaluation, ControlLoopError> {
+    runtime.ensure_loaded(&app_state_root(&app)?)?;
+    production_service(runtime.inner().clone()).evaluate_sync()
 }
 #[tauri::command]
-fn sync_workspace(confirmed: bool) -> Result<WorkspaceSyncResult, ControlLoopError> {
-    production_service().sync(confirmed)
+fn sync_workspace(
+    app: tauri::AppHandle,
+    runtime: tauri::State<'_, ManagedCodexRuntime>,
+    confirmed: bool,
+) -> Result<WorkspaceSyncResult, ControlLoopError> {
+    runtime.ensure_loaded(&app_state_root(&app)?)?;
+    production_service(runtime.inner().clone()).sync(confirmed)
 }
 #[tauri::command]
-fn resolve_next_work_package() -> Result<ResolverDecisionResult, ControlLoopError> {
-    let service = production_service();
+fn resolve_next_work_package(
+    app: tauri::AppHandle,
+    runtime: tauri::State<'_, ManagedCodexRuntime>,
+) -> Result<ResolverDecisionResult, ControlLoopError> {
+    runtime.ensure_loaded(&app_state_root(&app)?)?;
+    let service = production_service(runtime.inner().clone());
     let root = service.root()?;
     resolve(&service.runner, &root, true, &service.guards.snapshot())
 }
 #[tauri::command]
-fn read_roadmap_evidence() -> Result<RoadmapEvidence, ControlLoopError> {
-    let service = production_service();
+fn read_roadmap_evidence(
+    runtime: tauri::State<'_, ManagedCodexRuntime>,
+) -> Result<RoadmapEvidence, ControlLoopError> {
+    let service = production_service(runtime.inner().clone());
     let root = service.root()?;
     load_roadmap_evidence(&root)
 }
 #[tauri::command]
 fn read_owner_authorization(
     app: tauri::AppHandle,
+    runtime: tauri::State<'_, ManagedCodexRuntime>,
 ) -> Result<OwnerAuthorizationEvidence, ControlLoopError> {
-    let service = production_service();
+    let state_root = app_state_root(&app)?;
+    runtime.ensure_loaded(&state_root)?;
+    let service = production_service(runtime.inner().clone());
     let root = service.root()?;
-    start_allowed_authorization(&service.runner, &root, &app_state_root(&app)?, true)
+    start_allowed_authorization(
+        &service.runner,
+        &root,
+        &state_root,
+        true,
+        &service.guards.snapshot(),
+    )
 }
 #[tauri::command]
 fn authorize_work_package(
     app: tauri::AppHandle,
+    runtime: tauri::State<'_, ManagedCodexRuntime>,
     work_package_id: String,
     confirmed: bool,
 ) -> Result<OwnerAuthorizationEvidence, ControlLoopError> {
-    let service = production_service();
+    runtime.ensure_loaded(&app_state_root(&app)?)?;
+    let service = production_service(runtime.inner().clone());
     let root = service.root()?;
     authorize_owner(
         &service.runner,
@@ -1524,25 +2316,46 @@ fn authorize_work_package(
     )
 }
 #[tauri::command]
-fn read_codex_runtime(app: tauri::AppHandle) -> Result<CodexRuntimeObserver, ControlLoopError> {
-    let service = production_service();
-    let root = service.root()?;
+fn read_codex_runtime(
+    app: tauri::AppHandle,
+    runtime: tauri::State<'_, ManagedCodexRuntime>,
+) -> Result<CodexRuntimeObserver, ControlLoopError> {
     let state_root = app_state_root(&app)?;
-    let authorization = start_allowed_authorization(&service.runner, &root, &state_root, true)?;
-    read_runtime(&state_root, &authorization)
+    runtime.ensure_loaded(&state_root)?;
+    let service = production_service(runtime.inner().clone());
+    let root = service.root()?;
+    let authorization = start_allowed_authorization(
+        &service.runner,
+        &root,
+        &state_root,
+        true,
+        &service.guards.snapshot(),
+    )?;
+    runtime.read(&state_root, &authorization)
 }
 #[tauri::command]
 fn control_codex(
     app: tauri::AppHandle,
+    runtime: tauri::State<'_, ManagedCodexRuntime>,
     action: CodexControlAction,
 ) -> Result<CodexRuntimeObserver, ControlLoopError> {
-    let service = production_service();
+    let state_root = app_state_root(&app)?;
+    runtime.ensure_loaded(&state_root)?;
+    let service = production_service(runtime.inner().clone());
     let root = service.root()?;
-    control_codex_runtime(&service.runner, &root, &app_state_root(&app)?, true, action)
+    control_codex_runtime(
+        &service.runner,
+        &root,
+        &state_root,
+        true,
+        runtime.inner(),
+        action,
+    )
 }
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .manage(ManagedCodexRuntime::default())
         .invoke_handler(tauri::generate_handler![
             read_repository_identity,
             check_remote_authority,
@@ -1757,7 +2570,7 @@ mod tests {
         let (local, _) = repo();
         let service = ControlLoopService {
             runner: ProductionGitRunner,
-            guards: LocalControlState,
+            guards: LocalControlState::default(),
             root_path: local,
             production: false,
         };
@@ -1793,7 +2606,7 @@ mod tests {
         git(&other, &["push", "origin", "main"]);
         let service = ControlLoopService {
             runner: ProductionGitRunner,
-            guards: LocalControlState,
+            guards: LocalControlState::default(),
             root_path: local.clone(),
             production: false,
         };
@@ -1825,7 +2638,7 @@ mod tests {
         };
         let _ = ControlLoopService {
             runner: r,
-            guards: LocalControlState,
+            guards: LocalControlState::default(),
             root_path: local,
             production: false,
         }
@@ -1868,7 +2681,7 @@ mod tests {
         git(&other, &["push", "origin", "main"]);
         let service = ControlLoopService {
             runner: ProductionGitRunner,
-            guards: LocalControlState,
+            guards: LocalControlState::default(),
             root_path: local,
             production: false,
         };
@@ -1887,7 +2700,7 @@ mod tests {
         };
         let _ = ControlLoopService {
             runner: r,
-            guards: LocalControlState,
+            guards: LocalControlState::default(),
             root_path: local,
             production: false,
         }
@@ -1945,9 +2758,13 @@ mod tests {
             blocker: Some("OWNER_AUTHORIZATION_REQUIRED".into()),
             record: None,
         };
-        let runtime = read_runtime(&state, &evidence).unwrap();
-        assert_eq!(runtime.engine, "Codex CLI");
+        let runtime = ManagedCodexRuntime::default()
+            .read(&state, &evidence)
+            .unwrap();
+        assert_eq!(runtime.engine, "Codex App Server");
         assert_eq!(runtime.profile, "sol");
+        assert_eq!(runtime.process_state, "NOT_STARTED");
+        assert!(!runtime.active_run && !runtime.writer_lock_held);
         assert_eq!(
             runtime.current_phase,
             CodexRuntimePhase::WaitingOwnerAuthorization
@@ -1957,6 +2774,264 @@ mod tests {
             Some("OWNER_AUTHORIZATION_REQUIRED")
         );
         assert_eq!(runtime.next_action, "AUTHORIZE_WORK_PACKAGE");
+    }
+    fn start_allowed_runtime() -> CodexRuntimeObserver {
+        default_runtime(&OwnerAuthorizationEvidence {
+            status: "START_ALLOWED".into(),
+            valid: true,
+            blocker: None,
+            record: Some(OwnerAuthorizationRecord {
+                work_package_id: "WP".into(),
+                authority_sha: "authority".into(),
+                branch: "feature/runtime".into(),
+                worktree: "/repo".into(),
+                scope: "runtime supervision".into(),
+                allowed_capabilities: vec![],
+                forbidden_capabilities: vec![],
+                authorized_at: "1".into(),
+            }),
+        })
+    }
+    #[test]
+    fn codex_app_server_protocol_event_produces_real_running_evidence() {
+        let runtime = ManagedCodexRuntime::default();
+        let mut observer = start_allowed_runtime();
+        observer.process_id = Some(4242);
+        observer.process_state = "RUNNING".into();
+        observer.active_work_package = Some("WP".into());
+        observer.current_phase = CodexRuntimePhase::Starting;
+        observer.session_state = CodexRuntimePhase::Starting;
+        observer.thread_id = Some("thread-1".into());
+        observer.session_id = Some("session-1".into());
+        let observed = runtime.observe_message(
+            observer,
+            json!({"method": "turn/started", "params": {"threadId": "thread-1", "turn": {"id": "turn-1", "status": "inProgress", "items": []}}}),
+        );
+        assert_eq!(observed.current_phase, CodexRuntimePhase::Running);
+        assert_eq!(observed.turn_id.as_deref(), Some("turn-1"));
+        assert!(observed.active_run && observed.writer_lock_held);
+        assert_eq!(observed.current_event.as_deref(), Some("turn/started"));
+    }
+    #[test]
+    fn stale_persisted_runtime_fails_closed_without_managed_process() {
+        let state = temp("stale-runtime");
+        let mut stale = start_allowed_runtime();
+        stale.process_id = Some(4242);
+        stale.process_state = "RUNNING".into();
+        stale.active_work_package = Some("WP".into());
+        stale.current_phase = CodexRuntimePhase::Running;
+        stale.session_state = CodexRuntimePhase::Running;
+        stale.active_run = true;
+        stale.writer_lock_held = true;
+        write_json(&runtime_path(&state), &stale).unwrap();
+        let authorization = OwnerAuthorizationEvidence {
+            status: "START_ALLOWED".into(),
+            valid: true,
+            blocker: None,
+            record: None,
+        };
+        let runtime = ManagedCodexRuntime::default();
+        let observed = runtime.read(&state, &authorization).unwrap();
+        assert_eq!(observed.current_phase, CodexRuntimePhase::Failed);
+        assert_eq!(observed.process_state, "MISSING");
+        assert!(observed.process_id.is_none());
+        assert_eq!(
+            observed.blocker.as_deref(),
+            Some("CODEX_APP_SERVER_PROCESS_MISSING")
+        );
+        assert!(!observed.active_run && !observed.writer_lock_held);
+    }
+    #[test]
+    fn guard_loading_reconciles_stale_persisted_liveness_before_snapshot() {
+        let state = temp("stale-guard-runtime");
+        let mut stale = start_allowed_runtime();
+        stale.process_id = Some(4242);
+        stale.process_state = "RUNNING".into();
+        stale.active_work_package = Some("WP".into());
+        stale.current_phase = CodexRuntimePhase::Running;
+        stale.session_state = CodexRuntimePhase::Running;
+        stale.active_run = true;
+        stale.writer_lock_held = true;
+        write_json(&runtime_path(&state), &stale).unwrap();
+        let runtime = ManagedCodexRuntime::default();
+        runtime.ensure_loaded(&state).unwrap();
+        let guards = runtime.snapshot();
+        let observed = runtime.inner.lock().unwrap().observer.clone().unwrap();
+        assert!(!guards.active_codex_run && !guards.writer_lock_held);
+        assert_eq!(observed.current_phase, CodexRuntimePhase::Failed);
+        assert_eq!(observed.process_state, "MISSING");
+    }
+    #[test]
+    fn exited_managed_process_reconciles_exit_status_and_releases_guards() {
+        let runtime = ManagedCodexRuntime::default();
+        let mut observer = start_allowed_runtime();
+        observer.process_state = "RUNNING".into();
+        observer.active_work_package = Some("WP".into());
+        observer.current_phase = CodexRuntimePhase::Running;
+        observer.session_state = CodexRuntimePhase::Running;
+        observer.active_run = true;
+        observer.writer_lock_held = true;
+        let mut child = Command::new("false").spawn().unwrap();
+        observer.process_id = Some(child.id());
+        child.wait().unwrap();
+        {
+            let mut manager = runtime.inner.lock().unwrap();
+            manager.observer = Some(observer);
+            manager.child = Some(child);
+        }
+        let guards = runtime.snapshot();
+        let observed = runtime.inner.lock().unwrap().observer.clone().unwrap();
+        assert!(!guards.active_codex_run && !guards.writer_lock_held);
+        assert_eq!(observed.process_state, "EXITED");
+        assert_eq!(observed.current_phase, CodexRuntimePhase::Failed);
+        assert!(observed.exit_status.as_deref().unwrap().contains('1'));
+        assert_eq!(observed.blocker.as_deref(), Some("CODEX_APP_SERVER_EXITED"));
+    }
+    #[test]
+    fn active_run_and_writer_lock_guards_follow_runtime_observer() {
+        let runtime = ManagedCodexRuntime::default();
+        let mut observer = start_allowed_runtime();
+        observer.current_phase = CodexRuntimePhase::Running;
+        observer.session_state = CodexRuntimePhase::Running;
+        observer.active_run = true;
+        observer.writer_lock_held = true;
+        {
+            let mut manager = runtime.inner.lock().unwrap();
+            manager.observer = Some(observer);
+            manager.child = Some(Command::new("sleep").arg("5").spawn().unwrap());
+        }
+        let guards = runtime.snapshot();
+        assert!(guards.active_codex_run && guards.writer_lock_held);
+    }
+    #[test]
+    fn managed_runtime_guards_block_workspace_sync() {
+        let (local, remote) = repo();
+        let other = temp("runtime-guard-remote");
+        git(&other, &["clone", remote.to_str().unwrap(), "."]);
+        git(&other, &["config", "user.name", "AICC Test"]);
+        git(
+            &other,
+            &["config", "user.email", "aicc-test@example.invalid"],
+        );
+        fs::write(other.join("remote-ahead"), "x").unwrap();
+        git(&other, &["add", "."]);
+        git(&other, &["commit", "-m", "remote-ahead"]);
+        git(&other, &["push", "origin", "main"]);
+        let runtime = ManagedCodexRuntime::default();
+        let mut observer = start_allowed_runtime();
+        observer.current_phase = CodexRuntimePhase::Running;
+        observer.session_state = CodexRuntimePhase::Running;
+        observer.active_run = true;
+        observer.writer_lock_held = true;
+        {
+            let mut manager = runtime.inner.lock().unwrap();
+            manager.observer = Some(observer);
+            manager.child = Some(Command::new("sleep").arg("5").spawn().unwrap());
+        }
+        let service = ControlLoopService {
+            runner: ProductionGitRunner,
+            guards: LocalControlState { runtime },
+            root_path: local,
+            production: false,
+        };
+        let evaluation = service.evaluate_sync().unwrap();
+        assert!(!evaluation.allowed);
+        assert!(evaluation.blockers.contains(&SyncBlocker::ActiveRun));
+        assert!(evaluation.blockers.contains(&SyncBlocker::WriterLocked));
+    }
+    #[test]
+    fn completed_turn_releases_active_run_and_writer_lock() {
+        let runtime = ManagedCodexRuntime::default();
+        let mut observer = start_allowed_runtime();
+        observer.active_work_package = Some("WP".into());
+        observer.current_phase = CodexRuntimePhase::Running;
+        observer.session_state = CodexRuntimePhase::Running;
+        observer.active_run = true;
+        observer.writer_lock_held = true;
+        let observer = runtime.observe_message(
+            observer,
+            json!({"method": "turn/started", "params": {"threadId": "thread-1", "turn": {"id": "turn-1", "status": "inProgress", "items": []}}}),
+        );
+        let observed = runtime.observe_message(
+            observer,
+            json!({"method": "turn/completed", "params": {"threadId": "thread-1", "turn": {"id": "turn-1", "status": "completed", "items": []}}}),
+        );
+        assert_eq!(observed.current_phase, CodexRuntimePhase::Idle);
+        assert!(!observed.active_run && !observed.writer_lock_held);
+        assert!(observed.active_work_package.is_none());
+        assert!(runtime.inner.lock().unwrap().turn_started);
+    }
+    #[test]
+    fn unexpected_server_request_blocks_without_faking_a_response() {
+        let runtime = ManagedCodexRuntime::default();
+        let mut observer = start_allowed_runtime();
+        observer.active_work_package = Some("WP".into());
+        observer.current_phase = CodexRuntimePhase::Running;
+        observer.session_state = CodexRuntimePhase::Running;
+        observer.active_run = true;
+        observer.writer_lock_held = true;
+        let observed = runtime.observe_message(
+            observer,
+            json!({"id": 91, "method": "item/commandExecution/requestApproval", "params": {}}),
+        );
+        assert_eq!(observed.current_phase, CodexRuntimePhase::Blocked);
+        assert_eq!(
+            observed.blocker.as_deref(),
+            Some("CODEX_SERVER_REQUEST_UNSUPPORTED")
+        );
+        assert!(observed.active_run && observed.writer_lock_held);
+        assert!(runtime.inner.lock().unwrap().responses.is_empty());
+    }
+    #[test]
+    fn unsupported_controls_return_error_without_mutating_runtime() {
+        let runtime = ManagedCodexRuntime::default();
+        let observer = start_allowed_runtime();
+        runtime.inner.lock().unwrap().observer = Some(observer.clone());
+        for action in [
+            CodexControlAction::Pause,
+            CodexControlAction::Resume,
+            CodexControlAction::StopAfterCurrentStep,
+        ] {
+            assert_eq!(
+                unsupported_control(&action).unwrap().code,
+                "UNSUPPORTED_CONTROL"
+            );
+            assert_eq!(
+                runtime.inner.lock().unwrap().observer,
+                Some(observer.clone())
+            );
+        }
+    }
+    #[test]
+    fn app_server_launch_and_protocol_methods_are_exact() {
+        assert_eq!(codex_app_server_args(), &["-p", "sol", "app-server"]);
+        let record = OwnerAuthorizationRecord {
+            work_package_id: "WP".into(),
+            authority_sha: "authority".into(),
+            branch: "feature/runtime".into(),
+            worktree: "/repo".into(),
+            scope: "runtime supervision".into(),
+            allowed_capabilities: vec![],
+            forbidden_capabilities: vec![],
+            authorized_at: "1".into(),
+        };
+        assert_eq!(initialize_request()["method"], "initialize");
+        assert_eq!(initialized_notification()["method"], "initialized");
+        assert_eq!(thread_start_request(&record)["method"], "thread/start");
+        assert_eq!(
+            thread_start_request(&record)["params"]["sandbox"],
+            "workspace-write"
+        );
+        assert_eq!(
+            thread_start_request(&record)["params"]["approvalPolicy"],
+            "never"
+        );
+        assert_eq!(
+            turn_start_request("thread-1", &record)["method"],
+            "turn/start"
+        );
+        assert!(supported_codex_controls().contains(&CodexControlAction::Start));
+        assert!(!supported_codex_controls().contains(&CodexControlAction::Pause));
     }
     #[test]
     fn codex_runtime_contract_contains_only_bounded_actions() {

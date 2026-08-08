@@ -37,7 +37,7 @@ export type RoadmapMilestone = { id: string; title: string; workPackages: string
 export type RoadmapEvidence = { project: string; currentMilestone: string; authoritySha: string; currentWorkPackage: string; closedWorkPackages: string[]; nextWorkPackages: string[]; progressPercent: number; milestones: RoadmapMilestone[]; entries: RoadmapEntry[] };
 export type OwnerAuthorizationRecord = { workPackageId: string; authoritySha: string; branch: string; worktree: string; scope: string; allowedCapabilities: string[]; forbiddenCapabilities: string[]; authorizedAt: string };
 export type OwnerAuthorizationEvidence = { status: 'NOT_AUTHORIZED' | 'AUTHORIZED_FOR_IMPLEMENTATION' | 'START_ALLOWED'; valid: boolean; blocker: string | null; record: OwnerAuthorizationRecord | null };
-export type CodexRuntimeObserver = { engine: 'Codex CLI'; profile: 'sol'; activeWorkPackage: string | null; sessionState: CodexRuntimePhase; branch: string | null; worktree: string | null; currentPhase: CodexRuntimePhase; lastActivity: string | null; currentTask: string | null; testState: string; reviewState: string; pullRequest: string | null; ciState: string; blocker: string | null; nextAction: string; stopAfterCurrentStep: boolean };
+export type CodexRuntimeObserver = { engine: 'Codex App Server'; profile: 'sol'; processId: number | null; processState: string; sessionId: string | null; threadId: string | null; turnId: string | null; activeWorkPackage: string | null; sessionState: CodexRuntimePhase; branch: string | null; worktree: string | null; currentPhase: CodexRuntimePhase; lastActivity: string | null; currentEvent: string | null; currentTask: string | null; testState: string; reviewState: string; pullRequest: string | null; ciState: string; blocker: string | null; failure: string | null; exitStatus: string | null; activeRun: boolean; writerLockHeld: boolean; nextAction: string; stopAfterCurrentStep: boolean; supportedControls: CodexControlAction[] };
 export type ControlLoopState = { identity: RepositoryIdentity | null; authority: RemoteAuthority | null; evaluation: WorkspaceEvaluation | null; resolver: ResolverResult | null; roadmap: RoadmapEvidence | null; authorization: OwnerAuthorizationEvidence | null; codexRuntime: CodexRuntimeObserver | null; status: AuthorityStatus; error: string | null };
 
 export type RepositoryStatusEvidence = {
@@ -102,6 +102,7 @@ export function ownerBlocker(blocker: string): { reason: string; nextStep: strin
 }
 export function resolverDecision(result: ResolverResult | null): ResolverDecision | 'UNKNOWN' { return result?.decision ?? 'UNKNOWN'; }
 export function hasRuntimeStartAction(): boolean { return false; }
+export function runtimeSupportsControl(runtime: CodexRuntimeObserver | null, action: CodexControlAction): boolean { return runtime?.supportedControls.includes(action) === true; }
 
 export function runtimePhaseCopy(phase: CodexRuntimePhase): string {
   const copy: Record<CodexRuntimePhase, string> = {
@@ -130,7 +131,6 @@ function inTauri(): boolean { return typeof window !== 'undefined' && '__TAURI_I
 export async function loadControlLoop(): Promise<ControlLoopState> {
   if (!inTauri()) return { ...emptyState, status: 'UNAVAILABLE', error: 'Tauri runtime unavailable' };
   try {
-    const guards = { activeCodexRun: false, writerLockHeld: false, unsavedDiff: false, previousRunOpen: false };
     const [identity, authority, evaluation, resolver, roadmap, authorization, codexRuntime] = await Promise.all([
       invoke<RepositoryIdentity>('read_repository_identity'),
       invoke<RemoteAuthority>('check_remote_authority'),

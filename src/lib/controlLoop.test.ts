@@ -1,4 +1,4 @@
-import { authorityStatus, cancelSync, hasRuntimeStartAction, ownerBlocker, repositoryStatusEvidence, requestSync, resolverDecision, runtimePhaseCopy, shortSha, syncAllowed, syncOutcome, syncState, type CodexRuntimeObserver, type ControlLoopState, type RoadmapMilestone } from './controlLoop.ts';
+import { authorityStatus, cancelSync, hasRuntimeStartAction, ownerBlocker, repositoryStatusEvidence, requestSync, resolverDecision, runtimePhaseCopy, runtimeSupportsControl, shortSha, syncAllowed, syncOutcome, syncState, type CodexRuntimeObserver, type ControlLoopState, type RoadmapMilestone } from './controlLoop.ts';
 import { readFileSync } from 'node:fs';
 
 function assert(condition: unknown, message: string): asserts condition { if (!condition) throw new Error(message); }
@@ -44,11 +44,20 @@ assert(statusEvidence.localHead === 'abcdef0' && statusEvidence.remoteMain === '
 assert(statusEvidence.worktree === 'DIRTY' && statusEvidence.authority === 'DRIFT', 'repository status uses runtime identity and authority');
 assert(statusEvidence.currentWorkPackage === 'AICC-CONTROL-LOOP-001B' && statusEvidence.nextWpGate === 'BLOCKED', 'repository status uses roadmap and resolver evidence');
 const codexRuntime: CodexRuntimeObserver = {
-  engine: 'Codex CLI', profile: 'sol', activeWorkPackage: 'AICC-CODEX-ONLY-MIGRATION-001', sessionState: 'WAITING_OWNER_AUTHORIZATION', branch: 'feature/aicc-codex-only-migration', worktree: '/repo', currentPhase: 'WAITING_OWNER_AUTHORIZATION', lastActivity: null, currentTask: null, testState: 'UNKNOWN', reviewState: 'UNKNOWN', pullRequest: null, ciState: 'UNKNOWN', blocker: 'OWNER_AUTHORIZATION_REQUIRED', nextAction: 'AUTHORIZE_WORK_PACKAGE', stopAfterCurrentStep: false
+  engine: 'Codex App Server', profile: 'sol', processId: 4242, processState: 'RUNNING', sessionId: 'session-1', threadId: 'thread-1', turnId: 'turn-1', activeWorkPackage: 'AICC-CODEX-ONLY-MIGRATION-001', sessionState: 'RUNNING', branch: 'feature/aicc-codex-only-migration', worktree: '/repo', currentPhase: 'RUNNING', lastActivity: '1', currentEvent: 'turn/started', currentTask: 'implementation', testState: 'UNKNOWN', reviewState: 'UNKNOWN', pullRequest: null, ciState: 'UNKNOWN', blocker: null, failure: null, exitStatus: null, activeRun: true, writerLockHeld: true, nextAction: 'OBSERVE_CODEX_SESSION', stopAfterCurrentStep: false, supportedControls: ['START', 'RETRY']
 };
-assert(codexRuntime.engine === 'Codex CLI' && codexRuntime.profile === 'sol', 'Codex-only runtime contract is represented');
-assert(runtimePhaseCopy(codexRuntime.currentPhase) === '等待 Owner 授权', 'runtime state is Owner-readable');
+assert(codexRuntime.engine === 'Codex App Server' && codexRuntime.profile === 'sol', 'managed App Server runtime contract is represented');
+assert(runtimePhaseCopy(codexRuntime.currentPhase) === '运行中', 'runtime state is Owner-readable');
+assert(runtimeSupportsControl(codexRuntime, 'START'), 'supported controls come from runtime evidence');
+assert(!runtimeSupportsControl(codexRuntime, 'PAUSE') && !runtimeSupportsControl(codexRuntime, 'RESUME') && !runtimeSupportsControl(codexRuntime, 'STOP_AFTER_CURRENT_STEP'), 'unsupported controls cannot be presented as available');
 assert(appSource.includes('授权本工作包') && appSource.includes('Codex 运行观察'), 'Owner UI exposes authorization and Codex observer');
+for (const evidence of ['codexRuntime?.processId', 'codexRuntime?.sessionId', 'codexRuntime?.threadId', 'codexRuntime?.turnId', 'codexRuntime.writerLockHeld', 'codexRuntime?.exitStatus', 'codexRuntime?.failure']) {
+  assert(appSource.includes(evidence), `runtime UI binds live evidence: ${evidence}`);
+}
+for (const fakeStatus of ['Codex CLI 未启动', '无绑定会话', 'Writer Lock NOT HELD', '无活动运行']) {
+  assert(!appSource.includes(fakeStatus), `runtime UI removes hardcoded status: ${fakeStatus}`);
+}
+assert(appSource.includes('UNSUPPORTED_CONTROL') && appSource.includes('runtimeSupportsControl'), 'unsupported controls are visibly disabled');
 assert(!appSource.includes('OmO Slim') && !appSource.includes('OpenCode'), 'active Owner UI has no obsolete execution architecture');
 
 console.log('control loop frontend contract tests passed');

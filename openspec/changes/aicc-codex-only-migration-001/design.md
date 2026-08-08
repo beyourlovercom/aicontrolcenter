@@ -6,9 +6,9 @@ The Living Roadmap and formal Work Package files define hierarchy and lifecycle.
 
 ## Runtime contract
 
-The backend exposes typed authorization and Codex runtime commands. Runtime state is persisted in the operating-system application data directory and records only observed or explicitly requested state. The Owner UI accepts no shell text.
+The backend owns a managed `codex -p sol app-server` child process and its bidirectional JSONL stdin/stdout channel. It follows the locally generated App Server protocol through `initialize`, `thread/start`, and `turn/start`, and records only observed process, session, thread, turn, event, and exit evidence. Persisted runtime state is a durable observation cache, never liveness authority. The Owner UI accepts no shell text.
 
-The configured execution engine is Codex CLI with profile `sol`. Allowed runtime controls are START, PAUSE, RESUME, STOP_AFTER_CURRENT_STEP, and RETRY. Every transition fails closed when authorization or repository bindings drift.
+START and RETRY are supported. PAUSE, RESUME, and STOP_AFTER_CURRENT_STEP remain visible as bounded typed controls but are disabled and return `UNSUPPORTED_CONTROL` because the installed App Server contract has no equivalent operation. Every transition fails closed when authorization, repository bindings, process liveness, or protocol evidence drift.
 
 ## Delivery safety
 
