@@ -488,9 +488,21 @@ fn evaluate(
             blockers.push(SyncBlocker::SyncRequired);
         }
     }
-    let state = if blockers.iter().any(|blocker| *blocker == SyncBlocker::WorktreeDirty || *blocker == SyncBlocker::ActiveRun || *blocker == SyncBlocker::WriterLocked || *blocker == SyncBlocker::UnsavedDiff || *blocker == SyncBlocker::PreviousRunOpen || *blocker == SyncBlocker::RemoteUnavailable || *blocker == SyncBlocker::RepositoryInvalid) {
+    let state = if blockers.iter().any(|blocker| {
+        *blocker == SyncBlocker::WorktreeDirty
+            || *blocker == SyncBlocker::ActiveRun
+            || *blocker == SyncBlocker::WriterLocked
+            || *blocker == SyncBlocker::UnsavedDiff
+            || *blocker == SyncBlocker::PreviousRunOpen
+            || *blocker == SyncBlocker::RemoteUnavailable
+            || *blocker == SyncBlocker::RepositoryInvalid
+    }) {
         SyncState::Blocked
-    } else if identity.local_main_sha == authority.remote_main_sha { SyncState::UpToDate } else { SyncState::SyncRequired };
+    } else if identity.local_main_sha == authority.remote_main_sha {
+        SyncState::UpToDate
+    } else {
+        SyncState::SyncRequired
+    };
     WorkspaceSyncEvaluation {
         allowed: blockers == [SyncBlocker::SyncRequired],
         blockers,
@@ -668,7 +680,12 @@ fn load_roadmap_evidence(root: &Path) -> Result<RoadmapEvidence, ControlLoopErro
     for line in content.lines() {
         if let Some(value) = line.strip_prefix("### ") {
             if let Some((id, title, work_packages)) = active_milestone.take() {
-                milestones.push(RoadmapMilestone { id, title, work_packages, progress_percent: 0 });
+                milestones.push(RoadmapMilestone {
+                    id,
+                    title,
+                    work_packages,
+                    progress_percent: 0,
+                });
             }
             let mut parts = value.splitn(2, " — ");
             let id = parts.next().unwrap_or("UNKNOWN").trim().to_string();
@@ -676,12 +693,22 @@ fn load_roadmap_evidence(root: &Path) -> Result<RoadmapEvidence, ControlLoopErro
             active_milestone = Some((id, title, Vec::new()));
         } else if let Some(value) = line.strip_prefix("Work Packages:") {
             if let Some((_, _, packages)) = active_milestone.as_mut() {
-                packages.extend(value.split(',').map(|item| item.trim().trim_matches('`').to_string()).filter(|item| !item.is_empty()));
+                packages.extend(
+                    value
+                        .split(',')
+                        .map(|item| item.trim().trim_matches('`').to_string())
+                        .filter(|item| !item.is_empty()),
+                );
             }
         }
     }
     if let Some((id, title, work_packages)) = active_milestone.take() {
-        milestones.push(RoadmapMilestone { id, title, work_packages, progress_percent: 0 });
+        milestones.push(RoadmapMilestone {
+            id,
+            title,
+            work_packages,
+            progress_percent: 0,
+        });
     }
     let packages_root = root.join("docs/60_Operations/work-packages");
     let mut entries = Vec::new();
@@ -703,7 +730,11 @@ fn load_roadmap_evidence(root: &Path) -> Result<RoadmapEvidence, ControlLoopErro
             continue;
         }
         if let Ok(package) = parse_package(&path) {
-            let milestone = milestones.iter().find(|milestone| milestone.work_packages.contains(&package.id)).map(|milestone| milestone.id.clone()).unwrap_or_else(|| "UNASSIGNED".into());
+            let milestone = milestones
+                .iter()
+                .find(|milestone| milestone.work_packages.contains(&package.id))
+                .map(|milestone| milestone.id.clone())
+                .unwrap_or_else(|| "UNASSIGNED".into());
             entries.push(RoadmapEntry {
                 id: package.id,
                 title: package.title,
@@ -715,9 +746,15 @@ fn load_roadmap_evidence(root: &Path) -> Result<RoadmapEvidence, ControlLoopErro
     }
     entries.sort_by(|left, right| left.id.cmp(&right.id));
     for milestone in &mut milestones {
-        let items = entries.iter().filter(|entry| entry.milestone == milestone.id).collect::<Vec<_>>();
+        let items = entries
+            .iter()
+            .filter(|entry| entry.milestone == milestone.id)
+            .collect::<Vec<_>>();
         let total = items.len().max(1);
-        let closed = items.iter().filter(|entry| entry.status == "CLOSED").count();
+        let closed = items
+            .iter()
+            .filter(|entry| entry.status == "CLOSED")
+            .count();
         milestone.progress_percent = ((closed * 100) / total) as u8;
     }
     let total = entries.len().max(1);
