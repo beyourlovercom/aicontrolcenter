@@ -8,6 +8,7 @@ use std::{
     thread,
     time::{Duration, Instant},
 };
+use tauri::Manager;
 
 pub const CANONICAL_PATH: &str = "/Users/a/AI/007/AIcontrolcenter";
 const MAX_OUTPUT: usize = 64 * 1024;
@@ -50,10 +51,82 @@ pub struct RemoteAuthority {
 #[derive(Debug, Deserialize, Serialize, Clone, Default, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct ExecutionGuardSnapshot {
-    pub active_open_code_run: bool,
+    pub active_codex_run: bool,
     pub writer_lock_held: bool,
     pub unsaved_diff: bool,
     pub previous_run_open: bool,
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct OwnerAuthorizationRecord {
+    pub work_package_id: String,
+    pub authority_sha: String,
+    pub branch: String,
+    pub worktree: String,
+    pub scope: String,
+    pub allowed_capabilities: Vec<String>,
+    pub forbidden_capabilities: Vec<String>,
+    pub authorized_at: String,
+}
+
+#[derive(Debug, Serialize, Clone, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct OwnerAuthorizationEvidence {
+    pub status: String,
+    pub valid: bool,
+    pub blocker: Option<String>,
+    pub record: Option<OwnerAuthorizationRecord>,
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq, Eq)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum CodexRuntimePhase {
+    Idle,
+    WaitingOwnerAuthorization,
+    Starting,
+    Running,
+    Testing,
+    Reviewing,
+    PrOpen,
+    CiRunning,
+    Merging,
+    BuildingUat,
+    ReadyForHumanUat,
+    Blocked,
+    Failed,
+    Paused,
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq, Eq)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum CodexControlAction {
+    Start,
+    Pause,
+    Resume,
+    StopAfterCurrentStep,
+    Retry,
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct CodexRuntimeObserver {
+    pub engine: String,
+    pub profile: String,
+    pub active_work_package: Option<String>,
+    pub session_state: CodexRuntimePhase,
+    pub branch: Option<String>,
+    pub worktree: Option<String>,
+    pub current_phase: CodexRuntimePhase,
+    pub last_activity: Option<String>,
+    pub current_task: Option<String>,
+    pub test_state: String,
+    pub review_state: String,
+    pub pull_request: Option<String>,
+    pub ci_state: String,
+    pub blocker: Option<String>,
+    pub next_action: String,
+    pub stop_after_current_step: bool,
 }
 #[derive(Debug, Serialize, Clone, PartialEq, Eq)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
@@ -470,7 +543,7 @@ fn evaluate(
     if !identity.worktree_clean {
         blockers.push(SyncBlocker::WorktreeDirty);
     }
-    if guards.active_open_code_run {
+    if guards.active_codex_run {
         blockers.push(SyncBlocker::ActiveRun);
     }
     if guards.writer_lock_held {
@@ -895,7 +968,7 @@ fn resolve<R: GitRunner>(
     if a.status == AuthorityStatus::Drift || a.status == AuthorityStatus::RemoteInvalidResponse {
         blockers.push(ResolverBlocker::AuthorityDrift);
     }
-    if guards.active_open_code_run {
+    if guards.active_codex_run {
         blockers.push(ResolverBlocker::ActiveRun);
     }
     if guards.writer_lock_held {
@@ -909,6 +982,12 @@ fn resolve<R: GitRunner>(
     }
     let mut records = HashMap::new();
     let mut candidates = vec![];
+    let roadmap_path = root.join("docs/10_Planning_Roadmap/01_LIVING_ROADMAP.md");
+    let current_work_package = if roadmap_path.is_file() {
+        Some(load_roadmap_evidence(root)?.current_work_package)
+    } else {
+        None
+    };
     for entry in fs::read_dir(root.join("docs/60_Operations/work-packages")).map_err(|_| {
         err(
             "WORK_PACKAGE_SCHEMA_INVALID",
@@ -925,7 +1004,12 @@ fn resolve<R: GitRunner>(
             .path();
         if path.extension().and_then(|e| e.to_str()) == Some("md") {
             if let Ok(p) = parse_package(&path) {
-                if p.status == "AUTHORIZED" {
+                if p.status == "AUTHORIZED"
+                    && current_work_package
+                        .as_deref()
+                        .map(|current| current == p.id)
+                        .unwrap_or(true)
+                {
                     candidates.push(p.clone());
                 }
                 records.insert(p.id.clone(), p);
@@ -980,6 +1064,412 @@ fn production_service() -> ControlLoopService<ProductionGitRunner, LocalControlS
         production: true,
     }
 }
+
+fn authorization_path(state_root: &Path) -> PathBuf {
+    state_root.join("owner-authorization.json")
+}
+
+fn runtime_path(state_root: &Path) -> PathBuf {
+    state_root.join("codex-runtime.json")
+}
+
+fn read_authorization_record(
+    state_root: &Path,
+) -> Result<Option<OwnerAuthorizationRecord>, ControlLoopError> {
+    let path = authorization_path(state_root);
+    if !path.is_file() {
+        return Ok(None);
+    }
+    let content = fs::read_to_string(path).map_err(|_| {
+        err(
+            "AUTHORIZATION_UNAVAILABLE",
+            "authorization evidence is unreadable",
+        )
+    })?;
+    serde_json::from_str(&content).map(Some).map_err(|_| {
+        err(
+            "AUTHORIZATION_INVALID",
+            "authorization evidence is malformed",
+        )
+    })
+}
+
+fn write_json<T: Serialize>(path: &Path, value: &T) -> Result<(), ControlLoopError> {
+    let parent = path
+        .parent()
+        .ok_or_else(|| err("STATE_PATH_INVALID", "state path has no parent"))?;
+    fs::create_dir_all(parent)
+        .map_err(|_| err("STATE_WRITE_FAILED", "state directory cannot be created"))?;
+    let content = serde_json::to_string_pretty(value)
+        .map_err(|_| err("STATE_WRITE_FAILED", "state cannot be serialized"))?;
+    fs::write(path, content).map_err(|_| err("STATE_WRITE_FAILED", "state cannot be persisted"))
+}
+
+fn authorization_evidence<R: GitRunner>(
+    runner: &R,
+    repository_root: &Path,
+    state_root: &Path,
+    production: bool,
+) -> Result<OwnerAuthorizationEvidence, ControlLoopError> {
+    let record = read_authorization_record(state_root)?;
+    let Some(record) = record else {
+        return Ok(OwnerAuthorizationEvidence {
+            status: "NOT_AUTHORIZED".into(),
+            valid: false,
+            blocker: Some("OWNER_AUTHORIZATION_REQUIRED".into()),
+            record: None,
+        });
+    };
+    let repository = identity(runner, repository_root, production)?;
+    let remote = authority(runner, repository_root, production);
+    let package_path = repository_root
+        .join("docs/60_Operations/work-packages")
+        .join(format!("{}.md", record.work_package_id));
+    let package = parse_package(&package_path).map_err(|_| {
+        err(
+            "AUTHORIZATION_BINDING_INVALID",
+            "bound Work Package evidence is invalid",
+        )
+    })?;
+    let blocker = if package.status != "AUTHORIZED"
+        || package.owner_authorization != "AUTHORIZED_FOR_IMPLEMENTATION"
+    {
+        Some("WORK_PACKAGE_NOT_AUTHORIZED")
+    } else if remote.remote_main_sha.as_deref() != Some(record.authority_sha.as_str())
+        || package.authority_sha != record.authority_sha
+    {
+        Some("AUTHORITY_DRIFT")
+    } else if repository.current_branch.as_deref() != Some(record.branch.as_str()) {
+        Some("BRANCH_MISMATCH")
+    } else if repository.canonical_path != record.worktree {
+        Some("WORKTREE_MISMATCH")
+    } else {
+        None
+    };
+    Ok(OwnerAuthorizationEvidence {
+        status: if blocker.is_none() {
+            "AUTHORIZED_FOR_IMPLEMENTATION".into()
+        } else {
+            "NOT_AUTHORIZED".into()
+        },
+        valid: blocker.is_none(),
+        blocker: blocker.map(str::to_string),
+        record: Some(record),
+    })
+}
+
+fn start_allowed_authorization<R: GitRunner>(
+    runner: &R,
+    repository_root: &Path,
+    state_root: &Path,
+    production: bool,
+) -> Result<OwnerAuthorizationEvidence, ControlLoopError> {
+    let mut evidence = authorization_evidence(runner, repository_root, state_root, production)?;
+    if !evidence.valid {
+        return Ok(evidence);
+    }
+    let resolved = resolve(
+        runner,
+        repository_root,
+        production,
+        &ExecutionGuardSnapshot::default(),
+    )?;
+    let bound_id = evidence
+        .record
+        .as_ref()
+        .map(|record| record.work_package_id.as_str());
+    if resolved.decision == ResolverDecision::StartAllowed
+        && resolved
+            .work_package
+            .as_ref()
+            .map(|package| package.id.as_str())
+            == bound_id
+    {
+        evidence.status = "START_ALLOWED".into();
+    } else {
+        evidence.blocker = Some("RESOLVER_BLOCKED".into());
+    }
+    Ok(evidence)
+}
+
+fn authorize_owner<R: GitRunner>(
+    runner: &R,
+    repository_root: &Path,
+    state_root: &Path,
+    production: bool,
+    work_package_id: &str,
+    confirmed: bool,
+) -> Result<OwnerAuthorizationEvidence, ControlLoopError> {
+    if !confirmed {
+        return Err(err(
+            "OWNER_CONFIRMATION_REQUIRED",
+            "explicit Owner confirmation is required",
+        ));
+    }
+    let repository = identity(runner, repository_root, production)?;
+    let remote = authority(runner, repository_root, production);
+    if remote.status != AuthorityStatus::Verified {
+        return Err(err(
+            "AUTHORITY_UNAVAILABLE",
+            "remote Authority is not verified",
+        ));
+    }
+    if !repository.worktree_clean {
+        return Err(err(
+            "WORKTREE_DIRTY",
+            "worktree must be clean before authorization",
+        ));
+    }
+    let package = parse_package(
+        &repository_root
+            .join("docs/60_Operations/work-packages")
+            .join(format!("{work_package_id}.md")),
+    )
+    .map_err(|_| err("WORK_PACKAGE_SCHEMA_INVALID", "Work Package is invalid"))?;
+    let authority_sha = remote.remote_main_sha.unwrap_or_default();
+    if package.id != work_package_id
+        || package.status != "AUTHORIZED"
+        || package.owner_authorization != "AUTHORIZED_FOR_IMPLEMENTATION"
+        || package.authority_sha != authority_sha
+    {
+        return Err(err(
+            "WORK_PACKAGE_NOT_AUTHORIZED",
+            "formal Work Package authorization does not match Authority",
+        ));
+    }
+    let branch = repository
+        .current_branch
+        .ok_or_else(|| err("DETACHED_HEAD", "authorization requires a named branch"))?;
+    let record = OwnerAuthorizationRecord {
+        work_package_id: package.id,
+        authority_sha,
+        branch,
+        worktree: repository.canonical_path,
+        scope: "Codex-only migration, validation, independent review, scoped PR, exact-head CI, squash merge, and main-bound Human UAT artifact".into(),
+        allowed_capabilities: vec![
+            "REPOSITORY_SCOPED_EDIT".into(),
+            "STANDARD_VALIDATION".into(),
+            "INDEPENDENT_REVIEW".into(),
+            "SCOPED_PR".into(),
+            "EXACT_HEAD_CI".into(),
+            "SQUASH_MERGE".into(),
+            "BUILD_UAT_ARTIFACT".into(),
+        ],
+        forbidden_capabilities: vec![
+            "ARBITRARY_SHELL_UI".into(),
+            "FORCE_PUSH".into(),
+            "OPENSPEC_SYNC".into(),
+            "PRODUCTION_DEPLOY".into(),
+            "DESTRUCTIVE_DATABASE".into(),
+            "SECRETS_MUTATION".into(),
+            "HUMAN_UAT_SELF_PASS".into(),
+        ],
+        authorized_at: timestamp(),
+    };
+    write_json(&authorization_path(state_root), &record)?;
+    authorization_evidence(runner, repository_root, state_root, production)
+}
+
+fn default_runtime(authorization: &OwnerAuthorizationEvidence) -> CodexRuntimeObserver {
+    let phase = if authorization.status == "START_ALLOWED" {
+        CodexRuntimePhase::Idle
+    } else if authorization.valid {
+        CodexRuntimePhase::Blocked
+    } else {
+        CodexRuntimePhase::WaitingOwnerAuthorization
+    };
+    CodexRuntimeObserver {
+        engine: "Codex CLI".into(),
+        profile: "sol".into(),
+        active_work_package: authorization
+            .record
+            .as_ref()
+            .map(|record| record.work_package_id.clone()),
+        session_state: phase.clone(),
+        branch: authorization
+            .record
+            .as_ref()
+            .map(|record| record.branch.clone()),
+        worktree: authorization
+            .record
+            .as_ref()
+            .map(|record| record.worktree.clone()),
+        current_phase: phase,
+        last_activity: None,
+        current_task: None,
+        test_state: "UNKNOWN".into(),
+        review_state: "UNKNOWN".into(),
+        pull_request: None,
+        ci_state: "UNKNOWN".into(),
+        blocker: if authorization.status == "START_ALLOWED" {
+            None
+        } else if authorization.valid {
+            Some("RESOLVER_BLOCKED".into())
+        } else {
+            Some("OWNER_AUTHORIZATION_REQUIRED".into())
+        },
+        next_action: if authorization.status == "START_ALLOWED" {
+            "START".into()
+        } else if authorization.valid {
+            "RESOLVE_BLOCKER".into()
+        } else {
+            "AUTHORIZE_WORK_PACKAGE".into()
+        },
+        stop_after_current_step: false,
+    }
+}
+
+fn read_runtime(
+    state_root: &Path,
+    authorization: &OwnerAuthorizationEvidence,
+) -> Result<CodexRuntimeObserver, ControlLoopError> {
+    let path = runtime_path(state_root);
+    if !path.is_file() {
+        return Ok(default_runtime(authorization));
+    }
+    let content = fs::read_to_string(path)
+        .map_err(|_| err("RUNTIME_UNAVAILABLE", "Codex runtime state is unreadable"))?;
+    serde_json::from_str(&content)
+        .map_err(|_| err("RUNTIME_INVALID", "Codex runtime state is malformed"))
+}
+
+fn codex_prompt(record: &OwnerAuthorizationRecord) -> String {
+    format!(
+        "Execute formal Work Package {} within scope: {}. Preserve all forbidden capabilities: {}. Use formal repository evidence, run standard validation, and stop with truthful evidence if blocked. Do not widen scope.",
+        record.work_package_id,
+        record.scope,
+        record.forbidden_capabilities.join(", ")
+    )
+}
+
+fn spawn_codex(record: &OwnerAuthorizationRecord) -> Result<(), ControlLoopError> {
+    Command::new("codex")
+        .args([
+            "exec",
+            "-p",
+            "sol",
+            "-C",
+            &record.worktree,
+            "--sandbox",
+            "workspace-write",
+            "--ask-for-approval",
+            "never",
+            "--",
+            &codex_prompt(record),
+        ])
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+        .map(|_| ())
+        .map_err(|_| err("CODEX_START_FAILED", "Codex CLI could not be started"))
+}
+
+fn control_codex_runtime<R: GitRunner>(
+    runner: &R,
+    repository_root: &Path,
+    state_root: &Path,
+    production: bool,
+    action: CodexControlAction,
+) -> Result<CodexRuntimeObserver, ControlLoopError> {
+    let authorization =
+        start_allowed_authorization(runner, repository_root, state_root, production)?;
+    let mut runtime = read_runtime(state_root, &authorization)?;
+    match action {
+        CodexControlAction::Start | CodexControlAction::Retry => {
+            if authorization.status != "START_ALLOWED" {
+                runtime.current_phase = CodexRuntimePhase::WaitingOwnerAuthorization;
+                runtime.session_state = runtime.current_phase.clone();
+                runtime.blocker = authorization.blocker;
+                runtime.next_action = "AUTHORIZE_WORK_PACKAGE".into();
+            } else if !matches!(
+                runtime.current_phase,
+                CodexRuntimePhase::Idle
+                    | CodexRuntimePhase::Failed
+                    | CodexRuntimePhase::Blocked
+                    | CodexRuntimePhase::Paused
+                    | CodexRuntimePhase::WaitingOwnerAuthorization
+            ) {
+                return Err(err(
+                    "INVALID_RUNTIME_TRANSITION",
+                    "START is not allowed now",
+                ));
+            } else {
+                let record = authorization.record.ok_or_else(|| {
+                    err("OWNER_AUTHORIZATION_REQUIRED", "authorization is missing")
+                })?;
+                runtime.active_work_package = Some(record.work_package_id.clone());
+                runtime.branch = Some(record.branch.clone());
+                runtime.worktree = Some(record.worktree.clone());
+                runtime.current_phase = CodexRuntimePhase::Starting;
+                runtime.session_state = CodexRuntimePhase::Starting;
+                runtime.last_activity = Some(timestamp());
+                runtime.current_task = Some("启动受控 Codex 实现".into());
+                runtime.blocker = None;
+                runtime.next_action = "OBSERVE_CODEX_SESSION".into();
+                spawn_codex(&record)?;
+            }
+        }
+        CodexControlAction::Pause => {
+            if !matches!(
+                runtime.current_phase,
+                CodexRuntimePhase::Starting
+                    | CodexRuntimePhase::Running
+                    | CodexRuntimePhase::Testing
+                    | CodexRuntimePhase::Reviewing
+            ) {
+                return Err(err(
+                    "INVALID_RUNTIME_TRANSITION",
+                    "PAUSE is not allowed now",
+                ));
+            }
+            runtime.current_phase = CodexRuntimePhase::Paused;
+            runtime.session_state = CodexRuntimePhase::Paused;
+            runtime.last_activity = Some(timestamp());
+            runtime.next_action = "RESUME".into();
+        }
+        CodexControlAction::Resume => {
+            if runtime.current_phase != CodexRuntimePhase::Paused {
+                return Err(err(
+                    "INVALID_RUNTIME_TRANSITION",
+                    "RESUME is not allowed now",
+                ));
+            }
+            runtime.current_phase = CodexRuntimePhase::Running;
+            runtime.session_state = CodexRuntimePhase::Running;
+            runtime.last_activity = Some(timestamp());
+            runtime.next_action = "OBSERVE_CODEX_SESSION".into();
+        }
+        CodexControlAction::StopAfterCurrentStep => {
+            if !matches!(
+                runtime.current_phase,
+                CodexRuntimePhase::Starting
+                    | CodexRuntimePhase::Running
+                    | CodexRuntimePhase::Testing
+                    | CodexRuntimePhase::Reviewing
+            ) {
+                return Err(err(
+                    "INVALID_RUNTIME_TRANSITION",
+                    "STOP_AFTER_CURRENT_STEP is not allowed now",
+                ));
+            }
+            runtime.stop_after_current_step = true;
+            runtime.last_activity = Some(timestamp());
+            runtime.next_action = "STOP_AFTER_CURRENT_STEP".into();
+        }
+    }
+    write_json(&runtime_path(state_root), &runtime)?;
+    Ok(runtime)
+}
+
+fn app_state_root(app: &tauri::AppHandle) -> Result<PathBuf, ControlLoopError> {
+    app.path().app_data_dir().map_err(|_| {
+        err(
+            "STATE_PATH_INVALID",
+            "application data directory is unavailable",
+        )
+    })
+}
 #[tauri::command]
 fn read_repository_identity() -> Result<RepositoryIdentity, ControlLoopError> {
     production_service().read_identity()
@@ -1008,6 +1498,48 @@ fn read_roadmap_evidence() -> Result<RoadmapEvidence, ControlLoopError> {
     let root = service.root()?;
     load_roadmap_evidence(&root)
 }
+#[tauri::command]
+fn read_owner_authorization(
+    app: tauri::AppHandle,
+) -> Result<OwnerAuthorizationEvidence, ControlLoopError> {
+    let service = production_service();
+    let root = service.root()?;
+    start_allowed_authorization(&service.runner, &root, &app_state_root(&app)?, true)
+}
+#[tauri::command]
+fn authorize_work_package(
+    app: tauri::AppHandle,
+    work_package_id: String,
+    confirmed: bool,
+) -> Result<OwnerAuthorizationEvidence, ControlLoopError> {
+    let service = production_service();
+    let root = service.root()?;
+    authorize_owner(
+        &service.runner,
+        &root,
+        &app_state_root(&app)?,
+        true,
+        &work_package_id,
+        confirmed,
+    )
+}
+#[tauri::command]
+fn read_codex_runtime(app: tauri::AppHandle) -> Result<CodexRuntimeObserver, ControlLoopError> {
+    let service = production_service();
+    let root = service.root()?;
+    let state_root = app_state_root(&app)?;
+    let authorization = start_allowed_authorization(&service.runner, &root, &state_root, true)?;
+    read_runtime(&state_root, &authorization)
+}
+#[tauri::command]
+fn control_codex(
+    app: tauri::AppHandle,
+    action: CodexControlAction,
+) -> Result<CodexRuntimeObserver, ControlLoopError> {
+    let service = production_service();
+    let root = service.root()?;
+    control_codex_runtime(&service.runner, &root, &app_state_root(&app)?, true, action)
+}
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -1017,7 +1549,11 @@ pub fn run() {
             evaluate_workspace_sync,
             sync_workspace,
             resolve_next_work_package,
-            read_roadmap_evidence
+            read_roadmap_evidence,
+            read_owner_authorization,
+            authorize_work_package,
+            read_codex_runtime,
+            control_codex
         ])
         .run(tauri::generate_context!())
         .expect("error while running AI Control Center");
@@ -1401,6 +1937,47 @@ mod tests {
         assert_eq!(parse_package(&p).unwrap().status, "CLOSED");
     }
     #[test]
+    fn codex_runtime_without_authorization_fails_closed() {
+        let state = temp("codex-runtime");
+        let evidence = OwnerAuthorizationEvidence {
+            status: "NOT_AUTHORIZED".into(),
+            valid: false,
+            blocker: Some("OWNER_AUTHORIZATION_REQUIRED".into()),
+            record: None,
+        };
+        let runtime = read_runtime(&state, &evidence).unwrap();
+        assert_eq!(runtime.engine, "Codex CLI");
+        assert_eq!(runtime.profile, "sol");
+        assert_eq!(
+            runtime.current_phase,
+            CodexRuntimePhase::WaitingOwnerAuthorization
+        );
+        assert_eq!(
+            runtime.blocker.as_deref(),
+            Some("OWNER_AUTHORIZATION_REQUIRED")
+        );
+        assert_eq!(runtime.next_action, "AUTHORIZE_WORK_PACKAGE");
+    }
+    #[test]
+    fn codex_runtime_contract_contains_only_bounded_actions() {
+        let actions = [
+            CodexControlAction::Start,
+            CodexControlAction::Pause,
+            CodexControlAction::Resume,
+            CodexControlAction::StopAfterCurrentStep,
+            CodexControlAction::Retry,
+        ];
+        assert_eq!(actions.len(), 5);
+        assert_eq!(
+            serde_json::to_string(&CodexRuntimePhase::ReadyForHumanUat).unwrap(),
+            "\"READY_FOR_HUMAN_UAT\""
+        );
+        assert_eq!(
+            serde_json::to_string(&CodexControlAction::StopAfterCurrentStep).unwrap(),
+            "\"STOP_AFTER_CURRENT_STEP\""
+        );
+    }
+    #[test]
     fn parser_unknown_field_rejects() {
         let p = temp("wp").join("wp.md");
         fs::write(&p, "---\nschema: aicc-work-package/v1\nunknown: x\n---\n").unwrap();
@@ -1457,7 +2034,7 @@ mod tests {
         fs::create_dir_all(root.join("docs/60_Operations/work-packages")).unwrap();
         fs::write(
             root.join("docs/10_Planning_Roadmap/01_LIVING_ROADMAP.md"),
-            "# AI Control Center Living Roadmap\n\n## Current milestone\n\n`M2 — Authority And Workspace Control`\n\n## Authority\n\nCurrent Authority: `authority`\n\nClosed Work Packages: `AICC-CLOSED`\n\nCurrent Work Package: `AICC-POST-MERGE-UAT-001-R2`\n\nNext Work Packages: `001B OpenSpec Binding`, `001C OpenCode Runtime Observer`\n\n## Milestones\n\n### M1 — Visible Foundation\n\nWork Packages:\n`AICC-CLOSED`\n\n### M2 — Authority And Workspace Control\n\nWork Packages:\n`AICC-POST-MERGE-UAT-001-R2`,\n`AICC-CONTROL-LOOP-001B`\n\n### M3 — Runtime\n\nFuture Work Packages:\n`AICC-CONTROL-LOOP-001C`,\n`AICC-CONTROL-LOOP-001D`\n\n## Delivery sequence\n\n1. AICC-CLOSED — closed foundation.\n2. AICC-POST-MERGE-UAT-001-R2 — current Human UAT remediation.\n3. 001B — OpenSpec Binding (planned, owner authorization not authorized).\n\n## Current safety state\n\nThe application remains fail closed.",
+            "# AI Control Center Living Roadmap\n\n## Current milestone\n\n`M2 — Authority And Workspace Control`\n\n## Authority\n\nCurrent Authority: `authority`\n\nClosed Work Packages: `AICC-CLOSED`\n\nCurrent Work Package: `AICC-POST-MERGE-UAT-001-R2`\n\nNext Work Packages: `001B OpenSpec Binding`, `001C Codex Runtime Observer`\n\n## Milestones\n\n### M1 — Visible Foundation\n\nWork Packages:\n`AICC-CLOSED`\n\n### M2 — Authority And Workspace Control\n\nWork Packages:\n`AICC-POST-MERGE-UAT-001-R2`,\n`AICC-CONTROL-LOOP-001B`\n\n### M3 — Runtime\n\nFuture Work Packages:\n`AICC-CONTROL-LOOP-001C`,\n`AICC-CONTROL-LOOP-001D`\n\n## Delivery sequence\n\n1. AICC-CLOSED — closed foundation.\n2. AICC-POST-MERGE-UAT-001-R2 — current Human UAT remediation.\n3. 001B — OpenSpec Binding (planned, owner authorization not authorized).\n\n## Current safety state\n\nThe application remains fail closed.",
         )
         .unwrap();
         let package = "---\nschema: aicc-work-package/v1\nid: AICC-POST-MERGE-UAT-001-R2\ntitle: R2\nstatus: AUTHORIZED\nauthority_sha: authority\nopenspec_change: current\ndependencies: []\nprevious_run_status: HUMAN_UAT_FAIL\nowner_authorization: AUTHORIZED_FOR_IMPLEMENTATION\n---\n";

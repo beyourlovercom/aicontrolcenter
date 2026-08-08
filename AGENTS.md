@@ -4,7 +4,7 @@
 
 `origin/main` exact SHA and formal governance documents are authoritative.
 
-OpenSpec, Oh My OpenCode Slim, OpenCode sessions, runtime state, dashboards, local workspaces, caches, and agent output are non-authoritative.
+OpenSpec, Codex sessions, runtime state, dashboards, local workspaces, caches, and agent output are non-authoritative.
 
 No tool, agent, artifact, task checkbox, local session, or application state may authorize its own execution.
 
@@ -21,7 +21,7 @@ No tool, agent, artifact, task checkbox, local session, or application state may
 - `git clean`.
 - Automatic conflict resolution.
 - Automatic rebase.
-- Product-runtime Push, PR creation, merge, migration, deployment, or release.
+- Production deployment, destructive database operations, secrets mutation, security architecture changes, and irreversible external writes without a separate Owner Gate.
 - Treating unavailable or unknown Authority as verified.
 
 ## Governed development automation
@@ -32,7 +32,7 @@ Repository development automation may create commits, push a feature branch, and
 - the branch and Authority SHA are fixed;
 - the changes remain inside the authorized scope;
 - no force operation is used;
-- Ready for Review and Merge remain separate Owner Gates.
+- Ready for Review and Merge remain separate Owner Gates unless a named Work Package explicitly authorizes normal-risk autonomous delivery through exact-head CI and squash merge.
 
 AICC-CONTROL-LOOP-001A already has this whole-Work-Package authorization.
 
@@ -54,7 +54,7 @@ Owner-triggered Workspace Sync:
 - must revalidate immediately before execution;
 - must not reset, clean, rebase, force, resolve conflicts, push, or merge a PR.
 
-## Work Package Resolver
+## Work Package Resolver And Codex Runtime
 
 The resolver may calculate and display `START_ALLOWED` or one or more explicit blocker codes.
 
@@ -62,35 +62,34 @@ The resolver must not:
 
 - authorize a Work Package;
 - modify its status;
-- run OpenSpec Apply;
-- start OpenCode;
-- start an OmO Slim agent;
+- run OpenSpec Apply without the named Work Package capability;
+- start Codex without a matching persisted Owner authorization;
 - acquire a real Writer Lock;
 - execute implementation.
+
+The governed Codex runtime may expose only typed operations. It must bind Owner authorization to the Work Package ID, Authority SHA, branch, worktree, scope, allowed capabilities, forbidden capabilities, and timestamp. It must never accept arbitrary shell input from the Owner UI.
 
 ## Current implementation phase
 
 Current milestone: `M2 — Authority And Workspace Control`
 
-Current Work Package: `AICC-CONTROL-LOOP-001A`
+Current Work Package: `AICC-CODEX-ONLY-MIGRATION-001`
 
-Authority base: `dc6d20ec9fb9d33683ad43148d10a5cb5c667552`
+Authority base: `fcd41386fafd6ee2083e73cdee71bee68a3a1e09`
 
 This Work Package may introduce:
 
-- fixed typed Git process execution;
-- read-only remote Authority checks;
-- guarded Owner-triggered Workspace Sync;
-- machine-readable Work Package parsing;
-- next authorized Work Package resolution;
-- corresponding read and control UI.
+- Codex-only roadmap and application architecture;
+- persisted, evidence-bound Owner authorization;
+- typed Codex runtime state and bounded controls;
+- Codex CLI execution contracts using the configured `sol` profile;
+- independent review, PR, exact-head CI, squash merge, and UAT artifact phases for normal-risk scoped delivery;
+- corresponding Chinese-first Owner UI and tests.
 
 This Work Package must not introduce:
 
 - arbitrary command execution;
-- OpenCode Runtime control;
-- product OmO Slim execution;
 - OpenSpec Sync;
-- automatic Apply;
-- automatic Work Package start;
-- product Push, PR, Merge, migration, deployment, or release.
+- automatic Work Package authorization;
+- production deployment, destructive database operations, secrets mutation, security architecture changes, or irreversible external writes;
+- Human UAT PASS without human evidence.

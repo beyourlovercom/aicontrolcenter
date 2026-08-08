@@ -1,9 +1,8 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { agents } from './lib/data';
-  import { cancelSync as cancelledSync, emptyState, loadControlLoop, ownerBlocker, repositoryStatusEvidence, requestSync, syncAllowed, syncOutcome, syncState as getSyncState, syncWorkspace, type ControlLoopState, type RoadmapEntry, type SyncState } from './lib/controlLoop';
+  import { cancelSync as cancelledSync, authorizeWorkPackage, controlCodex, emptyState, loadControlLoop, ownerBlocker, repositoryStatusEvidence, requestSync, runtimePhaseCopy, syncAllowed, syncOutcome, syncState as getSyncState, syncWorkspace, type CodexControlAction, type ControlLoopState, type RoadmapEntry, type SyncState } from './lib/controlLoop';
 
-  type Tab = 'overview' | 'openspec' | 'agents' | 'validation';
+  type Tab = 'overview' | 'openspec' | 'codex' | 'validation';
 
   type WorkItem = RoadmapEntry & { key: string; summary: string; gate: string; progress: string; progressPercent: number; parent: string; dependency: string; change: string; path: string; spec: string; task: string; run: string; criteria: string[] };
   let selected: WorkItem = { key: 'loading', id: 'LOADING', title: '正在读取正式路线图', summary: '正在读取仓库证据。', status: 'CURRENT', authorization: 'CHECKING', gate: 'CHECKING', progress: '0 / 0', progressPercent: 0, parent: '项目路线图', dependency: 'unknown', change: 'unknown', path: 'docs/10_Planning_Roadmap/01_LIVING_ROADMAP.md', spec: 'unknown', task: 'unknown', run: 'unknown', criteria: [] };
@@ -13,6 +12,8 @@
   let toast = '';
   let controlLoop: ControlLoopState = emptyState;
   let syncState: SyncState = { kind: 'idle' };
+  let authorizationConfirming = false;
+  let controlPending = false;
   $: syncCode = controlLoop.evaluation?.blockers[0] ?? getSyncState(controlLoop.evaluation);
   $: syncCopy = ownerBlocker(syncCode);
   $: repositoryStatus = repositoryStatusEvidence(controlLoop);
@@ -20,10 +21,10 @@
   const evidence = [
     ['C', '项目章程 Project Charter', 'docs/00_Governance/01_PROJECT_CHARTER.md'],
     ['R', '在用路线图 Living Roadmap', 'docs/10_Planning_Roadmap/01_LIVING_ROADMAP.md'],
-    ['W', '当前工作包 Current Work Package', 'docs/60_Operations/work-packages/AICC-POST-MERGE-UAT-001.md'],
+    ['W', '当前工作包 Current Work Package', 'docs/60_Operations/work-packages/AICC-CODEX-ONLY-MIGRATION-001.md'],
     ['P', 'OpenSpec 提案 Proposal', 'openspec/changes/aicc-visible-slice-001/proposal.md'],
     ['T', 'OpenSpec 任务 Tasks', 'openspec/changes/aicc-visible-slice-001/tasks.md'],
-    ['OM', 'OmO Slim 配置 Config', '.opencode/oh-my-opencode-slim.json']
+    ['CX', 'Codex CLI 配置 Config', 'Codex profile: sol']
   ];
 
   $: formalItems = (controlLoop.roadmap?.entries ?? []).map((entry) => ({
@@ -66,6 +67,39 @@
     announce(controlLoop.status === 'VERIFIED' ? '远端 Authority 已验证；未执行 fetch。' : `Authority 状态：${controlLoop.status}`);
   }
 
+  function requestAuthorization() {
+    authorizationConfirming = true;
+  }
+
+  function cancelAuthorization() {
+    authorizationConfirming = false;
+  }
+
+  async function confirmAuthorization() {
+    const workPackageId = controlLoop.roadmap?.currentWorkPackage;
+    if (!workPackageId) return;
+    try {
+      controlLoop = { ...controlLoop, authorization: await authorizeWorkPackage(workPackageId, true) };
+      authorizationConfirming = false;
+      await refresh();
+    } catch (error) {
+      authorizationConfirming = false;
+      announce(`授权被阻止：${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  async function runCodexControl(action: CodexControlAction) {
+    if (controlPending) return;
+    controlPending = true;
+    try {
+      controlLoop = { ...controlLoop, codexRuntime: await controlCodex(action) };
+    } catch (error) {
+      announce(`Codex 操作被阻止：${error instanceof Error ? error.message : String(error)}`);
+    } finally {
+      controlPending = false;
+    }
+  }
+
   async function syncLocalMain() {
     if (!syncAllowed(controlLoop.evaluation)) return;
     syncState = requestSync(controlLoop.evaluation);
@@ -96,7 +130,7 @@
       <div class="brand-mark">✓</div>
       <div>
         <div class="brand-name">AI Control Center</div>
-        <div class="brand-subtitle">Authority · OpenSpec · OmO Slim</div>
+        <div class="brand-subtitle">Authority · OpenSpec · Codex CLI</div>
       </div>
     </div>
 
@@ -157,7 +191,7 @@
         <div class="security-card">
           <div class="security-label">当前安全模式</div>
           <strong>只读 V1</strong>
-          <p>OpenSpec 只解析；OmO Slim 只读取配置；Agent、Apply 与仓库写入全部禁用。</p>
+          <p>OpenSpec 只解析；Codex 仅在 Owner 授权和固定能力范围内运行；任意 shell、越权写入和自动授权全部禁用。</p>
         </div>
       </div>
     </aside>
@@ -169,11 +203,26 @@
           <h1>{selected.title}</h1>
           <p>{selected.summary}</p>
         </div>
-        <button class="primary-button" type="button" onclick={() => announce(`原型操作：打开 ${selected.id}`)}>打开正式 WP</button>
+        {#if controlLoop.authorization?.valid}
+          <span class="accent-chip">AUTHORIZED_FOR_IMPLEMENTATION</span>
+        {:else}
+          <button class="primary-button" type="button" onclick={requestAuthorization}>授权本工作包</button>
+        {/if}
       </div>
 
+      {#if authorizationConfirming}
+        <div class="confirm-box authorization-box" role="dialog" aria-label="确认工作包授权">
+          <strong>确认授权本工作包？</strong>
+          <span>授权将绑定 Work Package ID、Authority SHA、当前分支、工作区、范围、允许/禁止能力与时间戳。不会启动 Codex。</span>
+          <div class="confirm-actions">
+            <button class="secondary-button" type="button" onclick={cancelAuthorization}>取消</button>
+            <button class="primary-button" type="button" onclick={confirmAuthorization}>确认授权</button>
+          </div>
+        </div>
+      {/if}
+
       <nav class="tabs" aria-label="工作包详情">
-        {#each [['overview', '概览'], ['openspec', 'OpenSpec'], ['agents', 'Agent 状态'], ['validation', '验证']] as tab}
+        {#each [['overview', '概览'], ['openspec', 'OpenSpec'], ['codex', 'Codex 状态'], ['validation', '验证']] as tab}
           <button class:active={activeTab === tab[0]} type="button" onclick={() => activeTab = tab[0] as Tab}>{tab[1]}</button>
         {/each}
       </nav>
@@ -208,6 +257,21 @@
               <div><dt>后续工作包</dt><dd>{controlLoop.roadmap?.nextWorkPackages.join(', ') ?? 'unknown'}</dd></div>
               <div><dt>远端策略</dt><dd>只读查询 remote main，不执行 git fetch</dd></div>
             </dl>
+          </article>
+
+          <article class="content-card">
+            <div class="section-title-row"><h3>Owner 授权证据</h3><span class="accent-chip">{controlLoop.authorization?.status ?? 'UNKNOWN'}</span></div>
+            <dl class="contract-grid">
+              <div><dt>Work Package</dt><dd class="mono">{controlLoop.authorization?.record?.workPackageId ?? 'UNKNOWN'}</dd></div>
+              <div><dt>Authority SHA</dt><dd class="mono">{controlLoop.authorization?.record?.authoritySha ?? 'UNKNOWN'}</dd></div>
+              <div><dt>分支</dt><dd>{controlLoop.authorization?.record?.branch ?? 'UNKNOWN'}</dd></div>
+              <div><dt>工作区</dt><dd class="mono">{controlLoop.authorization?.record?.worktree ?? 'UNKNOWN'}</dd></div>
+              <div><dt>范围</dt><dd>{controlLoop.authorization?.record?.scope ?? 'UNKNOWN'}</dd></div>
+              <div><dt>允许能力</dt><dd class="mono">{controlLoop.authorization?.record?.allowedCapabilities.join(', ') ?? 'UNKNOWN'}</dd></div>
+              <div><dt>禁止能力</dt><dd class="mono">{controlLoop.authorization?.record?.forbiddenCapabilities.join(', ') ?? 'UNKNOWN'}</dd></div>
+              <div><dt>授权时间</dt><dd>{controlLoop.authorization?.record?.authorizedAt ?? 'UNKNOWN'}</dd></div>
+            </dl>
+            {#if controlLoop.authorization?.blocker}<div class="sync-status failure" role="status">{controlLoop.authorization.blocker}</div>{/if}
           </article>
 
           <article class="content-card">
@@ -298,27 +362,36 @@
             <div class="policy-row"><span>Archive</span><b class="deny">OWNER CLOSURE ONLY</b></div>
           </article>
         </section>
-      {:else if activeTab === 'agents'}
+      {:else if activeTab === 'codex'}
         <section class="tab-panel">
           <div class="metric-grid">
-            <article class="metric-card"><div class="eyebrow">OmO Slim</div><div class="metric-value">DETECTED</div><div class="metric-note">Configuration view</div></article>
-            <article class="metric-card"><div class="eyebrow">当前预设</div><div class="metric-value">PROJECT CONFIG</div><div class="metric-note">7 个已配置 Agent</div></article>
-            <article class="metric-card"><div class="eyebrow">Runtime 状态</div><div class="metric-value">OFF</div><div class="metric-note">无会话 · 无写入锁</div></article>
+            <article class="metric-card"><div class="eyebrow">Codex 引擎</div><div class="metric-value">{controlLoop.codexRuntime?.engine ?? 'Codex CLI'}</div><div class="metric-note">profile: {controlLoop.codexRuntime?.profile ?? 'sol'}</div></article>
+            <article class="metric-card"><div class="eyebrow">当前运行状态</div><div class="metric-value">{controlLoop.codexRuntime ? runtimePhaseCopy(controlLoop.codexRuntime.currentPhase) : '未知'}</div><div class="metric-note mono">{controlLoop.codexRuntime?.currentPhase ?? 'UNKNOWN'}</div></article>
+            <article class="metric-card"><div class="eyebrow">当前任务</div><div class="metric-value">{controlLoop.codexRuntime?.currentTask ?? '未知'}</div><div class="metric-note">不显示未观察到的运行证据</div></article>
           </div>
 
           <article class="content-card">
-            <div class="section-title-row"><h3>OmO Slim Agent 团队</h3><span class="accent-chip">配置视图</span></div>
-            <div class="agent-grid">
-              {#each agents as agent}
-                <div class="agent-card">
-                  <div class="agent-top"><span class="agent-avatar">{agent[0]}</span><div><strong>{agent[1]}</strong><span>{agent[2]}</span></div></div>
-                  <div class="agent-tags"><span>{agent[3]}</span><span>{agent[4]}</span></div>
-                </div>
+            <div class="section-title-row"><h3>Codex 运行观察</h3><span class="accent-chip">{controlLoop.codexRuntime?.sessionState ?? 'UNKNOWN'}</span></div>
+            <dl class="contract-grid">
+              <div><dt>当前工作包</dt><dd class="mono">{controlLoop.codexRuntime?.activeWorkPackage ?? 'UNKNOWN'}</dd></div>
+              <div><dt>分支</dt><dd>{controlLoop.codexRuntime?.branch ?? 'UNKNOWN'}</dd></div>
+              <div><dt>工作区</dt><dd class="mono">{controlLoop.codexRuntime?.worktree ?? 'UNKNOWN'}</dd></div>
+              <div><dt>最后活动</dt><dd>{controlLoop.codexRuntime?.lastActivity ?? 'UNKNOWN'}</dd></div>
+              <div><dt>测试状态</dt><dd class="mono">{controlLoop.codexRuntime?.testState ?? 'UNKNOWN'}</dd></div>
+              <div><dt>独立审查</dt><dd class="mono">{controlLoop.codexRuntime?.reviewState ?? 'UNKNOWN'}</dd></div>
+              <div><dt>PR</dt><dd class="mono">{controlLoop.codexRuntime?.pullRequest ?? 'UNKNOWN'}</dd></div>
+              <div><dt>CI 状态</dt><dd class="mono">{controlLoop.codexRuntime?.ciState ?? 'UNKNOWN'}</dd></div>
+              <div><dt>阻塞</dt><dd class="mono">{controlLoop.codexRuntime?.blocker ?? 'NONE'}</dd></div>
+              <div><dt>下一步</dt><dd>{controlLoop.codexRuntime?.nextAction ?? 'UNKNOWN'}</dd></div>
+            </dl>
+            <div class="runtime-controls">
+              {#each [['START','启动 Codex'],['PAUSE','暂停'],['RESUME','恢复'],['STOP_AFTER_CURRENT_STEP','当前步骤后停止'],['RETRY','重试']] as action}
+                <button class="secondary-button" type="button" disabled={controlPending} onclick={() => runCodexControl(action[0] as CodexControlAction)}>{action[1]}</button>
               {/each}
             </div>
           </article>
 
-          <div class="callout"><strong>Capability-based Policy：</strong>只读工具调用可进入并行 Read Lanes；任何可能修改仓库的工具调用，无论由哪个 Agent 发起，都必须进入唯一 Write Lane 并先取得 Writer Lock。当前 V1 全部 Agent 关闭。</div>
+          <div class="callout"><strong>Codex 能力策略：</strong>Codex CLI 使用固定 profile `sol` 和预定义能力。Owner UI 不接受 shell 文本；任何仓库写入必须保持唯一 Writer Lock、范围绑定和独立审查。</div>
         </section>
       {:else}
         <section class="tab-panel">
@@ -329,7 +402,7 @@
                 ['01','Authority 关卡','远端 main 与正式 WP 已检查','PASS','pass'],
                 ['02','OpenSpec 解析','工件与任务图已检测','PASS','pass'],
                 ['03','Owner 授权','Apply 或 Runtime 前必须授权','WAITING','wait'],
-                ['04','OmO 委派计划','并行读取，单一写入通道','LOCKED','locked'],
+                ['04','Codex 委派计划','并行读取，单一写入通道','LOCKED','locked'],
                 ['05','实现与测试','只读 V1 中已禁用','LOCKED','locked'],
                 ['06','独立审查','独立证据合同','LOCKED','locked'],
                 ['07','Owner 交接','停止于 WAITING_OWNER_ACCEPTANCE','LOCKED','locked']
@@ -363,7 +436,7 @@
 
       <div class="section-title-row stack-heading"><h3>执行状态</h3><span class="secondary-note">只读探测</span></div>
       <div class="stack-list">
-        {#each [['OS','OpenSpec','已解析正式工件','DETECTED'],['OM','OmO Slim','已解析预设与 Agent','DETECTED'],['OC','OpenCode','Runtime 未启动','AVAILABLE'],['RN','Active Run','无绑定会话','NONE'],['WL','Writer Lock','写入通道已禁用','NOT HELD']] as item}
+        {#each [['OS','OpenSpec','已解析正式工件','DETECTED'],['CX','Codex CLI','profile: sol · 未启动','AVAILABLE'],['RN','Codex Run','无绑定会话','NONE'],['WL','Writer Lock','写入通道已禁用','NOT HELD']] as item}
           <div class="stack-row"><span class="stack-icon">{item[0]}</span><div><strong>{item[1]}</strong><span>{item[2]}</span></div><b>{item[3]}</b></div>
         {/each}
       </div>
@@ -373,13 +446,13 @@
         {#each evidence as file}
           <button type="button" onclick={() => announce(`原型操作：打开 ${file[1]}`)}>
             <span class="stack-icon">{file[0]}</span>
-            <span><strong>{file[1]}</strong><small>{file[0] === 'W' ? 'docs/60_Operations/work-packages/AICC-POST-MERGE-UAT-001.md' : file[2]}</small></span>
+            <span><strong>{file[1]}</strong><small>{file[2]}</small></span>
             <b>›</b>
           </button>
         {/each}
       </div>
 
-      <div class="callout compact"><strong>Authority first：</strong>OpenSpec、OmO Slim 和 Runtime 无权改变正式授权；发生冲突时停止并显示 AUTHORITY_DRIFT。</div>
+      <div class="callout compact"><strong>Authority first：</strong>OpenSpec 与 Codex Runtime 无权改变正式授权；发生冲突时停止并显示 AUTHORITY_DRIFT。</div>
     </aside>
   </div>
 

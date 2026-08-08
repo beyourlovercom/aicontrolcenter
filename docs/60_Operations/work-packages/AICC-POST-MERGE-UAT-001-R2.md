@@ -2,7 +2,7 @@
 schema: aicc-work-package/v1
 id: AICC-POST-MERGE-UAT-001-R2
 title: Human UAT Remediation R2 — Roadmap, Sync, Resolver, and Owner UI
-status: AUTHORIZED
+status: BLOCKED
 authority_sha: 7f72b0a32013c1fd0ee410199e41eb1b3f9bc935
 openspec_change: aicc-post-merge-uat-001-r2
 dependencies:

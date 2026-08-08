@@ -3,6 +3,8 @@ import { invoke } from '@tauri-apps/api/core';
 export type AuthorityStatus = 'CHECKING' | 'VERIFIED' | 'DRIFT' | 'UNAVAILABLE';
 export type ResolverDecision = 'START_ALLOWED' | 'BLOCKED';
 export type Blocker = string;
+export type CodexRuntimePhase = 'IDLE' | 'WAITING_OWNER_AUTHORIZATION' | 'STARTING' | 'RUNNING' | 'TESTING' | 'REVIEWING' | 'PR_OPEN' | 'CI_RUNNING' | 'MERGING' | 'BUILDING_UAT' | 'READY_FOR_HUMAN_UAT' | 'BLOCKED' | 'FAILED' | 'PAUSED';
+export type CodexControlAction = 'START' | 'PAUSE' | 'RESUME' | 'STOP_AFTER_CURRENT_STEP' | 'RETRY';
 
 export type RepositoryIdentity = {
   canonicalPath: string;
@@ -33,7 +35,10 @@ export type ResolverResult = { decision: ResolverDecision; workPackage: WorkPack
 export type RoadmapEntry = { id: string; title: string; status: string; authorization: string; milestone?: string };
 export type RoadmapMilestone = { id: string; title: string; workPackages: string[]; futureItems: string[]; progressPercent: number };
 export type RoadmapEvidence = { project: string; currentMilestone: string; authoritySha: string; currentWorkPackage: string; closedWorkPackages: string[]; nextWorkPackages: string[]; progressPercent: number; milestones: RoadmapMilestone[]; entries: RoadmapEntry[] };
-export type ControlLoopState = { identity: RepositoryIdentity | null; authority: RemoteAuthority | null; evaluation: WorkspaceEvaluation | null; resolver: ResolverResult | null; roadmap: RoadmapEvidence | null; status: AuthorityStatus; error: string | null };
+export type OwnerAuthorizationRecord = { workPackageId: string; authoritySha: string; branch: string; worktree: string; scope: string; allowedCapabilities: string[]; forbiddenCapabilities: string[]; authorizedAt: string };
+export type OwnerAuthorizationEvidence = { status: 'NOT_AUTHORIZED' | 'AUTHORIZED_FOR_IMPLEMENTATION' | 'START_ALLOWED'; valid: boolean; blocker: string | null; record: OwnerAuthorizationRecord | null };
+export type CodexRuntimeObserver = { engine: 'Codex CLI'; profile: 'sol'; activeWorkPackage: string | null; sessionState: CodexRuntimePhase; branch: string | null; worktree: string | null; currentPhase: CodexRuntimePhase; lastActivity: string | null; currentTask: string | null; testState: string; reviewState: string; pullRequest: string | null; ciState: string; blocker: string | null; nextAction: string; stopAfterCurrentStep: boolean };
+export type ControlLoopState = { identity: RepositoryIdentity | null; authority: RemoteAuthority | null; evaluation: WorkspaceEvaluation | null; resolver: ResolverResult | null; roadmap: RoadmapEvidence | null; authorization: OwnerAuthorizationEvidence | null; codexRuntime: CodexRuntimeObserver | null; status: AuthorityStatus; error: string | null };
 
 export type RepositoryStatusEvidence = {
   localHead: string;
@@ -44,7 +49,7 @@ export type RepositoryStatusEvidence = {
   nextWpGate: ResolverDecision | 'UNKNOWN';
 };
 
-export const emptyState: ControlLoopState = { identity: null, authority: null, evaluation: null, resolver: null, roadmap: null, status: 'CHECKING', error: null };
+export const emptyState: ControlLoopState = { identity: null, authority: null, evaluation: null, resolver: null, roadmap: null, authorization: null, codexRuntime: null, status: 'CHECKING', error: null };
 
 export type SyncState =
   | { kind: 'idle' }
@@ -98,6 +103,13 @@ export function ownerBlocker(blocker: string): { reason: string; nextStep: strin
 export function resolverDecision(result: ResolverResult | null): ResolverDecision | 'UNKNOWN' { return result?.decision ?? 'UNKNOWN'; }
 export function hasRuntimeStartAction(): boolean { return false; }
 
+export function runtimePhaseCopy(phase: CodexRuntimePhase): string {
+  const copy: Record<CodexRuntimePhase, string> = {
+    IDLE: '空闲', WAITING_OWNER_AUTHORIZATION: '等待 Owner 授权', STARTING: '启动中', RUNNING: '运行中', TESTING: '测试中', REVIEWING: '审查中', PR_OPEN: 'PR 已创建', CI_RUNNING: 'CI 运行中', MERGING: '合并中', BUILDING_UAT: '构建 UAT 中', READY_FOR_HUMAN_UAT: '准备 Human UAT', BLOCKED: '已阻塞', FAILED: '失败', PAUSED: '已暂停'
+  };
+  return copy[phase];
+}
+
 export function shortSha(sha: string | null | undefined): string {
   return sha ? sha.slice(0, 7) : 'UNKNOWN';
 }
@@ -118,15 +130,17 @@ function inTauri(): boolean { return typeof window !== 'undefined' && '__TAURI_I
 export async function loadControlLoop(): Promise<ControlLoopState> {
   if (!inTauri()) return { ...emptyState, status: 'UNAVAILABLE', error: 'Tauri runtime unavailable' };
   try {
-    const guards = { activeOpenCodeRun: false, writerLockHeld: false, unsavedDiff: false, previousRunOpen: false };
-    const [identity, authority, evaluation, resolver, roadmap] = await Promise.all([
+    const guards = { activeCodexRun: false, writerLockHeld: false, unsavedDiff: false, previousRunOpen: false };
+    const [identity, authority, evaluation, resolver, roadmap, authorization, codexRuntime] = await Promise.all([
       invoke<RepositoryIdentity>('read_repository_identity'),
       invoke<RemoteAuthority>('check_remote_authority'),
       invoke<WorkspaceEvaluation>('evaluate_workspace_sync'),
       invoke<ResolverResult>('resolve_next_work_package'),
-      invoke<RoadmapEvidence>('read_roadmap_evidence')
+      invoke<RoadmapEvidence>('read_roadmap_evidence'),
+      invoke<OwnerAuthorizationEvidence>('read_owner_authorization'),
+      invoke<CodexRuntimeObserver>('read_codex_runtime')
     ]);
-    return { identity, authority, evaluation, resolver, roadmap, status: authorityStatus(authority.status), error: null };
+    return { identity, authority, evaluation, resolver, roadmap, authorization, codexRuntime, status: authorityStatus(authority.status), error: null };
   } catch (error) {
     return { ...emptyState, status: 'UNAVAILABLE', error: error instanceof Error ? error.message : String(error) };
   }
@@ -135,4 +149,14 @@ export async function loadControlLoop(): Promise<ControlLoopState> {
 export async function syncWorkspace(): Promise<{ success: boolean; actions: string[]; error: string | null }> {
   if (!inTauri()) throw new Error('Tauri runtime unavailable');
   return invoke('sync_workspace', { confirmed: true });
+}
+
+export async function authorizeWorkPackage(workPackageId: string, confirmed: boolean): Promise<OwnerAuthorizationEvidence> {
+  if (!inTauri()) throw new Error('Tauri runtime unavailable');
+  return invoke('authorize_work_package', { workPackageId, confirmed });
+}
+
+export async function controlCodex(action: CodexControlAction): Promise<CodexRuntimeObserver> {
+  if (!inTauri()) throw new Error('Tauri runtime unavailable');
+  return invoke('control_codex', { action });
 }
