@@ -651,43 +651,69 @@ fn roadmap_line(content: &str, label: &str) -> String {
         .unwrap_or_else(|| "UNKNOWN".into())
 }
 
-fn delivery_work_packages(content: &str) -> Vec<String> {
-    content
-        .lines()
-        .filter_map(|line| {
-            let trimmed = line.trim_start();
-            let (_, description) = trimmed.split_once(". ")?;
-            if !trimmed.chars().next()?.is_ascii_digit() {
-                return None;
+fn parse_milestones(content: &str) -> Result<Vec<RoadmapMilestone>, ControlLoopError> {
+    let mut lines = content.lines();
+    if !lines.by_ref().any(|line| line.trim() == "## Milestones") {
+        return Err(err("ROADMAP_HIERARCHY_INVALID", "Milestones section is missing"));
+    }
+    let mut milestones = Vec::new();
+    let mut current: Option<RoadmapMilestone> = None;
+    let mut reading_packages = false;
+    for line in lines {
+        let trimmed = line.trim();
+        if trimmed.starts_with("## ") && trimmed != "## Milestones" {
+            break;
+        }
+        if let Some(value) = trimmed.strip_prefix("### ") {
+            if let Some(milestone) = current.take() {
+                if milestone.work_packages.is_empty() {
+                    return Err(err("ROADMAP_HIERARCHY_INVALID", "milestone has no Work Packages"));
+                }
+                milestones.push(milestone);
             }
-            Some(
-                description
-                    .split(" — ")
-                    .next()
-                    .unwrap_or(description)
-                    .trim_matches('`')
-                    .trim()
-                    .to_string(),
-            )
-        })
-        .collect()
-}
-
-fn canonical_delivery_id(identifier: &str) -> String {
-    match identifier {
-        "001B" => "AICC-CONTROL-LOOP-001B".into(),
-        "001C" => "AICC-CONTROL-LOOP-001C".into(),
-        "001D" => "AICC-CONTROL-LOOP-001D".into(),
-        value => value.into(),
+            let (id, title) = value
+                .split_once(" — ")
+                .ok_or_else(|| err("ROADMAP_HIERARCHY_INVALID", "milestone heading is invalid"))?;
+            current = Some(RoadmapMilestone {
+                id: id.trim().to_string(),
+                title: title.trim().to_string(),
+                work_packages: Vec::new(),
+                progress_percent: 0,
+            });
+            reading_packages = false;
+        } else if trimmed == "Work Packages:" {
+            if current.is_none() {
+                return Err(err("ROADMAP_HIERARCHY_INVALID", "Work Packages has no milestone"));
+            }
+            reading_packages = true;
+        } else if reading_packages {
+            if let Some(milestone) = current.as_mut() {
+                let mut rest = trimmed;
+                while let Some(start) = rest.find('`') {
+                    let after_start = &rest[start + 1..];
+                    let end = after_start.find('`').ok_or_else(|| {
+                        err("ROADMAP_HIERARCHY_INVALID", "Work Package identifier is unterminated")
+                    })?;
+                    let id = &after_start[..end];
+                    if id.is_empty() || milestone.work_packages.iter().any(|item| item == id) {
+                        return Err(err("ROADMAP_HIERARCHY_INVALID", "duplicate or empty Work Package"));
+                    }
+                    milestone.work_packages.push(id.to_string());
+                    rest = &after_start[end + 1..];
+                }
+            }
+        }
     }
-}
-
-fn milestone_for_work_package(id: &str) -> &'static str {
-    match id {
-        "AICC-VISIBLE-SLICE-001" | "AICC-OPENSPEC-READMODEL-001" => "M1",
-        "AICC-CONTROL-LOOP-001C" | "AICC-CONTROL-LOOP-001D" => "M3",
-        _ => "M2",
+    if let Some(milestone) = current {
+        if milestone.work_packages.is_empty() {
+            return Err(err("ROADMAP_HIERARCHY_INVALID", "milestone has no Work Packages"));
+        }
+        milestones.push(milestone);
     }
+    if milestones.is_empty() {
+        return Err(err("ROADMAP_HIERARCHY_INVALID", "no milestones found"));
+    }
+    Ok(milestones)
 }
 
 fn load_roadmap_evidence(root: &Path) -> Result<RoadmapEvidence, ControlLoopError> {
@@ -714,41 +740,7 @@ fn load_roadmap_evidence(root: &Path) -> Result<RoadmapEvidence, ControlLoopErro
         .filter(|value| !value.is_empty())
         .collect::<Vec<_>>();
     let project = "AI Control Center".to_string();
-    let delivery_ids = delivery_work_packages(&content)
-        .iter()
-        .map(|id| canonical_delivery_id(id))
-        .collect::<Vec<_>>();
-    let mut milestones = vec![
-        RoadmapMilestone {
-            id: "M1".into(),
-            title: "Visible Foundation".into(),
-            work_packages: Vec::new(),
-            progress_percent: 0,
-        },
-        RoadmapMilestone {
-            id: "M2".into(),
-            title: "Authority And Workspace Control".into(),
-            work_packages: Vec::new(),
-            progress_percent: 0,
-        },
-        RoadmapMilestone {
-            id: "M3".into(),
-            title: "Runtime".into(),
-            work_packages: Vec::new(),
-            progress_percent: 0,
-        },
-    ];
-    for id in &delivery_ids {
-        let milestone_id = milestone_for_work_package(id);
-        if let Some(milestone) = milestones
-            .iter_mut()
-            .find(|milestone| milestone.id == milestone_id)
-        {
-            if !milestone.work_packages.contains(id) {
-                milestone.work_packages.push(id.clone());
-            }
-        }
-    }
+    let mut milestones = parse_milestones(&content)?;
     let packages_root = root.join("docs/60_Operations/work-packages");
     let mut entries = Vec::new();
     for entry in fs::read_dir(packages_root).map_err(|_| {
@@ -769,12 +761,11 @@ fn load_roadmap_evidence(root: &Path) -> Result<RoadmapEvidence, ControlLoopErro
             continue;
         }
         if let Ok(package) = parse_package(&path) {
-            let milestone = milestone_for_work_package(&package.id).to_string();
-            if let Some(group) = milestones.iter_mut().find(|group| group.id == milestone) {
-                if !group.work_packages.contains(&package.id) {
-                    group.work_packages.push(package.id.clone());
-                }
-            }
+            let milestone = milestones
+                .iter()
+                .find(|group| group.work_packages.iter().any(|id| id == &package.id))
+                .map(|group| group.id.clone())
+                .unwrap_or_else(|| "UNASSIGNED".into());
             entries.push(RoadmapEntry {
                 id: package.id,
                 title: package.title,
@@ -782,6 +773,20 @@ fn load_roadmap_evidence(root: &Path) -> Result<RoadmapEvidence, ControlLoopErro
                 authorization: package.owner_authorization,
                 milestone,
             });
+        }
+    }
+    for milestone in &milestones {
+        for work_package_id in &milestone.work_packages {
+            let path = packages_root.join(format!("{work_package_id}.md"));
+            let package = fs::read_to_string(&path).map_err(|_| {
+                err("ROADMAP_HIERARCHY_INVALID", "milestone references missing Work Package")
+            })?;
+            parse_package(&path).map_err(|_| {
+                err("ROADMAP_HIERARCHY_INVALID", "milestone references malformed Work Package")
+            })?;
+            if package.is_empty() {
+                return Err(err("ROADMAP_HIERARCHY_INVALID", "Work Package evidence is empty"));
+            }
         }
     }
     entries.sort_by(|left, right| left.id.cmp(&right.id));
@@ -1410,12 +1415,13 @@ mod tests {
         fs::create_dir_all(root.join("docs/60_Operations/work-packages")).unwrap();
         fs::write(
             root.join("docs/10_Planning_Roadmap/01_LIVING_ROADMAP.md"),
-            "# AI Control Center Living Roadmap\n\n## Current milestone\n\n`M2 — Authority And Workspace Control`\n\n## Authority\n\nCurrent Authority: `authority`\n\nClosed Work Packages: `AICC-CLOSED`\n\nCurrent Work Package: `AICC-POST-MERGE-UAT-001-R2`\n\nNext Work Packages: `001B OpenSpec Binding`, `001C OpenCode Runtime Observer`\n\n## Delivery sequence\n\n1. AICC-CLOSED — closed foundation.\n2. AICC-POST-MERGE-UAT-001-R2 — current Human UAT remediation.\n3. 001B — OpenSpec Binding (planned, owner authorization not authorized).\n\n## Current safety state\n\nThe application remains fail closed.",
+            "# AI Control Center Living Roadmap\n\n## Current milestone\n\n`M2 — Authority And Workspace Control`\n\n## Authority\n\nCurrent Authority: `authority`\n\nClosed Work Packages: `AICC-CLOSED`\n\nCurrent Work Package: `AICC-POST-MERGE-UAT-001-R2`\n\nNext Work Packages: `001B OpenSpec Binding`, `001C OpenCode Runtime Observer`\n\n## Milestones\n\n### M1 — Visible Foundation\n\nWork Packages:\n`AICC-CLOSED`\n\n### M2 — Authority And Workspace Control\n\nWork Packages:\n`AICC-POST-MERGE-UAT-001-R2`,\n`AICC-CONTROL-LOOP-001B`\n\n### M3 — Runtime\n\nWork Packages:\n`AICC-RUNTIME-001`\n\n## Delivery sequence\n\n1. AICC-CLOSED — closed foundation.\n2. AICC-POST-MERGE-UAT-001-R2 — current Human UAT remediation.\n3. 001B — OpenSpec Binding (planned, owner authorization not authorized).\n\n## Current safety state\n\nThe application remains fail closed.",
         )
         .unwrap();
         let package = "---\nschema: aicc-work-package/v1\nid: AICC-POST-MERGE-UAT-001-R2\ntitle: R2\nstatus: AUTHORIZED\nauthority_sha: authority\nopenspec_change: current\ndependencies: []\nprevious_run_status: HUMAN_UAT_FAIL\nowner_authorization: AUTHORIZED_FOR_IMPLEMENTATION\n---\n";
         let planned = "---\nschema: aicc-work-package/v1\nid: AICC-CONTROL-LOOP-001B\ntitle: Binding\nstatus: PLANNED\nauthority_sha: authority\nopenspec_change: binding\ndependencies: []\nprevious_run_status: CLOSED\nowner_authorization: NOT_AUTHORIZED\n---\n";
         let closed = "---\nschema: aicc-work-package/v1\nid: AICC-CLOSED\ntitle: Closed\nstatus: CLOSED\nauthority_sha: authority\nopenspec_change: closed\ndependencies: []\nprevious_run_status: CLOSED\nowner_authorization: AUTHORIZED_FOR_IMPLEMENTATION\n---\n";
+        let runtime = "---\nschema: aicc-work-package/v1\nid: AICC-RUNTIME-001\ntitle: Runtime\nstatus: PLANNED\nauthority_sha: authority\nopenspec_change: runtime\ndependencies: []\nprevious_run_status: CLOSED\nowner_authorization: NOT_AUTHORIZED\n---\n";
         fs::write(root.join("docs/60_Operations/work-packages/r2.md"), package).unwrap();
         fs::write(
             root.join("docs/60_Operations/work-packages/planned.md"),
@@ -1427,6 +1433,11 @@ mod tests {
             closed,
         )
         .unwrap();
+        fs::write(
+            root.join("docs/60_Operations/work-packages/runtime.md"),
+            runtime,
+        )
+        .unwrap();
         let evidence = load_roadmap_evidence(&root).unwrap();
         assert_eq!(
             evidence.current_milestone,
@@ -1434,6 +1445,23 @@ mod tests {
         );
         assert_eq!(evidence.current_work_package, "AICC-POST-MERGE-UAT-001-R2");
         assert!(!evidence.milestones.is_empty());
+        assert_eq!(evidence.milestones.len(), 3);
+        assert!(evidence
+            .milestones
+            .iter()
+            .find(|milestone| milestone.id == "M1")
+            .unwrap()
+            .work_packages
+            .contains(&"AICC-CLOSED".to_string()));
+        assert_eq!(
+            evidence
+                .entries
+                .iter()
+                .find(|entry| entry.id == "AICC-POST-MERGE-UAT-001-R2")
+                .unwrap()
+                .milestone,
+            "M2"
+        );
         assert!(evidence.progress_percent > 0);
         assert!(evidence
             .milestones
@@ -1452,6 +1480,36 @@ mod tests {
         assert!(evidence.entries.iter().any(|entry| {
             entry.id == "AICC-POST-MERGE-UAT-001-R2" && entry.status == "AUTHORIZED"
         }));
+    }
+    #[test]
+    fn roadmap_membership_changes_with_formal_evidence() {
+        let root = temp("roadmap-move");
+        fs::create_dir_all(root.join("docs/10_Planning_Roadmap")).unwrap();
+        fs::create_dir_all(root.join("docs/60_Operations/work-packages")).unwrap();
+        let header = "## Current milestone\n\n`M2 — Authority And Workspace Control`\n\nCurrent Authority: `authority`\nCurrent Work Package: `R2`\n\n## Milestones\n\n### M2 — Authority And Workspace Control\n\nWork Packages:\n`R2`\n\n### M3 — Runtime\n\nWork Packages:\n`RUNTIME`\n";
+        fs::write(root.join("docs/10_Planning_Roadmap/01_LIVING_ROADMAP.md"), header).unwrap();
+        let r2 = "---\nschema: aicc-work-package/v1\nid: R2\ntitle: R2\nstatus: AUTHORIZED\nauthority_sha: authority\nopenspec_change: r2\ndependencies: []\nprevious_run_status: HUMAN_UAT_FAIL\nowner_authorization: AUTHORIZED_FOR_IMPLEMENTATION\n---\n";
+        let runtime = "---\nschema: aicc-work-package/v1\nid: RUNTIME\ntitle: Runtime\nstatus: PLANNED\nauthority_sha: authority\nopenspec_change: runtime\ndependencies: []\nprevious_run_status: CLOSED\nowner_authorization: NOT_AUTHORIZED\n---\n";
+        fs::write(root.join("docs/60_Operations/work-packages/R2.md"), r2).unwrap();
+        fs::write(root.join("docs/60_Operations/work-packages/RUNTIME.md"), runtime).unwrap();
+        let first = load_roadmap_evidence(&root).unwrap();
+        assert_eq!(first.entries[0].milestone, "M2");
+        let moved_header = "## Current milestone\n\n`M2 — Authority And Workspace Control`\n\n## Authority\n\nCurrent Authority: `authority`\nCurrent Work Package: `R2`\n\n## Milestones\n\n### M2 — Authority And Workspace Control\n\nWork Packages:\n`RUNTIME`\n\n### M3 — Runtime\n\nWork Packages:\n`R2`";
+        fs::write(root.join("docs/10_Planning_Roadmap/01_LIVING_ROADMAP.md"), moved_header).unwrap();
+        let moved = load_roadmap_evidence(&root).unwrap();
+        assert_eq!(moved.entries[0].milestone, "M3");
+    }
+    #[test]
+    fn malformed_or_missing_milestone_evidence_fails_closed() {
+        let root = temp("roadmap-invalid");
+        fs::create_dir_all(root.join("docs/10_Planning_Roadmap")).unwrap();
+        fs::create_dir_all(root.join("docs/60_Operations/work-packages")).unwrap();
+        fs::write(
+            root.join("docs/10_Planning_Roadmap/01_LIVING_ROADMAP.md"),
+            "## Current milestone\n\n`M2`\n\n## Authority\n\nCurrent Work Package: `R2`\n\n## Milestones\n\n### M2 — Control\n\nWork Packages:\n`MISSING`",
+        )
+        .unwrap();
+        assert_eq!(load_roadmap_evidence(&root).unwrap_err().code, "ROADMAP_HIERARCHY_INVALID");
     }
     #[test]
     fn resolver_preserves_valid_unauthorized_package_without_schema_blocker() {

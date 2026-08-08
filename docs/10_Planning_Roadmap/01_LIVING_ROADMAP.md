@@ -14,6 +14,29 @@ Current Work Package: `AICC-POST-MERGE-UAT-001-R2`
 
 Next Work Packages: `001B OpenSpec Binding`, `001C OpenCode Runtime Observer`, `001D Governed Runtime Control`
 
+## Milestones
+
+### M1 — Visible Foundation
+
+Work Packages:
+`AICC-VISIBLE-SLICE-001`,
+`AICC-OPENSPEC-READMODEL-001`
+
+### M2 — Authority And Workspace Control
+
+Work Packages:
+`AICC-CONTROL-LOOP-001A`,
+`AICC-POST-MERGE-UAT-001`,
+`AICC-POST-MERGE-UAT-001-R1`,
+`AICC-POST-MERGE-UAT-001-R2`,
+`AICC-CONTROL-LOOP-001B`
+
+### M3 — Runtime
+
+Work Packages:
+`AICC-CONTROL-LOOP-001C`,
+`AICC-CONTROL-LOOP-001D`
+
 ## Delivery sequence
 
 1. AICC-VISIBLE-SLICE-001 — closed installable macOS visual app.
