@@ -761,7 +761,7 @@ fn load_roadmap_evidence(root: &Path) -> Result<RoadmapEvidence, ControlLoopErro
     let mut milestones = parse_milestones(&content)?;
     let packages_root = root.join("docs/60_Operations/work-packages");
     let mut entries = Vec::new();
-    for entry in fs::read_dir(packages_root).map_err(|_| {
+    for entry in fs::read_dir(&packages_root).map_err(|_| {
         err(
             "WORK_PACKAGE_UNAVAILABLE",
             "Work Package evidence is unavailable",
