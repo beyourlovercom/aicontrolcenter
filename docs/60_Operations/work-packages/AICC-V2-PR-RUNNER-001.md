@@ -1,8 +1,8 @@
 # AICC-V2-PR-RUNNER-001: AICC PR Runner Foundation
 
-Status: `PLANNED`
+Status: `READY_FOR_OWNER_AUTHORIZATION`
 Authorization: `NOT_AUTHORIZED`
-Owner UAT prerequisite: `AICC_SELF_DEVELOPMENT_READY = PASS`
+Bootstrap: `FIRST_SELF_DEVELOPMENT_WORK_PACKAGE`
 
 ## Goal
 
@@ -51,8 +51,16 @@ The first PR Runner implementation must not automatically merge anything.
 
 ## Dependencies
 
-- `AICC-V2-005` Owner Human UAT PASS.
-- `AICC_SELF_DEVELOPMENT_READY = PASS`.
+- `AICC-V2-004` Codex Runtime Control = `PASS`.
+- `AICC-V2-005-R1` Work Package Contract Binding Remediation = `PASS`.
+- Explicit Owner authorization is required before execution.
+- Repository and runtime safety gates must pass.
+
+## Bootstrap Semantics
+
+AICC-V2-PR-RUNNER-001 is the first self-development Work Package. Its first real bounded implementation by Codex, started by AICC after explicit Owner authorization, is the Human UAT evidence used to establish `AICC_SELF_DEVELOPMENT_READY = PASS`.
+
+Therefore this Work Package MUST NOT require `AICC_SELF_DEVELOPMENT_READY` as a prerequisite.
 
 ## Risks
 
