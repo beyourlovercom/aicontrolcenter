@@ -12,7 +12,11 @@ Closed Work Packages: `AICC-VISIBLE-SLICE-001`, `AICC-OPENSPEC-READMODEL-001`, `
 
 Current Work Package: `AICC-CODEX-ONLY-MIGRATION-001`
 
-Next Work Packages: `001B OpenSpec Binding`, `001C Codex Runtime Observer`, `001D Owner Authorization & Governed Codex Runtime`, `001E Codex PR Runner`, `001F Autonomous Delivery Loop`
+Next Work Package after `AICC_SELF_DEVELOPMENT_READY`: `AICC-V2-PR-RUNNER-001`
+
+AICC_SELF_DEVELOPMENT_READY: `NOT_YET_PASS`
+
+`AICC-V2-PR-RUNNER-001`
 
 ## Milestones
 
@@ -36,6 +40,13 @@ Work Packages:
 
 Formal Work Packages:
 
+`AICC-V2-001` — `PASS`
+`AICC-V2-002` — `PASS`
+`AICC-V2-003` — `PASS`
+`AICC-V2-004` — `PASS`
+`AICC-V2-005` — `WAITING_OWNER_HUMAN_UAT`
+`AICC-V2-PR-RUNNER-001` — `PLANNED` / `NOT_AUTHORIZED`
+
 Future Work Packages:
 `AICC-CONTROL-LOOP-001C`,
 `AICC-CONTROL-LOOP-001D`,
@@ -54,11 +65,12 @@ Future Work Packages:
 8. 001B — OpenSpec Binding (planned, owner authorization not authorized).
 9. 001C — Codex Runtime Observer (future placeholder; no formal WP record).
 10. 001D — Owner Authorization & Governed Codex Runtime (future placeholder; no formal WP record).
-11. 001E — Codex PR Runner (future placeholder; no formal WP record).
-12. 001F — Autonomous Delivery Loop (future placeholder; no formal WP record).
+11. AICC_SELF_DEVELOPMENT_READY — `NOT_YET_PASS`; requires Owner Human UAT.
+12. AICC-V2-PR-RUNNER-001 — AICC PR Runner Foundation (next Work Package; planned, not authorized).
+13. 001F — Autonomous Delivery Loop (future placeholder; no formal WP record).
 
 ## Current safety state
 
 The application is authority-first and Codex-only. It uses fixed typed repository and Codex operations, fails closed on unknown authority, requires evidence-bound Owner authorization and explicit confirmation, and never exposes arbitrary shell input.
 
-The build is an unsigned/ad-hoc UAT artifact only. It does not create a Release or Deploy. R2 remains unresolved and Human UAT remains pending. 001B remains `PLANNED` / `NOT_AUTHORIZED`; 001C through 001F are future placeholders and receive no fabricated status, authorization, or formal Work Package path.
+The build is an unsigned/ad-hoc UAT artifact only. It does not create a Release or Deploy. AICC-V2-005 remains `WAITING_OWNER_HUMAN_UAT`; only the Owner can produce the final Human UAT PASS. `AICC_SELF_DEVELOPMENT_READY` remains `NOT_YET_PASS`. `AICC-V2-PR-RUNNER-001` is planned and not authorized; no PR Runner code is implemented here.
