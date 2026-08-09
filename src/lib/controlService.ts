@@ -9,8 +9,8 @@ const WORK_PACKAGES = join(REPOSITORY_ROOT, 'docs/60_Operations/work-packages');
 
 export type WorkPackage = { id: string; title: string; source: string; rawMarkdown: string; fields: Record<string, string>; sections: Record<string, string>; status: string; goal: string; scope: string; dependencies: string; acceptanceCriteria: string; risks: string; allowed: string; forbidden: string };
 export type RepositoryModel = { repository: string; branch: string; head: string; localMain: string; remoteMain: string; worktree: 'CLEAN' | 'DIRTY' | 'UNAVAILABLE'; lastCommit: string };
-export type Authorization = { authorizationId: string; workPackageId: string; authoritySha: string; branch: string; headShaAtAuthorization: string; repositoryRoot: string; scope: string[]; allowed: string[]; forbidden: string[]; authorizedAt: string };
-const AUTH_FILE = join(homedir(), '.aicc-v2', 'authorization.json');
+export type Authorization = { authorizationId: string; workPackageId: string; authoritySha: string; branch: string; headShaAtAuthorization: string; repositoryRoot: string; scope: string[]; allowed: string[]; forbidden: string[]; authorizedAt: string; supersededAt?: string; status?: 'ACTIVE'|'SUPERSEDED' };
+const AUTH_FILE = join(homedir(), '.aicc-v2', 'authorization.json'); const AUTH_HISTORY_FILE = join(homedir(), '.aicc-v2', 'authorization-history.json');
 
 export function validWorkPackageId(id: string): boolean { return /^AICC-[A-Z0-9]+(?:-[A-Z0-9]+)*$/.test(id) && !id.includes('..') && !id.includes('/') && !id.includes('\\'); }
 export function readRoadmap(): string { return readFileSync(ROADMAP, 'utf8'); }
@@ -40,7 +40,8 @@ export function readRepository(): RepositoryModel {
   try { remoteMain = git(['ls-remote', 'origin', 'refs/heads/main']).split(/\s+/)[0] || remoteMain; } catch { /* remote access is optional and read-only */ }
   return { repository: REPOSITORY_ROOT, branch, head, localMain, remoteMain, worktree: safeGit(['status', '--porcelain']) === '' ? 'CLEAN' : 'DIRTY', lastCommit: safeGit(['log', '-1', '--format=%h %s']) };
 }
-export function readAuthorization(): Authorization | null { try { return JSON.parse(readFileSync(AUTH_FILE, 'utf8')) as Authorization; } catch { return null; } }
+export function readAuthorization(): Authorization | null { try { const record = JSON.parse(readFileSync(AUTH_FILE, 'utf8')) as Authorization; return record.status === 'SUPERSEDED' ? null : record; } catch { return null; } }
+function readStoredAuthorization(): Authorization | null { try { return JSON.parse(readFileSync(AUTH_FILE, 'utf8')) as Authorization; } catch { return null; } }
 export function authorizationState(id: string, repo: RepositoryModel): { status: 'AUTHORIZED' | 'INVALID' | 'UNAUTHORIZED'; record: Authorization | null; reason?: string } {
   const record = readAuthorization(); if (!record) return { status: 'UNAUTHORIZED', record: null };
   if (record.workPackageId !== id) return { status: 'INVALID', record, reason: 'WORK_PACKAGE_CHANGED' };
@@ -59,5 +60,15 @@ export function persistAuthorization(id: string, repo: RepositoryModel): Authori
   const blocker = authorizationBlocker(id, repo, true); if (blocker) throw new Error(blocker);
   const record: Authorization = { authorizationId: `auth-${Date.now()}`, workPackageId: id, authoritySha: repo.remoteMain, branch: repo.branch, headShaAtAuthorization: repo.head, repositoryRoot: repo.repository, scope: ['read_repository', 'read_work_package', 'sync_local_main'], allowed: ['owner_confirmed_actions'], forbidden: ['codex_runtime', 'writer_lock', 'arbitrary_shell', 'push', 'merge'], authorizedAt: new Date().toISOString() };
   mkdirSync(join(homedir(), '.aicc-v2'), { recursive: true }); writeFileSync(AUTH_FILE, JSON.stringify(record, null, 2), { mode: 0o600 }); return record;
+}
+export function reauthorizeAuthorization(id: string, repo: RepositoryModel): { record: Authorization; superseded: boolean } {
+  if (!id) throw new Error('NO_WORK_PACKAGE_SELECTED');
+  const existing = readStoredAuthorization();
+  if (existing && (existing.repositoryRoot !== repo.repository || existing.workPackageId !== id || existing.branch !== repo.branch || existing.authoritySha !== repo.remoteMain)) throw new Error('AUTHORIZATION_CONFLICT');
+  if (existing && existing.headShaAtAuthorization === repo.head) return { record: existing, superseded: false };
+  const record: Authorization = { authorizationId: `auth-${Date.now()}`, workPackageId: id, authoritySha: repo.remoteMain, branch: repo.branch, headShaAtAuthorization: repo.head, repositoryRoot: repo.repository, scope: ['read_repository', 'read_work_package', 'sync_local_main'], allowed: ['owner_confirmed_actions'], forbidden: ['codex_runtime', 'writer_lock', 'arbitrary_shell', 'push', 'merge'], authorizedAt: new Date().toISOString(), status: 'ACTIVE' };
+  mkdirSync(join(homedir(), '.aicc-v2'), { recursive: true });
+  if (existing) { const superseded = { ...existing, status: 'SUPERSEDED' as const, supersededAt: record.authorizedAt }; let history: Authorization[] = []; try { history = JSON.parse(readFileSync(AUTH_HISTORY_FILE, 'utf8')) as Authorization[]; } catch { /* no history yet */ } writeFileSync(AUTH_HISTORY_FILE, JSON.stringify([...history, superseded], null, 2), { mode: 0o600 }); }
+  writeFileSync(AUTH_FILE, JSON.stringify(record, null, 2), { mode: 0o600 }); return { record, superseded: Boolean(existing) };
 }
 export function syncLocalMain(): 'ALREADY_SYNCED' | 'FAST_FORWARD' { const repo = readRepository(); if (repo.worktree !== 'CLEAN') throw new Error('WORKTREE_DIRTY'); if (repo.branch === 'main') throw new Error('MAIN_SYNC_REQUIRES_FEATURE_BRANCH'); git(['fetch', 'origin', 'main']); const remote = git(['rev-parse', 'refs/remotes/origin/main']); const local = safeGit(['rev-parse', 'refs/heads/main']); if (local === remote) return 'ALREADY_SYNCED'; try { execFileSync('git', ['merge-base', '--is-ancestor', local, remote], { cwd: REPOSITORY_ROOT, stdio: 'ignore' }); } catch { throw new Error('LOCAL_MAIN_DIVERGED'); } execFileSync('git', ['update-ref', 'refs/heads/main', remote, local], { cwd: REPOSITORY_ROOT, stdio: 'ignore' }); return 'FAST_FORWARD'; }
