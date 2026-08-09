@@ -1,6 +1,7 @@
 import { defineConfig } from 'vite';
 import { svelte } from '@sveltejs/vite-plugin-svelte';
 import { authorizationBlocker, authorizationState, persistAuthorization, readAuthorization, readRoadmap, readRepository, readWorkPackage, syncLocalMain } from './src/lib/controlService';
+import { codexInfo, readRuntime, startRuntime, stopRuntime } from './src/lib/runtimeManager';
 import type { Plugin } from 'vite';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 
@@ -34,5 +35,8 @@ function localControlPlugin(): Plugin { return { name: 'aicc-local-control', con
     if (req.method !== 'POST' || req.headers['content-type']?.split(';')[0] !== 'application/json') return json(res, { error: 'JSON_REQUIRED' }, 415);
     let body = ''; req.on('data', (chunk) => body += chunk); req.on('end', () => { try { const payload = JSON.parse(body); if (Object.keys(payload).length) return json(res, { error: 'FIXED_INPUT_ONLY' }, 400); json(res, { status: syncLocalMain() }); } catch (error) { json(res, { error: error instanceof Error ? error.message : 'SYNC_ERROR' }, 409); } }); return;
   });
+  server.middlewares.use('/api/codex/runtime', (_req: IncomingMessage, res: ServerResponse) => json(res, { info: codexInfo(), runtime: readRuntime() }));
+  server.middlewares.use('/api/codex/start', (req: IncomingMessage, res: ServerResponse) => { if (req.headers.origin && req.headers.origin !== 'http://127.0.0.1:1420' && req.headers.origin !== 'http://localhost:1420') return json(res,{error:'ORIGIN_REJECTED'},403); if(req.method!=='POST'||req.headers['content-type']?.split(';')[0]!=='application/json')return json(res,{error:'JSON_REQUIRED'},415);let body='';req.on('data',c=>body+=c);req.on('end',()=>{try{const p=JSON.parse(body) as {workPackageId?:string};if(Object.keys(p).some(k=>k!=='workPackageId')||typeof p.workPackageId!=='string')return json(res,{error:'FIXED_INPUT_ONLY'},400);json(res,startRuntime(p.workPackageId));}catch(e){json(res,{error:e instanceof Error?e.message:'RUNTIME_ERROR'},409);}});});
+  server.middlewares.use('/api/codex/stop', (req: IncomingMessage, res: ServerResponse) => { if(req.method!=='POST'||req.headers['content-type']?.split(';')[0]!=='application/json')return json(res,{error:'JSON_REQUIRED'},415);let body='';req.on('data',c=>body+=c);req.on('end',()=>{try{if(Object.keys(JSON.parse(body)).length)return json(res,{error:'FIXED_INPUT_ONLY'},400);stopRuntime();json(res,{status:'STOPPING'});}catch(e){json(res,{error:e instanceof Error?e.message:'STOP_ERROR'},409);}});});
   server.middlewares.use('/api/work-packages', (req: IncomingMessage, res: ServerResponse) => { const id = decodeURIComponent((req.url ?? '').split('/').filter(Boolean)[0] ?? ''); try { json(res, readWorkPackage(id)); } catch (error) { json(res, { error: error instanceof Error ? error.message : 'WP_ERROR' }, 404); } });
 } }; }
