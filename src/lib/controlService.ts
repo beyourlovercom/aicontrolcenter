@@ -7,7 +7,7 @@ export const REPOSITORY_ROOT = '/Users/a/AI/007/AIcontrolcenter';
 const ROADMAP = join(REPOSITORY_ROOT, 'docs/10_Planning_Roadmap/01_LIVING_ROADMAP.md');
 const WORK_PACKAGES = join(REPOSITORY_ROOT, 'docs/60_Operations/work-packages');
 
-export type WorkPackage = { id: string; title: string; source: string; fields: Record<string, string>; sections: Record<string, string> };
+export type WorkPackage = { id: string; title: string; source: string; rawMarkdown: string; fields: Record<string, string>; sections: Record<string, string>; status: string; goal: string; scope: string; dependencies: string; acceptanceCriteria: string; risks: string; allowed: string; forbidden: string };
 export type RepositoryModel = { repository: string; branch: string; head: string; localMain: string; remoteMain: string; worktree: 'CLEAN' | 'DIRTY' | 'UNAVAILABLE'; lastCommit: string };
 export type Authorization = { authorizationId: string; workPackageId: string; authoritySha: string; branch: string; headShaAtAuthorization: string; repositoryRoot: string; scope: string[]; allowed: string[]; forbidden: string[]; authorizedAt: string };
 const AUTH_FILE = join(homedir(), '.aicc-v2', 'authorization.json');
@@ -20,10 +20,14 @@ export function readWorkPackage(id: string): WorkPackage {
   const text = readFileSync(source, 'utf8');
   const heading = text.match(/^#\s+(.+)$/m)?.[1] ?? id;
   const fields: Record<string, string> = {};
-  for (const line of text.split('\n')) { const match = line.match(/^\*\*(.+?)\*\*:\s*(.+)$/); if (match) fields[match[1].trim()] = match[2].trim(); }
+  for (const line of text.split('\n')) { const match = line.match(/^(?:\*\*)?([^:*]+?)(?:\*\*)?:\s*(.+)$/); if (match) fields[match[1].trim()] = match[2].trim().replace(/^`|`$/g, ''); }
   const sections: Record<string, string> = {};
-  for (const match of text.matchAll(/^##\s+(.+?)\n([\s\S]*?)(?=^##\s|\s*$)/gm)) sections[match[1].trim()] = match[2].trim();
-  return { id, title: heading.replace(/^AICC-[^:：]+[:：]\s*/, ''), source: `docs/60_Operations/work-packages/${id}.md`, fields, sections };
+  let section = ''; for (const line of text.split('\n')) { const headingMatch = line.match(/^##\s+(.+?)\s*$/); if (headingMatch) { section = headingMatch[1].trim(); sections[section] = ''; } else if (section) sections[section] += `${sections[section] ? '\n' : ''}${line}`; }
+  for (const key of Object.keys(sections)) sections[key] = sections[key].trim();
+  const pick = (...keys: string[]) => keys.map((key) => sections[key] ?? fields[key]).find((value) => value?.trim())?.trim() ?? '';
+  const goal = pick('Goal', '目标'), scope = pick('Scope', '范围'), dependencies = pick('Dependencies', '依赖'), acceptanceCriteria = pick('Acceptance Criteria', '验收标准'), risks = pick('Risks', '风险'), allowed = pick('Allowed', '允许'), forbidden = pick('Forbidden', '禁止');
+  sections.Goal = goal; sections.Scope = scope; sections.Dependencies = dependencies; sections['Acceptance Criteria'] = acceptanceCriteria;
+  return { id, title: heading.replace(/^AICC-[^:：]+[:：]\s*/, ''), source: `docs/60_Operations/work-packages/${id}.md`, rawMarkdown: text, fields, sections, status: fields.Status ?? fields.status ?? '未提供', goal, scope, dependencies, acceptanceCriteria, risks, allowed, forbidden };
 }
 
 function git(args: string[]): string { return execFileSync('git', args, { cwd: REPOSITORY_ROOT, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim(); }
