@@ -1,3 +1,10 @@
-import {resolveLifecycle,aggregateStatus,type RoadmapNode} from './workflow.ts';
-function assert(x:unknown,m:string):asserts x{if(!x)throw Error(m)}
-const current=resolveLifecycle('AICC-V2-UI-WORKFLOW-001',false);assert(current.currentStage==='HUMAN_UAT'&&current.status==='WAITING_UAT','current lifecycle');assert(current.stageStatuses.IMPLEMENTATION==='COMPLETE'&&current.stageStatuses.VALIDATION==='COMPLETE','completed evidence');assert(current.executability==='PLANNED_ONLY','planned executable state');const empty:RoadmapNode={id:'M5',type:'milestone',title:'M5',status:'NOT_STARTED',progress:null,parentId:null,children:[]};assert(aggregateStatus([])==='NOT_STARTED'&&empty.status!=='COMPLETE','empty milestone');console.log('lifecycle contract tests passed');
+import assert from 'node:assert/strict';
+import {createProjectSnapshot} from './model/projectModel.ts';
+import {resolveEntityContext} from './context/entityContext.ts';
+const roadmap='## Active V2 Milestones\n### M1 — Control Surface Finalization\nWork Packages: `AICC-V2-UI-WORKFLOW-001`\n## Legacy Historical Milestones';
+const snapshot=createProjectSnapshot({roadmap:{source:'docs/10_Planning_Roadmap/01_LIVING_ROADMAP.md',content:roadmap},formalWorkPackages:{}});
+const current=resolveEntityContext(snapshot,{type:'work_package',id:'AICC-V2-UI-WORKFLOW-001'});
+assert.equal(current.type,'work_package');if(current.type!=='work_package')throw Error('WP context required');
+assert.equal(current.lifecycle.currentStage,'HUMAN_UAT');assert.equal(current.lifecycle.effectiveStatus,'WAITING_UAT');
+assert.equal(current.lifecycle.stages.find(stage=>stage.id==='IMPLEMENTATION')?.status,'COMPLETE');assert.equal(current.lifecycle.stages.find(stage=>stage.id==='VALIDATION')?.status,'COMPLETE');
+assert.equal(current.formalization,'PLANNED_ONLY');console.log('lifecycle contract tests passed');

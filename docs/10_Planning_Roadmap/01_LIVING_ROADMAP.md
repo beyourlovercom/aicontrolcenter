@@ -21,34 +21,34 @@ AICC_SELF_DEVELOPMENT_READY: `NOT_YET_PASS`
 ## Active V2 Milestones
 
 ### M1 — Control Surface Finalization
-Work Packages: `AICC-V2-001`, `AICC-V2-002`, `AICC-V2-003`, `AICC-V2-004`
+Work Packages: `AICC-V2-UI-WORKFLOW-001`, `AICC-V2-DUAL-PANEL-001`
 
 ### M2 — Human UAT Control
-Work Packages: `AICC-V2-005`, `AICC-V2-005-R1`, `AICC-V2-005-R2`, `AICC-V2-005-R3`, `AICC-V2-005-R4`, `AICC-V2-005-R5`
+Work Packages: `AICC-V2-HUMAN-UAT-001`
 
 ### M3 — First Usable Version Closure
-Work Packages: `AICC-V2-005`, `AICC_SELF_DEVELOPMENT_READY`
+Work Packages: `AICC-V2-SELF-DEVELOPMENT-UAT-001`
 
 ### M4 — PR Runner Foundation
 Work Packages: `AICC-V2-PR-RUNNER-001`
 
 ### M5 — Review + Exact-head CI
-Work Packages: none yet
+Work Packages: `AICC-V2-REVIEW-CI-001`
 
 ### M6 — Autonomous PR Delivery
-Work Packages: none yet
+Work Packages: `AICC-V2-AUTO-DELIVERY-001`
 
 ### M7 — WP Automatic Lifecycle
-Work Packages: none yet
+Work Packages: `AICC-V2-WP-LIFECYCLE-001`
 
 ### M8 — Evidence & Audit
-Work Packages: none yet
+Work Packages: `AICC-V2-EVIDENCE-001`
 
 ### M9 — Mobile Owner Console
-Work Packages: none yet
+Work Packages: `AICC-V2-MOBILE-OWNER-001`
 
 ### M10 — Multi-project AICC
-Work Packages: none yet
+Work Packages: `AICC-V2-PROJECT-REGISTRY-001`
 
 ## Legacy Historical Milestones
 

@@ -1,1 +1,1 @@
-<script lang="ts">import WorkflowTimeline from './WorkflowTimeline.svelte';import {prStages} from '../lib/workflow';</script><WorkflowTimeline stages={prStages} current={0} />
+<script lang="ts">import WorkflowTimeline from './WorkflowTimeline.svelte';import {prStages} from '../lib/workflow';import type {LifecycleStage} from '../lib/model/entityTypes';const stages:LifecycleStage[]=prStages.map(([id,label],index)=>({id,label,status:index===0?'NOT_STARTED':'N_A',evidence:[]}));</script><WorkflowTimeline {stages} currentStage="DELIVERY_READY" />

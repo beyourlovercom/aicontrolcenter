@@ -1,2 +1,15 @@
-<script lang="ts">import StatusDot from './StatusDot.svelte';import type {RoadmapNode,AiccStatus} from '../lib/workflow';export let nodes:RoadmapNode[]=[];export let selectedId='';export let onSelect:(id:string)=>void=()=>{};let open:Record<string,boolean>={};const key='aicc-v2-roadmap-collapse';try{open=JSON.parse(localStorage.getItem(key)||'{}')}catch{}function toggle(id:string){open={...open,[id]:open[id]===false};localStorage.setItem(key,JSON.stringify(open))}function visible(node:RoadmapNode){return open[node.id]!==false}function select(node:RoadmapNode){if(node.type!=='pull_request')onSelect(node.id);}</script>
-<div class="roadmap-tree" data-testid="roadmap-tree">{#each nodes as node}<div class="tree-node depth-{node.depth}"><button class="tree-row" class:current={node.id===selectedId} onclick={()=>select(node)}><span class="tree-toggle" onclick={(e)=>{e.stopPropagation();toggle(node.id)}}>{node.children.length?(open[node.id]===false?'▸':'▾'):'·'}</span><span class="tree-type">{node.type==='milestone'?'M':node.type==='work_package'?'WP':'PR'}</span><StatusDot status={node.status}/><strong>{node.title}</strong>{#if node.progress!==null}<small>{node.progress}%</small>{/if}</button>{#if node.children.length&&visible(node)}<div class="tree-children"><svelte:self nodes={node.children} selectedId={selectedId} onSelect={onSelect}/></div>{/if}</div>{/each}</div>
+<script lang="ts">
+  import StatusDot from './StatusDot.svelte';
+  import type {RoadmapNode} from '../lib/workflow';
+  export let nodes:RoadmapNode[]=[];export let selectedId='';export let onSelect:(id:string)=>void=()=>{};
+  let open:Record<string,boolean>={};const key='aicc-v2-roadmap-collapse';
+  try{open=JSON.parse(localStorage.getItem(key)||'{}')}catch{}
+  function toggle(id:string){open={...open,[id]:open[id]===false};localStorage.setItem(key,JSON.stringify(open))}
+</script>
+<div class="roadmap-tree" data-testid="roadmap-tree">{#each nodes as node}<div class="tree-node">
+  <div class:current={node.id===selectedId} class="tree-row">
+    <button class="tree-toggle" aria-label={`${open[node.id]!==false?'折叠':'展开'} ${node.id}`} aria-expanded={node.children.length?open[node.id]!==false:undefined} onclick={()=>node.children.length&&toggle(node.id)}>{node.children.length?(open[node.id]!==false?'▾':'▸'):'·'}</button>
+    <button class="tree-select" onclick={()=>node.type!=='pull_request'&&onSelect(node.id)}><span class="tree-type">{node.type==='milestone'?'M':node.type==='work_package'?'WP':'PR'}</span><StatusDot status={node.status}/><strong>{node.title}</strong>{#if node.progress!==null}<small>{node.progress}%</small>{/if}</button>
+  </div>
+  {#if node.children.length&&open[node.id]!==false}<div class="tree-children" data-parent={node.id}><svelte:self nodes={node.children} {selectedId} {onSelect}/></div>{/if}
+</div>{/each}</div>

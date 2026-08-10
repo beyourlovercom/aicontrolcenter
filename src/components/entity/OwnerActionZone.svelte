@@ -1,0 +1,9 @@
+<script lang="ts">import type {ActionEligibility,WorkPackageEntityContext} from '../../lib/model/entityTypes';export let context:WorkPackageEntityContext;export let busy=false;export let codexAvailable=false;export let onAction:(id:ActionEligibility['id'])=>void=()=>{};$: authorize=context.availableActions.find(action=>action.id==='AUTHORIZE')!;$: start=context.availableActions.find(action=>action.id==='START_CODEX')!;$: stop=context.availableActions.find(action=>action.id==='STOP_CODEX')!;$: sync=context.availableActions.find(action=>action.id==='SAFE_MAIN_SYNC')!;function run(id:ActionEligibility['id']){onAction(id)}</script>
+<section class="action-zone" data-testid="owner-action-zone"><div class="section-label"><span>Owner Action Zone</span><small>{context.lifecycle.currentStage==='HUMAN_UAT'?'Human UAT 阶段':'显式 Owner 操作'}</small></div><div class="actions">
+  <button class="action primary" onclick={()=>run('REFRESH')} disabled={busy}>刷新状态</button>
+  <button class:disabled={!authorize.enabled} class="action" data-eligible={authorize.enabled} onclick={()=>run('AUTHORIZE')}>确认授权 <small>{authorize.enabled?'READY':authorize.reasonCode}</small></button>
+  <button class:disabled={!start.enabled} class="action" data-eligible={start.enabled} onclick={()=>run('START_CODEX')}>启动 Codex <small>{start.enabled&&codexAvailable?'READY':start.reasonCode}</small></button>
+  <button class:disabled={!stop.enabled} class="action" data-eligible={stop.enabled} onclick={()=>run('STOP_CODEX')}>停止 <small>{stop.enabled?'ACTIVE':'NO ACTIVE RUN'}</small></button>
+  <button class="action disabled" data-eligible="false" onclick={()=>run('RETRY')}>重试 <small>NOT_IMPLEMENTED</small></button>
+  <button class:disabled={!sync.enabled} class="action" data-eligible={sync.enabled} onclick={()=>run('SAFE_MAIN_SYNC')}>同步本地 main <small>SAFE FF</small></button>
+</div></section>
