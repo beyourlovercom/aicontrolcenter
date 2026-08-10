@@ -105,4 +105,12 @@ Future Work Packages:
 
 The application is authority-first and Codex-only. It uses fixed typed repository and Codex operations, fails closed on unknown authority, requires evidence-bound Owner authorization and explicit confirmation, and never exposes arbitrary shell input.
 
+## V2 baseline closure
+
+`AICC-V2-UI-WORKFLOW-001` — `OWNER_UI_UAT = PASS`; `STATUS = COMPLETE`.
+
+`AICC_ENTITY_CONTEXT_FOUNDATION` — `STATUS = APPROVED_BASELINE`; frozen authority HEAD: `9ebde86f019b831d41158fe38e3be7078bd02e53`.
+
+The historical bootstrap formalization label remains only as a documented legacy compatibility note. The Entity Context Foundation is not reopened by the Dual Panel Work Package.
+
 The build is an unsigned/ad-hoc UAT artifact only. It does not create a Release or Deploy. AICC-V2-005 remains `WAITING_OWNER_HUMAN_UAT`; only the Owner can produce the final Human UAT PASS. `AICC_SELF_DEVELOPMENT_READY` remains `NOT_YET_PASS`. `AICC-V2-PR-RUNNER-001` is ready for Owner authorization as the bootstrap self-development Work Package; no PR Runner code is implemented here.
