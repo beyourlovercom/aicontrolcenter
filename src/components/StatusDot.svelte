@@ -1,1 +1,1 @@
-<script lang="ts">import {statusClass,statusText,type AiccStatus} from '../lib/workflow';export let status:AiccStatus='NOT_STARTED';export let label=true;</script><span class="status-dot-ui {statusClass(status)}" title={status}>{label}<span>{statusText(status)}</span></span>
+<script lang="ts">import {statusClass,statusText,type AiccStatus} from '../lib/workflow';export let status:AiccStatus='NOT_STARTED';export let label=true;</script><span class="status-dot-ui {statusClass(status)}" title={status}>{#if label}<span>{statusText(status)}</span>{/if}</span>

@@ -2,7 +2,7 @@
 
 ## Current milestone
 
-`M2 — Authority And Workspace Control`
+`M4 — PR Runner Foundation`
 
 ## Authority
 
@@ -18,7 +18,39 @@ AICC_SELF_DEVELOPMENT_READY: `NOT_YET_PASS`
 
 `AICC-V2-PR-RUNNER-001`
 
-## Milestones
+## Active V2 Milestones
+
+### M1 — Control Surface Finalization
+Work Packages: `AICC-V2-001`, `AICC-V2-002`, `AICC-V2-003`, `AICC-V2-004`
+
+### M2 — Human UAT Control
+Work Packages: `AICC-V2-005`, `AICC-V2-005-R1`, `AICC-V2-005-R2`, `AICC-V2-005-R3`, `AICC-V2-005-R4`, `AICC-V2-005-R5`
+
+### M3 — First Usable Version Closure
+Work Packages: `AICC-V2-005`, `AICC_SELF_DEVELOPMENT_READY`
+
+### M4 — PR Runner Foundation
+Work Packages: `AICC-V2-PR-RUNNER-001`
+
+### M5 — Review + Exact-head CI
+Work Packages: none yet
+
+### M6 — Autonomous PR Delivery
+Work Packages: none yet
+
+### M7 — WP Automatic Lifecycle
+Work Packages: none yet
+
+### M8 — Evidence & Audit
+Work Packages: none yet
+
+### M9 — Mobile Owner Console
+Work Packages: none yet
+
+### M10 — Multi-project AICC
+Work Packages: none yet
+
+## Legacy Historical Milestones
 
 ### M1 — Visible Foundation
 
