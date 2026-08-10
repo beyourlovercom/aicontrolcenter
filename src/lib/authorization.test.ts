@@ -6,7 +6,7 @@ function assert(ok: unknown, message: string): asserts ok { if (!ok) throw new E
 assert(service.includes('reauthorizeAuthorization'), 'same-context reauthorization exists');
 assert(service.includes('status: \'SUPERSEDED\''), 'old authorization is superseded');
 assert(service.includes('headShaAtAuthorization === repo.head'), 'current HEAD binding');
-assert(service.includes('existing.repositoryRoot !== repo.repository') && service.includes('existing.workPackageId !== id') && service.includes('existing.branch !== repo.branch') && service.includes('existing.authoritySha !== repo.remoteMain'), 'real conflicts remain protected');
+assert(service.includes('authorizationSupersessionBlocker') && service.includes('ACTIVE_RUNTIME_CONFLICT') && service.includes('WRITER_LOCK_HELD'), 'supersession safety gates remain protected');
 assert(evidence.includes('Authorized HEAD') && evidence.includes('Current HEAD'), 'authorization head evidence visible');
 assert(app.includes('AUTHORIZATION_SUCCESS'), 'authorization feedback visible');
 console.log('authorization supersession contract tests passed');

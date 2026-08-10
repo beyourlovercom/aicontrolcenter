@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process';
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
 
@@ -10,6 +10,7 @@ const WORK_PACKAGES = join(REPOSITORY_ROOT, 'docs/60_Operations/work-packages');
 export type WorkPackage = { id: string; title: string; source: string; rawMarkdown: string; fields: Record<string, string>; sections: Record<string, string>; status: string; goal: string; scope: string; dependencies: string; acceptanceCriteria: string; risks: string; allowed: string; forbidden: string };
 export type RepositoryModel = { repository: string; branch: string; head: string; localMain: string; remoteMain: string; worktree: 'CLEAN' | 'DIRTY' | 'UNAVAILABLE'; lastCommit: string };
 export type Authorization = { authorizationId: string; workPackageId: string; authoritySha: string; branch: string; headShaAtAuthorization: string; repositoryRoot: string; scope: string[]; allowed: string[]; forbidden: string[]; authorizedAt: string; supersededAt?: string; status?: 'ACTIVE'|'SUPERSEDED' };
+export type AuthorizationTransitionSafety = { activeRuntime: boolean; writerLockHeld: boolean };
 const AUTH_FILE = join(homedir(), '.aicc-v2', 'authorization.json'); const AUTH_HISTORY_FILE = join(homedir(), '.aicc-v2', 'authorization-history.json');
 
 export function validWorkPackageId(id: string): boolean { return /^AICC-[A-Z0-9]+(?:-[A-Z0-9]+)*$/.test(id) && !id.includes('..') && !id.includes('/') && !id.includes('\\'); }
@@ -42,6 +43,21 @@ export function readRepository(): RepositoryModel {
 }
 export function readAuthorization(): Authorization | null { try { const record = JSON.parse(readFileSync(AUTH_FILE, 'utf8')) as Authorization; return record.status === 'SUPERSEDED' ? null : record; } catch { return null; } }
 function readStoredAuthorization(): Authorization | null { try { return JSON.parse(readFileSync(AUTH_FILE, 'utf8')) as Authorization; } catch { return null; } }
+function readAuthorizationTransitionSafety(): AuthorizationTransitionSafety {
+  let activeRuntime = false;
+  try { const runtime = JSON.parse(readFileSync(join(homedir(), '.aicc-v2', 'runtime.json'), 'utf8')) as { phase?: string }; activeRuntime = ['STARTING', 'RUNNING', 'STOPPING'].includes(runtime.phase ?? ''); } catch { /* no runtime evidence */ }
+  return { activeRuntime, writerLockHeld: existsSync(join(homedir(), '.aicc-v2', 'writer.lock')) };
+}
+export function authorizationSupersessionBlocker(id: string, repo: RepositoryModel, existing: Authorization | null, safety: AuthorizationTransitionSafety): string | null {
+  const base = authorizationBlocker(id, repo, true);
+  if (base && base !== 'AUTHORIZATION_CONFLICT') return base;
+  if (safety.activeRuntime) return 'ACTIVE_RUNTIME_CONFLICT';
+  if (safety.writerLockHeld) return 'WRITER_LOCK_HELD';
+  if (existing && existing.repositoryRoot !== repo.repository) return 'AUTHORIZATION_REPOSITORY_MISMATCH';
+  if (existing && existing.branch !== repo.branch) return 'AUTHORIZATION_BRANCH_MISMATCH';
+  if (existing && existing.authoritySha !== repo.remoteMain) return 'AUTHORITY_DRIFT';
+  return null;
+}
 export function authorizationState(id: string, repo: RepositoryModel): { status: 'AUTHORIZED' | 'INVALID' | 'UNAUTHORIZED'; record: Authorization | null; reason?: string } {
   const record = readAuthorization(); if (!record) return { status: 'UNAUTHORIZED', record: null };
   if (record.workPackageId !== id) return { status: 'INVALID', record, reason: 'WORK_PACKAGE_CHANGED' };
@@ -64,7 +80,8 @@ export function persistAuthorization(id: string, repo: RepositoryModel): Authori
 export function reauthorizeAuthorization(id: string, repo: RepositoryModel): { record: Authorization; superseded: boolean } {
   if (!id) throw new Error('NO_WORK_PACKAGE_SELECTED');
   const existing = readStoredAuthorization();
-  if (existing && (existing.repositoryRoot !== repo.repository || existing.workPackageId !== id || existing.branch !== repo.branch || existing.authoritySha !== repo.remoteMain)) throw new Error('AUTHORIZATION_CONFLICT');
+  const blocker = authorizationSupersessionBlocker(id, repo, existing, readAuthorizationTransitionSafety());
+  if (blocker) throw new Error(blocker);
   if (existing && existing.headShaAtAuthorization === repo.head) return { record: existing, superseded: false };
   const record: Authorization = { authorizationId: `auth-${Date.now()}`, workPackageId: id, authoritySha: repo.remoteMain, branch: repo.branch, headShaAtAuthorization: repo.head, repositoryRoot: repo.repository, scope: ['read_repository', 'read_work_package', 'sync_local_main'], allowed: ['owner_confirmed_actions'], forbidden: ['codex_runtime', 'writer_lock', 'arbitrary_shell', 'push', 'merge'], authorizedAt: new Date().toISOString(), status: 'ACTIVE' };
   mkdirSync(join(homedir(), '.aicc-v2'), { recursive: true });
