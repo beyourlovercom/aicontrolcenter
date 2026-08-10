@@ -42,6 +42,7 @@ export function readRepository(): RepositoryModel {
   return { repository: REPOSITORY_ROOT, branch, head, localMain, remoteMain, worktree: safeGit(['status', '--porcelain']) === '' ? 'CLEAN' : 'DIRTY', lastCommit: safeGit(['log', '-1', '--format=%h %s']) };
 }
 export function readAuthorization(): Authorization | null { try { const record = JSON.parse(readFileSync(AUTH_FILE, 'utf8')) as Authorization; return record.status === 'SUPERSEDED' ? null : record; } catch { return null; } }
+export function readAuthorizationHistory(): Authorization[] { try { return JSON.parse(readFileSync(AUTH_HISTORY_FILE, 'utf8')) as Authorization[]; } catch { return []; } }
 function readStoredAuthorization(): Authorization | null { try { return JSON.parse(readFileSync(AUTH_FILE, 'utf8')) as Authorization; } catch { return null; } }
 function readAuthorizationTransitionSafety(): AuthorizationTransitionSafety {
   let activeRuntime = false;

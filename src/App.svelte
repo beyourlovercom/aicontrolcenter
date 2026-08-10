@@ -1,5 +1,5 @@
 <script lang="ts">
-  import {onMount} from 'svelte';
+  import {onMount,tick} from 'svelte';
   import RoadmapTree from './components/RoadmapTree.svelte';
   import StatusTabs from './components/StatusTabs.svelte';
   import WorkflowTimeline from './components/WorkflowTimeline.svelte';
@@ -55,8 +55,8 @@
     const copy=running[id];setFeedback({state:'RUNNING',title:copy[0],message:copy[1],code:copy[2]});
     try{
       if(id==='REFRESH')await loadSnapshot(false);
-      if(id==='AUTHORIZE'&&selectedEntity.type==='work_package')await post('/api/authorization',{workPackageId:selectedEntity.id,confirmed:true});
-      if(id==='START_CODEX'&&selectedEntity.type==='work_package')await post('/api/codex/start',{workPackageId:selectedEntity.id});
+      if(id==='AUTHORIZE'&&selectedEntity.type==='work_package'){const requestedId=selectedEntity.id;const result=await post('/api/authorization',{workPackageId:requestedId,selectedEntityId:requestedId,confirmed:true});if(result.record?.workPackageId!==requestedId||result.record?.headShaAtAuthorization!==snapshot.repository.value?.head)throw new Error('AUTHORIZATION_PERSISTENCE_INTEGRITY_FAILED');await loadSnapshot(false);await tick();const refreshedSnapshot=createProjectSnapshot(raw);const refreshed=resolveEntityContext(refreshedSnapshot,selectedEntity);if(refreshed.type!=='work_package'||refreshed.id!==requestedId||refreshed.authorization.state!=='VALID'||refreshed.authorization.record?.workPackageId!==requestedId||refreshed.authorization.record?.headShaAtAuthorization!==refreshedSnapshot.repository.value?.head)throw new Error('AUTHORIZATION_POSTCONDITION_FAILED');}
+      if(id==='START_CODEX'&&selectedEntity.type==='work_package'){const startContext=resolveEntityContext(createProjectSnapshot(raw),selectedEntity);if(startContext.type!=='work_package'||startContext.authorization.state!=='VALID'||startContext.authorization.record?.workPackageId!==selectedEntity.id)throw new Error('TARGET_CONTEXT_MISMATCH');await post('/api/codex/start',{workPackageId:selectedEntity.id});}
       if(id==='STOP_CODEX')await post('/api/codex/stop',{});
       if(id==='SAFE_MAIN_SYNC')await post('/api/repository/sync-main',{});
       await loadSnapshot(false);
