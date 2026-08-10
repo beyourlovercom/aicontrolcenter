@@ -1,8 +1,15 @@
 import assert from 'node:assert/strict';
 import { resolveCodexExecutionPolicy } from './codexExecutionPolicy.ts';
+import { buildPrompt } from './runtimeManager.ts';
 const base={id:'AICC-X',title:'x',source:'x',rawMarkdown:'',fields:{},sections:{},status:'',goal:'',scope:'',dependencies:'',acceptanceCriteria:'',risks:'',allowed:'',forbidden:''};
 assert.equal(resolveCodexExecutionPolicy(base).sandboxMode,'workspace-write');
 assert.equal(resolveCodexExecutionPolicy({...base,fields:{'Execution Type':'REMEDIATION'}}).sandboxMode,'workspace-write');
 assert.equal(resolveCodexExecutionPolicy({...base,fields:{'Execution Type':'READ_ONLY_AUDIT'}}).sandboxMode,'read-only');
 assert.equal(resolveCodexExecutionPolicy({...base,fields:{'Execution Type':'REVIEW'}}).sandboxMode,'read-only');
+const contract=buildPrompt('AICC-X',base,{authorizationId:'auth',workPackageId:'AICC-X',authoritySha:'sha',branch:'feature/x',headShaAtAuthorization:'head',repositoryRoot:'/repo',scope:['read'],allowed:['write'],forbidden:['push'],authorizedAt:'now'});
+assert(contract.startsWith('CURRENT TRUSTED EXECUTION DIRECTIVE'));
+assert(contract.includes('Modify the repository to implement the supplied Work Package'));
+assert(contract.includes('CURRENT FORMAL WORK PACKAGE SOURCE'));
+assert(contract.indexOf('CURRENT TRUSTED EXECUTION DIRECTIVE')<contract.indexOf('CURRENT FORMAL WORK PACKAGE SOURCE'));
+assert(!contract.includes('arbitrary prompt'));
 console.log('codex execution policy tests passed');
