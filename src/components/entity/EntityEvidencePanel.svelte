@@ -2,7 +2,7 @@
 <div data-testid="entity-evidence" data-entity-type={context.type}>
 {#if context.type==='milestone'}
   <div class="evidence-intro"><span class="live-dot"></span><strong>里程碑汇总证据</strong></div>
-  <div class="evidence-list"><div><span>Progress</span><code>{context.progress??0}%</code></div><div><span>Work Packages</span><code>{context.summary.workPackages}</code></div><div><span>Complete</span><code>{context.summary.complete}</code></div><div><span>Waiting / Active</span><code>{context.summary.waiting}</code></div><div><span>Blocked</span><code>{context.summary.blocked}</code></div><div><span>Pull Requests</span><code>{context.summary.pullRequests}</code></div></div>
+  <div class="evidence-list milestone-metrics"><div><span>Progress</span><b class="metric-value">{context.progress!==null?`${context.progress}%`:'—'}</b></div><div><span>Work Packages</span><b class="metric-value">{context.summary.workPackages??'—'}</b></div><div><span>Complete</span><b class="metric-value">{context.summary.complete??'—'}</b></div><div><span>Waiting / Active</span><b class="metric-value">{context.summary.waiting??'—'}</b></div><div><span>Blocked</span><b class="metric-value">{context.summary.blocked??'—'}</b></div><div><span>Pull Requests</span><b class="metric-value">{context.summary.pullRequests??'—'}</b></div></div>
   <div class="auth-card"><span class="kicker">BLOCKERS</span><strong>{context.blockers.length?'存在阻塞':'无已记录阻塞'}</strong><p>{context.blockers.join('；')||'当前来源未报告阻塞。'}</p></div>
   <div class="auth-card"><span class="kicker">RECENT ACTIVITY</span><strong>{context.recentActivity}</strong><p>{context.nextAction}</p></div>
 {:else if context.type==='work_package'}
