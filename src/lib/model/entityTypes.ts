@@ -14,7 +14,7 @@ export type AuthorizationRecord={authorizationId:string;workPackageId:string;aut
 export type RuntimeRecord={runId:string;workPackageId:string;authorizationId:string;authoritySha:string;branch:string;startingHeadSha:string;pid:number|null;threadId:string|null;phase:string;currentTask:string;latestEvent:string;startedAt:string;lastActivityAt:string;executionType?:string;sandboxMode?:string;authorizedHead?:string;postRunHead?:string;changedFiles?:string[];codeChangePresent?:boolean;implementationResult?:string;stderr?:string;exitCode?:number|null;completedAt?:string};
 export type HumanUatRecord={workPackageId:string;status:'IN_PROGRESS'|'PASS'|'FAILED'|'BLOCKED';source:string};
 export type WriterLockState={status:'HELD'|'NOT_HELD'|'UNAVAILABLE';scope:'repository';workPackageId?:string};
-export type PullRequestRecord={id:string;workPackageId:string;status:AiccStatus};
+export type PullRequestRecord={id:string;workPackageId:string;status:AiccStatus;url?:string;sourceBranch?:string;targetBranch?:string;headSha?:string;commitEvidence?:string;reviewEvidence?:string;ciEvidence?:string;filesChanged?:number;mergeability?:string;mergeResult?:string;mainVerification?:string;fixture?:boolean};
 
 export type AiccProjectSnapshot={
   roadmap:SourceValue<RoadmapNode[]>;
@@ -38,5 +38,5 @@ export type ActionEligibility={id:ActionId;visible:boolean;enabled:boolean;reaso
 type ContextBase={entity:SelectedEntityRef;type:SelectedEntityRef['type'];id:string;title:string;displayTitle:string;status:AiccStatus;statusLabel:string;progress:number|null;breadcrumb:string;evidence:string[];availableActions:ActionEligibility[]};
 export type MilestoneEntityContext=ContextBase&{type:'milestone';entity:{type:'milestone';id:string};goal:string;dependencies:string;children:RoadmapNode[];summary:{workPackages:number;complete:number;waiting:number;blocked:number;pullRequests:number};blockers:string[];nextAction:string;recentActivity:string};
 export type WorkPackageEntityContext=ContextBase&{type:'work_package';entity:{type:'work_package';id:string};parentMilestone:RoadmapNode|null;formalization:FormalizationState;formalWorkPackage:FormalWorkPackage|null;lifecycle:WorkPackageLifecycle;authorization:ResolvedAuthorization;runtime:RuntimeRecord|null;writerLock:WriterLockState;humanUat:HumanUatRecord|null;relatedPullRequests:PullRequestRecord[]};
-export type PullRequestEntityContext=ContextBase&{type:'pull_request';entity:{type:'pull_request';id:string};parentWorkPackageId:string|null};
+export type PullRequestEntityContext=ContextBase&{type:'pull_request';entity:{type:'pull_request';id:string};parentWorkPackageId:string|null;record:PullRequestRecord|null;stages:LifecycleStage[];currentStage:string;tabs:string[]};
 export type ResolvedEntityContext=MilestoneEntityContext|WorkPackageEntityContext|PullRequestEntityContext;

@@ -3,22 +3,25 @@
   import RoadmapTree from './components/RoadmapTree.svelte';
   import StatusTabs from './components/StatusTabs.svelte';
   import WorkflowTimeline from './components/WorkflowTimeline.svelte';
+  import PRWorkflowTimeline from './components/PRWorkflowTimeline.svelte';
   import EntityHeader from './components/entity/EntityHeader.svelte';
   import EntityEvidencePanel from './components/entity/EntityEvidencePanel.svelte';
   import MilestoneView from './components/entity/MilestoneView.svelte';
   import OwnerActionZone from './components/entity/OwnerActionZone.svelte';
   import {createProjectSnapshot,type RawProjectSources} from './lib/model/projectModel';
   import {resolveEntityContext} from './lib/context/entityContext';
+  import {resolvePrTabView} from './lib/context/prTabContent';
   import type {ActionEligibility,FormalWorkPackage,SelectedEntityRef,WorkPackageEntityContext} from './lib/model/entityTypes';
 
   type Drawer='roadmap'|'status'|null;
   type Feedback={state:'IDLE'|'RUNNING'|'SUCCESS'|'BLOCKED'|'ERROR';title:string;message:string;code?:string;next?:string};
   let drawer:Drawer=null,leftWidth=320,rightWidth=320,busy=false,activeTab='概览',codexInfo:any=null,selectionRequest=0,runtimeTimer:number|undefined;
   let selectedEntity:SelectedEntityRef={type:'work_package',id:'AICC-V2-PR-RUNNER-001'};
-  let raw:RawProjectSources={formalWorkPackages:{}};
+  let raw:RawProjectSources={formalWorkPackages:{},localDevelopment:true};
   let feedback:Feedback={state:'IDLE',title:'等待 Owner 操作',message:'请选择上方操作。最近一次操作结果会保留在这里。'};
   $: snapshot=createProjectSnapshot(raw);
   $: context=resolveEntityContext(snapshot,selectedEntity);
+  $: prTab=context.type==='pull_request'?resolvePrTabView(context,activeTab):null;
   $: roadmapNodes=snapshot.roadmap.value??[];
   $: tabStatuses=context.type==='work_package'?{概览:context.status,流程:context.status,工作包:context.formalization==='FORMAL_READY'?'PASS':'NOT_STARTED',运行:context.runtime&&['STARTING','RUNNING','STOPPING'].includes(context.runtime.phase)?'IN_PROGRESS':context.runtime?'PASS':'NOT_STARTED',验证:context.lifecycle.stages.find(stage=>stage.id==='VALIDATION')?.status??'N_A',UAT:context.lifecycle.stages.find(stage=>stage.id==='HUMAN_UAT')?.status??'N_A',证据:snapshot.repository.availability==='AVAILABLE'?'PASS':'BLOCKED'}:{};
 
@@ -40,8 +43,9 @@
     if(showFeedback)setFeedback({state:'SUCCESS',title:'状态已刷新',message:'项目快照与当前实体上下文已重新构建。',code:'REFRESH_SUCCESS'});
   }
   function startRuntimePolling(){if(runtimeTimer)clearInterval(runtimeTimer);runtimeTimer=window.setInterval(async()=>{try{const data=await request('/api/codex/runtime');raw={...raw,runtime:data.runtime??null};codexInfo=data.info;if(!data.runtime||!['STARTING','RUNNING','STOPPING'].includes(data.runtime.phase)){if(runtimeTimer)clearInterval(runtimeTimer);runtimeTimer=undefined}}catch{/* runtime source failure is rendered as unavailable on the next full refresh */}},1000)}
+  function findRoadmapNode(nodes:any[],id:string):any{for(const node of nodes){if(node.id===id)return node;const found=findRoadmapNode(node.children??[],id);if(found)return found}return null}
   async function select(id:string){
-    const node=roadmapNodes.find(item=>item.id===id)||roadmapNodes.flatMap(item=>item.children).find(item=>item.id===id);
+    const node=findRoadmapNode(roadmapNodes,id);
     if(!node)return;
     selectedEntity={type:node.type,id:node.id} as SelectedEntityRef;activeTab='概览';drawer=null;selectionRequest+=1;
     if(selectedEntity.type==='work_package')await readFormalWorkPackage(selectedEntity.id,selectionRequest);
@@ -86,7 +90,8 @@
         <StatusTabs active={activeTab} statuses={tabStatuses} onSelect={(tab)=>activeTab=tab}/>
         <section class="tab-content">{#if activeTab==='运行'}<p>当前 WP Runtime：{context.runtime?.phase??'无匹配运行'}</p>{:else if activeTab==='验证'}<p>Validation：{context.lifecycle.stages.find(stage=>stage.id==='VALIDATION')?.status}</p>{:else if activeTab==='UAT'}<p>Human UAT：{context.humanUat?.status??'UNAVAILABLE / ABSENT'}</p>{:else if activeTab==='证据'}<p>{context.evidence.join(' · ')}</p>{:else}<p>{context.statusLabel} · {context.formalization}</p>{/if}</section>
         <section class="overview"><div class="section-label"><span>Work Package detail</span><small>Read-only normalized source</small></div>{#if context.formalWorkPackage}<article class="detail-card"><div class="detail-top"><span class="tag">{context.id}</span><span class="truth">FORMAL READY</span></div><h3>{context.formalWorkPackage.title}</h3><p class="source-path">{context.formalWorkPackage.source}</p><div class="detail-grid"><div><b>Goal / Scope</b><p>{context.formalWorkPackage.sections.Goal??'未提供'}</p></div><div><b>Status</b><p>{context.formalWorkPackage.fields.Status??'未提供'}</p></div><div><b>Dependencies</b><p>{context.formalWorkPackage.sections.Dependencies??'未提供'}</p></div><div><b>Acceptance Criteria</b><p>{context.formalWorkPackage.sections['Acceptance Criteria']??'未提供'}</p></div></div></article>{:else}<article class="detail-card"><div class="detail-top"><span class="tag">{context.id}</span><span class="kicker">PLANNED_ONLY</span></div><h3>Roadmap Work Package</h3><p>当前仅存在于 Roadmap；尚无有效正式可执行 Work Package 文件。</p></article>{/if}</section>
-      {:else}<section class="milestone-view"><div class="milestone-badge">[PR]</div><h2>{context.title}</h2><p>PR 视图将在后续工作包实现；当前没有生产 PR 证据。</p></section>{/if}
+
+      {:else if prTab}<section class="pr-panel"><div class="section-label"><span>Pull Request Panel</span><small>PR 7-stage workflow</small></div><div class="pr-notice"><strong>[PR] PR #DEMO — Dual Panel Fixture</strong><span>DEMO · LOCAL FIXTURE · 仅用于本地视觉 UAT，不代表 GitHub 生产证据。</span><span>Parent: {context.parentWorkPackageId??'未匹配'}</span></div><StatusTabs active={activeTab} statuses={{}} tabs={context.tabs} onSelect={(tab)=>activeTab=tab}/><div class="pr-tab-view" data-testid="pr-tab-content" data-pr-tab={prTab.tab}><div class="section-label"><span>{prTab.title}</span><small>{prTab.tab}</small></div>{#if prTab.description}<p class="pr-tab-description">{prTab.description}</p>{/if}{#if prTab.tab==='流程'}<PRWorkflowTimeline stages={context.stages} currentStage={context.currentStage}/>{/if}<div class="runtime-list">{#each prTab.rows as row}<div><span>{row[0]}</span><b>{row[1]}</b></div>{/each}</div></div></section>{/if}
     </div></main>
     <div class="resize-handle" onpointerdown={(event)=>resize('right',event)} role="separator" aria-label="调整状态宽度"></div>
     <aside class:drawer-open={drawer==='status'} class="status panel"><div class="panel-header"><div><span class="kicker">03 / EVIDENCE</span><h2>状态与证据</h2></div></div><EntityEvidencePanel {context} repository={snapshot.repository.value} {codexInfo}/></aside>
