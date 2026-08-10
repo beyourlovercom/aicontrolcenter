@@ -1,0 +1,3 @@
+import {resolveLifecycle,aggregateStatus,type RoadmapNode} from './workflow.ts';
+function assert(x:unknown,m:string):asserts x{if(!x)throw Error(m)}
+const current=resolveLifecycle('AICC-V2-UI-WORKFLOW-001',false);assert(current.currentStage==='HUMAN_UAT'&&current.status==='WAITING_UAT','current lifecycle');assert(current.stageStatuses.IMPLEMENTATION==='COMPLETE'&&current.stageStatuses.VALIDATION==='COMPLETE','completed evidence');assert(current.executability==='PLANNED_ONLY','planned executable state');const empty:RoadmapNode={id:'M5',type:'milestone',title:'M5',status:'NOT_STARTED',progress:null,parentId:null,children:[]};assert(aggregateStatus([])==='NOT_STARTED'&&empty.status!=='COMPLETE','empty milestone');console.log('lifecycle contract tests passed');
