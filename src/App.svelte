@@ -1,5 +1,5 @@
 <script lang="ts">
-  import {onMount,tick} from 'svelte';
+  import {onDestroy,onMount,tick} from 'svelte';
   import RoadmapTree from './components/RoadmapTree.svelte';
   import StatusTabs from './components/StatusTabs.svelte';
   import WorkflowTimeline from './components/WorkflowTimeline.svelte';
@@ -13,7 +13,7 @@
 
   type Drawer='roadmap'|'status'|null;
   type Feedback={state:'IDLE'|'RUNNING'|'SUCCESS'|'BLOCKED'|'ERROR';title:string;message:string;code?:string;next?:string};
-  let drawer:Drawer=null,leftWidth=320,rightWidth=320,busy=false,activeTab='概览',codexInfo:any=null,selectionRequest=0;
+  let drawer:Drawer=null,leftWidth=320,rightWidth=320,busy=false,activeTab='概览',codexInfo:any=null,selectionRequest=0,runtimeTimer:number|undefined;
   let selectedEntity:SelectedEntityRef={type:'work_package',id:'AICC-V2-PR-RUNNER-001'};
   let raw:RawProjectSources={formalWorkPackages:{}};
   let feedback:Feedback={state:'IDLE',title:'等待 Owner 操作',message:'请选择上方操作。最近一次操作结果会保留在这里。'};
@@ -39,6 +39,7 @@
     if(selectedAtStart.type==='work_package')await readFormalWorkPackage(selectedAtStart.id,selectionRequest);
     if(showFeedback)setFeedback({state:'SUCCESS',title:'状态已刷新',message:'项目快照与当前实体上下文已重新构建。',code:'REFRESH_SUCCESS'});
   }
+  function startRuntimePolling(){if(runtimeTimer)clearInterval(runtimeTimer);runtimeTimer=window.setInterval(async()=>{try{const data=await request('/api/codex/runtime');raw={...raw,runtime:data.runtime??null};codexInfo=data.info;if(!data.runtime||!['STARTING','RUNNING','STOPPING'].includes(data.runtime.phase)){if(runtimeTimer)clearInterval(runtimeTimer);runtimeTimer=undefined}}catch{/* runtime source failure is rendered as unavailable on the next full refresh */}},1000)}
   async function select(id:string){
     const node=roadmapNodes.find(item=>item.id===id)||roadmapNodes.flatMap(item=>item.children).find(item=>item.id===id);
     if(!node)return;
@@ -56,7 +57,7 @@
     try{
       if(id==='REFRESH')await loadSnapshot(false);
       if(id==='AUTHORIZE'&&selectedEntity.type==='work_package'){const requestedId=selectedEntity.id;const result=await post('/api/authorization',{workPackageId:requestedId,selectedEntityId:requestedId,confirmed:true});if(result.record?.workPackageId!==requestedId||result.record?.headShaAtAuthorization!==snapshot.repository.value?.head)throw new Error('AUTHORIZATION_PERSISTENCE_INTEGRITY_FAILED');await loadSnapshot(false);await tick();const refreshedSnapshot=createProjectSnapshot(raw);const refreshed=resolveEntityContext(refreshedSnapshot,selectedEntity);if(refreshed.type!=='work_package'||refreshed.id!==requestedId||refreshed.authorization.state!=='VALID'||refreshed.authorization.record?.workPackageId!==requestedId||refreshed.authorization.record?.headShaAtAuthorization!==refreshedSnapshot.repository.value?.head)throw new Error('AUTHORIZATION_POSTCONDITION_FAILED');}
-      if(id==='START_CODEX'&&selectedEntity.type==='work_package'){const startContext=resolveEntityContext(createProjectSnapshot(raw),selectedEntity);if(startContext.type!=='work_package'||startContext.authorization.state!=='VALID'||startContext.authorization.record?.workPackageId!==selectedEntity.id)throw new Error('TARGET_CONTEXT_MISMATCH');await post('/api/codex/start',{workPackageId:selectedEntity.id});}
+      if(id==='START_CODEX'&&selectedEntity.type==='work_package'){const startContext=resolveEntityContext(createProjectSnapshot(raw),selectedEntity);if(startContext.type!=='work_package'||startContext.authorization.state!=='VALID'||startContext.authorization.record?.workPackageId!==selectedEntity.id)throw new Error('TARGET_CONTEXT_MISMATCH');await post('/api/codex/start',{workPackageId:selectedEntity.id});startRuntimePolling();}
       if(id==='STOP_CODEX')await post('/api/codex/stop',{});
       if(id==='SAFE_MAIN_SYNC')await post('/api/repository/sync-main',{});
       await loadSnapshot(false);
@@ -65,7 +66,7 @@
     }catch(error){const message=error instanceof Error?error.message:'ACTION_ERROR';setFeedback({state:'ERROR',title:'Owner 操作未完成',message,code:message.split(':')[0],next:'刷新状态并检查当前实体证据。'})}finally{busy=false}
   }
   function resize(side:'left'|'right',event:PointerEvent){const startX=event.clientX,start=side==='left'?leftWidth:rightWidth;const move=(next:PointerEvent)=>{const value=Math.max(side==='left'?240:260,Math.min(420,start+(side==='left'?next.clientX-startX:startX-next.clientX)));if(side==='left')leftWidth=value;else rightWidth=value};const up=()=>{removeEventListener('pointermove',move);removeEventListener('pointerup',up);localStorage.setItem(`aicc-v2-${side}-width`,String(side==='left'?leftWidth:rightWidth))};addEventListener('pointermove',move);addEventListener('pointerup',up)}
-  onMount(()=>{leftWidth=+localStorage.getItem('aicc-v2-left-width')!||320;rightWidth=+localStorage.getItem('aicc-v2-right-width')!||320;void loadSnapshot(false)});
+  onMount(()=>{leftWidth=+localStorage.getItem('aicc-v2-left-width')!||320;rightWidth=+localStorage.getItem('aicc-v2-right-width')!||320;void loadSnapshot(false).then(()=>{if(raw.runtime&&['STARTING','RUNNING','STOPPING'].includes(raw.runtime.phase))startRuntimePolling()})});onDestroy(()=>{if(runtimeTimer)clearInterval(runtimeTimer)});
 </script>
 
 <svelte:head><title>AICC V2 · Control Center</title><meta name="viewport" content="width=device-width, initial-scale=1"/></svelte:head>
