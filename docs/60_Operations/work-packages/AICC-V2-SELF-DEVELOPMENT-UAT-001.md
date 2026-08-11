@@ -50,6 +50,31 @@ evidence 一致。
 14. Authorization, implementation, validation, Human UAT, and terminal runtime evidence survive refresh, browser reload, entity switching, and Local Control Service restart.
 15. No external manual mutation or fabricated lifecycle fact is required to advance this Work Package.
 
+## Owner Human UAT Plan
+
+以下是独立于机器 Acceptance Criteria 的 Owner-facing 人工验收计划。每项均包含稳定 ID、Owner 操作与人工可判断的通过标准。
+
+- HUA-01 | 第一轮：启动与运行 | 在 Roadmap 选择本 Work Package | 页面显示当前 Work Package 与人工 UAT 工作台。
+- HUA-02 | 第一轮：启动与运行 | 点击确认授权并确认授权结果 | Owner 授权状态显示有效且绑定本 Work Package。
+- HUA-03 | 第一轮：启动与运行 | 点击启动 Codex | AICC 启动真实 Codex 运行，反馈显示已启动。
+- HUA-04 | 第一轮：启动与运行 | 观察 Runtime Monitor | 运行监控显示运行中、耗时与当前活动。
+- HUA-05 | 第一轮：启动与运行 | 观察运行期间的写入锁 | 运行期间写入锁显示已持有且范围为仓库。
+- HUA-06 | 第二轮：真实自开发结果 | 观察 Agent 消息与命令 | 监控中能看到真实活动记录，不是静态示例。
+- HUA-07 | 第二轮：真实自开发结果 | 等待 Codex 运行结束 | 终态、退出码与最近活动显示真实且一致。
+- HUA-08 | 第二轮：真实自开发结果 | 查看 Runtime 的实现结果 | 实现结果显示已产生代码变更。
+- HUA-09 | 第二轮：真实自开发结果 | 查看文件变更事件 | 变更事件指向 HumanUatWorkspace 产品代码。
+- HUA-10 | 第二轮：真实自开发结果 | 打开 Human UAT 工作台 | 工作台显示中文优先的验收方式字段。
+- HUA-11 | 第三轮：状态与持久化 | 查看逐项验收方式 | `ITEMIZED_PASS` 对应显示「逐项验收」。
+- HUA-12 | 第三轮：状态与持久化 | 查看 Owner 直接通过方式 | `OWNER_OVERRIDE_PASS` 对应显示「Owner 直接通过」。
+- HUA-13 | 第三轮：状态与持久化 | 点击刷新状态 | 刷新后运行、生命周期与验收方式保持一致。
+- HUA-14 | 第三轮：状态与持久化 | 切换到其他实体再切回 | 本 Work Package 的证据没有丢失或串到其他实体。
+- HUA-15 | 第三轮：状态与持久化 | 重新加载浏览器 | 验收方式与 Runtime 终态仍可恢复。
+- HUA-16 | 第四轮：最终验收 | 重启 Local Control Service 后刷新 | 授权、验证与 Human UAT 证据仍可读取。
+- HUA-17 | 第四轮：最终验收 | 检查写入锁终态 | 运行结束后写入锁显示未持有。
+- HUA-18 | 第四轮：最终验收 | 逐项检查全部人工验收项 | 所有必验项均已由 Owner 明确通过或标记不适用。
+- HUA-19 | 第四轮：最终验收 | 点击通过 UAT | Human UAT 显示已通过且验收方式保持真实。
+- HUA-20 | 第四轮：最终验收 | 检查最终生命周期 | HUMAN_UAT 完成，但 CLOSED 仍保持未开始。
+
 ## Persistence and evidence
 
 The dogfood loop must preserve the Owner authorization, implementation lifecycle
