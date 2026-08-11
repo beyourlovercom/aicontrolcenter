@@ -1,0 +1,13 @@
+import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
+const app=readFileSync(new URL('../App.svelte',import.meta.url),'utf8');
+const actions=readFileSync(new URL('../components/entity/PrOwnerActionZone.svelte',import.meta.url),'utf8');
+const eligibility=readFileSync(new URL('./context/actionEligibility.ts',import.meta.url),'utf8');
+assert.equal((app.match(/<RuntimeMonitor/g)??[]).length,2,'WP and PR share the canonical RuntimeMonitor');
+assert(app.includes('runtime={null}'), 'PR monitor is present without a PR runtime');
+assert(app.includes('emptyTitle="暂无 PR 运行记录"'),'PR empty state is explicit');
+assert(app.includes('PR_EXECUTION_CONTRACT_NOT_BOUND'),'PR execution block reason is visible');
+assert(actions.includes("'PR_START_CODEX','启动 Codex'"),'PR start action remains visible');
+assert(eligibility.includes("action('PR_START_CODEX',true,false,'PR_EXECUTION_CONTRACT_NOT_BOUND'"),'PR start remains truthfully blocked');
+assert(app.includes('<RuntimeMonitor runtime={null} workPackage={null}'), 'parent WP runtime is not passed to PR monitor');
+console.log('PR runtime monitor structure tests passed');
