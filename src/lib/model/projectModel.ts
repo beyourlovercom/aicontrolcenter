@@ -4,7 +4,7 @@ import {resolveLifecycleProgress,resolveRuntimeImplementationProgress,resolveSta
 import {resolveAuthorizationForEntity} from '../context/authorizationResolver.ts';
 import {resolveWorkPackageLifecycle} from '../context/lifecycleResolver.ts';
 
-export type RawProjectSources={roadmap?:{content:string;source:string}|null;repository?:RepositoryState|null;formalWorkPackages?:Record<string,FormalWorkPackage>;authorization?:AuthorizationRecord|null;runtime?:RuntimeRecord|null;pullRequests?:PullRequestRecord[];localDevelopment?:boolean;sourceErrors?:Partial<Record<'roadmap'|'repository'|'formalWorkPackages'|'authorizations'|'runtime'|'pullRequests',string>>};
+export type RawProjectSources={roadmap?:{content:string;source:string}|null;repository?:RepositoryState|null;formalWorkPackages?:Record<string,FormalWorkPackage>;authorization?:AuthorizationRecord|null;runtime?:RuntimeRecord|null;humanUat?:HumanUatRecord[];pullRequests?:PullRequestRecord[];localDevelopment?:boolean;sourceErrors?:Partial<Record<'roadmap'|'repository'|'formalWorkPackages'|'authorizations'|'runtime'|'pullRequests',string>>};
 const available=<T>(value:T):SourceValue<T>=>({availability:'AVAILABLE',value});
 const unavailable=<T>(code:string):SourceValue<T>=>({availability:'UNAVAILABLE',value:null,errorCode:code});
 
@@ -27,7 +27,7 @@ export function normalizeRoadmap(content:string,localDevelopment=false, pullRequ
   return matches.map(match=>{const id=match[1],name=match[2].trim(),wpIds=[...match[3].matchAll(/`(AICC-[A-Z0-9-]+)`/g)].map(item=>item[1]);const children:RoadmapNode[]=wpIds.map(wpId=>{const prs=(localDevelopment?pullRequests:[]).filter(pr=>pr.workPackageId===wpId).map(pr=>{const stages=prStages.map(([stageId,label],index)=>({id:stageId,label,status:index===0?pr.status:'N_A',evidence:[]}));return {id:pr.id,type:'pull_request' as const,title:'PR #DEMO — Dual Panel Fixture',status:pr.status,progress:resolveLifecycleProgress(stages),parentId:wpId,children:[]}});const status=workPackageStatus(wpId),progress=runtime?.workPackageId===wpId?resolveRuntimeImplementationProgress(runtime):resolveStatusProgress(status);return {id:wpId,type:'work_package' as const,title:wpId,status,progress,parentId:id,children:prs}});const status=id==='M1'&&children.some(child=>child.status==='WAITING_UAT')?'IN_PROGRESS':resolveMilestoneStatus(children);return {id,type:'milestone' as const,title:`${id} — ${name}`,status,progress:children.length?Math.round(children.reduce((sum,child)=>sum+(child.progress??0),0)/children.length):0,parentId:null,children};});
 }
 
-const CURRENT_UAT:HumanUatRecord[]=[{workPackageId:'AICC-V2-UI-WORKFLOW-001',status:'IN_PROGRESS',source:'AICC-V2-UI-WORKFLOW-001-R6 Owner UI UAT'}];
+const CURRENT_UAT:HumanUatRecord[]=[{repository:'local',workPackageId:'AICC-V2-UI-WORKFLOW-001',entityType:'work_package',status:'IN_PROGRESS',ownerLabel:'Owner',items:[],createdAt:'2026-01-01T00:00:00.000Z',updatedAt:'2026-01-01T00:00:00.000Z',source:'existing Owner UI UAT evidence'}];
 function reconcileRoadmapLifecycle(snapshot:AiccProjectSnapshot):AiccProjectSnapshot{
   if(snapshot.roadmap.availability!=='AVAILABLE'||!snapshot.roadmap.value)return snapshot;
   const roadmap=snapshot.roadmap.value.map(milestone=>{const children=milestone.children.map(node=>{
@@ -53,7 +53,7 @@ export function createProjectSnapshot(raw:RawProjectSources):AiccProjectSnapshot
     authorizations:raw.sourceErrors?.authorizations?unavailable(raw.sourceErrors.authorizations):available(raw.authorization?[raw.authorization]:[]),
     runtime:raw.sourceErrors?.runtime?unavailable(raw.sourceErrors.runtime):available(raw.runtime??null),
     writerLock:available({status:active?'HELD':'NOT_HELD',scope:'repository',...(active&&raw.runtime?{workPackageId:raw.runtime.workPackageId}:{})}),
-    humanUat:available(CURRENT_UAT),pullRequests:raw.sourceErrors?.pullRequests?unavailable(raw.sourceErrors.pullRequests):available(raw.localDevelopment===true?(raw.pullRequests??[LOCAL_DEMO_PR]):(raw.pullRequests??[])),roadmapSource:raw.roadmap?.source??'docs/10_Planning_Roadmap/01_LIVING_ROADMAP.md'
+    humanUat:available(raw.humanUat??CURRENT_UAT),pullRequests:raw.sourceErrors?.pullRequests?unavailable(raw.sourceErrors.pullRequests):available(raw.localDevelopment===true?(raw.pullRequests??[LOCAL_DEMO_PR]):(raw.pullRequests??[])),roadmapSource:raw.roadmap?.source??'docs/10_Planning_Roadmap/01_LIVING_ROADMAP.md'
   };
   return reconcileRoadmapLifecycle(snapshot);
 }

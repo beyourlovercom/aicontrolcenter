@@ -12,7 +12,9 @@ export type RepositoryState={repository:string;branch:string;head:string;localMa
 export type FormalWorkPackage={id:string;title:string;source:string;fields:Record<string,string>;sections:Record<string,string>};
 export type AuthorizationRecord={authorizationId:string;workPackageId:string;authoritySha:string;branch:string;headShaAtAuthorization:string;repositoryRoot:string;authorizedAt:string;status?:string};
 export type RuntimeRecord={runId:string;workPackageId:string;authorizationId:string;authoritySha:string;branch:string;startingHeadSha:string;pid:number|null;pidAlive?:boolean;threadId:string|null;phase:string;currentTask:string;latestEvent:string;startedAt:string;lastActivityAt:string;events?:string[];agentMessageCount?:number;commandExecutionCount?:number;fileChangeEventCount?:number;toolCallCount?:number;errorEventCount?:number;executionType?:string;sandboxMode?:string;authorizedHead?:string;postRunHead?:string;changedFiles?:string[];codeChangePresent?:boolean;implementationResult?:string;stderr?:string;finalAgentMessage?:string;exitCode?:number|null;completedAt?:string;failure?:string};
-export type HumanUatRecord={workPackageId:string;status:'IN_PROGRESS'|'PASS'|'FAILED'|'BLOCKED';source:string};
+export type HumanUatItemState='PENDING'|'PASS'|'FAIL'|'N_A';
+export type HumanUatItem={id:string;title:string;description:string;state:HumanUatItemState;note?:string;evidence?:string[]};
+export type HumanUatRecord={repository:string;workPackageId:string;entityType:'work_package';status:'NOT_STARTED'|'IN_PROGRESS'|'NEEDS_REMEDIATION'|'PASS';ownerLabel?:string;items:HumanUatItem[];overallNote?:string;createdAt:string;updatedAt:string;finalDecisionAt?:string;source:string};
 export type WriterLockState={status:'HELD'|'NOT_HELD'|'UNAVAILABLE';scope:'repository';workPackageId?:string};
 export type PullRequestRecord={id:string;workPackageId:string;status:AiccStatus;url?:string;sourceBranch?:string;targetBranch?:string;headSha?:string;commitEvidence?:string;reviewEvidence?:string;ciEvidence?:string;filesChanged?:number;mergeability?:string;mergeResult?:string;mainVerification?:string;fixture?:boolean};
 
