@@ -15,6 +15,7 @@ export type RuntimeRecord={runId:string;workPackageId:string;authorizationId:str
 export type HumanUatItemState='PENDING'|'PASS'|'FAIL'|'N_A';
 export type HumanUatItem={id:string;title:string;description:string;state:HumanUatItemState;note?:string;evidence?:string[]};
 export type HumanUatRecord={repository:string;workPackageId:string;entityType:'work_package';status:'NOT_STARTED'|'IN_PROGRESS'|'NEEDS_REMEDIATION'|'PASS';ownerLabel?:string;items:HumanUatItem[];overallNote?:string;createdAt:string;updatedAt:string;finalDecisionAt?:string;source:string};
+export type LifecycleEvidenceRecord={repository:string;workPackageId:string;implementation:{status:'COMPLETE';commitSha:string;source:'VERIFIED_EXISTING_CHECKPOINT';recordedAt:string};validation:{status:'COMPLETE';checks:string[];recordedAt:string};};
 export type WriterLockState={status:'HELD'|'NOT_HELD'|'UNAVAILABLE';scope:'repository';workPackageId?:string};
 export type PullRequestRecord={id:string;workPackageId:string;status:AiccStatus;url?:string;sourceBranch?:string;targetBranch?:string;headSha?:string;commitEvidence?:string;reviewEvidence?:string;ciEvidence?:string;filesChanged?:number;mergeability?:string;mergeResult?:string;mainVerification?:string;fixture?:boolean};
 
@@ -26,6 +27,7 @@ export type AiccProjectSnapshot={
   runtime:SourceValue<RuntimeRecord|null>;
   writerLock:SourceValue<WriterLockState>;
   humanUat:SourceValue<HumanUatRecord[]>;
+  lifecycleEvidence:SourceValue<LifecycleEvidenceRecord[]>;
   pullRequests:SourceValue<PullRequestRecord[]>;
   roadmapSource:string;
 };

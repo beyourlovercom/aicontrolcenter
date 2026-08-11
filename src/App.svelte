@@ -41,7 +41,7 @@
     if(showFeedback)setFeedback({state:'RUNNING',title:'正在刷新状态…',message:'正在重建项目快照与当前实体上下文。',code:'REFRESHING'});
     const selectedAtStart=selectedEntity;
     const runtimeQuery=selectedAtStart.type==='work_package'?`?workPackageId=${encodeURIComponent(selectedAtStart.id)}`:'';
-    const [roadmapResult,repositoryResult,authorizationResult,runtimeResult,descriptionResult,uatResult]=await Promise.allSettled([request('/api/roadmap'),request('/api/repository'),request(`/api/authorization?workPackageId=${encodeURIComponent(selectedAtStart.type==='work_package'?selectedAtStart.id:'')}`),request(`/api/codex/runtime${runtimeQuery}`),request('/api/entity-descriptions'),selectedAtStart.type==='work_package'?request(`/api/human-uat?workPackageId=${encodeURIComponent(selectedAtStart.id)}`):Promise.resolve({record:null})]);
+    const [roadmapResult,repositoryResult,authorizationResult,runtimeResult,descriptionResult,uatResult,lifecycleEvidenceResult]=await Promise.allSettled([request('/api/roadmap'),request('/api/repository'),request(`/api/authorization?workPackageId=${encodeURIComponent(selectedAtStart.type==='work_package'?selectedAtStart.id:'')}`),request(`/api/codex/runtime${runtimeQuery}`),request('/api/entity-descriptions'),selectedAtStart.type==='work_package'?request(`/api/human-uat?workPackageId=${encodeURIComponent(selectedAtStart.id)}`):Promise.resolve({record:null}),selectedAtStart.type==='work_package'?request(`/api/lifecycle-evidence?workPackageId=${encodeURIComponent(selectedAtStart.id)}`):Promise.resolve({record:null})]);
     const sourceErrors:RawProjectSources['sourceErrors']={};
     const next:RawProjectSources={...raw,sourceErrors};
     if(roadmapResult.status==='fulfilled')next.roadmap=roadmapResult.value;else sourceErrors.roadmap='ROADMAP_UNAVAILABLE';
@@ -50,6 +50,7 @@
     if(runtimeResult.status==='fulfilled'){next.runtime=runtimeResult.value.runtime??null;codexInfo=runtimeResult.value.info}else sourceErrors.runtime='RUNTIME_UNAVAILABLE';
     if(descriptionResult.status==='fulfilled')descriptions=descriptionResult.value.records??[];
     if(uatResult.status==='fulfilled'&&selectedAtStart.type==='work_package')next.humanUat=uatResult.value.record?[uatResult.value.record]:[];
+    if(lifecycleEvidenceResult.status==='fulfilled'&&selectedAtStart.type==='work_package')next.lifecycleEvidence=lifecycleEvidenceResult.value.record?[lifecycleEvidenceResult.value.record]:[];
     raw=next;
     if(next.roadmap?.content){const hydrated=resolveHydratedSelection(createProjectSnapshot(next).roadmap.value??[]);if(hydrated.type!==selectedEntity.type||hydrated.id!==selectedEntity.id){selectedEntity=hydrated;activeTab='概览';selectionRequest+=1;persistSelection(hydrated);return loadSnapshot(false);}}
     if(selectedAtStart.type==='work_package')await readFormalWorkPackage(selectedAtStart.id,selectionRequest);

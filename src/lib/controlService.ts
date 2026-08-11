@@ -19,11 +19,15 @@ export function readEntityDescriptions():EntityDescriptionRecord[]{try{return JS
 function writeEntityDescriptions(records:EntityDescriptionRecord[]){mkdirSync(join(homedir(),'.aicc-v2'),{recursive:true});const tmp=`${DESCRIPTION_FILE}.${process.pid}.tmp`;writeFileSync(tmp,JSON.stringify(records,null,2),{mode:0o600});renameSync(tmp,DESCRIPTION_FILE)}
 export function upsertEntityDescription(record:Omit<EntityDescriptionRecord,'updatedAt'|'updatedBy'>){const next=readEntityDescriptions().filter(item=>!(item.repositoryKey===record.repositoryKey&&item.entityType===record.entityType&&item.entityId===record.entityId));next.push({...record,updatedAt:new Date().toISOString(),updatedBy:'owner'});writeEntityDescriptions(next);return next.at(-1)!}
 export function clearEntityDescription(repositoryKey:string,entityType:EntityDescriptionRecord['entityType'],entityId:string){writeEntityDescriptions(readEntityDescriptions().filter(item=>!(item.repositoryKey===repositoryKey&&item.entityType===entityType&&item.entityId===entityId)))}
-import type {HumanUatRecord} from './model/entityTypes.ts';
+import type {HumanUatRecord,LifecycleEvidenceRecord} from './model/entityTypes.ts';
 const HUMAN_UAT_FILE=join(homedir(),'.aicc-v2','human-uat.json');
 export function readHumanUatRecords():HumanUatRecord[]{try{return JSON.parse(readFileSync(HUMAN_UAT_FILE,'utf8')) as HumanUatRecord[]}catch{return []}}
 export function readHumanUat(repository:string,workPackageId:string):HumanUatRecord|null{return readHumanUatRecords().find(item=>item.repository===repository&&item.entityType==='work_package'&&item.workPackageId===workPackageId)??null}
 export function writeHumanUat(record:HumanUatRecord):HumanUatRecord{const records=readHumanUatRecords().filter(item=>!(item.repository===record.repository&&item.entityType==='work_package'&&item.workPackageId===record.workPackageId));mkdirSync(join(homedir(),'.aicc-v2'),{recursive:true});atomicWriteJson(HUMAN_UAT_FILE,[...records,record]);return record}
+const LIFECYCLE_EVIDENCE_FILE=join(homedir(),'.aicc-v2','lifecycle-evidence.json');
+export function readLifecycleEvidenceRecords():LifecycleEvidenceRecord[]{try{return JSON.parse(readFileSync(LIFECYCLE_EVIDENCE_FILE,'utf8')) as LifecycleEvidenceRecord[]}catch{return []}}
+export function readLifecycleEvidence(repository:string,workPackageId:string):LifecycleEvidenceRecord|null{return readLifecycleEvidenceRecords().find(item=>item.repository===repository&&item.workPackageId===workPackageId)??null}
+export function writeLifecycleEvidence(record:LifecycleEvidenceRecord):LifecycleEvidenceRecord{const records=readLifecycleEvidenceRecords().filter(item=>!(item.repository===record.repository&&item.workPackageId===record.workPackageId));mkdirSync(join(homedir(),'.aicc-v2'),{recursive:true});atomicWriteJson(LIFECYCLE_EVIDENCE_FILE,[...records,record]);return record}
 
 export function validWorkPackageId(id: string): boolean { return /^AICC-[A-Z0-9]+(?:-[A-Z0-9]+)*$/.test(id) && !id.includes('..') && !id.includes('/') && !id.includes('\\'); }
 export function readRoadmap(): string { return readFileSync(ROADMAP, 'utf8'); }
