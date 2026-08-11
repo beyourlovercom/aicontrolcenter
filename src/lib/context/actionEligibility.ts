@@ -3,7 +3,7 @@ import type {ActionEligibility,AiccProjectSnapshot,ResolvedAuthorization,Selecte
 const action=(id:ActionEligibility['id'],visible:boolean,enabled:boolean,reasonCode?:string,reasonLabel?:string):ActionEligibility=>({id,visible,enabled,...(reasonCode?{reasonCode}:{}) ,...(reasonLabel?{reasonLabel}:{})});
 export function resolveAvailableActions(entity:SelectedEntityRef,snapshot:AiccProjectSnapshot,formalization?:FormalizationState,lifecycle?:WorkPackageLifecycle,authorization?:ResolvedAuthorization):ActionEligibility[]{
   if(entity.type==='milestone')return [action('REFRESH',true,true)];
-  if(entity.type==='pull_request')return [action('REFRESH',true,true)];
+  if(entity.type==='pull_request')return [action('REFRESH',true,true),action('PR_OPEN',true,false,'PR_NOT_BOUND','未绑定真实 GitHub PR'),action('PR_RETRY',true,false,'PR_RETRY_NOT_AVAILABLE','当前没有可重试的 PR 执行'),action('PR_STOP',true,false,'PR_NO_ACTIVE_EXECUTION','当前没有活动中的 PR 执行'),action('PR_APPROVE_MERGE',true,false,'PR_MERGE_EVIDENCE_MISSING','当前 Demo PR 未绑定真实 PR / CI / Merge evidence')];
   const repo=snapshot.repository.value,runtime=snapshot.runtime.value;
   const matchingRuntime=runtime?.workPackageId===entity.id?runtime:null;
   const humanUat=lifecycle?.currentStage==='HUMAN_UAT';

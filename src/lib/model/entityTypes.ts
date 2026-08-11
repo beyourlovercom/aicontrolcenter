@@ -32,7 +32,7 @@ export type LifecycleStage={id:string;label:string;status:AiccStatus;evidence:st
 export type WorkPackageLifecycle={currentStage:string;effectiveStatus:AiccStatus;stages:LifecycleStage[]};
 export type AuthorizationEffectiveState='NONE'|'VALID'|'STALE_HEAD'|'STALE_BRANCH'|'CONTEXT_MISMATCH'|'CONFLICT'|'UNAVAILABLE';
 export type ResolvedAuthorization={state:AuthorizationEffectiveState;record:AuthorizationRecord|null;reasonCode?:string};
-export type ActionId='REFRESH'|'AUTHORIZE'|'START_CODEX'|'STOP_CODEX'|'RETRY'|'SAFE_MAIN_SYNC';
+export type ActionId='REFRESH'|'AUTHORIZE'|'START_CODEX'|'STOP_CODEX'|'RETRY'|'SAFE_MAIN_SYNC'|'PR_OPEN'|'PR_RETRY'|'PR_STOP'|'PR_APPROVE_MERGE';
 export type ActionEligibility={id:ActionId;visible:boolean;enabled:boolean;reasonCode?:string;reasonLabel?:string};
 
 type ContextBase={entity:SelectedEntityRef;type:SelectedEntityRef['type'];id:string;title:string;displayTitle:string;status:AiccStatus;statusLabel:string;progress:number|null;breadcrumb:string;evidence:string[];availableActions:ActionEligibility[]};

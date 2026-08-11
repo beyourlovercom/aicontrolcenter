@@ -1,4 +1,4 @@
-<script lang="ts">import type {MilestoneEntityContext} from '../../lib/model/entityTypes';export let context:MilestoneEntityContext;</script>
+<script lang="ts">import type {MilestoneEntityContext} from '../../lib/model/entityTypes';import MilestoneProgress from './MilestoneProgress.svelte';export let context:MilestoneEntityContext;export let onSelect:(id:string)=>void=()=>{};</script>
 <section class="milestone-view" data-testid="milestone-view">
   <div class="milestone-badge">[MILESTONE OVERVIEW]</div>
   <h2>{context.title}</h2><p>状态：{context.statusLabel} · 进度：{context.progress??0}%</p>
@@ -10,3 +10,4 @@
     <strong>Next Action</strong><p>{context.nextAction}</p>
   </div>
 </section>
+<MilestoneProgress {context} {onSelect}/>

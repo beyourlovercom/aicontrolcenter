@@ -1,6 +1,6 @@
 import { defineConfig } from 'vite';
 import { svelte } from '@sveltejs/vite-plugin-svelte';
-import { authorizationBlocker, authorizationState, persistAuthorization, reauthorizeAuthorization, readAuthorization, readRoadmap, readRepository, readWorkPackage, syncLocalMain } from './src/lib/controlService';
+import { authorizationBlocker, authorizationState, persistAuthorization, reauthorizeAuthorization, readAuthorization, readRoadmap, readRepository, readWorkPackage, syncLocalMain, readEntityDescriptions, upsertEntityDescription, clearEntityDescription } from './src/lib/controlService';
 import { codexInfo, readRuntime, startRuntime, stopRuntime } from './src/lib/runtimeManager';
 import type { Plugin } from 'vite';
 import type { IncomingMessage, ServerResponse } from 'node:http';
@@ -23,6 +23,7 @@ function json(res: ServerResponse, body: unknown, status = 200) { res.statusCode
 function localControlPlugin(): Plugin { return { name: 'aicc-local-control', configureServer(server) {
   server.middlewares.use('/api/health', (_req: IncomingMessage, res: ServerResponse) => json(res, { ok: true, service: 'aicc-local-control' }));
   server.middlewares.use('/api/roadmap', (_req: IncomingMessage, res: ServerResponse) => { try { json(res, { source: 'docs/10_Planning_Roadmap/01_LIVING_ROADMAP.md', content: readRoadmap() }); } catch { json(res, { error: 'ROADMAP_ERROR' }, 500); } });
+  server.middlewares.use('/api/entity-descriptions', (req: IncomingMessage, res: ServerResponse) => { try { if(req.method==='GET')return json(res,{records:readEntityDescriptions()}); if(req.method!=='POST'&&req.method!=='DELETE')return json(res,{error:'METHOD_NOT_ALLOWED'},405); let body='';req.on('data',chunk=>body+=chunk);req.on('end',()=>{const p=JSON.parse(body) as {repositoryKey?:string;entityType?:'milestone'|'work_package'|'pull_request';entityId?:string;description?:string};if(typeof p.repositoryKey!=='string'||!p.entityType||typeof p.entityId!=='string')return json(res,{error:'DESCRIPTION_TARGET_INVALID'},400);if(req.method==='DELETE'){clearEntityDescription(p.repositoryKey,p.entityType,p.entityId);return json(res,{status:'CLEARED'});}if(typeof p.description!=='string'||p.description.trim().length>2000)return json(res,{error:'DESCRIPTION_INVALID'},400);return json(res,{record:upsertEntityDescription({repositoryKey:p.repositoryKey,entityType:p.entityType,entityId:p.entityId,description:p.description.trim()})});});return; } catch { return json(res,{error:'DESCRIPTION_STORAGE_ERROR'},500); } });
   server.middlewares.use('/api/repository', (_req: IncomingMessage, res: ServerResponse) => { try { json(res, readRepository()); } catch { json(res, { error: 'REPOSITORY_ERROR' }, 500); } });
   server.middlewares.use('/api/authorization', (req: IncomingMessage, res: ServerResponse) => {
     if (req.headers.origin && req.headers.origin !== 'http://127.0.0.1:1420' && req.headers.origin !== 'http://localhost:1420') return json(res, { error: 'ORIGIN_REJECTED' }, 403);
