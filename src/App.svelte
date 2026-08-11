@@ -10,6 +10,7 @@
   import OwnerActionZone from './components/entity/OwnerActionZone.svelte';
   import PrOwnerActionZone from './components/entity/PrOwnerActionZone.svelte';
   import CurrentContextLocator from './components/CurrentContextLocator.svelte';
+  import RuntimeMonitor from './components/RuntimeMonitor.svelte';
   import {createProjectSnapshot,type RawProjectSources} from './lib/model/projectModel';
   import {resolveEntityContext} from './lib/context/entityContext';
   import {resolvePrTabView} from './lib/context/prTabContent';
@@ -19,7 +20,9 @@
   type Feedback={state:'IDLE'|'RUNNING'|'SUCCESS'|'BLOCKED'|'ERROR';title:string;message:string;code?:string;next?:string};
   let drawer:Drawer=null,leftWidth=320,rightWidth=320,leftCollapsed=false,rightCollapsed=false,busy=false,activeTab='概览',codexInfo:any=null,selectionRequest=0,runtimeTimer:number|undefined;
   let descriptions:{repositoryKey:string;entityType:string;entityId:string;description:string}[]=[];
-  let selectedEntity:SelectedEntityRef={type:'work_package',id:'AICC-V2-PR-RUNNER-001'};
+  const SELECTION_KEY='aicc-v2-selected-entity';
+  function readSelection():SelectedEntityRef|null{try{const hash=new URLSearchParams(window.location.hash.replace(/^#/,''));const value=hash.get('entity');if(value){const [type,id]=value.split(':');if((type==='milestone'||type==='work_package'||type==='pull_request')&&id)return {type,id} as SelectedEntityRef}const stored=JSON.parse(localStorage.getItem(SELECTION_KEY)||'null');if(stored&&(stored.type==='milestone'||stored.type==='work_package'||stored.type==='pull_request')&&typeof stored.id==='string')return stored as SelectedEntityRef}catch{}return null}
+  let selectedEntity:SelectedEntityRef=readSelection()??{type:'milestone',id:'M1'};
   let raw:RawProjectSources={formalWorkPackages:{},localDevelopment:true};
   let feedback:Feedback={state:'IDLE',title:'等待 Owner 操作',message:'请选择上方操作。最近一次操作结果会保留在这里。'};
   $: snapshot=createProjectSnapshot(raw);
@@ -36,7 +39,8 @@
   async function loadSnapshot(showFeedback=true){
     if(showFeedback)setFeedback({state:'RUNNING',title:'正在刷新状态…',message:'正在重建项目快照与当前实体上下文。',code:'REFRESHING'});
     const selectedAtStart=selectedEntity;
-    const [roadmapResult,repositoryResult,authorizationResult,runtimeResult,descriptionResult]=await Promise.allSettled([request('/api/roadmap'),request('/api/repository'),request(`/api/authorization?workPackageId=${encodeURIComponent(selectedAtStart.type==='work_package'?selectedAtStart.id:'')}`),request('/api/codex/runtime'),request('/api/entity-descriptions')]);
+    const runtimeQuery=selectedAtStart.type==='work_package'?`?workPackageId=${encodeURIComponent(selectedAtStart.id)}`:'';
+    const [roadmapResult,repositoryResult,authorizationResult,runtimeResult,descriptionResult]=await Promise.allSettled([request('/api/roadmap'),request('/api/repository'),request(`/api/authorization?workPackageId=${encodeURIComponent(selectedAtStart.type==='work_package'?selectedAtStart.id:'')}`),request(`/api/codex/runtime${runtimeQuery}`),request('/api/entity-descriptions')]);
     const sourceErrors:RawProjectSources['sourceErrors']={};
     const next:RawProjectSources={...raw,sourceErrors};
     if(roadmapResult.status==='fulfilled')next.roadmap=roadmapResult.value;else sourceErrors.roadmap='ROADMAP_UNAVAILABLE';
@@ -45,18 +49,21 @@
     if(runtimeResult.status==='fulfilled'){next.runtime=runtimeResult.value.runtime??null;codexInfo=runtimeResult.value.info}else sourceErrors.runtime='RUNTIME_UNAVAILABLE';
     if(descriptionResult.status==='fulfilled')descriptions=descriptionResult.value.records??[];
     raw=next;
+    if(next.roadmap?.content){const hydrated=resolveHydratedSelection(createProjectSnapshot(next).roadmap.value??[]);if(hydrated.type!==selectedEntity.type||hydrated.id!==selectedEntity.id){selectedEntity=hydrated;activeTab='概览';selectionRequest+=1;persistSelection(hydrated);return loadSnapshot(false);}}
     if(selectedAtStart.type==='work_package')await readFormalWorkPackage(selectedAtStart.id,selectionRequest);
     if(showFeedback)setFeedback({state:'SUCCESS',title:'状态已刷新',message:'项目快照与当前实体上下文已重新构建。',code:'REFRESH_SUCCESS'});
   }
   async function saveDescription(value:string){const target={...selectedEntity};const response=await request(value.trim()?'/api/entity-descriptions':'/api/entity-descriptions',{method:value.trim()?'POST':'DELETE',headers:{'Content-Type':'application/json'},body:JSON.stringify({repositoryKey:snapshot.repository.value?.repository??'local',entityType:target.type,entityId:target.id,description:value})});if(target.type!==selectedEntity.type||target.id!==selectedEntity.id)throw new Error('DESCRIPTION_TARGET_MISMATCH');if(value.trim())descriptions=[...descriptions.filter(item=>!(item.repositoryKey===(snapshot.repository.value?.repository??'local')&&item.entityType===target.type&&item.entityId===target.id)),response.record];else descriptions=descriptions.filter(item=>!(item.repositoryKey===(snapshot.repository.value?.repository??'local')&&item.entityType===target.type&&item.entityId===target.id));setFeedback({state:'SUCCESS',title:value.trim()?'描述已保存':'已恢复默认描述',message:'Owner 本地描述元数据已更新。',code:value.trim()?'DESCRIPTION_SAVED':'DESCRIPTION_OVERRIDE_CLEARED'});}
-  function startRuntimePolling(){if(runtimeTimer)clearInterval(runtimeTimer);runtimeTimer=window.setInterval(async()=>{try{const data=await request('/api/codex/runtime');raw={...raw,runtime:data.runtime??null};codexInfo=data.info;if(!data.runtime||!['STARTING','RUNNING','STOPPING'].includes(data.runtime.phase)){if(runtimeTimer)clearInterval(runtimeTimer);runtimeTimer=undefined}}catch{/* runtime source failure is rendered as unavailable on the next full refresh */}},1000)}
+  function startRuntimePolling(){if(runtimeTimer)clearInterval(runtimeTimer);runtimeTimer=window.setInterval(async()=>{try{const id=selectedEntity.type==='work_package'?`?workPackageId=${encodeURIComponent(selectedEntity.id)}`:'';const data=await request(`/api/codex/runtime${id}`);raw={...raw,runtime:data.runtime??null};codexInfo=data.info;if(!data.runtime||!['STARTING','RUNNING','STOPPING'].includes(data.runtime.phase)){if(runtimeTimer)clearInterval(runtimeTimer);runtimeTimer=undefined}}catch{/* runtime source failure is rendered as unavailable on the next full refresh */}},1000)}
   function findRoadmapNode(nodes:any[],id:string):any{for(const node of nodes){if(node.id===id)return node;const found=findRoadmapNode(node.children??[],id);if(found)return found}return null}
+  function resolveHydratedSelection(nodes:any[]):SelectedEntityRef{const persisted=readSelection();if(persisted&&findRoadmapNode(nodes,persisted.id))return persisted;const active:any[]=[];const walk=(items:any[],parent:any=null)=>{for(const node of items){if(node.type==='work_package'&&['IN_PROGRESS','WAITING_OWNER','WAITING_UAT'].includes(node.status))active.push({node,parent});walk(node.children??[],node)}};walk(nodes);if(active.length===1)return {type:'work_package',id:active[0].node.id};if(active.length>1){const parents=[...new Set(active.map(item=>item.parent?.id).filter(Boolean))];return {type:'milestone',id:parents.length===1?parents[0]:(nodes[0]?.id??'M1')}}return {type:'milestone',id:nodes[0]?.id??'M1'};}
+  function persistSelection(selection:SelectedEntityRef){try{localStorage.setItem(SELECTION_KEY,JSON.stringify(selection));history.replaceState(null,'',`#entity=${selection.type}:${selection.id}`)}catch{}}
   function roadmapPath(nodes:any[],id:string,path:any[]=[]):any[]{for(const node of nodes){if(node.id===id)return [...path,node];const found=roadmapPath(node.children??[],id,[...path,node]);if(found.length)return found}return []}
   async function locateSelectedEntity(){const path=roadmapPath(roadmapNodes,selectedEntity.id);if(!path.length)return;const stored:Record<string,boolean>={};try{Object.assign(stored,JSON.parse(localStorage.getItem('aicc-v2-roadmap-collapse')||'{}'))}catch{}for(const node of path)if(node.children?.length)stored[node.id]=true;localStorage.setItem('aicc-v2-roadmap-collapse',JSON.stringify(stored));await tick();const target=document.querySelector(`[data-roadmap-node="${CSS.escape(selectedEntity.id)}"]`) as HTMLElement|null;const container=document.querySelector('.roadmap-scroll-region') as HTMLElement|null;if(target&&container){const top=target.getBoundingClientRect().top-container.getBoundingClientRect().top+container.scrollTop;container.scrollTo({top:Math.max(0,top-container.clientHeight/2),behavior:'smooth'});target.classList.add('locate-highlight');window.setTimeout(()=>target.classList.remove('locate-highlight'),900)}}
   async function select(id:string){
     const node=findRoadmapNode(roadmapNodes,id);
     if(!node)return;
-    selectedEntity={type:node.type,id:node.id} as SelectedEntityRef;activeTab='概览';drawer=null;selectionRequest+=1;
+    selectedEntity={type:node.type,id:node.id} as SelectedEntityRef;activeTab='概览';drawer=null;selectionRequest+=1;persistSelection(selectedEntity);
     if(selectedEntity.type==='work_package')await readFormalWorkPackage(selectedEntity.id,selectionRequest);
   }
   function toggleSidebar(side:'roadmap'|'status'){
@@ -100,6 +107,7 @@
         <OwnerActionZone context={context} {busy} codexAvailable={Boolean(codexInfo?.available)} onAction={runAction}/>
         <div class="feedback-bar {feedback.state.toLowerCase()}" data-testid="owner-action-feedback" data-feedback-state={feedback.state.toLowerCase()}><div class="feedback-state">{feedback.state}</div><div><strong>{feedback.title}</strong><p>{feedback.message}</p>{#if feedback.code}<code>{feedback.code}</code>{/if}{#if feedback.next}<small>下一步：{feedback.next}</small>{/if}</div></div>
         <section class="workflow-section"><div class="section-label"><span>Workflow</span><small>WP 9-stage lifecycle</small></div><WorkflowTimeline stages={context.lifecycle.stages} currentStage={context.lifecycle.currentStage}/><div class="current-stage"><strong>当前阶段：{context.lifecycle.currentStage}</strong><p>{context.lifecycle.currentStage==='HUMAN_UAT'?'等待 Owner 完成真实 UI Human UAT。':'当前阶段由统一生命周期解析器确定。'}</p></div></section>
+        <RuntimeMonitor runtime={context.runtime} workPackage={context.formalWorkPackage} writerLock={context.writerLock}/>
         <StatusTabs active={activeTab} statuses={tabStatuses} onSelect={(tab)=>activeTab=tab}/>
         <section class="tab-content">{#if activeTab==='运行'}<p>当前 WP Runtime：{context.runtime?.phase??'无匹配运行'}</p>{:else if activeTab==='验证'}<p>Validation：{context.lifecycle.stages.find(stage=>stage.id==='VALIDATION')?.status}</p>{:else if activeTab==='UAT'}<p>Human UAT：{context.humanUat?.status??'UNAVAILABLE / ABSENT'}</p>{:else if activeTab==='证据'}<p>{context.evidence.join(' · ')}</p>{:else}<p>{context.statusLabel} · {context.formalization}</p>{/if}</section>
         <section class="overview"><div class="section-label"><span>Work Package detail</span><small>Read-only normalized source</small></div>{#if context.formalWorkPackage}<article class="detail-card"><div class="detail-top"><span class="tag">{context.id}</span><span class="truth">FORMAL READY</span></div><h3>{context.formalWorkPackage.title}</h3><p class="source-path">{context.formalWorkPackage.source}</p><div class="detail-grid"><div><b>Goal / Scope</b><p>{context.formalWorkPackage.sections.Goal??'未提供'}</p></div><div><b>Status</b><p>{context.formalWorkPackage.fields.Status??'未提供'}</p></div><div><b>Dependencies</b><p>{context.formalWorkPackage.sections.Dependencies??'未提供'}</p></div><div><b>Acceptance Criteria</b><p>{context.formalWorkPackage.sections['Acceptance Criteria']??'未提供'}</p></div></div></article>{:else}<article class="detail-card"><div class="detail-top"><span class="tag">{context.id}</span><span class="kicker">PLANNED_ONLY</span></div><h3>Roadmap Work Package</h3><p>当前仅存在于 Roadmap；尚无有效正式可执行 Work Package 文件。</p></article>{/if}</section>

@@ -12,6 +12,7 @@ export type RepositoryModel = { repository: string; branch: string; head: string
 export type Authorization = { authorizationId: string; workPackageId: string; authoritySha: string; branch: string; headShaAtAuthorization: string; repositoryRoot: string; scope: string[]; allowed: string[]; forbidden: string[]; authorizedAt: string; supersededAt?: string; status?: 'ACTIVE'|'SUPERSEDED' };
 export type AuthorizationTransitionSafety = { activeRuntime: boolean; writerLockHeld: boolean };
 const AUTH_FILE = join(homedir(), '.aicc-v2', 'authorization.json'); const AUTH_HISTORY_FILE = join(homedir(), '.aicc-v2', 'authorization-history.json');
+function atomicWriteJson(path:string,value:unknown){const tmp=`${path}.${process.pid}.tmp`;writeFileSync(tmp,JSON.stringify(value,null,2),{mode:0o600});renameSync(tmp,path)}
 export type EntityDescriptionRecord={repositoryKey:string;entityType:'milestone'|'work_package'|'pull_request';entityId:string;description:string;updatedAt:string;updatedBy:'owner'};
 const DESCRIPTION_FILE=join(homedir(),'.aicc-v2','entity-descriptions.json');
 export function readEntityDescriptions():EntityDescriptionRecord[]{try{return JSON.parse(readFileSync(DESCRIPTION_FILE,'utf8')) as EntityDescriptionRecord[]}catch{return []}}
@@ -82,7 +83,7 @@ export function authorizationBlocker(id: string, repo: RepositoryModel | null, w
 export function persistAuthorization(id: string, repo: RepositoryModel): Authorization {
   const blocker = authorizationBlocker(id, repo, true); if (blocker) throw new Error(blocker);
   const record: Authorization = { authorizationId: `auth-${Date.now()}`, workPackageId: id, authoritySha: repo.remoteMain, branch: repo.branch, headShaAtAuthorization: repo.head, repositoryRoot: repo.repository, scope: ['read_repository', 'read_work_package', 'sync_local_main'], allowed: ['owner_confirmed_actions'], forbidden: ['codex_runtime', 'writer_lock', 'arbitrary_shell', 'push', 'merge'], authorizedAt: new Date().toISOString() };
-  mkdirSync(join(homedir(), '.aicc-v2'), { recursive: true }); writeFileSync(AUTH_FILE, JSON.stringify(record, null, 2), { mode: 0o600 }); return record;
+  mkdirSync(join(homedir(), '.aicc-v2'), { recursive: true }); atomicWriteJson(AUTH_FILE,record); return record;
 }
 export function reauthorizeAuthorization(id: string, repo: RepositoryModel): { record: Authorization; superseded: boolean } {
   if (!id) throw new Error('NO_WORK_PACKAGE_SELECTED');
@@ -92,7 +93,7 @@ export function reauthorizeAuthorization(id: string, repo: RepositoryModel): { r
   if (existing && existing.headShaAtAuthorization === repo.head) return { record: existing, superseded: false };
   const record: Authorization = { authorizationId: `auth-${Date.now()}`, workPackageId: id, authoritySha: repo.remoteMain, branch: repo.branch, headShaAtAuthorization: repo.head, repositoryRoot: repo.repository, scope: ['read_repository', 'read_work_package', 'sync_local_main'], allowed: ['owner_confirmed_actions'], forbidden: ['codex_runtime', 'writer_lock', 'arbitrary_shell', 'push', 'merge'], authorizedAt: new Date().toISOString(), status: 'ACTIVE' };
   mkdirSync(join(homedir(), '.aicc-v2'), { recursive: true });
-  if (existing) { const superseded = { ...existing, status: 'SUPERSEDED' as const, supersededAt: record.authorizedAt }; let history: Authorization[] = []; try { history = JSON.parse(readFileSync(AUTH_HISTORY_FILE, 'utf8')) as Authorization[]; } catch { /* no history yet */ } writeFileSync(AUTH_HISTORY_FILE, JSON.stringify([...history, superseded], null, 2), { mode: 0o600 }); }
-  writeFileSync(AUTH_FILE, JSON.stringify(record, null, 2), { mode: 0o600 }); return { record, superseded: Boolean(existing) };
+  if (existing) { const superseded = { ...existing, status: 'SUPERSEDED' as const, supersededAt: record.authorizedAt }; let history: Authorization[] = []; try { history = JSON.parse(readFileSync(AUTH_HISTORY_FILE, 'utf8')) as Authorization[]; } catch { /* no history yet */ } atomicWriteJson(AUTH_HISTORY_FILE,[...history, superseded]); }
+  atomicWriteJson(AUTH_FILE,record); return { record, superseded: Boolean(existing) };
 }
 export function syncLocalMain(): 'ALREADY_SYNCED' | 'FAST_FORWARD' { const repo = readRepository(); if (repo.worktree !== 'CLEAN') throw new Error('WORKTREE_DIRTY'); if (repo.branch === 'main') throw new Error('MAIN_SYNC_REQUIRES_FEATURE_BRANCH'); git(['fetch', 'origin', 'main']); const remote = git(['rev-parse', 'refs/remotes/origin/main']); const local = safeGit(['rev-parse', 'refs/heads/main']); if (local === remote) return 'ALREADY_SYNCED'; try { execFileSync('git', ['merge-base', '--is-ancestor', local, remote], { cwd: REPOSITORY_ROOT, stdio: 'ignore' }); } catch { throw new Error('LOCAL_MAIN_DIVERGED'); } execFileSync('git', ['update-ref', 'refs/heads/main', remote, local], { cwd: REPOSITORY_ROOT, stdio: 'ignore' }); return 'FAST_FORWARD'; }
