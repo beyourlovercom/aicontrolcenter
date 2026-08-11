@@ -21,7 +21,7 @@ AICC_SELF_DEVELOPMENT_READY: `NOT_YET_PASS`
 ## Active V2 Milestones
 
 ### M1 — Control Surface Finalization
-Work Packages: `AICC-V2-UI-WORKFLOW-001`, `AICC-V2-DUAL-PANEL-001`, `AICC-V2-VISUAL-IDENTITY-UNIFICATION-001`
+Work Packages: `AICC-V2-UI-WORKFLOW-001`, `AICC-V2-DUAL-PANEL-001`, `AICC-V2-VISUAL-IDENTITY-UNIFICATION-001`, `AICC-V2-RUNTIME-OBSERVER-001`
 
 ### M2 — Human UAT Control
 Work Packages: `AICC-V2-HUMAN-UAT-001`
@@ -96,7 +96,6 @@ Future Work Packages:
 7. AICC-CODEX-ONLY-MIGRATION-001 — current Codex-only migration through a new main-bound Human UAT artifact.
 8. 001B — OpenSpec Binding (planned, owner authorization not authorized).
 9. AICC-V2-VISUAL-IDENTITY-UNIFICATION-001 — Visual Identity Unification (ready for Owner authorization; visual remediation only).
-10. AICC-V2-RUNTIME-OBSERVER-001 — Codex Runtime Observer (future; no implementation started).
 11. AICC-V2-SELF-RELOAD-RESILIENCE-001 — Self-Reload Resilience (future; no implementation started).
 12. 001D — Owner Authorization & Governed Codex Runtime (future placeholder; no formal WP record).
 13. AICC_SELF_DEVELOPMENT_READY — `NOT_YET_PASS`; requires Owner Human UAT.
