@@ -4,4 +4,7 @@ const pass=[{id:'1',title:'a',description:'a',state:'PASS' as const},{id:'2',tit
 assert.equal(canPassHumanUat(pass),true);assert.equal(resolveHumanUatStatus(null,pass),'IN_PROGRESS');
 assert.equal(canPassHumanUat([{...pass[0],state:'PENDING'}]),false);assert.equal(canPassHumanUat([{...pass[0],state:'FAIL'}]),false);
 assert.equal(resolveHumanUatStatus({repository:'r',workPackageId:'w',entityType:'work_package',status:'PASS',items:pass,createdAt:'',updatedAt:'',source:''},pass),'PASS');
+const override={repository:'r',workPackageId:'w',entityType:'work_package' as const,status:'PASS' as const,decision:'PASS' as const,decisionMode:'OWNER_OVERRIDE_PASS' as const,items:[{...pass[0],state:'PENDING' as const}],createdAt:'',updatedAt:'',source:''};
+assert.equal(resolveHumanUatStatus(override,override.items),'PASS');
+assert.equal(override.items[0].state,'PENDING');
 console.log('human UAT contract tests passed');
