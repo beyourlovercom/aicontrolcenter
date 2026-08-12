@@ -35,6 +35,9 @@ Work Packages: `AICC-V2-GPT-BRIDGE-001`
 ### M3.75 — Autopilot Until Human UAT
 Work Packages: `AICC-V2-AUTOPILOT-UNTIL-UAT-001`
 
+### M3.9 — Local Service Autostart
+Work Packages: `AICC-V2-LOCAL-SERVICE-AUTOSTART-001`
+
 ### M4 — PR Runner Foundation
 Work Packages: `AICC-V2-PR-RUNNER-001`
 

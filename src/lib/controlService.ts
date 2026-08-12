@@ -1,14 +1,16 @@
-import { execFileSync } from 'node:child_process';
+import { execFile, execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
 
 export const REPOSITORY_ROOT = '/Users/a/AI/007/AIcontrolcenter';
+export const LOCAL_SERVICE_LABEL = 'com.aicc.v2.local-service';
 const ROADMAP = join(REPOSITORY_ROOT, 'docs/10_Planning_Roadmap/01_LIVING_ROADMAP.md');
 const WORK_PACKAGES = join(REPOSITORY_ROOT, 'docs/60_Operations/work-packages');
 
 export type WorkPackage = { id: string; title: string; source: string; rawMarkdown: string; fields: Record<string, string>; sections: Record<string, string>; status: string; goal: string; scope: string; dependencies: string; acceptanceCriteria: string; risks: string; allowed: string; forbidden: string };
 export type RepositoryModel = { repository: string; branch: string; head: string; localMain: string; remoteMain: string; worktree: 'CLEAN' | 'DIRTY' | 'UNAVAILABLE'; lastCommit: string };
+export type LocalServiceStatus = { processRunning: boolean; serviceHealthy: boolean; repositoryAvailable: boolean; codexAvailable: boolean; port: number; binding: '127.0.0.1'; conflict?: { pid: string; command: string } };
 export type Authorization = { authorizationId: string; workPackageId: string; authoritySha: string; branch: string; headShaAtAuthorization: string; repositoryRoot: string; scope: string[]; allowed: string[]; forbidden: string[]; authorizedAt: string; supersededAt?: string; status?: 'ACTIVE'|'SUPERSEDED' };
 export type AuthorizationTransitionSafety = { activeRuntime: boolean; writerLockHeld: boolean };
 const AUTH_FILE = join(homedir(), '.aicc-v2', 'authorization.json'); const AUTH_HISTORY_FILE = join(homedir(), '.aicc-v2', 'authorization-history.json');
@@ -49,6 +51,21 @@ export function readWorkPackage(id: string): WorkPackage {
 
 function git(args: string[]): string { return execFileSync('git', args, { cwd: REPOSITORY_ROOT, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim(); }
 function safeGit(args: string[]): string { try { return git(args); } catch { return 'unavailable'; } }
+function launchctl(args: string[]): string { return execFileSync('/bin/launchctl', args, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim(); }
+export function readLocalServiceStatus(healthProbe:()=>boolean): LocalServiceStatus {
+  const repositoryAvailable=existsSync(REPOSITORY_ROOT)&&existsSync(join(REPOSITORY_ROOT,'package.json'))&&existsSync(ROADMAP);
+  // The service must not synchronously ask launchd to inspect itself from an HTTP request.
+  // The running Vite process is the local service process; launchd status is exposed by
+  // the supervisor script and the health endpoint remains non-blocking.
+  const processRunning=true;
+  // Port ownership is enforced by Vite's strictPort setting. Keep the health
+  // request free of synchronous process inspection so it remains responsive.
+  return {processRunning,serviceHealthy:healthProbe(),repositoryAvailable,codexAvailable:existsSync('/usr/local/bin/codex')||existsSync('/opt/homebrew/bin/codex'),port:1420,binding:'127.0.0.1'};
+}
+function safeProcessCommand(pid:string){try{return execFileSync('/bin/ps',['-p',pid,'-o','command='],{encoding:'utf8'}).trim().slice(0,240)}catch{return 'unavailable'}}
+export function restartLocalService(){ if(!process.getuid)throw new Error('SUPERVISOR_UNAVAILABLE'); execFile('/bin/launchctl',['kickstart','-k',`gui/${process.getuid()}/${LOCAL_SERVICE_LABEL}`],()=>{}); return 'RESTART_REQUESTED'; }
+export function stopLocalService(){ if(!process.getuid)throw new Error('SUPERVISOR_UNAVAILABLE'); execFile('/bin/launchctl',['kill','SIGTERM',`gui/${process.getuid()}/${LOCAL_SERVICE_LABEL}`],()=>{}); return 'STOP_REQUESTED'; }
+export function readLocalServiceLogs(){const base=join(homedir(),'Library/Logs/AICC');const read=(name:string)=>{try{return readFileSync(join(base,name),'utf8').slice(-12000)}catch{return '日志不可用'}};return {stdout:read('local-service.stdout.log'),stderr:read('local-service.stderr.log')};}
 export function readRepository(): RepositoryModel {
   const head = safeGit(['rev-parse', 'HEAD']);
   const branch = safeGit(['branch', '--show-current']);

@@ -1,0 +1,21 @@
+import assert from 'node:assert/strict';
+import {readFileSync,existsSync} from 'node:fs';
+
+const root=new URL('../../',import.meta.url);
+const read=(path:string)=>readFileSync(new URL(path,root),'utf8');
+const supervisor=read('scripts/aicc-local-service-supervisor.sh');
+const roadmap=read('docs/10_Planning_Roadmap/01_LIVING_ROADMAP.md');
+const wp=read('docs/60_Operations/work-packages/AICC-V2-LOCAL-SERVICE-AUTOSTART-001.md');
+const vite=read('vite.config.ts');
+const service=read('src/lib/controlService.ts');
+const app=read('src/App.svelte');
+assert(existsSync(new URL('scripts/aicc-local-service-supervisor.sh',root)),'supervisor script exists');
+assert(supervisor.includes('com.aicc.v2.local-service')&&supervisor.includes('RunAtLoad')&&supervisor.includes('KeepAlive'),'launchd contract');
+assert(supervisor.includes('/Users/a/AI/007/AIcontrolcenter')&&supervisor.includes('127.0.0.1'),'fixed repository and localhost binding');
+assert(supervisor.includes('command -v node')&&supervisor.includes('command -v npm')&&supervisor.includes('$NPM_PATH'),'toolchain resolved at install time');
+assert(supervisor.includes('launchctl bootout')&&!supervisor.includes('/usr/bin/env</string><string>npm'),'reinstall replaces existing agent');
+assert(roadmap.includes('M3.9 — Local Service Autostart')&&roadmap.indexOf('AICC-V2-LOCAL-SERVICE-AUTOSTART-001')<roadmap.indexOf('### M4'),'roadmap position');
+assert(wp.includes('LSA-HUA-01')&&wp.includes('LSA-HUA-12'),'dedicated human UAT plan');
+assert(vite.includes('/api/service/restart')&&vite.includes('/api/service/logs')&&service.includes("launchctl(['kickstart','-k'") ,'supervisor controls are fixed operations');
+assert(app.includes('pollService')&&app.includes('正在重启本地服务'),'page reconnect and owner restart UI');
+console.log('local service autostart contract tests passed');
