@@ -30,7 +30,7 @@ export type AiccProjectSnapshot={
   humanUat:SourceValue<HumanUatRecord[]>;
   lifecycleEvidence:SourceValue<LifecycleEvidenceRecord[]>;
   pullRequests:SourceValue<PullRequestRecord[]>;
-  roadmapSource:string;
+  roadmapSource:string; formalWorkPackageReadError?:string;
 };
 
 export type LifecycleStage={id:string;label:string;status:AiccStatus;evidence:string[];startedAt?:string;completedAt?:string;reasonCode?:string};

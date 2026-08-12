@@ -29,6 +29,9 @@ Work Packages: `AICC-V2-HUMAN-UAT-001`
 ### M3 — First Usable Version Closure
 Work Packages: `AICC-V2-SELF-DEVELOPMENT-UAT-001`
 
+### M3.4 — Fast Execution Path
+Work Packages: `AICC-V2-FAST-EXECUTION-PATH-001`
+
 ### M3.5 — GPT Bridge Contract
 Work Packages: `AICC-V2-GPT-BRIDGE-001`
 

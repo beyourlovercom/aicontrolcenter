@@ -4,7 +4,7 @@ import {resolveLifecycleProgress,resolveRuntimeImplementationProgress,resolveSta
 import {resolveAuthorizationForEntity} from '../context/authorizationResolver.ts';
 import {resolveWorkPackageLifecycle} from '../context/lifecycleResolver.ts';
 
-export type RawProjectSources={roadmap?:{content:string;source:string}|null;repository?:RepositoryState|null;formalWorkPackages?:Record<string,FormalWorkPackage>;authorization?:AuthorizationRecord|null;runtime?:RuntimeRecord|null;humanUat?:HumanUatRecord[];lifecycleEvidence?:LifecycleEvidenceRecord[];pullRequests?:PullRequestRecord[];localDevelopment?:boolean;sourceErrors?:Partial<Record<'roadmap'|'repository'|'formalWorkPackages'|'authorizations'|'runtime'|'pullRequests',string>>};
+export type RawProjectSources={roadmap?:{content:string;source:string}|null;repository?:RepositoryState|null;formalWorkPackages?:Record<string,FormalWorkPackage>;authorization?:AuthorizationRecord|null;runtime?:RuntimeRecord|null;humanUat?:HumanUatRecord[];lifecycleEvidence?:LifecycleEvidenceRecord[];pullRequests?:PullRequestRecord[];localDevelopment?:boolean;sourceErrors?:Partial<Record<'roadmap'|'repository'|'formalWorkPackages'|'formalWorkPackageRead'|'authorizations'|'runtime'|'pullRequests',string>>};
 const available=<T>(value:T):SourceValue<T>=>({availability:'AVAILABLE',value});
 const unavailable=<T>(code:string):SourceValue<T>=>({availability:'UNAVAILABLE',value:null,errorCode:code});
 
@@ -55,7 +55,7 @@ export function createProjectSnapshot(raw:RawProjectSources):AiccProjectSnapshot
     authorizations:raw.sourceErrors?.authorizations?unavailable(raw.sourceErrors.authorizations):available(raw.authorization?[raw.authorization]:[]),
     runtime:raw.sourceErrors?.runtime?unavailable(raw.sourceErrors.runtime):available(raw.runtime??null),
     writerLock:available({status:active?'HELD':'NOT_HELD',scope:'repository',...(active&&raw.runtime?{workPackageId:raw.runtime.workPackageId}:{})}),
-    humanUat:available(raw.humanUat??CURRENT_UAT),lifecycleEvidence:available(raw.lifecycleEvidence??[]),pullRequests:raw.sourceErrors?.pullRequests?unavailable(raw.sourceErrors.pullRequests):available(raw.localDevelopment===true?(raw.pullRequests??[LOCAL_DEMO_PR]):(raw.pullRequests??[])),roadmapSource:raw.roadmap?.source??'docs/10_Planning_Roadmap/01_LIVING_ROADMAP.md'
+    humanUat:available(raw.humanUat??CURRENT_UAT),lifecycleEvidence:available(raw.lifecycleEvidence??[]),pullRequests:raw.sourceErrors?.pullRequests?unavailable(raw.sourceErrors.pullRequests):available(raw.localDevelopment===true?(raw.pullRequests??[LOCAL_DEMO_PR]):(raw.pullRequests??[])),roadmapSource:raw.roadmap?.source??'docs/10_Planning_Roadmap/01_LIVING_ROADMAP.md',formalWorkPackageReadError:raw.sourceErrors?.formalWorkPackageRead
   };
   return reconcileRoadmapLifecycle(snapshot);
 }

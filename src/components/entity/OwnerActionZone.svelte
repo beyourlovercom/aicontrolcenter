@@ -4,6 +4,6 @@
   <button class:disabled={!authorize.enabled} class="action authorize" title={authorize.enabled?'确认 Owner 授权':authorize.reasonCode} data-eligible={authorize.enabled} onclick={()=>run('AUTHORIZE')}>确认授权</button>
   <button class:disabled={!start.enabled} class="action start" title={start.enabled&&codexAvailable?'启动 Codex':start.reasonCode} data-eligible={start.enabled} onclick={()=>run('START_CODEX')}>启动 Codex</button>
   <button class:disabled={!stop.enabled} class="action stop" title={stop.enabled?'停止当前 Codex Runtime':stop.reasonCode} data-eligible={stop.enabled} onclick={()=>run('STOP_CODEX')}>停止</button>
-  <button class="action retry" title="NOT_IMPLEMENTED" data-eligible="false" onclick={()=>run('RETRY')}>重试</button>
+  <button class:disabled={!context.availableActions.find(action=>action.id==='RETRY')?.enabled} class="action retry" title={context.availableActions.find(action=>action.id==='RETRY')?.reasonCode??'重试当前运行'} data-eligible={context.availableActions.find(action=>action.id==='RETRY')?.enabled} onclick={()=>run('RETRY')}>重试</button>
   <button class:disabled={!sync.enabled} class="action sync" title={sync.enabled?'安全同步本地 main':sync.reasonCode} data-eligible={sync.enabled} onclick={()=>run('SAFE_MAIN_SYNC')}>同步本地 main</button>
 </div></section>

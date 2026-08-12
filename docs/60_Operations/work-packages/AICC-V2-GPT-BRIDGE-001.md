@@ -1,7 +1,13 @@
 # AICC-V2-GPT-BRIDGE-001: GPT Plus Web ↔ AICC ↔ Codex
 
-Status: FORMAL_READY
+Status: IMPLEMENTED_PARTIAL / BLOCKED_BEFORE_CANONICAL_LAUNCH
 Type: GPT_BRIDGE_BIDIRECTIONAL
+
+Phase 001A is not complete. The foundation is preserved, but the canonical
+Execution Inbox READY → Fast Execution launch → real Codex run →
+`AICC_RUN_REPORT_V1` → Result Outbox READY path remains blocked.
+
+Resume point: `IMPLEMENT_CANONICAL_INBOX_LAUNCH_ACTION`
 
 ## Goal and delivery phases
 

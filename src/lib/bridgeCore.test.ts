@@ -1,0 +1,4 @@
+import assert from 'node:assert/strict';
+import {parseExecutionV1,INBOX_STATES,OUTBOX_STATES} from './bridgeCore.ts';
+const valid=`AICC_EXECUTION_V1\nINSTRUCTION_ID: test-001\nENTITY_TYPE: WORK_PACKAGE\nENTITY_ID: AICC-V2-GPT-BRIDGE-001\nEXECUTION_TYPE: READ_ONLY_AUDIT\nREPOSITORY: /Users/a/AI/007/AIcontrolcenter\nBRANCH: rebuild/aicc-v2\nEXPECTED_HEAD: 69c758ea6faceb983eaaca4f5e916a6582407177\nSANDBOX: read-only\nREQUIRES_AUTHORIZATION: false\n\nINSTRUCTION_BEGIN\nInspect only and report.\nINSTRUCTION_END`;
+assert.equal(parseExecutionV1(valid).version,'AICC_EXECUTION_V1');assert.throws(()=>parseExecutionV1(valid.replace('AICC_EXECUTION_V1','AICC_EXECUTION_V2')),/UNSUPPORTED_EXECUTION_VERSION/);assert.throws(()=>parseExecutionV1('AICC_EXECUTION_V1'),/MALFORMED_EXECUTION/);assert.equal(INBOX_STATES.length,7);assert.equal(OUTBOX_STATES.length,4);console.log('bridge core contract tests passed');
