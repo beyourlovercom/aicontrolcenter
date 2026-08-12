@@ -32,6 +32,9 @@ Work Packages: `AICC-V2-SELF-DEVELOPMENT-UAT-001`
 ### M3.5 — GPT Bridge Contract
 Work Packages: `AICC-V2-GPT-BRIDGE-001`
 
+### M3.75 — Autopilot Until Human UAT
+Work Packages: `AICC-V2-AUTOPILOT-UNTIL-UAT-001`
+
 ### M4 — PR Runner Foundation
 Work Packages: `AICC-V2-PR-RUNNER-001`
 
