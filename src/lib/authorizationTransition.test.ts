@@ -19,4 +19,9 @@ assert.equal(authorizationSupersessionBlocker('AICC-V2-DUAL-PANEL-001',repo,{...
 assert.equal(authorizationSupersessionBlocker('AICC-V2-DUAL-PANEL-001',repo,{...old,authoritySha:'other'},safe),'AUTHORITY_DRIFT','authority drift remains protected');
 const app=readFileSync(new URL('../App.svelte',import.meta.url),'utf8');const server=readFileSync(new URL('../../vite.config.ts',import.meta.url),'utf8');const service=readFileSync(new URL('./controlService.ts',import.meta.url),'utf8');
 assert(app.includes('selectedEntityId:requestedId'),'request target echoes selected entity');assert(app.includes('AUTHORIZATION_POSTCONDITION_FAILED'),'success requires refreshed postcondition');assert(app.includes("startContext.authorization.record?.workPackageId!==selectedEntity.id"),'Codex start target gate');assert(server.includes('payload.selectedEntityId !== payload.workPackageId'),'server target integrity gate');assert(server.includes('authorizeWorkPackage'),'transport delegates canonical authorization orchestration');assert(service.includes('readAuthorizationHistory'),'history remains queryable');
+const authorizeBody=service.match(/export function authorizeWorkPackage[\s\S]*?\n}/)?.[0]??'';
+assert.match(authorizeBody,/requireAuthorization:false/,'authorization creation does not require the target authorization to pre-exist');
+assert.match(authorizeBody,/reauthorizeAuthorization\(id,repo,decision\)/,'authorization action delegates safe supersession');
+assert.match(authorizeBody,/revokeExecutionLease\(existing\.workPackageId\)/,'cross-WP supersession revokes the old lease');
+assert.doesNotMatch(authorizeBody,/requireAuthorization:true/,'no stricter local cross-WP authorization policy');
 console.log('authorization transition contract tests passed');

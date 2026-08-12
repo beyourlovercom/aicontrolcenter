@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from '
 import { join } from 'node:path';
 import { homedir } from 'node:os';
 import type {ExecutionPreflight} from './fastExecution.ts';
-import {canonicalExecutionDecision,grantExecutionLease,readWorktreeFiles,resolveExecutionScopes} from './fastExecution.ts';
+import {canonicalExecutionDecision,grantExecutionLease,readWorktreeFiles,resolveExecutionScopes,revokeExecutionLease} from './fastExecution.ts';
 
 export const REPOSITORY_ROOT = '/Users/a/AI/007/AIcontrolcenter';
 export const LOCAL_SERVICE_LABEL = 'com.aicc.v2.local-service';
@@ -142,10 +142,11 @@ export function reauthorizeAuthorization(id: string, repo: RepositoryModel,prefl
   atomicWriteJson(AUTH_FILE,record); return { record, superseded: Boolean(existing) };
 }
 export function authorizeWorkPackage(id:string):{record:Authorization;superseded:boolean;leaseId:string;decision:ReturnType<typeof canonicalExecutionDecision>}{
-  const repo=readRepository(),wp=readWorkPackage(id),validation=validateFormalWorkPackage(wp,id),scopes=resolveExecutionScopes(wp),decision=canonicalExecutionDecision(repo,id,scopes.scope,readWorktreeFiles(repo.repository),scopes.knownNonConflicting,{requireAuthorization:true,authorization:readAuthorization()??undefined,formalWpValid:validation.every(item=>item.severity!=='HARD_BLOCK')});
+  const repo=readRepository(),wp=readWorkPackage(id),validation=validateFormalWorkPackage(wp,id),scopes=resolveExecutionScopes(wp),existing=readAuthorization(),decision=canonicalExecutionDecision(repo,id,scopes.scope,readWorktreeFiles(repo.repository),scopes.knownNonConflicting,{requireAuthorization:false,formalWpValid:validation.every(item=>item.severity!=='HARD_BLOCK')});
   if(decision.decision==='HARD_BLOCK')throw new Error(decision.reasonCode??'EXECUTION_PREFLIGHT_BLOCKED');
-  const existing=readAuthorization(),blocker=authorizationBlocker(id,repo,true,decision);if(blocker&&blocker!=='AUTHORIZATION_CONFLICT')throw new Error(blocker);
+  const blocker=authorizationBlocker(id,repo,true,decision);if(blocker&&blocker!=='AUTHORIZATION_CONFLICT')throw new Error(blocker);
   const result=existing?reauthorizeAuthorization(id,repo,decision):{record:persistAuthorization(id,repo,decision),superseded:false};
+  if(existing&&existing.workPackageId!==id)revokeExecutionLease(existing.workPackageId);
   const lease=grantExecutionLease(repo,id,scopes.scope,readWorktreeFiles(repo.repository),'owner',decision.provenance);
   return {...result,leaseId:lease.leaseId,decision};
 }

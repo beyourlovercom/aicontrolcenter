@@ -1,16 +1,17 @@
 # AICC-V2-GPT-BRIDGE-001: GPT Plus Web ↔ AICC ↔ Codex
 
-Status: IMPLEMENTED_PARTIAL / BLOCKED_BEFORE_CANONICAL_LAUNCH
+Status: IMPLEMENTED / PENDING_OWNER_RETEST
 Type: GPT_BRIDGE_BIDIRECTIONAL
 
-Phase 001A is not complete. The foundation is preserved, but the canonical
-Execution Inbox READY → Fast Execution launch → real Codex run →
-`AICC_RUN_REPORT_V1` → Result Outbox READY path remains blocked.
+Phase 001A is not complete. Canonical read-only and bounded write runtime
+dogfood have passed, including instruction delivery, Writer Lock, terminal
+Runtime evidence, `AICC_RUN_REPORT_V1`, and Result Outbox READY. Owner Human
+UAT Round 2 remains pending.
 
-Resume point: `IMPLEMENT_CANONICAL_INBOX_LAUNCH_ACTION`
+Resume point: `OWNER_RETEST_001A_ROUND_2`
 
-Current Owner-UAT truth: `001A ROUND_1 = PASS`; `001A ROUND_2 = BLOCKED / PENDING REAL DOGFOOD AND OWNER RETEST`.
-This document does not claim canonical runtime dogfood, production release, or remote delivery readiness.
+Current Owner-UAT truth: `001A ROUND_1 = PASS`; `001A ROUND_2 = PENDING_OWNER_RETEST`.
+This document does not claim 001A completion, production release, or remote delivery readiness.
 
 ## Goal and delivery phases
 
@@ -25,6 +26,21 @@ Implement the 001A Bridge Core: parse and persist the Execution Inbox, expose
 the canonical eight protocol gates, launch only explicit READY items through
 Fast Execution, bind real runtime evidence, generate `AICC_RUN_REPORT_V1`, and
 persist Result Outbox READY evidence.
+
+## File Scope
+
+- `src/lib/bridgeCore.ts`
+- `src/lib/bridgeCore.test.ts`
+- `src/lib/runtimeManager.ts`
+- `src/lib/runtimeManager.test.ts`
+- `src/App.svelte`
+- `vite.config.ts`
+- `docs/60_Operations/work-packages/AICC-V2-GPT-BRIDGE-001.md`
+
+This semantic scope covers the Bridge Core protocol adapter, its direct tests,
+the existing canonical Runtime instruction handoff, the current Bridge UI and
+localhost transport integration, and this formal contract. It does not include
+Constitution or approved baseline documents.
 
 ## Acceptance Criteria
 
