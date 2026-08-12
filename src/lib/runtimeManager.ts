@@ -22,7 +22,7 @@ import {
 } from "./controlService.ts";
 import { resolveCodexExecutionPolicy } from "./codexExecutionPolicy.ts";
 import {
-  fastPreflight,
+  canonicalExecutionDecision,
   grantExecutionLease,
   readWorktreeFiles,
   resolveExecutionScopes,
@@ -259,21 +259,26 @@ export function buildPrompt(
 export function startRuntime(
   wpId: string,
   adapter: ProcessAdapter = { spawn },
+  options: { allowReadOnlyWithoutAuthorization?: boolean; executionType?: string } = {},
 ): RuntimeState {
   const repo = readRepository(),
-    auth = readAuthorization(),
+    storedAuth = readAuthorization(),
     wp = readWorkPackage(wpId),
     info = codexInfo();
+  const policy = resolveCodexExecutionPolicy(wp);
+  const effectiveExecutionType = options.executionType ?? policy.executionType;
+  const effectivePolicy = effectiveExecutionType === "READ_ONLY_AUDIT" ? { ...policy, executionType: "READ_ONLY_AUDIT" as const, sandboxMode: "read-only" as const } : policy;
+  const auth = storedAuth ?? (options.allowReadOnlyWithoutAuthorization && effectiveExecutionType === "READ_ONLY_AUDIT" ? { authorizationId: "read-only-local-audit", workPackageId: wpId, authoritySha: repo.remoteMain, branch: repo.branch, headShaAtAuthorization: repo.head, repositoryRoot: repo.repository, scope: ["read_repository", "read_work_package"], allowed: ["read_only_audit"], forbidden: ["arbitrary_shell", "push", "merge"], authorizedAt: new Date().toISOString() } : null);
   const changed = readWorktreeFiles(REPOSITORY_ROOT);
   const { scope, knownNonConflicting } = resolveExecutionScopes(wp);
   const humanUat = readHumanUat(REPOSITORY_ROOT, wpId);
-  const preflight = fastPreflight(
+  const preflight = canonicalExecutionDecision(
     repo,
     wpId,
     scope,
     changed,
     knownNonConflicting,
-    { humanUatHardStop: humanUat?.status === "PASS", requireAuthorization: true, authorization: auth ?? undefined },
+    { humanUatHardStop: humanUat?.status === "PASS", requireAuthorization: !options.allowReadOnlyWithoutAuthorization, authorization: auth ?? undefined },
   );
   if (preflight.decision === "HARD_BLOCK")
     throw new Error(preflight.reasonCode ?? "EXECUTION_PREFLIGHT_BLOCKED");
@@ -302,8 +307,7 @@ export function startRuntime(
   } catch {
     throw new Error("WRITER_LOCK_HELD");
   }
-  const policy = resolveCodexExecutionPolicy(wp),
-    now = new Date().toISOString(),
+  const now = new Date().toISOString(),
     s: RuntimeState = {
       runId: `run-${Date.now()}`,
       workPackageId: wpId,
@@ -319,8 +323,8 @@ export function startRuntime(
       startedAt: now,
       lastActivityAt: now,
       events: [],
-      executionType: policy.executionType,
-      sandboxMode: policy.sandboxMode,
+      executionType: effectivePolicy.executionType,
+      sandboxMode: effectivePolicy.sandboxMode,
       authorizedHead: auth.headShaAtAuthorization,
       codeChangePresent: false,
     };
@@ -328,7 +332,7 @@ export function startRuntime(
   try {
     child = adapter.spawn(
       "codex",
-      ["exec", "--sandbox", policy.sandboxMode, "--json", "-"],
+      ["exec", "--sandbox", effectivePolicy.sandboxMode, "--json", "-"],
       { cwd: REPOSITORY_ROOT, shell: false, stdio: ["pipe", "pipe", "pipe"] },
     );
     s.pid = child.pid ?? null;

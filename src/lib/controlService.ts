@@ -3,6 +3,7 @@ import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from '
 import { join } from 'node:path';
 import { homedir } from 'node:os';
 import type {ExecutionPreflight} from './fastExecution.ts';
+import {canonicalExecutionDecision,grantExecutionLease,readWorktreeFiles,resolveExecutionScopes} from './fastExecution.ts';
 
 export const REPOSITORY_ROOT = '/Users/a/AI/007/AIcontrolcenter';
 export const LOCAL_SERVICE_LABEL = 'com.aicc.v2.local-service';
@@ -120,7 +121,7 @@ export function authorizationState(id: string, repo: RepositoryModel): { status:
 }
 export function authorizationBlocker(id: string, repo: RepositoryModel | null, wpExists: boolean,preflight?:ExecutionPreflight): string | null {
   if (!id) return 'NO_WORK_PACKAGE_SELECTED'; if (!wpExists) return 'WP_NOT_FOUND'; if (!repo) return 'REPOSITORY_UNAVAILABLE';
-  if(repo.worktree==='DIRTY'&&!preflight)return 'WORKTREE_PROVENANCE_REQUIRED';if(preflight?.severity==='HARD_BLOCK')return 'UNKNOWN_OR_CONFLICTING_DIRTY';if (!repo.branch || repo.branch === 'unavailable') return 'DETACHED_HEAD'; if (repo.branch === 'main') return 'FEATURE_BRANCH_REQUIRED';
+  if(repo.worktree==='DIRTY'&&!preflight)return 'CANONICAL_DECISION_UNAVAILABLE';if(preflight?.severity==='HARD_BLOCK')return preflight.reasonCode??'EXECUTION_PREFLIGHT_BLOCKED';if (!repo.branch || repo.branch === 'unavailable') return 'DETACHED_HEAD'; if (repo.branch === 'main') return 'FEATURE_BRANCH_REQUIRED';
   if (!repo.remoteMain || repo.remoteMain.includes('unavailable')) return 'REMOTE_MAIN_UNAVAILABLE'; if (repo.localMain !== repo.remoteMain) return 'SYNC_REQUIRED';
   const state = authorizationState(id, repo); if (state.status === 'AUTHORIZED') return 'AUTHORIZATION_CONFLICT'; return null;
 }
@@ -139,5 +140,13 @@ export function reauthorizeAuthorization(id: string, repo: RepositoryModel,prefl
   mkdirSync(join(homedir(), '.aicc-v2'), { recursive: true });
   if (existing) { const superseded = { ...existing, status: 'SUPERSEDED' as const, supersededAt: record.authorizedAt }; let history: Authorization[] = []; try { history = JSON.parse(readFileSync(AUTH_HISTORY_FILE, 'utf8')) as Authorization[]; } catch { /* no history yet */ } atomicWriteJson(AUTH_HISTORY_FILE,[...history, superseded]); }
   atomicWriteJson(AUTH_FILE,record); return { record, superseded: Boolean(existing) };
+}
+export function authorizeWorkPackage(id:string):{record:Authorization;superseded:boolean;leaseId:string;decision:ReturnType<typeof canonicalExecutionDecision>}{
+  const repo=readRepository(),wp=readWorkPackage(id),validation=validateFormalWorkPackage(wp,id),scopes=resolveExecutionScopes(wp),decision=canonicalExecutionDecision(repo,id,scopes.scope,readWorktreeFiles(repo.repository),scopes.knownNonConflicting,{requireAuthorization:true,authorization:readAuthorization()??undefined,formalWpValid:validation.every(item=>item.severity!=='HARD_BLOCK')});
+  if(decision.decision==='HARD_BLOCK')throw new Error(decision.reasonCode??'EXECUTION_PREFLIGHT_BLOCKED');
+  const existing=readAuthorization(),blocker=authorizationBlocker(id,repo,true,decision);if(blocker&&blocker!=='AUTHORIZATION_CONFLICT')throw new Error(blocker);
+  const result=existing?reauthorizeAuthorization(id,repo,decision):{record:persistAuthorization(id,repo,decision),superseded:false};
+  const lease=grantExecutionLease(repo,id,scopes.scope,readWorktreeFiles(repo.repository),'owner',decision.provenance);
+  return {...result,leaseId:lease.leaseId,decision};
 }
 export function syncLocalMain(): 'ALREADY_SYNCED' | 'FAST_FORWARD' { const repo = readRepository(); if (repo.worktree !== 'CLEAN') throw new Error('WORKTREE_DIRTY'); if (repo.branch === 'main') throw new Error('MAIN_SYNC_REQUIRES_FEATURE_BRANCH'); git(['fetch', 'origin', 'main']); const remote = git(['rev-parse', 'refs/remotes/origin/main']); const local = safeGit(['rev-parse', 'refs/heads/main']); if (local === remote) return 'ALREADY_SYNCED'; try { execFileSync('git', ['merge-base', '--is-ancestor', local, remote], { cwd: REPOSITORY_ROOT, stdio: 'ignore' }); } catch { throw new Error('LOCAL_MAIN_DIVERGED'); } execFileSync('git', ['update-ref', 'refs/heads/main', remote, local], { cwd: REPOSITORY_ROOT, stdio: 'ignore' }); return 'FAST_FORWARD'; }

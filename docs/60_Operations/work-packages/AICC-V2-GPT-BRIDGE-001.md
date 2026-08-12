@@ -9,7 +9,28 @@ Execution Inbox READY → Fast Execution launch → real Codex run →
 
 Resume point: `IMPLEMENT_CANONICAL_INBOX_LAUNCH_ACTION`
 
+Current Owner-UAT truth: `001A ROUND_1 = PASS`; `001A ROUND_2 = BLOCKED / PENDING REAL DOGFOOD AND OWNER RETEST`.
+This document does not claim canonical runtime dogfood, production release, or remote delivery readiness.
+
 ## Goal and delivery phases
+
+## Goal
+
+Provide a bounded, Owner-triggered bridge from a validated `AICC_EXECUTION_V1`
+instruction into the existing AICC Fast Execution and Codex Runtime path.
+
+## Scope
+
+Implement the 001A Bridge Core: parse and persist the Execution Inbox, expose
+the canonical eight protocol gates, launch only explicit READY items through
+Fast Execution, bind real runtime evidence, generate `AICC_RUN_REPORT_V1`, and
+persist Result Outbox READY evidence.
+
+## Acceptance Criteria
+
+Machine acceptance: the 001A parser, inbox, outbox, canonical Fast Execution
+handoff, Writer Lock, runtime binding, terminal report generation, failure
+handling, persistence, and explicit Owner launch behavior must be validated.
 
 The parent contract covers a bidirectional GPT Plus Web ↔ AICC ↔ Codex task/result bridge.
 It is delivered as two phases; these are formal phases inside the parent Work Package,
@@ -167,6 +188,16 @@ scraping. Composer-target failure is visible and must not click unrelated contro
 12. Existing Codex runtime is reused.
 13. An adapter cannot directly execute code or mutate the repository.
 14. Web adapter failure does not block Bridge Core.
+15. READY inbox items require an explicit Owner launch action.
+16. Receiving or parsing never auto-executes Codex.
+17. Bridge launch delegates to canonical Fast Execution preflight.
+18. Bridge launch reuses the existing WP Execution Lease.
+19. Worktree provenance and semantic scope evolution are preserved.
+20. Canonical Writer Lock and managed Runtime are reused.
+21. A launched inbox item persists its real Run ID and runtime state.
+22. Terminal runtime evidence generates a real `AICC_RUN_REPORT_V1`.
+23. A real terminal report creates Result Outbox `READY` and consumes the inbox.
+24. Hard preflight blockers fail closed without creating a fake runtime.
 
 001A Human UAT Plan (Chinese-first, max 7 per round, recommended 3–5):
 
