@@ -1,0 +1,28 @@
+import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
+
+const app=readFileSync(new URL('../App.svelte',import.meta.url),'utf8');
+const workspace=readFileSync(new URL('../components/entity/RuntimeWorkspace.svelte',import.meta.url),'utf8');
+const entityWorkspace=readFileSync(new URL('../components/entity/EntityOperationsWorkspace.svelte',import.meta.url),'utf8');
+const css=readFileSync(new URL('../app.css',import.meta.url),'utf8');
+
+assert.equal((app.match(/<EntityOperationsWorkspace/g)??[]).length,2,'WP and PR share the entity workspace hierarchy');
+assert.match(entityWorkspace,/slot name="workflow"/);
+assert.match(entityWorkspace,/StatusTabs/);
+assert.match(entityWorkspace,/StatusTabs active=\{activeTab\}/,'tab underline receives the selected tab state');
+assert.match(entityWorkspace,/active-tab-content/);
+assert.match(app,/activeTab==='流程'/,'WP workflow content has an explicit branch');
+assert.match(app,/activeTab==='工作包'/,'WP work-package content has an explicit branch');
+assert.match(app,/data-testid="wp-overview-content"/,'WP overview has an explicit branch');
+assert.equal((app.match(/<RuntimeWorkspace/g)??[]).length,2,'WP and PR both own a runtime tab workspace');
+assert.match(workspace,/runtime-execution-inbox/);
+assert.match(workspace,/runtime-current-execution/);
+assert.match(workspace,/runtime-live-activity/);
+assert.match(workspace,/runtime-run-result/);
+assert.match(workspace,/runtime-history/);
+assert.match(app,/class="status panel"[\s\S]*EntityEvidencePanel[\s\S]*<\/aside>/);
+assert.doesNotMatch(app,/class="status panel"[\s\S]*bridge-core-card/);
+assert.doesNotMatch(app,/RuntimeMonitor[\s\S]*StatusTabs/);
+assert.match(app,/recoveryToastTimer=window\.setTimeout/);
+assert.match(css,/\.recovery-toast/);
+console.log('runtime workspace UI contract tests passed');

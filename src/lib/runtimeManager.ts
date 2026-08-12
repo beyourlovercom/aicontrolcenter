@@ -208,7 +208,7 @@ function readStoredRuntime() {
     return null;
   }
 }
-function readRuntimeHistory(): RuntimeState[] {
+export function readRuntimeHistory(): RuntimeState[] {
   try {
     return JSON.parse(readFileSync(HISTORY_FILE, "utf8")) as RuntimeState[];
   } catch {

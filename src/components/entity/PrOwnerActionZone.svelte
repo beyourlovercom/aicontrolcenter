@@ -3,15 +3,23 @@
   export let context:PullRequestEntityContext;
   export let busy=false;
   export let onAction:(id:ActionId)=>void=()=>{};
-  const action=(id:ActionId)=>context.availableActions.find(item=>item.id===id);
+  export let onNavigate:(tab:string)=>void=()=>{};
+  $: start=context.availableActions.find(item=>item.id==='PR_START_CODEX');
+  $: stop=context.availableActions.find(item=>item.id==='PR_STOP');
+  $: retry=context.availableActions.find(item=>item.id==='PR_RETRY');
+  $: running=Boolean(stop?.enabled);
+  $: currentAction=running
+    ? {label:'查看运行',detail:'PR 正在执行',tab:'运行',action:null as ActionId|null,enabled:true}
+    : retry?.enabled
+      ? {label:'重试',detail:'PR 执行失败，可重新尝试',tab:'运行',action:'PR_RETRY' as ActionId,enabled:true}
+      : start?.enabled
+        ? {label:'启动执行',detail:'PR 准备就绪，可以开始执行',tab:'运行',action:'PR_START_CODEX' as ActionId,enabled:true}
+        : {label:'准备执行',detail:start?.reasonLabel??'当前 PR 尚未绑定可执行合同',tab:'运行',action:null as ActionId|null,enabled:false};
+  function activate(){if(currentAction.action)onAction(currentAction.action);else onNavigate(currentAction.tab)}
 </script>
-<section class="action-zone pr-action-zone" data-testid="pr-owner-action-zone">
-  <div class="section-label"><span>PR Owner Action Zone</span><small>显式 PR 操作</small></div>
-  <div class="actions">
-    <button class="action primary" onclick={()=>onAction('REFRESH')} aria-label="刷新状态" disabled={busy}>刷新状态</button>
-    {#each [['PR_START_CODEX','启动 Codex'],['PR_STOP','停止'],['PR_RETRY','重试'],['PR_OPEN','打开 PR'],['PR_APPROVE_MERGE','批准合并']] as item}
-      {@const eligibility=action(item[0] as ActionId)}
-      <button class:disabled={!eligibility?.enabled} class="action pr-action" title={eligibility?.reasonLabel??eligibility?.reasonCode??item[1]} aria-label={item[1]} onclick={()=>onAction(item[0] as ActionId)}>{item[1]}</button>
-    {/each}
-  </div>
+
+<section class="action-zone contextual-action-zone pr-action-zone" data-testid="pr-owner-action-zone" data-current-action={currentAction.label}>
+  <div class="section-label"><span>当前操作</span><small>Current Action</small></div>
+  <div class="current-action-summary"><strong>{currentAction.detail}</strong><button class="action primary" class:disabled={!currentAction.enabled} onclick={activate} disabled={busy||!currentAction.enabled}>{currentAction.label}</button></div>
+  {#if running&&stop?.enabled}<button class="action secondary-action" onclick={()=>onAction('PR_STOP')} disabled={busy}>停止</button>{/if}
 </section>
