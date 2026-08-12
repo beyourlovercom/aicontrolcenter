@@ -1,19 +1,64 @@
-# AICC-V2-GPT-BRIDGE-001: GPT Plus ↔ AICC ↔ Codex Bridge
+# AICC-V2-GPT-BRIDGE-001: GPT Plus Web ↔ AICC ↔ Codex
 
 Status: FORMAL_READY
-Type: GPT_BRIDGE
+Type: GPT_BRIDGE_BIDIRECTIONAL
 
-## Goal
+## Goal and delivery phases
 
-建立一个人工确认、可验证、可复制的双向 GPT Plus ↔ AICC ↔ Codex 桥接契约：
-Owner 可导入执行指令，AICC 可导出真实运行报告。此 Work Package 只定义
-契约与验收边界，本准备任务不实现产品代码。
+The parent contract covers a bidirectional GPT Plus Web ↔ AICC ↔ Codex task/result bridge.
+It is delivered as two phases; these are formal phases inside the parent Work Package,
+not a new unsupported Roadmap hierarchy level:
 
-## Primary surfaces
+- `AICC-V2-GPT-BRIDGE-001A` — Bridge Core. Independently usable without browser DOM integration.
+- `AICC-V2-GPT-BRIDGE-001B` — ChatGPT Web Adapter. Depends on 001A.
 
-- `导入执行指令`
-- `复制运行报告`
-- Optional secondary debugging action: `复制原始日志`
+Delivery order: 001A Bridge Core → 001A Machine Validation → 001A Human UAT →
+001B Web Adapter → 001B Machine Validation → 001B Human UAT → parent complete.
+
+## 001A — Bridge Core
+
+The canonical business flow is:
+
+`External Adapter → Execution Inbox → ImportedExecutionInstruction → parser → 8 Gates → existing Codex runtime / future Autopilot`
+
+Outbound flow is:
+
+`Runtime / Validation terminal → AICC_RUN_REPORT_V1 → Result Outbox → External Adapter`
+
+Core scope:
+
+1. Execution Inbox
+2. Result Outbox
+3. `AICC_EXECUTION_V1` parser
+4. `AICC_RUN_REPORT_V1` generator
+5. canonical import gates
+6. existing Codex runtime integration
+7. clipboard import fallback
+8. copy-report fallback
+9. local bridge API contract for adapters
+
+Clipboard is only a fallback, never the canonical source. Source adapters are
+`CLIPBOARD` and `WEB_BRIDGE`; `MCP` and `API` are reserved, not implemented.
+The source-independent instruction model preserves:
+`instructionId`, `sourceType`, `sourceReference`, `receivedAt`, `envelopeVersion`,
+`entityType`, `entityId`, `executionType`, `branch`, `expectedHead`, `sandbox`,
+`instructionBody`, `parseStatus`, and `gateStatus`.
+
+### Execution Inbox
+
+Stable inbox entries preserve the original imported text without mutation and use:
+`RECEIVED`, `PARSED`, `INVALID`, `READY`, `BLOCKED`, `LAUNCHED`, `CONSUMED`.
+Future Owner UI is Chinese-first: `执行指令收件箱`, source, target WP, execution type,
+received time and gate status. View/load/reject/delete behavior is subject to the
+implementation contract; this preparation does not add UI.
+
+### Result Outbox
+
+Stable outbox entries preserve `resultId`, related instruction ID where available,
+entity ID, run ID, created time, report version, report text, delivery state and
+source conversation reference where available. Delivery states are `READY`,
+`DELIVERED`, `ACKNOWLEDGED`, `FAILED`; `DELIVERED` never means a ChatGPT message
+was actually sent.
 
 ## AICC_EXECUTION_V1
 
@@ -34,40 +79,35 @@ INSTRUCTION_BEGIN
 INSTRUCTION_END
 ```
 
-The parser must recognize the version, validate all required fields, extract
-the instruction body exactly, reject malformed/unsupported envelopes visibly,
-and never treat metadata as executable shell input.
+The parser recognizes the version, validates required fields, extracts the body
+exactly, rejects malformed/unsupported envelopes visibly, and never treats metadata
+as executable shell input. Imported text never executes immediately; Owner must
+explicitly launch after gates pass.
 
-Import never auto-executes pasted or clipboard text. Owner must explicitly
-launch after the parsed target and gates are shown.
+The eight canonical gates are: `ENTITY_MATCH`, `BRANCH_MATCH`,
+`EXPECTED_HEAD_MATCH`, `WORKTREE_GATE`, `OWNER_AUTHORIZATION`,
+`WRITER_LOCK_AVAILABLE`, `EXECUTION_TYPE_SUPPORTED`, `SANDBOX_SUPPORTED`.
 
-## Import gates
+## 001B — ChatGPT Web Adapter
 
-Before launch, the single canonical execution gate must validate:
+Inbound happy path: ChatGPT Web detects an explicit `AICC_EXECUTION_V1` block;
+Owner clicks `发送到 AICC`; the adapter sends it to the localhost AICC service;
+the instruction enters the Execution Inbox. Receipt never auto-executes.
 
-- ENTITY_MATCH
-- BRANCH_MATCH
-- EXPECTED_HEAD_MATCH
-- WORKTREE_GATE
-- OWNER_AUTHORIZATION
-- WRITER_LOCK_AVAILABLE
-- EXECUTION_TYPE_SUPPORTED
-- SANDBOX_SUPPORTED
+Outbound happy path: the adapter polls the Result Outbox, shows `AICC 有新的运行报告`,
+and after Owner clicks `插入运行报告`, inserts `AICC_RUN_REPORT_V1` into the active
+ChatGPT composer. Owner must click ChatGPT's native Send action.
 
-Mismatch or failure is shown in Owner Action Feedback. A target mismatch must
-show `目标实体不一致`; switching to the target, if offered, is explicit.
-Imported execution uses the existing Owner action, Local Control Service,
-managed Codex runtime, Writer Lock, Runtime Monitor, and persistence path.
-No second Codex launcher is permitted.
+Conversation metadata (`CHATGPT_WEB`, source conversation URL, bridge session ID)
+is advisory only and never becomes repository/WP truth. If exact routing cannot be
+proven, do not insert into an arbitrary conversation; show `发现 AICC 运行结果，请确认目标对话`.
 
 ## AICC_RUN_REPORT_V1
 
-The standard report is human-readable structured text intended for direct paste
-into GPT Plus:
+The standard human-readable report contains these sections and only truthful data:
 
 ```text
 AICC_RUN_REPORT_V1
-
 ENTITY
 EXECUTION
 WRITER LOCK
@@ -81,68 +121,103 @@ REPOSITORY STATE
 OWNER STATUS
 ```
 
-Each section reports only available evidence. `ABSENT`, `UNAVAILABLE`, and
-`FAILED` remain distinct. The report includes entity/parent, execution type,
-run ID, status, branch, execution HEAD, elapsed time, exit code, terminal lock,
-implementation result, activity counts, final Agent message, stderr/error
-summary, validation evidence, resolved lifecycle, repository HEAD/worktree/
-changed files, and effective Owner status where available.
+`ABSENT`, `UNAVAILABLE`, and `FAILED` remain distinct. The report may include
+parent, execution type, run ID, runtime status, branch, execution HEAD, elapsed,
+exit code, terminal lock, implementation result, activity counts, final Agent
+message, stderr/error summary, validation evidence, lifecycle, repository HEAD,
+worktree, changed files and effective Owner status.
 
-`复制运行报告` is primary. `复制原始日志` is optional and secondary. Clipboard
-success shows `运行报告已复制`; failure shows `复制失败` and
-`CLIPBOARD_WRITE_FAILED`.
+## Local transport and security
 
-## Machine Acceptance Criteria
+V1 uses a browser adapter/content bridge to the AICC Local Control Service at
+`127.0.0.1`. Conceptual endpoints are:
 
-1. A valid `AICC_EXECUTION_V1` envelope parses deterministically.
-2. A malformed envelope is visibly rejected.
-3. An unsupported envelope version is visibly rejected.
-4. Entity mismatch blocks launch.
-5. Branch mismatch blocks launch.
-6. Expected HEAD mismatch blocks launch.
-7. Unavailable Writer Lock blocks launch.
-8. Authorization failure blocks launch.
-9. Import uses the existing Codex runtime path.
-10. Envelope metadata is never executed as shell input.
-11. `AICC_RUN_REPORT_V1` contains all required sections.
-12. Unavailable report fields remain truthful and distinct from absent/failed.
-13. Clipboard success produces visible feedback.
-14. Clipboard failure produces visible feedback and a stable error code.
-15. No second Codex runtime implementation is introduced.
+- `POST /api/gpt-bridge/inbox`
+- `GET /api/gpt-bridge/outbox`
+- `POST /api/gpt-bridge/outbox/:id/ack`
 
-## Owner Human UAT Plan
+Simple polling is sufficient; WebSocket/SSE is not required. The browser adapter
+may deliver text only and must never invoke shell, `codex exec`, Git, or filesystem
+mutation. AICC remains the execution authority and reuses the existing runtime,
+Writer Lock, persistence and Owner action.
 
-Human UAT is independent of the machine contract and uses Chinese-first,
-Owner-readable rounds. Each item has a stable ID, operation, and pass standard.
+If Web DOM integration breaks, clipboard import and copy-report remain usable.
+Recognition must target explicit `AICC_EXECUTION_V1` content, not arbitrary page
+scraping. Composer-target failure is visible and must not click unrelated controls.
 
-- HUA-01 | 第一轮：指令导入 | 打开导入执行指令 | 模态框显示中文标题、文本输入区与取消/载入操作。
-- HUA-02 | 第一轮：指令导入 | 粘贴一份有效 AICC_EXECUTION_V1 | 解析结果显示目标 WP、分支、HEAD、执行类型与 Sandbox。
-- HUA-03 | 第一轮：指令导入 | 修改为错误版本或缺字段 | 页面明确显示解析失败，且不会启动 Codex。
-- HUA-04 | 第一轮：指令导入 | 导入目标与当前 WP 不同的指令 | 页面显示目标实体不一致，且不会静默执行。
-- HUA-05 | 第二轮：Gate 与执行 | 检查 Gate 结果 | Entity、Branch、HEAD、Worktree、授权与写入锁结果可读且真实。
-- HUA-06 | 第二轮：Gate 与执行 | 点击载入并启动 Codex | 必须由 Owner 显式点击后才启动现有 Codex Runtime。
-- HUA-07 | 第二轮：Gate 与执行 | 在运行期间观察 Runtime Monitor | 可看到真实运行状态、活动与写入锁，不出现第二套运行器。
-- HUA-08 | 第二轮：Gate 与执行 | 触发一个 Gate 失败 | Owner Action Feedback 显示中文原因与稳定错误码。
-- HUA-09 | 第三轮：运行报告 | 点击复制运行报告 | 页面显示运行报告已复制，报告以 AICC_RUN_REPORT_V1 开头。
-- HUA-10 | 第三轮：运行报告 | 将报告粘贴到 GPT Plus 输入区 | 报告包含实体、执行、锁、实现、活动与终态信息。
-- HUA-11 | 第三轮：运行报告 | 检查不可用字段 | ABSENT、UNAVAILABLE、FAILED 没有被混为同一状态。
-- HUA-12 | 第三轮：运行报告 | 查看复制原始日志 | 原始日志为次要调试操作，不取代标准运行报告。
-- HUA-13 | 第四轮：持久化与异常 | 复制报告时制造失败 | 页面显示复制失败与 CLIPBOARD_WRITE_FAILED，不静默失败。
-- HUA-14 | 第四轮：持久化与异常 | 刷新状态并重新打开报告 | 最新可用运行证据与 Owner 状态保持一致。
-- HUA-15 | 第四轮：持久化与异常 | 切换实体再切回 | 报告不会串到其他 WP，目标上下文保持隔离。
-- HUA-16 | 第四轮：持久化与异常 | 重启 Local Control Service 后刷新 | 已持久化运行状态仍可读取，缺失信息仍如实显示。
+## 001A Machine Acceptance Criteria
+
+1. Inbox entries persist with stable IDs and original source text.
+2. Outbox entries persist with stable IDs and report text.
+3. Valid `AICC_EXECUTION_V1` envelopes parse deterministically.
+4. Malformed envelopes are rejected visibly.
+5. Unsupported versions are rejected visibly.
+6. All eight gates are evaluated from one canonical gate resolver.
+7. Instruction business state is independent of adapter source type.
+8. Clipboard import works as fallback only.
+9. `AICC_RUN_REPORT_V1` generation includes required sections.
+10. ABSENT, UNAVAILABLE and FAILED remain semantically distinct.
+11. Local adapter API accepts an inbox instruction safely.
+12. Existing Codex runtime is reused.
+13. An adapter cannot directly execute code or mutate the repository.
+14. Web adapter failure does not block Bridge Core.
+
+001A Human UAT Plan (Chinese-first, max 7 per round, recommended 3–5):
+
+- HUA-A01 | 第一轮：指令收件箱 | 查看一条外部指令 | 收件箱显示来源、目标 WP、收到时间与 Gate 状态。
+- HUA-A02 | 第一轮：指令收件箱 | 导入有效指令 | 原文保持不变且状态进入可解析路径。
+- HUA-A03 | 第一轮：指令收件箱 | 导入无效指令 | 页面明确拒绝，不会自动启动 Codex。
+- HUA-A04 | 第二轮：运行与 Gate | 检查八项 Gate | Entity、Branch、HEAD、Worktree、授权、锁、类型、Sandbox 结果真实可读。
+- HUA-A05 | 第二轮：运行与 Gate | Owner 显式载入并启动 | 只通过既有 AICC Runtime 执行，未得到 Owner 点击不会运行。
+- HUA-A06 | 第二轮：运行与 Gate | 观察运行结果 | 运行、锁、终态与错误证据保持一致。
+- HUA-A07 | 第三轮：报告与回退 | 复制运行报告 | 报告可粘贴到 GPT Plus，复制成功/失败都有反馈。
+- HUA-A08 | 第三轮：报告与回退 | 关闭 Web Bridge 后复制报告 | Core 仍可通过复制报告完成交接。
+- HUA-A09 | 第四轮：持久化与隔离 | 刷新并切换实体 | Inbox、Outbox 与实体上下文保持绑定，不发生串线。
+- HUA-A10 | 第四轮：持久化与隔离 | 重启服务后读取证据 | 持久化记录恢复，缺失与不可用状态不被伪造。
+
+## 001B Machine Acceptance Criteria
+
+1. Adapter detects explicit `AICC_EXECUTION_V1` blocks only.
+2. `发送到 AICC` requires explicit Owner action.
+3. Delivery targets the correct localhost AICC endpoint.
+4. Receipt never auto-executes.
+5. Adapter polls Result Outbox.
+6. `REPORT_READY` produces visible notification.
+7. `插入运行报告` targets only the active composer after Owner action.
+8. ChatGPT native send is never automated.
+9. Conversation routing metadata is advisory.
+10. Routing mismatch never inserts into an arbitrary conversation.
+11. Missing DOM target fails visibly.
+12. Arbitrary page scraping is not used.
+13. Clipboard and copy-report fallbacks remain available.
+14. Adapter never invokes shell, Codex, Git or filesystem mutation.
+
+001B Human UAT Plan (Chinese-first, max 7 per round, recommended 3–5):
+
+- HUA-B01 | 第一轮：网页识别 | 打开包含执行块的对话 | 仅明确 AICC_EXECUTION_V1 被识别。
+- HUA-B02 | 第一轮：网页识别 | 点击发送到 AICC | 指令发送至本机服务并进入收件箱。
+- HUA-B03 | 第二轮：安全启动 | 检查接收后的页面 | 收到指令不会自动执行，仍需 AICC Owner 启动。
+- HUA-B04 | 第二轮：安全启动 | 模拟目标不一致 | 页面显示目标不一致，不会静默切换 WP。
+- HUA-B05 | 第三轮：运行报告 | 等待报告就绪 | ChatGPT Web 显示 AICC 有新的运行报告。
+- HUA-B06 | 第三轮：运行报告 | 点击插入运行报告 | 报告插入当前 composer，不发送消息。
+- HUA-B07 | 第四轮：异常与回退 | 点击原生发送前检查 | 发送仍由 Owner 手动完成。
+- HUA-B08 | 第四轮：异常与回退 | 使 DOM 目标不可用 | 页面显示失败，不点击其他页面控件。
+- HUA-B09 | 第四轮：异常与回退 | 关闭/破坏 Web Bridge | 可用剪贴板导入与复制运行报告继续工作。
+- HUA-B10 | 第四轮：异常与回退 | 检查错误对话路由 | 无法确认目标时要求 Owner 确认，不自动插入错误会话。
 
 ## Non-goals
 
-明确不在本 Work Package 范围内：
-
-- ChatGPT API、自动向 ChatGPT 网站发送消息、浏览器扩展、直接浏览器控制。
-- PR execution contract、commit/push、Draft PR、CI、Review、Merge。
-- PR Runner、GitHub delivery automation、WP Close capability。
+NOT IN SCOPE: ChatGPT API, OpenAI API, ChatGPT Work, Codex Desktop, MCP write access,
+browser extension implementation in this preparation, automatic ChatGPT message
+sending, automatic exact conversation opening, cross-device sync, browser cloud
+service, multiple-browser routing, WebSocket/SSE requirement, PR execution,
+commit/push, Draft PR, CI, Review, Merge, PR Runner, WP Close, deployment,
+OpenCode, OpenSpec and OmO.
 
 ## Boundaries
 
-- `PASTE_IMMEDIATELY_EXECUTES = 0`。
-- `OWNER_LAUNCH_ACTION_REQUIRED = YES`。
-- `SECOND_CODEX_RUNTIME_IMPLEMENTATION = 0`。
-- 不改变现有 Runtime、Authorization、Writer Lock 或生命周期语义。
+`EXECUTION_INBOX_CANONICAL = PASS`; `RESULT_OUTBOX_CANONICAL = PASS`;
+`CLIPBOARD_IS_ONLY_FALLBACK = YES`; `AUTO_SEND_CHATGPT_MESSAGE = 0`;
+`CONVERSATION_ROUTING_IS_ADVISORY = PASS`; `V1_WEBSOCKET_REQUIRED = NO`;
+`V1_SIMPLE_POLLING_ALLOWED = YES`; `BROWSER_ADAPTER_CAN_EXECUTE_CODE = 0`;
+`AICC_REMAINS_EXECUTION_AUTHORITY = YES`; `WEB_ADAPTER_FAILURE_BLOCKS_CORE = 0`.
