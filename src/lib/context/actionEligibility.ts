@@ -1,6 +1,7 @@
 import type {ActionEligibility,AiccProjectSnapshot,ResolvedAuthorization,SelectedEntityRef,WorkPackageLifecycle,FormalizationState} from '../model/entityTypes.ts';
 
 const action=(id:ActionEligibility['id'],visible:boolean,enabled:boolean,reasonCode?:string,reasonLabel?:string):ActionEligibility=>({id,visible,enabled,...(reasonCode?{reasonCode}:{}) ,...(reasonLabel?{reasonLabel}:{})});
+export function isRetryableRuntimePhase(phase:string|undefined){return Boolean(phase&&['FAILED','STOPPED','RECOVERY_REQUIRED'].includes(phase));}
 export function resolveAvailableActions(entity:SelectedEntityRef,snapshot:AiccProjectSnapshot,formalization?:FormalizationState,lifecycle?:WorkPackageLifecycle,authorization?:ResolvedAuthorization):ActionEligibility[]{
   if(entity.type==='milestone')return [action('REFRESH',true,true)];
   if(entity.type==='pull_request')return [action('REFRESH',true,true),action('PR_START_CODEX',true,false,'PR_EXECUTION_CONTRACT_NOT_BOUND','PR 尚未绑定独立 Codex 执行合同'),action('PR_STOP',true,false,'PR_NO_ACTIVE_EXECUTION','当前没有活动中的 PR 执行'),action('PR_RETRY',true,false,'PR_RETRY_NOT_AVAILABLE','当前没有可重试的 PR 执行'),action('PR_OPEN',true,false,'PR_NOT_BOUND','未绑定真实 GitHub PR'),action('PR_APPROVE_MERGE',true,false,'PR_MERGE_EVIDENCE_MISSING','当前 Demo PR 未绑定真实 PR / CI / Merge evidence')];
@@ -18,7 +19,7 @@ export function resolveAvailableActions(entity:SelectedEntityRef,snapshot:AiccPr
     // repository/WP/authorization/lease preflight before spawning Codex.
     action('START_CODEX',true,!humanUat&&!planned&&!invalid&&authorization?.record?.workPackageId===entity.id&&!activeRuntime,humanUat?'HUMAN_UAT_ACTION_NOT_APPLICABLE':planned?'FORMAL_WP_DOCUMENT_MISSING':activeRuntime?'CODEX_ALREADY_RUNNING':authorization?.record?.workPackageId!==entity.id?'AUTHORIZATION_NOT_FOUND':undefined,blockedLabel??(activeRuntime?'当前 WP 已有活动中的 Codex Runtime。':authorization?.record?.workPackageId!==entity.id?'当前 WP 无匹配授权记录。':undefined)),
     action('STOP_CODEX',true,Boolean(matchingRuntime&&['STARTING','RUNNING','STOPPING'].includes(matchingRuntime.phase)),'NO_ACTIVE_MATCHING_RUNTIME','当前 WP 没有活动中的 Codex Runtime。'),
-    action('RETRY',true,Boolean(matchingRuntime&&['FAILED','COMPLETED','STOPPED','RECOVERY_REQUIRED'].includes(matchingRuntime.phase)),'NO_RETRYABLE_RUNTIME','当前没有可重试的终态运行。'),
+    action('RETRY',true,isRetryableRuntimePhase(matchingRuntime?.phase),'NO_RETRYABLE_RUNTIME','当前没有可重试的终态运行。'),
     action('SAFE_MAIN_SYNC',true,Boolean(repo&&repo.worktree==='CLEAN'&&repo.branch!=='main'),repo?.worktree!=='CLEAN'?'WORKTREE_DIRTY':'SYNC_NOT_ELIGIBLE','仓库当前不满足安全同步条件。')
   ];
 }
