@@ -12,7 +12,7 @@
   import CurrentContextLocator from './components/CurrentContextLocator.svelte';
   import RuntimeMonitor from './components/RuntimeMonitor.svelte';
   import HumanUatWorkspace from './components/entity/HumanUatWorkspace.svelte';
-  import {createProjectSnapshot,type RawProjectSources} from './lib/model/projectModel';
+  import {createProjectSnapshot,normalizeRoadmap,type RawProjectSources} from './lib/model/projectModel';
   import {resolveEntityContext} from './lib/context/entityContext';
   import {resolvePrTabView} from './lib/context/prTabContent';
   import type {ActionEligibility,FormalWorkPackage,HumanUatRecord,SelectedEntityRef,WorkPackageEntityContext} from './lib/model/entityTypes';
@@ -36,7 +36,7 @@
 
   function setFeedback(value:Feedback){feedback=value}
   async function request(url:string,options?:RequestInit){const response=await fetch(url,options);const data=await response.json();if(!response.ok){const value=typeof data.error==='object'?data.error:{code:data.error,message:data.error};throw new Error(`${value.code??'ACTION_ERROR'}: ${value.message??'操作失败'}`)}return data}
-  async function readFormalWorkPackage(id:string,token:number){if(raw.formalWorkPackages?.[id])return;try{const response=await fetch(`/api/work-packages/${encodeURIComponent(id)}`);if(response.status===404)return; if(!response.ok)throw new Error('FORMAL_WP_SOURCE_UNAVAILABLE');const workPackage=await response.json() as FormalWorkPackage;if(token===selectionRequest)raw={...raw,formalWorkPackages:{...raw.formalWorkPackages,[id]:workPackage}}}catch{if(token===selectionRequest)raw={...raw,sourceErrors:{...raw.sourceErrors,formalWorkPackages:'FORMAL_WP_SOURCE_UNAVAILABLE'}}}}
+  async function readFormalWorkPackage(id:string,token:number){try{const response=await fetch(`/api/work-packages/${encodeURIComponent(id)}`);if(response.status===404)return; if(!response.ok)throw new Error('FORMAL_WP_SOURCE_UNAVAILABLE');const workPackage=await response.json() as FormalWorkPackage;if(token===selectionRequest)raw={...raw,formalWorkPackages:{...raw.formalWorkPackages,[id]:workPackage},sourceErrors:{...raw.sourceErrors,formalWorkPackages:undefined}}}catch{if(token===selectionRequest)raw={...raw,sourceErrors:{...raw.sourceErrors,formalWorkPackages:'FORMAL_WP_SOURCE_UNAVAILABLE'}}}}
   async function loadSnapshot(showFeedback=true){
     if(showFeedback)setFeedback({state:'RUNNING',title:'正在刷新状态…',message:'正在重建项目快照与当前实体上下文。',code:'REFRESHING'});
     const selectedAtStart=selectedEntity;
@@ -44,7 +44,7 @@
     const [roadmapResult,repositoryResult,authorizationResult,runtimeResult,descriptionResult,uatResult,lifecycleEvidenceResult]=await Promise.allSettled([request('/api/roadmap'),request('/api/repository'),request(`/api/authorization?workPackageId=${encodeURIComponent(selectedAtStart.type==='work_package'?selectedAtStart.id:'')}`),request(`/api/codex/runtime${runtimeQuery}`),request('/api/entity-descriptions'),selectedAtStart.type==='work_package'?request(`/api/human-uat?workPackageId=${encodeURIComponent(selectedAtStart.id)}`):Promise.resolve({record:null}),selectedAtStart.type==='work_package'?request(`/api/lifecycle-evidence?workPackageId=${encodeURIComponent(selectedAtStart.id)}`):Promise.resolve({record:null})]);
     const sourceErrors:RawProjectSources['sourceErrors']={};
     const next:RawProjectSources={...raw,sourceErrors};
-    if(roadmapResult.status==='fulfilled')next.roadmap=roadmapResult.value;else sourceErrors.roadmap='ROADMAP_UNAVAILABLE';
+    if(roadmapResult.status==='fulfilled'){try{normalizeRoadmap(roadmapResult.value.content,next.localDevelopment===true,next.pullRequests??[],next.runtime??null);next.roadmap=roadmapResult.value}catch{next.roadmap=null;sourceErrors.roadmap='ROADMAP_PARSE_FAILED'}}else{next.roadmap=null;sourceErrors.roadmap='ROADMAP_UNAVAILABLE'}
     if(repositoryResult.status==='fulfilled')next.repository=repositoryResult.value;else sourceErrors.repository='REPOSITORY_UNAVAILABLE';
     if(authorizationResult.status==='fulfilled')next.authorization=authorizationResult.value.record??null;else sourceErrors.authorizations='AUTHORIZATION_UNAVAILABLE';
     if(runtimeResult.status==='fulfilled'){next.runtime=runtimeResult.value.runtime??null;codexInfo=runtimeResult.value.info}else sourceErrors.runtime='RUNTIME_UNAVAILABLE';
@@ -101,7 +101,7 @@
 <div class="app-shell">
   <header class="global-header"><div class="brand"><div class="brand-icon">A</div><div><strong>AI Control Center</strong><span>V2 · Local Web First</span></div></div><div class="header-context"><span class="status-dot"></span>本地工作区 <span class="mono">AIcontrolcenter</span></div><div class="header-actions"><button class="sidebar-toggle" data-tooltip={leftCollapsed?'打开左侧 Roadmap':'关闭左侧 Roadmap'} aria-label={leftCollapsed?'打开左侧 Roadmap':'关闭左侧 Roadmap'} onclick={()=>toggleSidebar('roadmap')}>{leftCollapsed?'》':'《'}</button><span class="branch-badge">{snapshot.repository.value?.branch??'repository unavailable'}</span><button class="sidebar-toggle" data-tooltip={rightCollapsed?'打开右侧状态栏':'关闭右侧状态栏'} aria-label={rightCollapsed?'打开右侧状态栏':'关闭右侧状态栏'} onclick={()=>toggleSidebar('status')}>{rightCollapsed?'《':'》'}</button></div></header>
   <div class:left-collapsed={leftCollapsed} class:right-collapsed={rightCollapsed} class="workspace" style={`--left-width:${leftWidth}px;--right-width:${rightWidth}px`}>
-    <aside class:drawer-open={drawer==='roadmap'} class="roadmap panel"><div class="panel-header"><div><span class="kicker">01 / ROADMAP</span><h2>项目路线图</h2></div></div><CurrentContextLocator context={context} onLocate={locateSelectedEntity}/><div class="roadmap-scroll-region"><div class="roadmap-scroll-content"><RoadmapTree nodes={roadmapNodes} selectedId={selectedEntity.id} onSelect={select}/></div></div><footer class="roadmap-footer"><span title={snapshot.roadmapSource}>数据来源：01_LIVING_ROADMAP.md</span></footer></aside>
+  <aside class:drawer-open={drawer==='roadmap'} class="roadmap panel"><div class="panel-header"><div><span class="kicker">01 / ROADMAP</span><h2>项目路线图</h2></div></div><CurrentContextLocator context={context} onLocate={locateSelectedEntity}/><div class="roadmap-scroll-region"><div class="roadmap-scroll-content">{#if snapshot.roadmap.availability==='AVAILABLE'}<RoadmapTree nodes={roadmapNodes} selectedId={selectedEntity.id} onSelect={select}/>{:else}<section class="roadmap-source-error" data-testid="roadmap-read-error"><strong>路线图暂时不可用</strong><p>无法读取或解析正式 Roadmap。</p><code>{snapshot.roadmap.errorCode??'ROADMAP_READ_FAILED'}</code></section>{/if}</div></div><footer class="roadmap-footer"><span title={snapshot.roadmapSource}>数据来源：01_LIVING_ROADMAP.md</span></footer></aside>
     <div class="resize-handle" onpointerdown={(event)=>resize('left',event)} role="separator" aria-label="调整路线图宽度"></div>
     <main class="center panel"><div class="center-inner">
       <EntityHeader {context} description={selectedDescription} onSave={saveDescription}/>
