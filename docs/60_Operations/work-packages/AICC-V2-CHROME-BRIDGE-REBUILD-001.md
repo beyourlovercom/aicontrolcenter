@@ -27,3 +27,15 @@ incomplete targets, fixed toolbar rendering, READY button state, polling
 side-effect freedom, same-Run duplicate protection, and DOM rerender toolbar
 restoration. Human UAT must verify the unpacked V2 extension in a real
 ChatGPT conversation before this Work Package can be closed.
+
+## Approved UI baseline
+
+`UI_STANDARD = AICC Bridge Panel v1`
+
+`STATUS = APPROVED_BASELINE`
+
+The panel is a compact 240px light surface with a persistent collapsed state,
+two stable 200x32px business buttons, and a 28px collapsed pill. Enabled
+actions use solid dark blue; unavailable actions remain visible with a
+transparent background and light-blue border/text. Business state never hides
+either button, and automatic Composer insertion remains disabled.

@@ -13,6 +13,11 @@ if (complete(`old\n${instruction}\nnew\n${instruction}`)!==null) throw new Error
 if (complete('natural language only')!==null) throw new Error('missing target instruction remains disabled');
 if (!content.includes('data-aicc-v2-send')||!content.includes('data-aicc-v2-insert')) throw new Error('V2 toolbar has exactly the two fixed controls');
 if (!content.includes("report?.state === 'READY'")||!content.includes('button.disabled')) throw new Error('report button state is READY-bound');
+if (!content.includes('width:240px')||!content.includes('width:200px')||!content.includes('height:32px')||!content.includes('height:28px')) throw new Error('panel dimensions do not match the frozen UI baseline');
+if (!content.includes('COLLAPSE_KEY')||!content.includes('chrome.storage.local.get')||!content.includes('chrome.storage.local.set')) throw new Error('collapse state is not persisted');
+if (!content.includes('data-aicc-v2-toggle')||!content.includes('data-aicc-v2-pill')) throw new Error('collapse/expand controls are missing');
+if (!content.includes('#2563EB')||!content.includes('#BFDBFE')||!content.includes('border-radius:8px')) throw new Error('enabled/disabled UI tokens are missing');
+if (!content.includes('syncSendButton')) throw new Error('send button availability projection is missing');
 if (content.includes('AUTO_REPORT_INSERT ?')||content.includes('AUTO_REPORT_INSERT &&')) throw new Error('auto insertion flag does not control visibility');
 if (content.match(/insertReport\(/g)?.length!==1||content.includes('messageData?.type')) throw new Error('manual insertion has one explicit content-script path');
 if (content.includes('sendInstruction')||content.includes('chrome.runtime.sendMessage({ type: \'SEND_INSTRUCTION\'')) throw new Error('polling does not send or launch');
