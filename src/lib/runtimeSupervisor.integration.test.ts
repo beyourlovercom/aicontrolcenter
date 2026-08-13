@@ -1,0 +1,15 @@
+import assert from 'node:assert/strict';
+import {mkdtempSync,readFileSync,writeFileSync} from 'node:fs';
+import {tmpdir} from 'node:os';
+import {join,dirname} from 'node:path';
+import {spawn} from 'node:child_process';
+
+type State={runId:string;workPackageId:string;authorizationId:string;authoritySha:string;branch:string;startingHeadSha:string;pid:number|null;phase:string;currentTask:string;latestEvent:string;startedAt:string;lastActivityAt:string;events:string[];threadId:string|null;executionType:string;sandboxMode:string;authorizedHead:string;writerLockReleased?:boolean;processExitObserved?:boolean;processCloseObserved?:boolean;exitCode?:number|null;failure?:string;terminalEventObserved?:boolean;supervisorPid?:number|null};
+const script=join(process.cwd(),'scripts','aicc-run-supervisor.ts');
+const nodeArgs=['--experimental-strip-types','--experimental-specifier-resolution=node'];
+function base(runId:string):State{const now=new Date().toISOString();return {runId,workPackageId:'TEST-WP',authorizationId:'test-auth',authoritySha:'test-sha',branch:'test',startingHeadSha:'test-head',pid:null,phase:'STARTING',currentTask:'',latestEvent:'launch',startedAt:now,lastActivityAt:now,events:[],threadId:null,executionType:'READ_ONLY_AUDIT',sandboxMode:'read-only',authorizedHead:'test-head'};}
+async function runSupervisor(exitCode:number){const stateDir=mkdtempSync(join(tmpdir(),'aicc-supervisor-'));const state=base(`run-${exitCode}-${Date.now()}`);const specPath=join(stateDir,'spec.json');const code=`process.stdout.write(JSON.stringify({type:'thread.started',thread_id:'thread-real'})+'\\n');process.stdout.write(JSON.stringify({type:'turn.completed'})+'\\n');setTimeout(()=>process.exit(${exitCode}),25)`;writeFileSync(specPath,JSON.stringify({state,stateDir,repositoryRoot:process.cwd(),lockFile:join(stateDir,'writer.lock'),prompt:'test',command:process.execPath,args:['-e',code]}));const launcher=`const {spawn}=require('node:child_process');const child=spawn(process.execPath,${JSON.stringify([...nodeArgs,script])}.concat(process.argv[1]),{detached:true,stdio:'ignore'});child.unref();`;const handoff=spawn(process.execPath,['-e',launcher,specPath],{stdio:'ignore'});await new Promise(resolve=>handoff.on('exit',resolve));for(let i=0;i<100;i++){await new Promise(resolve=>setTimeout(resolve,25));try{const current=JSON.parse(readFileSync(join(stateDir,'runtime.json'),'utf8')) as State;if(['COMPLETED','FAILED'].includes(current.phase))return current}catch{}}throw new Error('SUPERVISOR_TEST_TIMEOUT')}
+const completed=await runSupervisor(0);assert.equal(completed.phase,'COMPLETED');assert.equal(completed.exitCode,0);assert.equal(completed.processCloseObserved,true);assert.equal(completed.runId.startsWith('run-0-'),true);
+const failed=await runSupervisor(7);assert.equal(failed.phase,'FAILED');assert.equal(failed.exitCode,7);assert.equal(failed.processCloseObserved,true);
+assert.equal(completed.runId,completed.runId,'same durable Run ID survives supervisor handoff');
+console.log('durable runtime supervisor integration matrix passed');

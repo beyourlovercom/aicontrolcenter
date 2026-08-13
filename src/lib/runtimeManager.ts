@@ -1,4 +1,4 @@
-import { spawn, type ChildProcess } from "node:child_process";
+import { spawn } from "node:child_process";
 import {
   existsSync,
   mkdirSync,
@@ -48,6 +48,7 @@ export type RuntimeState = {
   branch: string;
   startingHeadSha: string;
   pid: number | null;
+  supervisorPid?: number | null;
   pidAlive?: boolean;
   processExitObserved?: boolean;
   processCloseObserved?: boolean;
@@ -122,10 +123,10 @@ const STATE_DIR = join(homedir(), ".aicc-v2");
 const RUN_FILE = join(STATE_DIR, "runtime.json");
 const HISTORY_FILE = join(STATE_DIR, "runtime-history.json");
 const LOCK_FILE = join(STATE_DIR, "writer.lock");
+const SUPERVISOR_SCRIPT = join(REPOSITORY_ROOT, "scripts", "aicc-run-supervisor.ts");
 const MAX_EVENTS = 40;
 const MAX_HISTORY = 20;
 export const STARTUP_TIMEOUT_MS = 15_000;
-let child: ChildProcess | null = null;
 export function codexInfo() {
   try {
     return {
@@ -164,22 +165,10 @@ export function monitorRuntimeState(
   )
     state.healthWarning = "STARTUP_TIMEOUT";
   if (!alive && state.pid !== null) {
-    state.completedAt = state.completedAt ?? new Date(now).toISOString();
     state.lastActivityAt = new Date(now).toISOString();
-    if (state.terminalEventObserved) {
-      state.phase = state.stopRequested ? "STOPPED" : "COMPLETED";
-      state.failure = undefined;
-    } else if (state.phase === "STARTING" && !state.threadId) {
-      state.phase = "FAILED";
-      state.failure = state.failure ?? "PROCESS_EXITED_BEFORE_THREAD_STARTED";
-    } else {
-      state.phase = state.phase === "STOPPING" ? "RECOVERY_REQUIRED" : "FAILED";
-      state.failure =
-        state.failure ??
-        (state.phase === "RECOVERY_REQUIRED"
-          ? "STALE_PID_LOCK_RECOVERED"
-          : "PROCESS_EXITED_UNEXPECTEDLY");
-    }
+    state.healthWarning = state.supervisorPid && pidAlive(state.supervisorPid)
+      ? "SUPERVISOR_RECONCILIATION_PENDING"
+      : "PROCESS_TRUTH_UNAVAILABLE";
   }
   return state;
 }
@@ -188,7 +177,8 @@ export function reconcileProcessExit(state:RuntimeState,code:number|null,signal:
   state.processSignal=signal;
   state.exitCode=code;
   state.pidAlive=false;
-  if(state.threadId&&code===0&&!state.stopRequested){state.phase='COMPLETED';state.failure=undefined}
+  if(!state.threadId){state.phase='FAILED';state.failure=state.failure??'PROCESS_EXITED_BEFORE_THREAD_STARTED'}
+  else if(code===0&&!state.stopRequested){state.phase='COMPLETED';state.failure=undefined}
   else if(state.stopRequested){state.phase='STOPPED'}
   else {state.phase='FAILED';state.failure=signal?`PROCESS_EXIT_SIGNAL:${signal}`:'PROCESS_EXIT_NONZERO'}
   return state;
@@ -387,74 +377,27 @@ export function startRuntime(
       instructionSourceReference: options.sourceReference,
       instructionSha256: options.instructionBody ? createHash("sha256").update(options.instructionBody).digest("hex") : undefined,
       instructionLength: options.instructionBody?.length,
-    };
+  };
   save(s);
   try {
-    child = adapter.spawn(
-      "codex",
-      ["exec", "--sandbox", effectivePolicy.sandboxMode, "--json", "-"],
-      { cwd: REPOSITORY_ROOT, shell: false, stdio: ["pipe", "pipe", "pipe"] },
-    );
-    s.pid = child.pid ?? null;
+    const specFile = join(STATE_DIR, `run-supervisor-${s.runId}.json`);
+    mkdirSync(STATE_DIR, { recursive: true });
+    writeFileSync(specFile, JSON.stringify({
+      state: s,
+      stateDir: STATE_DIR,
+      repositoryRoot: REPOSITORY_ROOT,
+      lockFile: LOCK_FILE,
+      prompt: buildPrompt(wpId, wp, auth, effectivePolicy.executionType, effectivePolicy.sandboxMode, { ...options, semanticScope: scope }),
+    }), { mode: 0o600 });
+    const supervisor = spawn(process.execPath, ["--experimental-strip-types", "--experimental-specifier-resolution=node", SUPERVISOR_SCRIPT, specFile], {
+      cwd: REPOSITORY_ROOT,
+      detached: true,
+      stdio: "ignore",
+    });
+    s.supervisorPid = supervisor.pid ?? null;
     s.pidAlive = true;
     save(s);
-    let buffer = "";
-    child.stdout?.on("data", (chunk: Buffer | string) => {
-      buffer += chunk.toString();
-      const parts = buffer.split("\n");
-      buffer = parts.pop() ?? "";
-      for (const line of parts) parseEvent(line, s);
-    });
-    child.stderr?.on("data", (chunk: Buffer | string) => {
-      const text = chunk.toString();
-      s.stderr = `${s.stderr ?? ""}${text}`.slice(-4000);
-      s.latestEvent = text.trim().slice(-500);
-      s.lastActivityAt = new Date().toISOString();
-      save(s);
-    });
-    child.on("exit", (code,signal) => {
-      s.processExitObserved=true;
-      s.exitCode=code;
-      s.processSignal=signal;
-      s.pidAlive=false;
-      save(s);
-    });
-    child.on("close", (code) => {
-      s.pidAlive = false;
-      s.processCloseObserved=true;
-      if(code!==null||s.exitCode===undefined)s.exitCode=code;
-      s.completedAt = new Date().toISOString();
-      s.lastActivityAt = s.completedAt;
-      const post = readRepository();
-      s.postRunHead = post.head;
-      let changed = "";
-      try {
-        changed = execFileSync("git", ["status", "--porcelain"], {
-          cwd: REPOSITORY_ROOT,
-          encoding: "utf8",
-        }).trim();
-      } catch {
-        changed = "STATUS_UNAVAILABLE";
-      }
-      s.changedFiles = changed ? changed.split("\n") : [];
-      s.codeChangePresent =
-        s.postRunHead !== s.authorizedHead || s.changedFiles.length > 0;
-      s.implementationResult =
-        s.executionType === "IMPLEMENTATION" ||
-        s.executionType === "REMEDIATION"
-          ? s.codeChangePresent
-            ? "CODE_CHANGE_PRESENT"
-            : "NO_IMPLEMENTATION_CHANGE"
-          : "READ_ONLY";
-      if (!s.threadId) {
-        s.phase = "FAILED";
-        s.failure = s.failure ?? "PROCESS_EXITED_BEFORE_THREAD_STARTED";
-      } else reconcileProcessExit(s,code,s.processSignal??null);
-      save(s);
-      releaseLockOnce(s);
-      child = null;
-    });
-    child.stdin?.end(buildPrompt(wpId, wp, auth, effectivePolicy.executionType, effectivePolicy.sandboxMode, { ...options, semanticScope: scope }));
+    supervisor.unref();
     return s;
   } catch (error) {
     releaseLock();
@@ -530,12 +473,11 @@ export function parseEvent(line: string, s: RuntimeState, persist = true) {
   }
 }
 export function stopRuntime() {
-  if (!child || !child.pid) throw new Error("NO_ACTIVE_RUN");
   const s = readRuntime();
-  if (!s) throw new Error("NO_ACTIVE_RUN");
+  if (!s || !s.pid) throw new Error("NO_ACTIVE_RUN");
   revokeExecutionLease(s.workPackageId);
   s.phase = "STOPPING";
   s.stopRequested = true;
   save(s);
-  child.kill("SIGTERM");
+  try { process.kill(s.pid, "SIGTERM"); } catch { /* supervisor will reconcile the terminal truth */ }
 }
