@@ -1,11 +1,16 @@
 # AICC-V2-WORKSPACE-CONTEXT-001
 
-Status: IMPLEMENTED / MACHINE_VALIDATED / HUMAN_UAT_PENDING
+Status: CLOSED
 Type: OWNER_WORKSPACE_CONTEXT
 Prerequisite: `AICC-V2-RUNTIME-OPERATIONS-001` CLOSED
 
-`GLOBAL_TASK_WORKSPACE_V1 = IMPLEMENTED_BASELINE_PENDING_UAT`
-`EXECUTION_CONTEXT_LOCK_V1 = IMPLEMENTED_BASELINE_PENDING_UAT`
+`IMPLEMENTATION = PASS`
+`MACHINE_VALIDATION = PASS`
+`HUMAN_UAT = PASS`
+`PACKAGE_STATUS = CLOSED`
+`WORKSPACE_CONTEXT_V1 = APPROVED_BASELINE`
+
+`GLOBAL_TASK_SINGLE_SURFACE_OWNER_UAT = PASS`
 
 ## Frozen scope
 
@@ -35,6 +40,14 @@ Package, or PR. Browsing, polling, tab changes, Global Task navigation, and
 unlocking do not silently change the locked target. An explicit entity in an
 instruction always overrides the lock; otherwise the task remains UNKNOWN
 when no explicit lock exists.
+
+## Closure
+
+Owner Human UAT confirmed the Global Task single-surface behavior: one left
+navigation entry, zero detail rows in the Roadmap, center-column workspace
+rendering, and no inline tree expansion. Owner also confirmed persistent
+separation of View Context and Execution Context, lock preservation while
+browsing another entity, and explicit-entity precedence over the Owner lock.
 
 ## Human UAT focus
 
