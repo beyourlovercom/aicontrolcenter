@@ -13,6 +13,7 @@
   let reportItem = null;
   let reportCorrelation = null;
   const AUTO_REPORT_INSERT_DEFAULT = false;
+  const MANUAL_REPORT_INSERT_AVAILABLE = true;
 
   function first(selectors) { return selectors.map(selector => document.querySelector(selector)).find(Boolean) || null; }
   function composer() { return first(window.AICCChatGPTDom.SELECTORS.composer); }
@@ -38,11 +39,12 @@
 
   async function pollResult() {
     const result = await message('POLL_RESULT');
-    if (!result?.ok) return showError(result?.error);
+    if (!result?.ok) { showError(result?.error); return result; }
     reportItem = result.item || null;
     reportCorrelation = result.correlation || null;
     ensureManualReportButton();
     if (reportItem) setStatus(`${AUTO_REPORT_INSERT_DEFAULT ? '运行报告已自动处理' : '运行报告已就绪'} · Run ID: ${reportItem.report?.runId || reportItem.runId || 'ABSENT'}`, 'SUCCESS');
+    return result;
   }
 
   function reportText(item) {
@@ -50,32 +52,24 @@
     return ['AICC_RUN_REPORT_V1', `Run ID: ${report.runId || item.runId || 'ABSENT'}`, `Entity: ${report.entityId || 'ABSENT'}`, `Execution type: ${report.executionType || 'UNAVAILABLE'}`, '', `Runtime Result: ${report.runtimeResult || 'UNAVAILABLE'}`, `Gate Result: ${report.gateResult || 'UNAVAILABLE'}`, '', 'Summary:', `${report.summary || 'UNAVAILABLE'}`].join('\n');
   }
 
-  async function insertReport(auto = false) {
-    if (!reportItem) return setStatus('暂无匹配的 AICC_RUN_REPORT_V1。', 'BLOCKED');
-    if (reportCorrelation?.sourceReference !== location.href || reportCorrelation?.originContext?.conversationId !== window.AICCChatGPTDom.originContext(document, null).conversationId) return setStatus(auto ? '当前不是原始 ChatGPT 对话，报告保持待插入。' : '请返回原始 ChatGPT 对话后插入运行报告。', 'BLOCKED');
+  async function insertReport() {
+    if (!reportItem || reportItem.state !== 'READY') return setStatus('暂无可用的 AICC_RUN_REPORT_V1。', 'BLOCKED');
+    if (reportCorrelation?.sourceReference !== location.href || reportCorrelation?.originContext?.conversationId !== window.AICCChatGPTDom.originContext(document, null).conversationId) return setStatus('请返回原始 ChatGPT 对话后插入运行报告。', 'BLOCKED');
     const target = composer();
     if (!target) return showError({ reason: '找不到 ChatGPT 当前编辑框，报告保持待插入。' });
     const text = reportText(reportItem);
-    if (window.AICCChatGPTDom.reportFormatPresent(target, text)) { const marked = await message('MARK_REPORT_INSERTED', { runId: reportItem.runId || reportItem.report?.runId, reportVersion: reportItem.report?.version, sourceReference: location.href, deliveryKey: arguments[1]?.deliveryKey }); if (!marked?.ok) return showError(marked.error); return setStatus('运行报告已插入原始对话。', 'SUCCESS'); }
+    if (window.AICCChatGPTDom.reportFormatPresent(target, text)) { const marked = await message('MARK_REPORT_INSERTED', { runId: reportItem.runId || reportItem.report?.runId, reportVersion: reportItem.report?.version, sourceReference: location.href }); if (!marked?.ok) return showError(marked.error); return setStatus('运行报告已插入原始对话。', 'SUCCESS'); }
     const inserted = window.AICCChatGPTDom.insertTextIntoComposer(target, text);
     if (!inserted || !(await window.AICCChatGPTDom.verifyComposerText(target, text))) return setStatus('运行报告插入失败：ChatGPT 编辑器未保留报告格式。', 'ERROR');
-    const marked = await message('MARK_REPORT_INSERTED', { runId: reportItem.runId || reportItem.report?.runId, reportVersion: reportItem.report?.version, sourceReference: location.href, deliveryKey: arguments[1]?.deliveryKey });
+    const marked = await message('MARK_REPORT_INSERTED', { runId: reportItem.runId || reportItem.report?.runId, reportVersion: reportItem.report?.version, sourceReference: location.href });
     if (!marked?.ok) return showError(marked?.error);
     setStatus('运行报告已插入编辑框，请由 Owner 手动发送。', 'SUCCESS');
   }
 
-  async function deliverReport(messageData) {
-    reportItem = messageData.item || null;
-    reportCorrelation = messageData.correlation || null;
-    ensureManualReportButton();
-    if (!reportItem || reportCorrelation?.sourceReference !== location.href || reportCorrelation?.originContext?.conversationId !== window.AICCChatGPTDom.originContext(document, null).conversationId) return;
-    await insertReport(true, messageData);
-  }
-
   async function requestReportDelivery() {
-    const result = await message('REQUEST_REPORT_DELIVERY', { conversationId: window.AICCChatGPTDom.originContext(document, null).conversationId });
-    if (!result?.ok) return showError(result?.error);
-    setStatus(result.delivery?.claimed ? '已领取运行报告，正在插入当前对话…' : '该运行报告已处理，未重复插入。', result.delivery?.claimed ? 'RUNNING' : 'SUCCESS');
+    const result = await pollResult();
+    if (!result?.ok || reportItem?.state !== 'READY') return setStatus('暂无可用的 AICC_RUN_REPORT_V1。', 'BLOCKED');
+    await insertReport();
   }
 
   function mount() {
@@ -90,8 +84,6 @@
     ensureManualReportButton();
     pollResult().then(() => { if (!reportItem) setStatus('AICC 可用 · 等待 Owner 操作', 'IDLE'); });
   }
-
-  chrome.runtime.onMessage.addListener(messageData => { if (messageData?.type === 'INSERT_REPORT') { void deliverReport(messageData); return false; } });
 
   if (document.body) { mount(); mountNativeActions(); } else new MutationObserver(mount).observe(document.documentElement, { childList: true, subtree: true });
   window.setInterval(() => { mount(); mountNativeActions(); }, 1000);
