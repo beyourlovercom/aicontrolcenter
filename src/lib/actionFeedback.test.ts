@@ -12,5 +12,5 @@ assert(source.includes('data-testid="owner-action-feedback"'), 'feedback DOM mar
 assert(source.includes('data-feedback-state={feedback.state.toLowerCase()}'), 'feedback state marker');
 assert(source.indexOf('data-testid="owner-action-feedback"') > source.indexOf('<OwnerActionZone'), 'feedback after action zone');
 assert(source.includes('data-testid="wp-overview-content"'), 'feedback remains in overview content');
-assert(source.includes('等待 Owner 操作'), 'idle feedback is visible');
+assert(source.includes('操作结果将在此显示'), 'idle feedback surface remains available without duplicating current action');
 console.log('action feedback contract tests passed');

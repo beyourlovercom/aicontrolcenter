@@ -1,7 +1,7 @@
 # AICC V2 UI / Interaction Standard
 
 - Document ID: `AICC-V2-UI-INTERACTION-STANDARD-001`
-- Version: `1.1`
+- Version: `1.2`
 - Status: `APPROVED_BASELINE`
 
 ## Shell and language
@@ -27,6 +27,21 @@ only the current round is expanded by default.
 
 The approved AICC V2 visual system—spacing, cards, badges, actions, evidence
 typography, and Chinese-first labels—is shared across features.
+
+## Owner blocked status single source
+
+All Owner-facing `阻塞`, `已阻塞`, and `BLOCKED` presentation MUST originate
+from `OwnerStatusProjection`. Entity Header, Workflow, Overview, Roadmap, and
+Owner Action are projections of that one result; they must not independently
+derive Owner blocked status from `context.status`, internal lifecycle state,
+FORMAL_READY, Runtime, Validation, Bridge state, raw reason codes, or local
+component heuristics.
+
+`FORMAL_READY != OWNER_BLOCKED`. Internal lifecycle `BLOCKED` and terminal
+Runtime state remain domain truth and do not by themselves authorize a blocked
+Owner presentation. A blocked Owner presentation is allowed only when
+`OwnerStatusProjection` confirms a real canonical blocker. Future duplicate
+blocked derivation is a UI Standard regression.
 
 ## Owner action principle
 
@@ -76,3 +91,14 @@ visibility and `PRIMARY OWNER ACTION <= 1`.
 Reason: simplify the Owner workflow after Canonical Execution convergence and
 prevent the primary action area from reverting into a permanent command
 toolbar.
+
+### v1.2 — OWNER_APPROVED_BASELINE_CHANGE
+
+- Owner-facing blocked status is single-source through `OwnerStatusProjection`.
+- EntityHeader, WorkflowTimeline, Overview, RoadmapTree, and Owner Action are
+  aligned to the same Owner status projection.
+- Direct lifecycle/context/runtime-to-blocked UI derivation is prohibited.
+- A duplicate blocked projection is classified as a UI Standard regression.
+
+Reason: eliminate multiple Owner blocked-status interpretations while keeping
+internal lifecycle and execution truth independent.

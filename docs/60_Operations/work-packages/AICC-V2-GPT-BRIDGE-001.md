@@ -1,17 +1,20 @@
 # AICC-V2-GPT-BRIDGE-001: GPT Plus Web ↔ AICC ↔ Codex
 
-Status: IMPLEMENTED / PENDING_OWNER_RETEST
+Status: 001A IMPLEMENTED / MACHINE_VALIDATED / HUMAN_UAT_PASS / COMPLETE
+Parent Status: NOT_COMPLETE
+001B Status: NOT_STARTED
 Type: GPT_BRIDGE_BIDIRECTIONAL
 
-Phase 001A is not complete. Canonical read-only and bounded write runtime
-dogfood have passed, including instruction delivery, Writer Lock, terminal
-Runtime evidence, `AICC_RUN_REPORT_V1`, and Result Outbox READY. Owner Human
-UAT Round 2 remains pending.
+Phase 001A Bridge Core is complete. Canonical read-only and bounded write
+runtime dogfood have passed, including instruction delivery, Writer Lock,
+terminal Runtime evidence, `AICC_RUN_REPORT_V1`, and Result Outbox READY.
+Owner Human UAT Rounds 1–4 are PASS.
 
-Resume point: `OWNER_RETEST_001A_ROUND_2`
+Resume point: `IMPLEMENT_001B_CHATGPT_WEB_ADAPTER`
 
-Current Owner-UAT truth: `001A ROUND_1 = PASS`; `001A ROUND_2 = PENDING_OWNER_RETEST`.
-This document does not claim 001A completion, production release, or remote delivery readiness.
+Current truth: `001A = COMPLETE`; `001B = NOT_STARTED`; parent
+`AICC-V2-GPT-BRIDGE-001 = NOT_COMPLETE`. This document does not claim parent
+closure, production release, or remote delivery readiness.
 
 ## Goal and delivery phases
 

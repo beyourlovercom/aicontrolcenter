@@ -3,6 +3,8 @@
   export let context:WorkPackageEntityContext;
   export let busy=false;
   export let codexAvailable=false;
+  export let bridgeOutbox:any[]=[];
+  export let ownerStatusCode:string|undefined=undefined;
   export let onAction:(id:ActionEligibility['id'])=>void=()=>{};
   export let onNavigate:(tab:string)=>void=()=>{};
 
@@ -12,16 +14,20 @@
   $: retry=context.availableActions.find(action=>action.id==='RETRY');
   $: runtime=context.runtime;
   $: activeRuntime=Boolean(runtime&&['STARTING','RUNNING','STOPPING'].includes(runtime.phase));
-  $: terminalReportPending=Boolean(runtime?.phase==='COMPLETED'&&runtime.exitCode===0&&context.lifecycle.currentStage!=='HUMAN_UAT'&&context.humanUat?.status!=='PASS');
-  $: humanUat=context.lifecycle.currentStage==='HUMAN_UAT';
+  $: matchingReport=runtime?.runId?bridgeOutbox.find(item=>item.report?.runId===runtime.runId):null;
+  $: terminalReportReady=Boolean(runtime?.phase==='COMPLETED'&&runtime.exitCode===0&&matchingReport);
+  $: terminalReportPending=Boolean(runtime?.phase==='COMPLETED'&&runtime.exitCode===0&&!terminalReportReady&&context.lifecycle.currentStage!=='HUMAN_UAT'&&context.humanUat?.status!=='PASS');
+  $: humanUat=context.lifecycle.currentStage==='HUMAN_UAT'||ownerStatusCode==='WAITING_UAT';
   $: currentAction=activeRuntime
     ? {label:'查看运行',detail:`正在执行 · ${runtime?.runId??'当前运行'}`,tab:'运行',enabled:true,action:null as ActionEligibility['id']|null}
-    : terminalReportPending
-      ? {label:'查看报告',detail:'运行已完成，正在生成运行报告…',tab:'运行',enabled:true,action:null as ActionEligibility['id']|null}
     : retry?.enabled
       ? {label:'重试',detail:'执行失败，可重新尝试',tab:'运行',enabled:true,action:'RETRY' as ActionEligibility['id']}
       : humanUat
         ? {label:context.humanUat?.status==='IN_PROGRESS'?'查看当前 UAT':'开始人工 UAT',detail:context.humanUat?.status==='IN_PROGRESS'?'正在进行人工验收':'机器执行已完成，等待人工验收',tab:'UAT',enabled:true,action:null as ActionEligibility['id']|null}
+        : terminalReportReady
+          ? {label:'查看报告',detail:'运行已完成，报告已生成',tab:'运行',enabled:true,action:null as ActionEligibility['id']|null}
+        : terminalReportPending
+          ? {label:'查看报告',detail:'运行已完成，正在生成运行报告…',tab:'运行',enabled:true,action:null as ActionEligibility['id']|null}
         : start?.enabled&&codexAvailable
           ? {label:'启动执行',detail:'准备就绪，可以开始执行',tab:'运行',enabled:true,action:'START_CODEX' as ActionEligibility['id']}
           : authorize?.enabled
