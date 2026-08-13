@@ -49,6 +49,11 @@ export type RuntimeState = {
   startingHeadSha: string;
   pid: number | null;
   pidAlive?: boolean;
+  processExitObserved?: boolean;
+  processCloseObserved?: boolean;
+  processSignal?: string | null;
+  terminalEventObserved?: boolean;
+  writerLockReleased?: boolean;
   threadId: string | null;
   threadStartedAt?: string;
   phase: RuntimePhase;
@@ -161,7 +166,10 @@ export function monitorRuntimeState(
   if (!alive && state.pid !== null) {
     state.completedAt = state.completedAt ?? new Date(now).toISOString();
     state.lastActivityAt = new Date(now).toISOString();
-    if (state.phase === "STARTING" && !state.threadId) {
+    if (state.terminalEventObserved) {
+      state.phase = state.stopRequested ? "STOPPED" : "COMPLETED";
+      state.failure = undefined;
+    } else if (state.phase === "STARTING" && !state.threadId) {
       state.phase = "FAILED";
       state.failure = state.failure ?? "PROCESS_EXITED_BEFORE_THREAD_STARTED";
     } else {
@@ -175,20 +183,28 @@ export function monitorRuntimeState(
   }
   return state;
 }
+export function reconcileProcessExit(state:RuntimeState,code:number|null,signal:string|null=null):RuntimeState {
+  state.processExitObserved=true;
+  state.processSignal=signal;
+  state.exitCode=code;
+  state.pidAlive=false;
+  if(state.threadId&&code===0&&!state.stopRequested){state.phase='COMPLETED';state.failure=undefined}
+  else if(state.stopRequested){state.phase='STOPPED'}
+  else {state.phase='FAILED';state.failure=signal?`PROCESS_EXIT_SIGNAL:${signal}`:'PROCESS_EXIT_NONZERO'}
+  return state;
+}
 export function readRuntime(workPackageId?: string): RuntimeState | null {
   const current = readStoredRuntime();
   if (current) {
     const before = current.phase;
+    const beforeLockReleased=current.writerLockReleased;
     const monitored = monitorRuntimeState(current);
-    if (
-      ["FAILED", "RECOVERY_REQUIRED"].includes(monitored.phase) &&
-      ["STARTING", "RUNNING", "STOPPING"].includes(before)
-    )
-      releaseLock();
+    if (["COMPLETED", "FAILED", "STOPPED", "RECOVERY_REQUIRED"].includes(monitored.phase) && ["STARTING", "RUNNING", "STOPPING"].includes(before)) releaseLockOnce(monitored);
     if (
       monitored.phase !== before ||
       monitored.healthWarning ||
-      monitored.pidAlive !== current.pidAlive
+      monitored.pidAlive !== current.pidAlive ||
+      monitored.writerLockReleased !== beforeLockReleased
     )
       save(monitored);
     if (!workPackageId || monitored.workPackageId === workPackageId)
@@ -242,6 +258,7 @@ function releaseLock() {
     /* already released */
   }
 }
+function releaseLockOnce(state:RuntimeState){if(state.writerLockReleased)return;state.writerLockReleased=true;releaseLock()}
 export function architectureAuthoritySha(
   wp: ReturnType<typeof readWorkPackage>,
 ): string {
@@ -395,9 +412,17 @@ export function startRuntime(
       s.lastActivityAt = new Date().toISOString();
       save(s);
     });
+    child.on("exit", (code,signal) => {
+      s.processExitObserved=true;
+      s.exitCode=code;
+      s.processSignal=signal;
+      s.pidAlive=false;
+      save(s);
+    });
     child.on("close", (code) => {
       s.pidAlive = false;
-      s.exitCode = code;
+      s.processCloseObserved=true;
+      if(code!==null||s.exitCode===undefined)s.exitCode=code;
       s.completedAt = new Date().toISOString();
       s.lastActivityAt = s.completedAt;
       const post = readRepository();
@@ -424,14 +449,9 @@ export function startRuntime(
       if (!s.threadId) {
         s.phase = "FAILED";
         s.failure = s.failure ?? "PROCESS_EXITED_BEFORE_THREAD_STARTED";
-      } else
-        s.phase = s.stopRequested
-          ? "STOPPED"
-          : code === 0
-            ? "COMPLETED"
-            : "FAILED";
+      } else reconcileProcessExit(s,code,s.processSignal??null);
       save(s);
-      releaseLock();
+      releaseLockOnce(s);
       child = null;
     });
     child.stdin?.end(buildPrompt(wpId, wp, auth, effectivePolicy.executionType, effectivePolicy.sandboxMode, { ...options, semanticScope: scope }));
@@ -491,7 +511,7 @@ export function parseEvent(line: string, s: RuntimeState, persist = true) {
       if (itemType.includes("tool"))
         s.toolCallCount = (s.toolCallCount ?? 0) + 1;
     }
-    if (e.type === "turn.completed") s.phase = "RUNNING";
+    if (e.type === "thread.completed" || e.type === "turn.completed") {s.terminalEventObserved=true;s.phase = "RUNNING";}
     if (e.type === "error") {
       s.failure = e.error ?? "Codex error";
       s.errorEventCount = (s.errorEventCount ?? 0) + 1;
