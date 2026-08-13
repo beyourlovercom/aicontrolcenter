@@ -13,6 +13,7 @@
   let reportItem = null;
   let reportCorrelation = null;
   const AUTO_REPORT_INSERT_DEFAULT = false;
+  const MANUAL_REPORT_INSERT_AVAILABLE = true;
 
   function first(selectors) { return selectors.map(selector => document.querySelector(selector)).find(Boolean) || null; }
   function composer() { return first(window.AICCChatGPTDom.SELECTORS.composer); }
@@ -75,14 +76,15 @@
   }
 
   function mount() {
-    if (document.querySelector(SELECTORS.mount)) return;
+    const existing = document.querySelector(SELECTORS.mount);
+    if (existing) { panel = existing; return; }
     panel = document.createElement('aside');
     panel.dataset.aiccGptBridgeExtension = 'true';
-    panel.innerHTML = '<strong>AICC Bridge</strong><button data-aicc-send>发送到 AICC</button><button data-aicc-insert>插入运行报告</button><div data-aicc-status>AICC 可用性检查中…</div>';
+    panel.innerHTML = `<strong>AICC Bridge</strong><button data-aicc-send>发送到 AICC</button>${MANUAL_REPORT_INSERT_AVAILABLE ? '<button data-aicc-insert>插入运行报告</button>' : ''}<div data-aicc-status>AICC 可用性检查中…</div>`;
     panel.style.cssText = 'position:fixed;right:16px;bottom:16px;z-index:2147483647;display:grid;gap:7px;width:220px;padding:12px;border:1px solid #d8dee8;border-radius:10px;background:#fff;box-shadow:0 8px 28px #0002;font:13px system-ui;color:#1f2937';
     document.body.appendChild(panel);
     panel.querySelector(SELECTORS.send).addEventListener('click', sendInstruction);
-    panel.querySelector(SELECTORS.insert).addEventListener('click', requestReportDelivery);
+    panel.querySelector(SELECTORS.insert)?.addEventListener('click', requestReportDelivery);
     pollResult().then(() => { if (!reportItem) setStatus('AICC 可用 · 等待 Owner 操作', 'IDLE'); });
   }
 
