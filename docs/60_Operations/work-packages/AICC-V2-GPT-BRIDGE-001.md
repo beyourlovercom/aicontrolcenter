@@ -1,21 +1,55 @@
 # AICC-V2-GPT-BRIDGE-001: GPT Plus Web ↔ AICC ↔ Codex
 
-Status: 001A IMPLEMENTED / MACHINE_VALIDATED / HUMAN_UAT_PASS / COMPLETE
-Parent Status: NOT_COMPLETE
-001B Status: IMPLEMENTED / MACHINE_VALIDATED / HUMAN_UAT_IN_PROGRESS
+Status: CLOSED
+Parent Status: CLOSED
+001A Status: COMPLETE / SEALED
+001B Status: COMPLETE / HUMAN_UAT_PASS
 Type: GPT_BRIDGE_BIDIRECTIONAL
 
 Phase 001A Bridge Core is complete. Canonical read-only and bounded write
 runtime dogfood have passed, including instruction delivery, Writer Lock,
 terminal Runtime evidence, `AICC_RUN_REPORT_V1`, and Result Outbox READY.
-Owner Human UAT Rounds 1–4 are PASS.
+Owner Human UAT Rounds 1 and 2 are PASS. Round 3.1 is PASS. Round 3.2
+remains a non-blocking P1 backlog finding because it has machine-tested
+remediation but no separate real Owner verification recorded in this closure.
 
-Resume point: `OWNER_UAT_001B_ROUND_2`
+Closure point: `GPT_BRIDGE_001B_CLOSURE`
 
-Current truth: `001A = COMPLETE`; `001B = IMPLEMENTED / MACHINE_VALIDATED /
-HUMAN_UAT_IN_PROGRESS`; parent `AICC-V2-GPT-BRIDGE-001 = NOT_COMPLETE`.
-This document does not claim 001B completion, parent closure, production
-release, or remote delivery readiness.
+Current truth: `001A = COMPLETE`; `001B = COMPLETE / HUMAN_UAT_PASS`; parent
+`AICC-V2-GPT-BRIDGE-001 = CLOSED`. This document does not claim production
+release or remote delivery readiness.
+
+Constitution v1.1 closure rationale: the five First Usable Version hard gates
+are PASS. The remaining Composer fallback source-selection ambiguity is P1,
+does not block those gates, and has no execution authority. The canonical
+Assistant capture path remains the workaround. No historical failure is
+rewritten as a pass.
+
+## Formal closure evidence
+
+- `GPT_BRIDGE_001B_UAT_ROUND_1 = PASS`
+- `GPT_BRIDGE_001B_UAT_ROUND_2 = PASS`
+- `GPT_BRIDGE_001B_UAT_ROUND_3 = PASS_WITH_NON_BLOCKING_P1_BACKLOG`
+- `GPT_BRIDGE_001B_HUMAN_UAT = PASS`
+- `GPT_BRIDGE_PARENT_ACCEPTANCE_CRITERIA = PASS`
+- `HUMAN_UAT = PASS`
+- `WP_STATUS = CLOSED`
+- `FIRST_USABLE_HARD_GATE_COUNT = 5`
+- `FIRST_USABLE_HARD_GATE_PASS_COUNT = 5`
+- `AICC_V2_FIRST_USABLE_VERSION = PASS`
+
+## Backlog finding
+
+### GPT Bridge Composer fallback source-selection ambiguity
+
+- Severity: `P1`
+- Blocks First Usable Version: `NO`
+- Blocks current WP closure: `0`
+- Execution authority: `0`
+- Workaround: use canonical Assistant capture.
+- Future direction: retain deterministic Composer-first source selection and
+  complete a separately recorded real Owner verification before treating the
+  fallback finding as fully UAT-verified.
 
 001B Human UAT Round 1 = PASS. Real Owner evidence: the Chrome extension
 loaded without error and displayed the AICC Bridge on chatgpt.com; an
@@ -23,8 +57,9 @@ Assistant response was captured without composer copy; the instruction was
 sent with `source = WEB_BRIDGE` and correlated to Inbox
 `owner-uat-001b-round1-direct-20260813`. The canonical dirty-worktree Gate
 blocked execution, which is expected for this development worktree. Receive
-did not auto-execute (`AUTO_EXECUTE_ON_RECEIVE = 0`). Rounds 2 and 3 remain
-`NOT_STARTED`.
+did not auto-execute (`AUTO_EXECUTE_ON_RECEIVE = 0`). The original Round 1
+record above predates the later Round 2 and Round 3.1 evidence; the formal
+closure evidence above is authoritative for final status.
 
 Round 1 also verified the read-only Execution Inbox inspection surface:
 Inbox ID, `WEB_BRIDGE` source, execution type, state, latest-item identity,
@@ -296,11 +331,11 @@ OpenCode, OpenSpec and OmO.
 
 ## MVP delivery discipline classification
 
-`GPT_BRIDGE_001B_UAT_ROUND_2 = IN_PROGRESS`.
+`GPT_BRIDGE_001B_UAT_ROUND_3 = PASS_WITH_NON_BLOCKING_P1_BACKLOG`.
 
 | Finding / proposed area | Severity | Hard gate impact | Current closure effect | Backlog / workaround |
 | --- | --- | --- | --- | --- |
-| Current idle-page instability | P0 | Gates 1 and 2 | Blocks Round 2 until the current critical path is usable and stable | Fix the smallest current root cause |
+| Current idle-page instability | P0 | Gates 1 and 2 | Resolved; Round 2 PASS and no remaining closure impact | Historical remediation cycle 1 evidence retained |
 | Formal Web Host / Control Service process separation | P2 | None proven | Does not block MVP by default | Backlog; future architecture phase |
 | Complete Desktop process isolation | P2 | None proven | Does not block MVP by default | Backlog; future architecture phase |
 | Advanced automatic self-healing | P2 | None proven | Does not block MVP by default | Backlog; future recovery phase |

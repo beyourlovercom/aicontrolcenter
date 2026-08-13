@@ -33,7 +33,8 @@ Work Packages: `AICC-V2-SELF-DEVELOPMENT-UAT-001`
 Work Packages: `AICC-V2-FAST-EXECUTION-PATH-001`
 
 ### M3.5 — GPT Bridge Contract
-Work Packages: `AICC-V2-GPT-BRIDGE-001`
+Work Packages: `AICC-V2-GPT-BRIDGE-001` — `CLOSED`; 001A and 001B complete,
+Human UAT PASS, First Usable Version hard gates 5/5 PASS.
 
 ### M3.75 — Autopilot Until Human UAT
 Work Packages: `AICC-V2-AUTOPILOT-UNTIL-UAT-001`
@@ -113,6 +114,9 @@ Future Work Packages:
 13. AICC_SELF_DEVELOPMENT_READY — `NOT_YET_PASS`; requires Owner Human UAT.
 14. AICC-V2-PR-RUNNER-001 — AICC PR Runner Foundation (ready for Owner authorization; bootstrap self-development Work Package).
 15. 001F — Autonomous Delivery Loop (future placeholder; no formal WP record).
+16. AICC-V2-GPT-BRIDGE-001 — closed GPT Bridge 001A/001B and First Usable
+    Version hard gates 5/5; remaining Composer fallback ambiguity is a
+    non-blocking P1 backlog finding.
 
 ## Current safety state
 
