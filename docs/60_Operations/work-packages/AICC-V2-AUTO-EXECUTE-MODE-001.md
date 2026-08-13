@@ -1,8 +1,14 @@
 # AICC-V2-AUTO-EXECUTE-MODE-001
 
-Status: IMPLEMENTED / MACHINE_VALIDATED / HUMAN_UAT_PENDING
+Status: CLOSED
 Type: SELF_DEVELOPMENT_AUTOMATION
 Prerequisite: `AICC-V2-TERMINAL-HANDOFF-001` PASS
+
+Implementation: PASS
+Machine Validation: PASS
+Human UAT: PASS
+Package Status: CLOSED
+`AUTO_EXECUTE_V1 = APPROVED_BASELINE`
 
 ## Purpose
 
@@ -33,6 +39,9 @@ duplicate Codex repository, Git, worktree, scope, or implementation reasoning.
 - `MULTI_CODEX_RUNTIME = PASS`
 - `AUTO_EXECUTE_FAILURE_RETRY_LOOP = 0`
 - `AUTO_RUN_USES_EXISTING_RUNTIME = 1`
+
+- `OFF_MODE_MANUAL_RUN_PRESERVED = PASS`
+- `ON_MODE_AUTO_LAUNCH = PASS`
 
 No automatic authorization, Human UAT, WP closure, ChatGPT Send, Autopilot,
 or second execution authority is included.

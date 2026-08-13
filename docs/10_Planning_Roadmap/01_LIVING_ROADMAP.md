@@ -41,8 +41,12 @@ Work Packages: `AICC-V2-TERMINAL-HANDOFF-001` — `IMPLEMENTED / OWNER_UAT_PENDI
 next executable self-development Work Package.
 
 ### M3.7 — Auto Execute Mode
-Work Packages: `AICC-V2-AUTO-EXECUTE-MODE-001` — `PLANNED`; follows Terminal
-Handoff in the self-development sequence.
+Work Packages: `AICC-V2-AUTO-EXECUTE-MODE-001` — `CLOSED`; Auto Execute V1
+approved baseline after Human UAT PASS.
+
+`AUTO_EXECUTE_ROADMAP_STATUS = CLOSED`
+`CHROME_BRIDGE_STATUS = PAUSED`
+`NEXT_MAINLINE_FOCUS = RUNTIME`
 
 ### M3.75 — Autopilot Until Human UAT
 Work Packages: `AICC-V2-AUTOPILOT-UNTIL-UAT-001`
