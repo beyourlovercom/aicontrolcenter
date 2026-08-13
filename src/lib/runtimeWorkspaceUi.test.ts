@@ -25,7 +25,8 @@ assert.match(workspace,/from '\.\.\/\.\.\/lib\/runtimeSelection\.ts'/,'Runtime w
 assert.match(workspace,/WEB_BRIDGE/);assert.match(workspace,/查看指令/);assert.match(workspace,/rawInstruction/);assert.match(workspace,/INSTRUCTION_ID/);assert.match(workspace,/未启动执行/);assert.match(workspace,/gateReason/);assert.equal(workspace.includes('onLaunch(item.id)'),true,'launch remains an explicit Owner action');assert.equal(workspace.includes('auto'),false,'inspection has no automatic execution path');
 assert.match(workspace,/runtime-current-execution/);
 assert.match(workspace,/runtime-live-activity/);
-assert.match(workspace,/runtime-run-result/);
+assert.match(workspace,/runtime-run-row-\{item\.runId\}/,'each Run renders its own result row');
+assert.match(workspace,/runtime-run-actions/,'Run action controls belong to each Run row');
 assert.match(workspace,/runtime-history/);
 assert.match(app,/class="status panel"[\s\S]*EntityEvidencePanel[\s\S]*<\/aside>/);
 assert.doesNotMatch(app,/class="status panel"[\s\S]*bridge-core-card/);
