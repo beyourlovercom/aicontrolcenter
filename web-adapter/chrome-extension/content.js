@@ -13,7 +13,6 @@
   let reportItem = null;
   let reportCorrelation = null;
   const AUTO_REPORT_INSERT_DEFAULT = false;
-  const MANUAL_REPORT_INSERT_AVAILABLE = true;
 
   function first(selectors) { return selectors.map(selector => document.querySelector(selector)).find(Boolean) || null; }
   function composer() { return first(window.AICCChatGPTDom.SELECTORS.composer); }
@@ -21,6 +20,8 @@
   function setStatus(message, state) { const status = panel?.querySelector(SELECTORS.status); if (status) { status.textContent = message; status.dataset.aiccState = state; } }
   function showError(error) { setStatus(error?.reason || '适配器操作失败。', 'ERROR'); }
   function message(type, data = {}) { return new Promise(resolve => chrome.runtime.sendMessage({ type, ...data }, resolve)); }
+  function syncManualReportButton() { const button = panel?.querySelector(SELECTORS.insert); if (!button) return; const ready = reportItem?.state === 'READY'; button.disabled = !ready; button.setAttribute('aria-disabled', String(!ready)); button.title = ready ? '插入当前运行报告' : '暂无可用运行报告'; }
+  function ensureManualReportButton() { if (!panel) return; let button = panel.querySelector(SELECTORS.insert); if (!button) { button = document.createElement('button'); button.dataset.aiccInsert = 'true'; button.textContent = '插入运行报告'; panel.appendChild(button); } if (button.dataset.aiccBound !== 'true') { button.addEventListener('click', requestReportDelivery); button.dataset.aiccBound = 'true'; } syncManualReportButton(); }
 
   async function sendTask(text, originContext, source) {
     if (!String(text || '').trim()) return showError({ reason: '没有找到可发送的任务内容。' });
@@ -40,6 +41,7 @@
     if (!result?.ok) return showError(result?.error);
     reportItem = result.item || null;
     reportCorrelation = result.correlation || null;
+    ensureManualReportButton();
     if (reportItem) setStatus(`${AUTO_REPORT_INSERT_DEFAULT ? '运行报告已自动处理' : '运行报告已就绪'} · Run ID: ${reportItem.report?.runId || reportItem.runId || 'ABSENT'}`, 'SUCCESS');
   }
 
@@ -65,6 +67,7 @@
   async function deliverReport(messageData) {
     reportItem = messageData.item || null;
     reportCorrelation = messageData.correlation || null;
+    ensureManualReportButton();
     if (!reportItem || reportCorrelation?.sourceReference !== location.href || reportCorrelation?.originContext?.conversationId !== window.AICCChatGPTDom.originContext(document, null).conversationId) return;
     await insertReport(true, messageData);
   }
@@ -77,20 +80,21 @@
 
   function mount() {
     const existing = document.querySelector(SELECTORS.mount);
-    if (existing) { panel = existing; return; }
+    if (existing) { panel = existing; ensureManualReportButton(); return; }
     panel = document.createElement('aside');
     panel.dataset.aiccGptBridgeExtension = 'true';
-    panel.innerHTML = `<strong>AICC Bridge</strong><button data-aicc-send>发送到 AICC</button>${MANUAL_REPORT_INSERT_AVAILABLE ? '<button data-aicc-insert>插入运行报告</button>' : ''}<div data-aicc-status>AICC 可用性检查中…</div>`;
+    panel.innerHTML = '<strong>AICC Bridge</strong><button data-aicc-send>发送到 AICC</button><button data-aicc-insert>插入运行报告</button><div data-aicc-status>AICC 可用性检查中…</div>';
     panel.style.cssText = 'position:fixed;right:16px;bottom:16px;z-index:2147483647;display:grid;gap:7px;width:220px;padding:12px;border:1px solid #d8dee8;border-radius:10px;background:#fff;box-shadow:0 8px 28px #0002;font:13px system-ui;color:#1f2937';
     document.body.appendChild(panel);
     panel.querySelector(SELECTORS.send).addEventListener('click', sendInstruction);
-    panel.querySelector(SELECTORS.insert)?.addEventListener('click', requestReportDelivery);
+    ensureManualReportButton();
     pollResult().then(() => { if (!reportItem) setStatus('AICC 可用 · 等待 Owner 操作', 'IDLE'); });
   }
 
   chrome.runtime.onMessage.addListener(messageData => { if (messageData?.type === 'INSERT_REPORT') { void deliverReport(messageData); return false; } });
 
-  if (document.body) { mount(); mountNativeActions(); } else new MutationObserver(mount).observe(document.documentElement, { childList: true });
+  if (document.body) { mount(); mountNativeActions(); } else new MutationObserver(mount).observe(document.documentElement, { childList: true, subtree: true });
+  window.setInterval(() => { mount(); mountNativeActions(); }, 1000);
   window.setInterval(mountNativeActions, 1000);
   window.setInterval(pollResult, 3000);
 }());
