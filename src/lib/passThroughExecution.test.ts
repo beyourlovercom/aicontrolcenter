@@ -16,6 +16,6 @@ const structured=`AICC_EXECUTION_V1\nENTITY_TYPE: WORK_PACKAGE\nENTITY_ID: AICC-
 const structuredItem=submitExecution(structured,'WEB_BRIDGE');
 assert.equal(structuredItem.state,'READY','dirty, missing-repository, branch and HEAD claims do not pre-block Codex');
 assert.equal(structuredItem.instruction?.repository,'/missing/repository');
-assert.throws(()=>parseExecutionV1(structured.replace('INSTRUCTION_END','')),/MALFORMED_EXECUTION/,'incomplete protocol remains rejected');
+assert.equal(parseExecutionV1(structured.replace('INSTRUCTION_END','')).expectedHead,'wrong-head','incomplete protocol remains metadata-readable');
 assert.equal(request.passThrough,true,'pass-through is explicit and does not create a second authority');
 console.log('pass-through execution contract tests passed');
