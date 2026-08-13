@@ -11,7 +11,8 @@ const MAX_EVENTS=12;
 function eventType(value:string){if(/^thread\.(started|completed)$/.test(value))return 'thread';if(/^turn\.(started|completed|failed)$/.test(value))return 'turn';if(/^item\.(started|completed|updated)(?::|$)/.test(value))return 'item';if(/^(agent_message|item\.(started|completed):agent_message)$/.test(value))return 'message';if(value==='error'||value.startsWith('error:'))return 'error';return 'unknown'}
 export function resolveCurrentActivity(runtime:RuntimeRecord|null):string{
   if(!runtime)return '不可用';
-  const value=runtime.events?.at(-1)??runtime.latestEvent??'';
+  const events=Array.isArray(runtime.events)?runtime.events.filter((event):event is string=>typeof event==='string'):[];
+  const value=events.at(-1)??(typeof runtime.latestEvent==='string'?runtime.latestEvent:'');
   const presentation=resolveEventPresentation(value);
   if(presentation.label!=='技术事件')return presentation.detail?`${presentation.label}：${presentation.detail}`:presentation.label;
   if(runtime.currentTask&&runtime.currentTask!=='准备启动 Codex'&&runtime.currentTask!=='最近项目已完成')return runtime.currentTask;
@@ -31,7 +32,7 @@ function resolveEventPresentation(value:string):{label:string;detail?:string}{
   return {label:'技术事件'};
 }
 export function normalizeRuntimeEvent(value:string,timestamp=new Date().toISOString()):NormalizedRuntimeEvent{const kind=eventType(value);const presentation=resolveEventPresentation(value);return {kind,label:presentation.label,timestamp,technicalType:value,detail:presentation.detail};}
-export function normalizeRuntimeEvents(runtime:RuntimeRecord):NormalizedRuntimeEvent[]{return (runtime.events??[]).slice(-MAX_EVENTS).map((event)=>normalizeRuntimeEvent(event,runtime.lastActivityAt));}
+export function normalizeRuntimeEvents(runtime:RuntimeRecord):NormalizedRuntimeEvent[]{const events=Array.isArray(runtime.events)?runtime.events.filter((event):event is string=>typeof event==='string'):[];return events.slice(-MAX_EVENTS).map((event)=>normalizeRuntimeEvent(event,typeof runtime.lastActivityAt==='string'?runtime.lastActivityAt:new Date().toISOString()));}
 export function resolveRuntimeMetric(value:number|undefined){return typeof value==='number'?value:null}
 export function ownerAcceptanceLabel(label:string):string{return label.replace(/Runtime Monitor/gi,'运行监控').replace(/persistent center surface/gi,'中心区固定显示').replace(/not a tab replacement/gi,'不作为标签页替代').replace(/implementation/gi,'实施').replace(/validation/gi,'验证').replace(/owner/gi,'Owner').replace(/Codex/gi,'Codex')}
 function acceptance(wp:FormalWorkPackage|null,runtime:RuntimeRecord|null){

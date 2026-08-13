@@ -2,7 +2,7 @@
  import type {FormalWorkPackage,RuntimeRecord,WriterLockState} from '../lib/model/entityTypes.ts';
  import {buildRuntimeObserver,ownerAcceptanceLabel,runtimeHealthLabel,runtimeStatusLabel,writerLockLabel} from '../lib/runtimeObserver.ts';
  export let runtime:RuntimeRecord|null=null; export let workPackage:FormalWorkPackage|null=null; export let writerLock:WriterLockState={status:'UNAVAILABLE',scope:'repository'}; export let emptyTitle='暂无运行记录'; export let emptyCapability='不可用'; export let emptyReason='';
- $: model=buildRuntimeObserver(runtime,workPackage,writerLock);
+ $: model=buildRuntimeObserver(runtime&&typeof runtime==='object'?runtime:null,workPackage,writerLock);
  $: elapsed=model.elapsedMs===null?'不可用':`${Math.floor(model.elapsedMs/60000)}m ${Math.floor(model.elapsedMs/1000)%60}s`;
 </script>
 <section class="runtime-monitor" data-testid="runtime-monitor" data-runtime-status={model.status}>

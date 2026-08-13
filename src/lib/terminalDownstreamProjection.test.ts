@@ -19,7 +19,7 @@ assert.match(bridge,/function reconcilePersistedExecutions\(\)/);
 assert.match(bridge,/export function readOutbox\(\)\{reconcilePersistedExecutions\(\);/);
 assert.match(bridge,/x\.executionId===item\.executionId&&x\.runId===item\.runId/);
 assert.match(bridge,/executionId:item\.executionId,runId:item\.runId/);
-assert.match(app,/bridgeInbox=inbox\.items\?\?bridgeInbox;bridgeOutbox=outbox\.items\?\?bridgeOutbox/,'live Runtime polling refreshes downstream Bridge projection');
+assert.match(app,/bridgeInbox=Array\.isArray\(inbox\.items\)\?inbox\.items:bridgeInbox;bridgeOutbox=Array\.isArray\(outbox\.items\)\?outbox\.items:bridgeOutbox/,'live Runtime polling refreshes downstream Bridge projection');
 assert.match(app,/void loadBridge\(\);startRuntimePolling\(\)/,'Bridge launch starts live Runtime projection');
 assert.match(app,/runtimePollInFlight=false/,'live Runtime polling has overlap protection');
 assert.match(app,/Promise\.all\(\[request\(`\/api\/codex\/runtime/,'live polling reads canonical Runtime and downstream state together');
