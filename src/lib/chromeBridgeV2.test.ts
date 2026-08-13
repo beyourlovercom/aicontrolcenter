@@ -1,0 +1,21 @@
+import {readFileSync} from 'node:fs';
+import {join} from 'node:path';
+const root = process.cwd();
+const dom = readFileSync(join(root,'web-adapter/chrome-extension-v2/chatgpt-dom.js'),'utf8');
+const content = readFileSync(join(root,'web-adapter/chrome-extension-v2/content.js'),'utf8');
+const worker = readFileSync(join(root,'web-adapter/chrome-extension-v2/service-worker.js'),'utf8');
+const manifest = readFileSync(join(root,'web-adapter/chrome-extension-v2/manifest.json'),'utf8');
+const instruction = 'AICC_EXECUTION_V1\nINSTRUCTION_ID: current\n\nINSTRUCTION_BEGIN\n检查当前仓库\nINSTRUCTION_END';
+function complete(value:string) { const blocks=value.match(/AICC_EXECUTION_V1[ \t]*\n[\s\S]*?\nINSTRUCTION_END(?=\n|$)/g)||[]; return blocks.length===1?blocks[0]:null; }
+const assistant = `prose\n${instruction}\nprose`;
+if (complete(assistant)!==instruction) throw new Error('only the complete current instruction block is captured');
+if (complete(`old\n${instruction}\nnew\n${instruction}`)!==null) throw new Error('multiple conversation instructions are rejected');
+if (complete('natural language only')!==null) throw new Error('missing target instruction remains disabled');
+if (!content.includes('data-aicc-v2-send')||!content.includes('data-aicc-v2-insert')) throw new Error('V2 toolbar has exactly the two fixed controls');
+if (!content.includes("report?.state === 'READY'")||!content.includes('button.disabled')) throw new Error('report button state is READY-bound');
+if (content.includes('AUTO_REPORT_INSERT ?')||content.includes('AUTO_REPORT_INSERT &&')) throw new Error('auto insertion flag does not control visibility');
+if (content.match(/insertReport\(/g)?.length!==1||content.includes('messageData?.type')) throw new Error('manual insertion has one explicit content-script path');
+if (content.includes('sendInstruction')||content.includes('chrome.runtime.sendMessage({ type: \'SEND_INSTRUCTION\'')) throw new Error('polling does not send or launch');
+if (worker.includes('chrome.tabs.sendMessage')||worker.includes('REQUEST_REPORT_DELIVERY')) throw new Error('service worker is transport only');
+if (JSON.parse(manifest).name!=='AICC Bridge V2') throw new Error('independent V2 manifest missing');
+console.log('Chrome Bridge V2 minimal matrix passed');
