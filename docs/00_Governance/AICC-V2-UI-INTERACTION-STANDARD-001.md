@@ -28,6 +28,14 @@ only the current round is expanded by default.
 The approved AICC V2 visual system—spacing, cards, badges, actions, evidence
 typography, and Chinese-first labels—is shared across features.
 
+## Workspace Context implementation constraint
+
+The Workspace Context Work Package implements `全局任务` as an explicit
+center-column Global Workspace. It is a navigation projection only and does
+not become an entity or execution authority. The compact Current Context
+control may expose an explicit Owner Execution Context Lock; passive Roadmap
+navigation and `定位` must never act as an implicit lock.
+
 ## Owner blocked status single source
 
 All Owner-facing `阻塞`, `已阻塞`, and `BLOCKED` presentation MUST originate

@@ -13,4 +13,6 @@ assert.equal(groups.waitingOwner[0].workPackageId,'WP-B');
 assert.equal(groups.needsAction[0].state,'FAILED');
 assert.equal(groups.recentCompleted[0].runId,'run-b');
 assert.equal(groups.waitingOwner[1].scope,'UNKNOWN');
+assert.equal(Object.keys(groups).length,4);
+assert.equal(groups.inProgress[0].entity?.id,'WP-A');
 console.log('global task view tests passed');
