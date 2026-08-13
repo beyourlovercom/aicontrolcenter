@@ -26,6 +26,6 @@ assert(wp.includes('LSA-HUA-01')&&wp.includes('LSA-HUA-12'),'dedicated human UAT
 assert(vite.includes('/api/service/restart')&&vite.includes('/api/service/logs')&&service.includes("execFile('/bin/launchctl',['kickstart','-k'") ,'supervisor controls are fixed operations');
 assert(app.includes('pollService')&&app.includes('正在重启本地服务'),'page reconnect and owner restart UI');
 assert(app.includes("boundedRequest('/api/health')")&&app.includes('本地服务正在恢复…'),'browser health polling is bounded and shows recovery');
-assert(app.includes("if(refresh)await loadSnapshot(false)"),'reconnect refreshes snapshot while selection persistence remains canonical');
+assert(app.includes("if(refresh&&!['STARTING','RUNNING','STOPPING'].includes(raw.runtime?.phase??''))await loadSnapshot(false)"),'reconnect refreshes only when no active runtime is present');
 assert(!service.includes("git(['ls-remote'")&&service.includes("refs/remotes/origin/main"),'snapshot repository read contains no unbounded remote network call');
 console.log('local service autostart contract tests passed');

@@ -18,6 +18,7 @@ assert.equal(terminal.process,'DEAD');
 assert.match(app,/if activeTab==='运行'[\s\S]*<RuntimeWorkspace/);
 assert.match(app,/runtimeHistory=Array\.isArray\(runtimeResult\.value\.history\)/);
 assert.match(app,/const nextRuntime=data\.runtime&&typeof data\.runtime==='object'\?data\.runtime:null/);
+assert.match(app,/async function refreshRuntimeProjection\(\)/);
 assert.match(workspace,/data-testid="runtime-live-activity"[\s\S]*<RuntimeMonitor/);
 assert.match(evidence,/displayRuntime=runtimeOverride\?\?context\.runtime/);
 console.log('active runtime render matrix passed');

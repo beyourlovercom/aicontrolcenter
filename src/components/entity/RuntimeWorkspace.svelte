@@ -2,6 +2,8 @@
   import RuntimeMonitor from '../RuntimeMonitor.svelte';
   import type {FormalWorkPackage,RuntimeRecord,WriterLockState} from '../../lib/model/entityTypes.ts';
   import {selectCanonicalCurrentRuntime} from '../../lib/runtimeSelection.ts';
+  import {onMount} from 'svelte';
+  import {recordWorkspaceMount} from '../../lib/runtimeLifecycleInstrumentation.ts';
 
   export let runtime:RuntimeRecord|null=null;
   export let history:RuntimeRecord[]=[];
@@ -24,6 +26,7 @@
   export let onSelectRun:(id:string)=>void=()=>{};
 
   let inspectedInboxId:string|null=null;
+  onMount(()=>recordWorkspaceMount());
   $: focused=selectCanonicalCurrentRuntime(runtime,history,selectedRunId);
   $: result=focused?.finalAgentMessage??(focused?.phase==='COMPLETED'?'Codex 运行已完成。':null);
   $: inspectedInbox=bridgeInbox.find(item=>item.id===inspectedInboxId)??null;
