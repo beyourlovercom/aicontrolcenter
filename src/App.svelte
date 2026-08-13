@@ -84,7 +84,7 @@
     if(showFeedback)setFeedback({state:'RUNNING',title:'正在刷新状态…',message:'正在重建项目快照与当前实体上下文。',code:'REFRESHING'});
     const selectedAtStart=selectedEntity;
     const runtimeQuery=selectedAtStart.type==='work_package'?`?workPackageId=${encodeURIComponent(selectedAtStart.id)}`:'';
-    const [roadmapResult,repositoryResult,authorizationResult,runtimeResult,descriptionResult,uatResult,lifecycleEvidenceResult]=await Promise.allSettled([boundedRequest('/api/roadmap'),boundedRequest('/api/repository'),boundedRequest(`/api/authorization?workPackageId=${encodeURIComponent(selectedAtStart.type==='work_package'?selectedAtStart.id:'')}`),boundedRequest(`/api/codex/runtime${runtimeQuery}`),boundedRequest('/api/entity-descriptions'),selectedAtStart.type==='work_package'?boundedRequest(`/api/human-uat?workPackageId=${encodeURIComponent(selectedAtStart.id)}`):Promise.resolve({record:null}),selectedAtStart.type==='work_package'?boundedRequest(`/api/lifecycle-evidence?workPackageId=${encodeURIComponent(selectedAtStart.id)}`):Promise.resolve({record:null})]);
+    const [roadmapResult,repositoryResult,authorizationResult,runtimeResult,descriptionResult,uatResult,lifecycleEvidenceResult,formalPackagesResult,allUatResult,allEvidenceResult]=await Promise.allSettled([boundedRequest('/api/roadmap'),boundedRequest('/api/repository'),boundedRequest(`/api/authorization?workPackageId=${encodeURIComponent(selectedAtStart.type==='work_package'?selectedAtStart.id:'')}`),boundedRequest(`/api/codex/runtime${runtimeQuery}`),boundedRequest('/api/entity-descriptions'),selectedAtStart.type==='work_package'?boundedRequest(`/api/human-uat?workPackageId=${encodeURIComponent(selectedAtStart.id)}`):Promise.resolve({record:null}),selectedAtStart.type==='work_package'?boundedRequest(`/api/lifecycle-evidence?workPackageId=${encodeURIComponent(selectedAtStart.id)}`):Promise.resolve({record:null}),boundedRequest('/api/work-packages'),boundedRequest('/api/human-uat'),boundedRequest('/api/lifecycle-evidence')]);
     const sourceErrors:RawProjectSources['sourceErrors']={};
     const next:RawProjectSources={...raw,sourceErrors};
     if(roadmapResult.status==='fulfilled'){try{normalizeRoadmap(roadmapResult.value.content,next.localDevelopment===true,next.pullRequests??[],next.runtime??null);next.roadmap=roadmapResult.value}catch{next.roadmap=null;sourceErrors.roadmap='ROADMAP_PARSE_FAILED'}}else{next.roadmap=null;sourceErrors.roadmap='ROADMAP_UNAVAILABLE'}
@@ -94,6 +94,9 @@
     if(descriptionResult.status==='fulfilled')descriptions=descriptionResult.value.records??[];
     if(uatResult.status==='fulfilled'&&selectedAtStart.type==='work_package')next.humanUat=uatResult.value.record?[uatResult.value.record]:[];
     if(lifecycleEvidenceResult.status==='fulfilled'&&selectedAtStart.type==='work_package')next.lifecycleEvidence=lifecycleEvidenceResult.value.record?[lifecycleEvidenceResult.value.record]:[];
+    if(formalPackagesResult.status==='fulfilled'&&Array.isArray(formalPackagesResult.value.items))next.formalWorkPackages=Object.fromEntries(formalPackagesResult.value.items.map((item:FormalWorkPackage)=>[item.id,item]));
+    if(allUatResult.status==='fulfilled'&&Array.isArray(allUatResult.value.records))next.humanUat=allUatResult.value.records;
+    if(allEvidenceResult.status==='fulfilled'&&Array.isArray(allEvidenceResult.value.records))next.lifecycleEvidence=allEvidenceResult.value.records;
     raw=next;
     if(next.roadmap?.content){const hydrated=resolveHydratedSelection(createProjectSnapshot(next).roadmap.value??[]);if(hydrated.type!==selectedEntity.type||hydrated.id!==selectedEntity.id){selectedEntity=hydrated;selectionRequest+=1;persistSelection(hydrated);}}
     const formalTarget=selectedEntity.type==='work_package'?selectedEntity.id:null;

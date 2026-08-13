@@ -1,5 +1,5 @@
 import { execFile, execFileSync } from 'node:child_process';
-import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
 import type {ExecutionPreflight} from './fastExecution.ts';
@@ -50,6 +50,9 @@ export function readWorkPackage(id: string): WorkPackage {
   const goal = pick('Goal', '目标'), scope = pick('Scope', '范围'), dependencies = pick('Dependencies', '依赖'), acceptanceCriteria = pick('Acceptance Criteria', '验收标准', 'Machine Acceptance', '机器验收'), risks = pick('Risks', '风险'), allowed = pick('Allowed', '允许'), forbidden = pick('Forbidden', '禁止');
   sections.Goal = goal; sections.Scope = scope; sections.Dependencies = dependencies; sections['Acceptance Criteria'] = acceptanceCriteria;
   return { id, title: heading.replace(/^AICC-[^:：]+[:：]\s*/, ''), source: `docs/60_Operations/work-packages/${id}.md`, rawMarkdown: text, fields, sections, status: fields.Status ?? fields.status ?? '未提供', goal, scope, dependencies, acceptanceCriteria, risks, allowed, forbidden };
+}
+export function readWorkPackages(): WorkPackage[] {
+  return readdirSync(WORK_PACKAGES).filter(name=>/^AICC-[A-Z0-9-]+\.md$/.test(name)).map(name=>name.slice(0,-3)).map(id=>readWorkPackage(id));
 }
 export function validateFormalWorkPackage(workPackage:WorkPackage,requestedId=workPackage.id):FormalWorkPackageValidationError[]{
   const errors:FormalWorkPackageValidationError[]=[];

@@ -21,11 +21,11 @@ assert.equal(app.includes('等待 Owner 操作'),false,'duplicate idle owner act
 assert.match(header,/statusOverride/,'entity header consumes owner status projection');
 assert.match(workflow,/getStatusPresentationMeta\(stage\.status\)/,'workflow labels use status presentation metadata');
 assert.match(roadmap,/StatusDot status=\{node\.status\}/,'roadmap status consumes projected node status');
-const context={type:'work_package',status:'BLOCKED',statusLabel:'阻塞',formalization:'FORMAL_READY',runtime:{runId:'run-1',phase:'COMPLETED',exitCode:0},lifecycle:{stages:[{id:'IMPLEMENTATION',status:'BLOCKED'},{id:'HUMAN_UAT',status:'NOT_STARTED'}]}} as any;
+const context={type:'work_package',status:'WAITING_UAT',statusLabel:'等待人工 UAT',formalization:'FORMAL_READY',runtime:{runId:'run-1',phase:'COMPLETED',exitCode:0},lifecycle:{stages:[{id:'IMPLEMENTATION',status:'COMPLETE'},{id:'HUMAN_UAT',status:'WAITING_UAT'}]}} as any;
 const projected=resolveOwnerStatusProjection(context,[{state:'READY',report:{runId:'run-1'}}]);
 assert.equal(projected.status,'WAITING_UAT');
 assert.equal(projected.hasRealBlocker,false);
-const blocked=resolveOwnerStatusProjection({...context,lifecycle:{stages:[{id:'IMPLEMENTATION',status:'BLOCKED'}]}} as any,[]);
+const blocked=resolveOwnerStatusProjection({...context,status:'BLOCKED',statusLabel:'阻塞',lifecycle:{stages:[{id:'IMPLEMENTATION',status:'BLOCKED'}]}} as any,[]);
 assert.equal(blocked.status,'BLOCKED');
 assert.equal(resolveOwnerWorkflowStages(context,[{state:'READY',report:{runId:'run-1'}}]).find(stage=>stage.id==='IMPLEMENTATION')?.status,'COMPLETE');
 console.log('overview projection matrix passed');
