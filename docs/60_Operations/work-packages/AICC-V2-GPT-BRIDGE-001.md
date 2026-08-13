@@ -293,3 +293,22 @@ OpenCode, OpenSpec and OmO.
 `CONVERSATION_ROUTING_IS_ADVISORY = PASS`; `V1_WEBSOCKET_REQUIRED = NO`;
 `V1_SIMPLE_POLLING_ALLOWED = YES`; `BROWSER_ADAPTER_CAN_EXECUTE_CODE = 0`;
 `AICC_REMAINS_EXECUTION_AUTHORITY = YES`; `WEB_ADAPTER_FAILURE_BLOCKS_CORE = 0`.
+
+## MVP delivery discipline classification
+
+`GPT_BRIDGE_001B_UAT_ROUND_2 = IN_PROGRESS`.
+
+| Finding / proposed area | Severity | Hard gate impact | Current closure effect | Backlog / workaround |
+| --- | --- | --- | --- | --- |
+| Current idle-page instability | P0 | Gates 1 and 2 | Blocks Round 2 until the current critical path is usable and stable | Fix the smallest current root cause |
+| Formal Web Host / Control Service process separation | P2 | None proven | Does not block MVP by default | Backlog; future architecture phase |
+| Complete Desktop process isolation | P2 | None proven | Does not block MVP by default | Backlog; future architecture phase |
+| Advanced automatic self-healing | P2 | None proven | Does not block MVP by default | Backlog; future recovery phase |
+
+Every new UAT finding must report `BUG_SEVERITY`,
+`BLOCKS_FIRST_USABLE_GATE`, `BLOCKED_GATE_ID`,
+`REMEDIATION_CYCLE_NUMBER`, `CURRENT_WP_CLOSURE_BLOCKED`, and
+`BACKLOG_IF_NOT_P0`. The normal maximum is
+`NORMAL_MAX_P0_REMEDIATION_CYCLES = 1`; only new real Owner evidence proving a
+continued core-path block may authorize another cycle. Backlog findings have
+`BACKLOG_FINDING_HAS_EXECUTION_AUTHORITY = 0`.
