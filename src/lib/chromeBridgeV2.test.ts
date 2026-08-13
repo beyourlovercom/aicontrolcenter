@@ -12,6 +12,10 @@ if (complete(assistant)!==instruction) throw new Error('only the complete curren
 if (complete(`old\n${instruction}\nnew\n${instruction}`)!==null) throw new Error('multiple conversation instructions are rejected');
 if (complete('natural language only')!==null) throw new Error('missing target instruction remains disabled');
 if (!content.includes('data-aicc-v2-send')||!content.includes('data-aicc-v2-insert')) throw new Error('V2 toolbar has exactly the two fixed controls');
+if (!content.includes("root: '#aicc-bridge-v2-root'")||!content.includes('function ensureRoot')||!content.includes('root.appendChild(next)')) throw new Error('V2 panel is not mounted under the extension-owned stable root');
+if (!content.includes('document.body || document.documentElement')||!content.includes('aiccBridgeV2Root')) throw new Error('panel mount must not depend on ChatGPT application selectors');
+if (JSON.parse(manifest).content_scripts[0].matches.length !== 2 || !JSON.parse(manifest).content_scripts[0].matches.includes('https://chatgpt.com/*')) throw new Error('normal ChatGPT host coverage is incomplete');
+if ((content.match(/id = 'aicc-bridge-v2-root'/g)||[]).length !== 1) throw new Error('V2 panel root creation is not unique');
 if (!content.includes("report?.state === 'READY'")||!content.includes('button.disabled')) throw new Error('report button state is READY-bound');
 if (!content.includes('width:240px')||!content.includes('width:200px')||!content.includes('height:32px')||!content.includes('height:28px')) throw new Error('panel dimensions do not match the frozen UI baseline');
 if (!content.includes('COLLAPSE_KEY')||!content.includes('chrome.storage.local.get')||!content.includes('chrome.storage.local.set')) throw new Error('collapse state is not persisted');

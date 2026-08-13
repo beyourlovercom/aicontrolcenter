@@ -7,7 +7,7 @@
   "host_permissions": ["http://127.0.0.1:1420/*"],
   "background": { "service_worker": "service-worker.js" },
   "content_scripts": [{
-    "matches": ["https://chatgpt.com/*"],
+    "matches": ["https://chatgpt.com/*", "https://chat.openai.com/*"],
     "js": ["chatgpt-dom.js", "content.js"],
     "run_at": "document_idle"
   }]
