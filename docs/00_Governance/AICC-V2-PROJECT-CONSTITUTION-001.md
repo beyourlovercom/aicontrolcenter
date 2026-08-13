@@ -1,7 +1,7 @@
 # AICC V2 Project Constitution
 
 - Document ID: `AICC-V2-PROJECT-CONSTITUTION-001`
-- Version: `1.1`
+- Version: `1.2`
 - Status: `APPROVED_BASELINE`
 - Effective: `2026-08-13`
 
@@ -32,6 +32,15 @@ complete.
 5. OpenCode, OpenSpec, and OmO are forbidden runtime dependencies.
 6. A baseline change requires a `BASELINE_CHANGE_PROPOSAL`, version change, and
    explicit Owner approval.
+7. AICC V2 is a pass-through control plane: it transports Owner tasks,
+   launches Codex, observes the real process, persists evidence, and returns
+   results without duplicating Codex repository or implementation reasoning.
+8. `AICC_EXECUTION_V1` is an optional structured transport envelope. A usable
+   raw task remains executable when the envelope is absent; an incomplete
+   structured envelope remains malformed.
+9. Multiple independent Codex runs may execute in parallel. AICC does not use
+   a repository-global Writer Lock or pre-Codex conflict predictor to serialize
+   them; Codex CLI and OS/Git protections remain authoritative.
 
 ## MVP delivery discipline
 

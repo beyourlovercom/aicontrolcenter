@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import {parseExecutionV1,canonicalExecutionV1Example,createCanonicalExecutionRequest,AICC_EXECUTION_V1_REQUIRED_FIELDS,AICC_EXECUTION_V1_OPTIONAL_FIELDS,AICC_EXECUTION_V1_EXECUTION_TYPES,INBOX_STATES,OUTBOX_STATES} from './bridgeCore.ts';
+import {parseExecutionV1,normalizeExecutionProtocol,createNaturalLanguageInstruction,canonicalExecutionV1Example,createCanonicalExecutionRequest,AICC_EXECUTION_V1_REQUIRED_FIELDS,AICC_EXECUTION_V1_OPTIONAL_FIELDS,AICC_EXECUTION_V1_EXECUTION_TYPES,INBOX_STATES,OUTBOX_STATES} from './bridgeCore.ts';
 import {buildPrompt,resolveRuntimeExecutionPolicy} from './runtimeManager.ts';
 import {readWorkPackage} from './controlService.ts';
 import {resolveExecutionScopes} from './fastExecution.ts';
@@ -7,6 +7,9 @@ const valid=`AICC_EXECUTION_V1\nINSTRUCTION_ID: test-001\nENTITY_TYPE: WORK_PACK
 assert.equal(parseExecutionV1(valid).version,'AICC_EXECUTION_V1');assert.throws(()=>parseExecutionV1(valid.replace('AICC_EXECUTION_V1','AICC_EXECUTION_V2')),/UNSUPPORTED_EXECUTION_VERSION/);assert.throws(()=>parseExecutionV1('AICC_EXECUTION_V1'),/MALFORMED_EXECUTION/);assert.equal(INBOX_STATES.length,7);assert.equal(OUTBOX_STATES.length,4);console.log('bridge core contract tests passed');
 const example=canonicalExecutionV1Example('/Users/a/AI/007/AIcontrolcenter','rebuild/aicc-v2','80eaa2d3dbc4bab7d6542db307dae9db070f9b3c');assert.equal(parseExecutionV1(example).entityId,'AICC-V2-GPT-BRIDGE-001');assert.equal(AICC_EXECUTION_V1_REQUIRED_FIELDS.length,9);assert.equal(AICC_EXECUTION_V1_OPTIONAL_FIELDS.length,2);assert.deepEqual(AICC_EXECUTION_V1_EXECUTION_TYPES,['IMPLEMENTATION','REMEDIATION','READ_ONLY_AUDIT']);assert.throws(()=>parseExecutionV1(example.replace('INSTRUCTION_BEGIN','BODY_BEGIN')),/MALFORMED_EXECUTION/);console.log('bridge canonical examples passed');
 const multiline=valid.replace('Inspect only and report.','Inspect the formal WP.\nReport BRIDGE_INSTRUCTION_FIDELITY_CANARY.\nDo not modify files.');
+const natural=createNaturalLanguageInstruction('检查当前 AICC 仓库状态','WEB_BRIDGE','https://chatgpt.com/c/1',{conversationId:'c-1',conversationUrl:'https://chatgpt.com/c/1',messageId:'m-1'});assert.equal(natural.instructionBody,'检查当前 AICC 仓库状态');assert.equal(natural.originContext?.messageId,'m-1');assert.equal(natural.requiresAuthorization,false);assert.equal(natural.version,'AICC_EXECUTION_V1','natural language is adapted internally without becoming owner-facing protocol');
+assert.equal(parseExecutionV1(valid.split('\n').join('\n\n')).instructionBody,'Inspect only and report.','contenteditable paragraph boundaries parse canonically');
+assert.equal(normalizeExecutionProtocol(valid.split('\n').join('\n\n')),normalizeExecutionProtocol(valid),'protocol normalization is stable');
 const parsed=parseExecutionV1(multiline,'WEB_BRIDGE','conversation-1');
 assert.equal(parsed.instructionBody,'Inspect the formal WP.\nReport BRIDGE_INSTRUCTION_FIDELITY_CANARY.\nDo not modify files.','multiline instruction preserved');
 const wp=readWorkPackage('AICC-V2-GPT-BRIDGE-001'),scopes=resolveExecutionScopes(wp);
@@ -28,6 +31,6 @@ const writeRequest=createCanonicalExecutionRequest(write,scopes.scope);assert.eq
 const auth={authorizationId:'a',workPackageId:wp.id,authoritySha:'sha',branch:'rebuild/aicc-v2',headShaAtAuthorization:'head',repositoryRoot:'/Users/a/AI/007/AIcontrolcenter',scope:['read'],allowed:['runtime'],forbidden:['push'],authorizedAt:'now'};
 const prompt=buildPrompt(wp.id,wp,auth,'READ_ONLY_AUDIT','read-only',request);
 assert.ok(prompt.includes(parsed.instructionBody),'runtime prompt preserves approved Bridge instruction');
-assert.ok(prompt.includes('APPROVED EXECUTION INSTRUCTION')&&!prompt.includes('Implement this Work Package now'),'Bridge instruction is not silently replaced by default WP implementation prompt');
-assert.ok(prompt.includes('Instruction ID: test-001')&&prompt.includes('Source Type: WEB_BRIDGE'),'prompt preserves bounded source attribution');
+assert.ok(prompt.includes('BEGIN OWNER TASK')&&!prompt.includes('Implement this Work Package now'),'Bridge instruction is passed through without a pre-Codex semantic gate');
+assert.ok(prompt.includes('BEGIN OWNER TASK'),'pass-through prompt contains the exact task body');
 console.log('bridge instruction fidelity matrix passed');

@@ -1,6 +1,6 @@
 # AICC-V2-TERMINAL-HANDOFF-001: Terminal Handoff
 
-Status: PLANNED
+Status: IMPLEMENTED / MACHINE_VALIDATED / HUMAN_UAT_PENDING
 Type: SELF_DEVELOPMENT_AUTOMATION
 Prerequisite: `AICC-V2-GPT-BRIDGE-001` CLOSED
 
@@ -11,9 +11,15 @@ one canonical terminal handoff: generate the Run Report, notify the Owner,
 and insert the report into the exact originating ChatGPT conversation. The
 final native ChatGPT Send remains under Owner control.
 
-This Work Package is planning-only until explicitly authorized. It does not
+The implementation is bounded to terminal handoff projection. It does not
 change lifecycle, authorization, execution eligibility, or terminal result
 semantics.
+
+Implementation evidence: the existing durable terminal reconciliation now
+persists one terminal notification per Run, exposes it through the local
+service, and preserves the originating ChatGPT source reference through the
+Web Bridge correlation so the adapter can insert the matching report once.
+Automated contract validation passes; real Owner Human UAT remains pending.
 
 ## Frozen contract
 

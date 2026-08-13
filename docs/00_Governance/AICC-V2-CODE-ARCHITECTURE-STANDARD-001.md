@@ -16,6 +16,10 @@ Vite middleware is transport/orchestration only.
 No UI, Evidence, Bridge, Run Report, or transport module may create domain
 authority or parallel business rules.
 
+Runtime Manager is a process observer and persistence owner. Its historical
+repository-global Writer Lock is deprecated; independent Codex runs use
+independent runtime state and are not serialized by AICC.
+
 ## Scope and service rules
 
 Every Work Package defines semantic File Scope. Changes are classified as

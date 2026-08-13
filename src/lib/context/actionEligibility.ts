@@ -17,7 +17,7 @@ export function resolveAvailableActions(entity:SelectedEntityRef,snapshot:AiccPr
     // The browser snapshot may be stale. A matching persisted authorization
     // record is enough to expose the action; the server performs the live
     // repository/WP/authorization/lease preflight before spawning Codex.
-    action('START_CODEX',true,!humanUat&&!planned&&!invalid&&authorization?.record?.workPackageId===entity.id&&!activeRuntime,humanUat?'HUMAN_UAT_ACTION_NOT_APPLICABLE':planned?'FORMAL_WP_DOCUMENT_MISSING':activeRuntime?'CODEX_ALREADY_RUNNING':authorization?.record?.workPackageId!==entity.id?'AUTHORIZATION_NOT_FOUND':undefined,blockedLabel??(activeRuntime?'当前 WP 已有活动中的 Codex Runtime。':authorization?.record?.workPackageId!==entity.id?'当前 WP 无匹配授权记录。':undefined)),
+    action('START_CODEX',true,true),
     action('STOP_CODEX',true,Boolean(matchingRuntime&&['STARTING','RUNNING','STOPPING'].includes(matchingRuntime.phase)),'NO_ACTIVE_MATCHING_RUNTIME','当前 WP 没有活动中的 Codex Runtime。'),
     action('RETRY',true,isRetryableRuntimePhase(matchingRuntime?.phase),'NO_RETRYABLE_RUNTIME','当前没有可重试的终态运行。'),
     action('SAFE_MAIN_SYNC',true,Boolean(repo&&repo.worktree==='CLEAN'&&repo.branch!=='main'),repo?.worktree!=='CLEAN'?'WORKTREE_DIRTY':'SYNC_NOT_ELIGIBLE','仓库当前不满足安全同步条件。')

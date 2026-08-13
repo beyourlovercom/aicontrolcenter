@@ -1,32 +1,31 @@
 # AICC V2 Canonical Execution Standard
 
 - Document ID: `AICC-V2-CANONICAL-EXECUTION-STANDARD-001`
-- Version: `1.0`
+- Version: `1.2`
 - Status: `APPROVED_BASELINE`
 
-## One decision authority
+## Pass-through control plane
 
-Every execution entry—Owner Start, Retry, GPT Bridge, Autopilot, PR Runner,
-or future runner—must consume the single `canonicalExecutionDecision()` in
-`src/lib/fastExecution.ts`. The result family is:
+AICC execution entry points are transport adapters. They normalize input,
+launch Codex, observe process truth, persist evidence, correlate runs, and
+return results. They have zero pre-Codex semantic gates. Codex owns repository,
+branch, HEAD, worktree, scope, feasibility, implementation, and task safety
+reasoning.
 
-`ALLOW | ALLOW_WITH_WARNING | OWNER_ACTION_REQUIRED | HARD_BLOCK`
-
-It carries `decision`, `severity`, `reasonCode`, Chinese reason, and next
-action. Consumers may not implement independent authorization, worktree, HEAD,
-scope, Formal WP, runtime, or Writer Lock gates.
+`AICC_EXECUTION_V1` is an optional envelope. Parsing is strict when its marker
+is present, but a non-empty raw task is passed through when no envelope is
+supplied. AICC never turns a Codex task finding into an AICC runtime failure.
 
 ## Safety policy
 
-Worktree states are `CLEAN`, `KNOWN_IN_SCOPE_DIRTY`,
-`KNOWN_NON_CONFLICTING_DIRTY`, and `UNKNOWN_OR_CONFLICTING_DIRTY`; only the last
-is a hard block. Scope evolution is expected, material expansion requires
-Owner action, and out-of-scope expansion hard blocks.
+The former AICC worktree, provenance, conflict, Formal WP, authorization lease,
+and repository-global Writer Lock checks are historical v1.0/v1.1 behavior and
+are deprecated as execution authority. They may remain as observational data,
+but cannot block Codex launch. Independent runs have independent state and
+evidence; AICC does not enforce one repository/one writer serialization.
 
-IMPLEMENTATION and REMEDIATION require a valid Owner WP Execution Lease.
-READ_ONLY_AUDIT with read-only sandbox and `requiresAuthorization=false` does
-not require a lease, but still obeys repository, branch, Formal WP, scope,
-runtime, Writer Lock, and repository-boundary safety.
+Codex CLI sandbox/approval controls, OS protections, and Git protections remain
+the safety authority. Removing duplicated AICC gates does not weaken them.
 
 Terminal runtime states do not block a later valid run and Runtime COMPLETED
 does not imply WP completion.

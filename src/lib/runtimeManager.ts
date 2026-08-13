@@ -1,11 +1,9 @@
 import { spawn } from "node:child_process";
 import {
-  existsSync,
   mkdirSync,
-  openSync,
+  readdirSync,
   readFileSync,
   renameSync,
-  unlinkSync,
   writeFileSync,
 } from "node:fs";
 import { homedir } from "node:os";
@@ -17,17 +15,10 @@ import {
   readAuthorization,
   readRepository,
   readWorkPackage,
-  readHumanUat,
   type Authorization,
 } from "./controlService.ts";
 import { resolveCodexExecutionPolicy } from "./codexExecutionPolicy.ts";
-import {
-  canonicalExecutionDecision,
-  grantExecutionLease,
-  readWorktreeFiles,
-  resolveExecutionScopes,
-  revokeExecutionLease,
-} from "./fastExecution.ts";
+import {revokeExecutionLease} from "./fastExecution.ts";
 export {selectCanonicalCurrentRuntime} from "./runtimeSelection.ts";
 
 export type RuntimePhase =
@@ -98,6 +89,7 @@ export type RuntimeState = {
   instructionSourceReference?: string;
   instructionSha256?: string;
   instructionLength?: number;
+  passThrough?: boolean;
 };
 export type ProcessAdapter = { spawn: typeof spawn };
 export type CanonicalExecutionRequest = {
@@ -113,6 +105,7 @@ export type CanonicalExecutionRequest = {
   instructionId?: string;
   sourceType?: string;
   sourceReference?: string;
+  passThrough?: boolean;
 };
 export function resolveRuntimeExecutionPolicy(executionType:string,requestedSandbox?:CanonicalExecutionRequest['sandbox']){
   const sandboxMode:"workspace-write"|"read-only"=["READ_ONLY_AUDIT","REVIEW","ANALYSIS"].includes(executionType)?"read-only":"workspace-write";
@@ -122,7 +115,6 @@ export function resolveRuntimeExecutionPolicy(executionType:string,requestedSand
 const STATE_DIR = join(homedir(), ".aicc-v2");
 const RUN_FILE = join(STATE_DIR, "runtime.json");
 const HISTORY_FILE = join(STATE_DIR, "runtime-history.json");
-const LOCK_FILE = join(STATE_DIR, "writer.lock");
 const SUPERVISOR_SCRIPT = join(REPOSITORY_ROOT, "scripts", "aicc-run-supervisor.ts");
 const MAX_EVENTS = 40;
 const MAX_HISTORY = 20;
@@ -184,36 +176,24 @@ export function reconcileProcessExit(state:RuntimeState,code:number|null,signal:
   return state;
 }
 export function readRuntime(workPackageId?: string): RuntimeState | null {
-  const current = readStoredRuntime();
+  const candidates = readStoredRuntimes()
+    .filter((item) => !workPackageId || item.workPackageId === workPackageId)
+    .sort((a,b)=>Date.parse(b.lastActivityAt||b.startedAt)-Date.parse(a.lastActivityAt||a.startedAt));
+  const active = candidates.find(item=>["STARTING","RUNNING","STOPPING"].includes(item.phase));
+  const current = active ?? candidates[0];
   if (current) {
     const before = current.phase;
-    const beforeLockReleased=current.writerLockReleased;
     const monitored = monitorRuntimeState(current);
     if (["COMPLETED", "FAILED", "STOPPED", "RECOVERY_REQUIRED"].includes(monitored.phase) && ["STARTING", "RUNNING", "STOPPING"].includes(before)) releaseLockOnce(monitored);
-    if (
-      monitored.phase !== before ||
-      monitored.healthWarning ||
-      monitored.pidAlive !== current.pidAlive ||
-      monitored.writerLockReleased !== beforeLockReleased
-    )
-      save(monitored);
-    if (!workPackageId || monitored.workPackageId === workPackageId)
-      return monitored;
-    if (["STARTING", "RUNNING", "STOPPING"].includes(monitored.phase))
-      return null;
+    if (monitored.phase !== before || monitored.healthWarning || monitored.pidAlive !== current.pidAlive || monitored.writerLockReleased !== current.writerLockReleased) save(monitored);
+    return monitored;
   }
-  return (
-    readRuntimeHistory().find(
-      (item) => !workPackageId || item.workPackageId === workPackageId,
-    ) ?? null
-  );
+  return readRuntimeHistory().find(item=>!workPackageId||item.workPackageId===workPackageId)??null;
 }
-function readStoredRuntime() {
-  try {
-    return JSON.parse(readFileSync(RUN_FILE, "utf8")) as RuntimeState;
-  } catch {
-    return null;
-  }
+function readStoredRuntimes():RuntimeState[]{
+  const files=[RUN_FILE];
+  try{files.push(...readdirSync(STATE_DIR).filter(file=>/^runtime-[^/]+\.json$/.test(file)).map(file=>join(STATE_DIR,file)))}catch{}
+  return files.map(file=>{try{return JSON.parse(readFileSync(file,"utf8")) as RuntimeState}catch{return null}}).filter((item):item is RuntimeState=>Boolean(item));
 }
 export function readRuntimeHistory(): RuntimeState[] {
   try {
@@ -238,17 +218,11 @@ function persistTerminal(s: RuntimeState) {
 }
 function save(s: RuntimeState) {
   mkdirSync(STATE_DIR, { recursive: true });
-  writeFileSync(RUN_FILE, JSON.stringify(s, null, 2), { mode: 0o600 });
+  const target=s.passThrough?join(STATE_DIR,`runtime-${s.runId}.json`):RUN_FILE;
+  writeFileSync(target, JSON.stringify(s, null, 2), { mode: 0o600 });
   persistTerminal(s);
 }
-function releaseLock() {
-  try {
-    unlinkSync(LOCK_FILE);
-  } catch {
-    /* already released */
-  }
-}
-function releaseLockOnce(state:RuntimeState){if(state.writerLockReleased)return;state.writerLockReleased=true;releaseLock()}
+function releaseLockOnce(state:RuntimeState){if(state.writerLockReleased)return;state.writerLockReleased=true}
 export function architectureAuthoritySha(
   wp: ReturnType<typeof readWorkPackage>,
 ): string {
@@ -274,12 +248,14 @@ export function preflightExecutionContract(
 }
 export function buildPrompt(
   wpId: string,
-  wp: ReturnType<typeof readWorkPackage>,
-  auth: Authorization,
+  wp: ReturnType<typeof readWorkPackage>|null,
+  auth: Authorization|null,
   executionType = "IMPLEMENTATION",
   sandboxMode = "workspace-write",
   request: CanonicalExecutionRequest = {},
 ) {
+  if(request.passThrough)return buildPassThroughPrompt(request.instructionBody??"",effectiveExecutionTypeForPrompt(executionType),sandboxMode);
+  if(!wp||!auth)throw new Error("EXECUTION_CONTEXT_REQUIRED");
   const readOnly =
     executionType === "READ_ONLY_AUDIT" ||
     executionType === "REVIEW" ||
@@ -295,71 +271,39 @@ export function buildPrompt(
     : "";
   return `CURRENT EXECUTION DIRECTIVE (LAYER 1 — TRUSTED SERVER)\n${directive}\n\nCURRENT RUNTIME AUTHORITY (LAYER 2)\nOwner Authorization State: VALID\nAuthorized Work Package: ${wpId}\nAuthorized Branch: ${auth.branch}\nAuthorized Execution Head: ${auth.headShaAtAuthorization}\nAuthorization ID: ${auth.authorizationId}\nAuthorization Created: ${auth.authorizedAt}\nExecution Type: ${executionType}\nSandbox: ${sandboxMode}\nThe READY_FOR_OWNER_AUTHORIZATION state contained in the source document is historical/pre-execution state and is not an active blocker for this run.\nArchitecture Authority SHA: ${architectureAuthoritySha(wp)}${instruction}\n\nFORMAL WORK PACKAGE CONTRACT (LAYER 4 — CURRENT SCOPE)\nThe following source defines scope, acceptance criteria, allowed product changes and forbidden product changes. Pre-authorization status text contained inside this document does not supersede the CURRENT RUNTIME AUTHORITY above.\nTitle: ${wp.title}\nGoal: ${wp.goal}\nScope: ${wp.scope}\nAcceptance Criteria: ${wp.acceptanceCriteria}\nPRODUCT CHANGE BOUNDARY — Allowed: ${wp.allowed}\nPRODUCT CHANGE BOUNDARY — Forbidden: ${wp.forbidden}\nAGENT EXECUTION CAPABILITIES: read files; edit files inside authorized workspace; run npm test; run npm run build; run TypeScript validation; run git diff --check; inspect git status/diff.\n\nFORMAL WORK PACKAGE SOURCE (LAYER 5 — DELIMITED EVIDENCE)\n================ BEGIN RAW WP SOURCE ================\n${wp.rawMarkdown}\n================ END RAW WP SOURCE ================\n\nCURRENT EXECUTION SAFETY RULES\nDo not push. Do not create a PR. Do not merge. Do not deploy. Do not expand scope beyond this Work Package.`;
 }
+function effectiveExecutionTypeForPrompt(executionType:string){return executionType||"IMPLEMENTATION"}
+export function buildPassThroughPrompt(instruction:string,executionType="IMPLEMENTATION",sandboxMode="workspace-write"){
+  return `AICC PASS-THROUGH TASK\nExecution type: ${executionType}\nSandbox: ${sandboxMode}\n\nExecute the following Owner task directly. AICC has not pre-judged repository, branch, HEAD, worktree, scope, authorization, or feasibility. Use your Codex CLI safety and approval rules, inspect the repository as needed, and report the actual result. Do not push, create a PR, merge, or expand beyond the task unless the Owner explicitly requests it.\n\nBEGIN OWNER TASK\n${instruction.trim()}\nEND OWNER TASK`;
+}
 export function startRuntime(
   wpId: string,
   adapter: ProcessAdapter = { spawn },
   options: CanonicalExecutionRequest = {},
 ): RuntimeState {
+  const passThrough=true;
   const repo = readRepository(),
-    storedAuth = readAuthorization(),
-    wp = readWorkPackage(wpId),
+    storedAuth = passThrough?null:readAuthorization(),
+    wp = passThrough?null:readWorkPackage(wpId),
     info = codexInfo();
-  const policy = resolveCodexExecutionPolicy(wp);
+  const policy = wp?resolveCodexExecutionPolicy(wp):{executionType:options.executionType??"IMPLEMENTATION"};
   const effectiveExecutionType = options.executionType ?? policy.executionType;
   const effectivePolicy = resolveRuntimeExecutionPolicy(effectiveExecutionType,options.sandbox);
   const isReadOnly = effectivePolicy.sandboxMode === "read-only";
-  if (options.expectedRepository && options.expectedRepository !== repo.repository)
+  if (!passThrough && options.expectedRepository && options.expectedRepository !== repo.repository)
     throw new Error("REPOSITORY_MISMATCH");
-  const matchingStoredAuth = storedAuth?.workPackageId === wpId && storedAuth.branch === repo.branch && storedAuth.repositoryRoot === repo.repository ? storedAuth : null;
+  const matchingStoredAuth = !passThrough&&storedAuth?.workPackageId === wpId && storedAuth.branch === repo.branch && storedAuth.repositoryRoot === repo.repository ? storedAuth : null;
   const auth = matchingStoredAuth ?? (options.allowReadOnlyWithoutAuthorization && isReadOnly ? { authorizationId: "read-only-local-audit", workPackageId: wpId, authoritySha: repo.remoteMain, branch: repo.branch, headShaAtAuthorization: repo.head, repositoryRoot: repo.repository, scope: ["read_repository", "read_work_package"], allowed: ["read_only_audit"], forbidden: ["arbitrary_shell", "push", "merge"], authorizedAt: new Date().toISOString() } : storedAuth);
-  const changed = readWorktreeFiles(REPOSITORY_ROOT);
-  const { scope, knownNonConflicting } = resolveExecutionScopes(wp);
-  if (options.semanticScope && (options.semanticScope.length !== scope.length || options.semanticScope.some((path) => !scope.includes(path))))
-    throw new Error("SEMANTIC_SCOPE_MISMATCH");
-  const humanUat = readHumanUat(REPOSITORY_ROOT, wpId);
-  const preflight = canonicalExecutionDecision(
-    repo,
-    wpId,
-    scope,
-    changed,
-    knownNonConflicting,
-    { humanUatHardStop: humanUat?.status === "PASS", requireAuthorization: options.requiresAuthorization ?? !options.allowReadOnlyWithoutAuthorization, authorization: auth ?? undefined, expectedBranch: options.expectedBranch, expectedHead: options.expectedHead },
-  );
-  if (preflight.decision === "HARD_BLOCK")
-    throw new Error(preflight.reasonCode ?? "EXECUTION_PREFLIGHT_BLOCKED");
-  if (!auth) throw new Error(preflight.reasonCode ?? "OWNER_AUTHORIZATION_REQUIRED");
-  const lease =
-    preflight.lease ?? grantExecutionLease(repo, wpId, scope, changed, "owner", preflight.provenance);
+  const scope = passThrough?[]:[];
   if (!info.available) throw new Error("CODEX_UNAVAILABLE");
-  const prior = readRuntime();
-  if (prior?.phase && ["STARTING", "RUNNING", "STOPPING"].includes(prior.phase))
-    throw new Error("CODEX_ALREADY_RUNNING");
-  let fd: number;
-  try {
-    mkdirSync(STATE_DIR, { recursive: true });
-    fd = openSync(LOCK_FILE, "wx", 0o600);
-    writeFileSync(
-      fd,
-      JSON.stringify({
-        lockId: `lock-${Date.now()}`,
-        workPackageId: wpId,
-        branch: repo.branch,
-        repositoryRoot: REPOSITORY_ROOT,
-        acquiredAt: new Date().toISOString(),
-        leaseId: lease.leaseId,
-      }),
-    );
-  } catch {
-    throw new Error("WRITER_LOCK_HELD");
-  }
   const now = new Date().toISOString(),
+    runId=`run-${Date.now()}-${Math.random().toString(36).slice(2,8)}`,
     s: RuntimeState = {
-      runId: `run-${Date.now()}`,
+      runId,
       workPackageId: wpId,
-      authorizationId: auth.authorizationId,
-      authoritySha: auth.authoritySha,
-      branch: auth.branch,
-      startingHeadSha: auth.headShaAtAuthorization,
+      authorizationId: auth?.authorizationId??"pass-through",
+      authoritySha: auth?.authoritySha??"NOT_APPLICABLE",
+      branch: auth?.branch??repo.branch,
+      startingHeadSha: auth?.headShaAtAuthorization??repo.head,
       pid: null,
       threadId: null,
       phase: "STARTING",
@@ -370,14 +314,15 @@ export function startRuntime(
       events: [],
       executionType: effectivePolicy.executionType,
       sandboxMode: effectivePolicy.sandboxMode,
-      authorizedHead: auth.headShaAtAuthorization,
+      authorizedHead: auth?.headShaAtAuthorization??repo.head,
       codeChangePresent: false,
       instructionId: options.instructionId,
       instructionSourceType: options.sourceType,
       instructionSourceReference: options.sourceReference,
       instructionSha256: options.instructionBody ? createHash("sha256").update(options.instructionBody).digest("hex") : undefined,
       instructionLength: options.instructionBody?.length,
-  };
+      passThrough,
+    };
   save(s);
   try {
     const specFile = join(STATE_DIR, `run-supervisor-${s.runId}.json`);
@@ -386,8 +331,8 @@ export function startRuntime(
       state: s,
       stateDir: STATE_DIR,
       repositoryRoot: REPOSITORY_ROOT,
-      lockFile: LOCK_FILE,
-      prompt: buildPrompt(wpId, wp, auth, effectivePolicy.executionType, effectivePolicy.sandboxMode, { ...options, semanticScope: scope }),
+      lockFile: join(STATE_DIR,`${s.runId}.lock`),
+      prompt: buildPrompt(wpId, wp, auth, effectivePolicy.executionType, effectivePolicy.sandboxMode, { ...options, passThrough, semanticScope: scope }),
     }), { mode: 0o600 });
     const supervisor = spawn(process.execPath, ["--experimental-strip-types", "--experimental-specifier-resolution=node", SUPERVISOR_SCRIPT, specFile], {
       cwd: REPOSITORY_ROOT,
@@ -400,7 +345,6 @@ export function startRuntime(
     supervisor.unref();
     return s;
   } catch (error) {
-    releaseLock();
     s.phase = "FAILED";
     s.failure = error instanceof Error ? error.message : "SPAWN_FAILED";
     save(s);

@@ -37,8 +37,8 @@ Work Packages: `AICC-V2-GPT-BRIDGE-001` — `CLOSED`; 001A and 001B complete,
 Human UAT PASS, First Usable Version hard gates 5/5 PASS.
 
 ### M3.6 — Terminal Handoff
-Work Packages: `AICC-V2-TERMINAL-HANDOFF-001` — `PLANNED`; next executable
-self-development Work Package.
+Work Packages: `AICC-V2-TERMINAL-HANDOFF-001` — `IMPLEMENTED / OWNER_UAT_PENDING`;
+next executable self-development Work Package.
 
 ### M3.7 — Auto Execute Mode
 Work Packages: `AICC-V2-AUTO-EXECUTE-MODE-001` — `PLANNED`; follows Terminal

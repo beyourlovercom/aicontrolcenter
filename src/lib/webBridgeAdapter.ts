@@ -10,6 +10,8 @@ export type AdapterCorrelation = {
   instructionId?: string;
   inboxId: string;
   runId?: string;
+  sourceReference?: string;
+  originContext?: { conversationId?: string; conversationUrl?: string; messageId?: string };
   sentAt: string;
 };
 
@@ -93,14 +95,13 @@ export class WebBridgeClient {
     this.storage = options.storage;
   }
 
-  async sendInstruction(text: string, sourceReference?: string): Promise<{ item: AdapterInboxItem; correlation: AdapterCorrelation }> {
-    if (!text.trim()) throw failureFrom('INSTRUCTION_TEXT_REQUIRED', '没有找到可发送的 AICC_EXECUTION_V1 指令。', '在 ChatGPT 编辑框中准备指令后重试。');
-    if (!/^AICC_EXECUTION_V1(?:\r?\n|$)/.test(text)) throw failureFrom('INVALID_EXECUTION_INSTRUCTION', '只接受明确的 AICC_EXECUTION_V1 指令。', '在编辑框中准备正式执行块后重试。', 'BLOCKED');
+  async sendInstruction(text: string, sourceReference?: string, originContext?: AdapterCorrelation['originContext']): Promise<{ item: AdapterInboxItem; correlation: AdapterCorrelation }> {
+    if (!text.trim()) throw failureFrom('INSTRUCTION_TEXT_REQUIRED', '没有找到可发送的任务内容。', '在 ChatGPT 编辑框中输入任务后重试。');
     let response: Response;
     try {
       response = await this.fetchImpl(`${this.baseUrl}/api/gpt-bridge/inbox`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ payload: text, sourceType: 'WEB_BRIDGE', sourceReference })
+        body: JSON.stringify({ payload: text, sourceType: 'WEB_BRIDGE', sourceReference, originContext })
       });
     } catch {
       throw failureFrom('AICC_UNAVAILABLE', '无法连接 AICC 本地服务。', '确认 127.0.0.1:1420 可用后重试。');
@@ -113,6 +114,8 @@ export class WebBridgeClient {
     const correlation: AdapterCorrelation = {
       inboxId: item.id,
       instructionId: item.instruction?.instructionId,
+      sourceReference,
+      originContext,
       sentAt: new Date().toISOString()
     };
     persistCorrelation(this.storage, correlation);
@@ -177,7 +180,7 @@ export const WEB_ADAPTER_CONTRACT = {
   transport: 'TEXT_ONLY',
   autoExecuteOnReceive: false,
   autoSendChatGptMessage: false,
-  conversationMetadataAuthority: false,
+  conversationMetadataAuthority: true,
   localService: 'http://127.0.0.1:1420',
   fallback: 'CLIPBOARD_COPY_PASTE'
 } as const;

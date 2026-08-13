@@ -7,7 +7,7 @@ type SupervisorSpec={state:RuntimeState;stateDir:string;repositoryRoot:string;lo
 const specFile=process.argv[2];
 if(!specFile)throw new Error('SUPERVISOR_SPEC_REQUIRED');
 const spec=JSON.parse(readFileSync(specFile,'utf8')) as SupervisorSpec;
-const runFile=join(spec.stateDir,'runtime.json');
+const runFile=spec.state.passThrough?join(spec.stateDir,`runtime-${spec.state.runId}.json`):join(spec.stateDir,'runtime.json');
 const historyFile=join(spec.stateDir,'runtime-history.json');
 const maxHistory=20;
 
