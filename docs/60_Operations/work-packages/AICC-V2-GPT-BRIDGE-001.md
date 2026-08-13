@@ -2,7 +2,7 @@
 
 Status: 001A IMPLEMENTED / MACHINE_VALIDATED / HUMAN_UAT_PASS / COMPLETE
 Parent Status: NOT_COMPLETE
-001B Status: NOT_STARTED
+001B Status: IMPLEMENTED / MACHINE_VALIDATED / HUMAN_UAT_IN_PROGRESS
 Type: GPT_BRIDGE_BIDIRECTIONAL
 
 Phase 001A Bridge Core is complete. Canonical read-only and bounded write
@@ -10,11 +10,21 @@ runtime dogfood have passed, including instruction delivery, Writer Lock,
 terminal Runtime evidence, `AICC_RUN_REPORT_V1`, and Result Outbox READY.
 Owner Human UAT Rounds 1–4 are PASS.
 
-Resume point: `IMPLEMENT_001B_CHATGPT_WEB_ADAPTER`
+Resume point: `OWNER_UAT_001B_ROUND_2`
 
-Current truth: `001A = COMPLETE`; `001B = NOT_STARTED`; parent
-`AICC-V2-GPT-BRIDGE-001 = NOT_COMPLETE`. This document does not claim parent
-closure, production release, or remote delivery readiness.
+Current truth: `001A = COMPLETE`; `001B = IMPLEMENTED / MACHINE_VALIDATED /
+HUMAN_UAT_IN_PROGRESS`; parent `AICC-V2-GPT-BRIDGE-001 = NOT_COMPLETE`.
+This document does not claim 001B completion, parent closure, production
+release, or remote delivery readiness.
+
+001B Human UAT Round 1 = PASS. Real Owner evidence: the Chrome extension
+loaded without error and displayed the AICC Bridge on chatgpt.com; an
+Assistant response was captured without composer copy; the instruction was
+sent with `source = WEB_BRIDGE` and correlated to Inbox
+`owner-uat-001b-round1-direct-20260813`. The canonical dirty-worktree Gate
+blocked execution, which is expected for this development worktree. Receive
+did not auto-execute (`AUTO_EXECUTE_ON_RECEIVE = 0`). Rounds 2 and 3 remain
+`NOT_STARTED`.
 
 ## Goal and delivery phases
 
@@ -247,25 +257,24 @@ scraping. Composer-target failure is visible and must not click unrelated contro
 12. Arbitrary page scraping is not used.
 13. Clipboard and copy-report fallbacks remain available.
 14. Adapter never invokes shell, Codex, Git or filesystem mutation.
+15. Adapter uses only the intended `127.0.0.1:1420` control boundary.
+16. Refresh recovery restores correlation without replaying execution.
 
-001B Human UAT Plan (Chinese-first, max 7 per round, recommended 3–5):
+001B Human UAT Plan (Chinese-first, three rounds, max 3 per round):
 
-- HUA-B01 | 第一轮：网页识别 | 打开包含执行块的对话 | 仅明确 AICC_EXECUTION_V1 被识别。
-- HUA-B02 | 第一轮：网页识别 | 点击发送到 AICC | 指令发送至本机服务并进入收件箱。
-- HUA-B03 | 第二轮：安全启动 | 检查接收后的页面 | 收到指令不会自动执行，仍需 AICC Owner 启动。
-- HUA-B04 | 第二轮：安全启动 | 模拟目标不一致 | 页面显示目标不一致，不会静默切换 WP。
-- HUA-B05 | 第三轮：运行报告 | 等待报告就绪 | ChatGPT Web 显示 AICC 有新的运行报告。
-- HUA-B06 | 第三轮：运行报告 | 点击插入运行报告 | 报告插入当前 composer，不发送消息。
-- HUA-B07 | 第四轮：异常与回退 | 点击原生发送前检查 | 发送仍由 Owner 手动完成。
-- HUA-B08 | 第四轮：异常与回退 | 使 DOM 目标不可用 | 页面显示失败，不点击其他页面控件。
-- HUA-B09 | 第四轮：异常与回退 | 关闭/破坏 Web Bridge | 可用剪贴板导入与复制运行报告继续工作。
-- HUA-B10 | 第四轮：异常与回退 | 检查错误对话路由 | 无法确认目标时要求 Owner 确认，不自动插入错误会话。
+- HUA-B01 | 第一轮：发送到 AICC | 在 ChatGPT Web 准备 AICC_EXECUTION_V1 并点击「发送到 AICC」 | 适配器出现，指令进入本机 Inbox，页面显示 Inbox 身份与状态。
+- HUA-B02 | 第一轮：发送到 AICC | 检查接收后的 AICC 页面 | 收到指令不会自动执行，仍需 Owner 在 AICC 中启动。
+- HUA-B03 | 第一轮：发送到 AICC | 发送格式错误的内容 | 页面显示可读失败原因与下一步，不静默失败。
+- HUA-B04 | 第二轮：运行报告 | 等待匹配的 AICC 运行结果 | 适配器按 Inbox/Run 身份显示对应报告，不使用最新结果猜测。
+- HUA-B05 | 第二轮：运行报告 | 点击「插入运行报告」 | 报告进入当前 ChatGPT composer，Run ID 保持一致。
+- HUA-B06 | 第二轮：运行报告 | 检查插入后的对话 | 不触发 ChatGPT 原生发送，Owner 仍需手动点击发送。
+- HUA-B07 | 第三轮：持久化与回退 | 刷新 ChatGPT 页面后继续检查 | 发送关联仍可恢复，不会静默重放执行。
+- HUA-B08 | 第三轮：持久化与回退 | 关闭适配器或使 composer 不可用 | 可回退为复制/粘贴 AICC 指令与运行报告，并显示失败原因。
 
 ## Non-goals
 
 NOT IN SCOPE: ChatGPT API, OpenAI API, ChatGPT Work, Codex Desktop, MCP write access,
-browser extension implementation in this preparation, automatic ChatGPT message
-sending, automatic exact conversation opening, cross-device sync, browser cloud
+automatic ChatGPT message sending, automatic exact conversation opening, cross-device sync, browser cloud
 service, multiple-browser routing, WebSocket/SSE requirement, PR execution,
 commit/push, Draft PR, CI, Review, Merge, PR Runner, WP Close, deployment,
 OpenCode, OpenSpec and OmO.

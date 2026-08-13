@@ -1,0 +1,21 @@
+import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
+import {join} from 'node:path';
+import {WebBridgeClient,insertIntoComposer,reportForComposer,WEB_ADAPTER_CONTRACT,type AdapterStorage} from './webBridgeAdapter.ts';
+
+const storageData=new Map<string,string>();
+const storage:AdapterStorage={getItem:key=>storageData.get(key)??null,setItem:(key,value)=>storageData.set(key,value)};
+let requested:string[]=[];
+const reports=[{id:'outbox-1',state:'READY',inboxId:'inbox-1',runId:'run-1',report:{runId:'run-1',entityId:'AICC-V2-GPT-BRIDGE-001',executionType:'IMPLEMENTATION',runtimeResult:'COMPLETED',gateResult:'PASS',summary:'完成'}}];
+const fakeFetch=async(url:string,init?:RequestInit)=>{requested.push(`${init?.method??'GET'} ${url}`);if(url.endsWith('/inbox'))return new Response(JSON.stringify({item:{id:'inbox-1',state:'READY',instruction:{instructionId:'instruction-1'}}}),{status:200});return new Response(JSON.stringify({items:reports}),{status:200});};
+const client=new WebBridgeClient({fetchImpl:fakeFetch,storage});
+await assert.rejects(()=>client.sendInstruction('普通 ChatGPT 文本'),(error:unknown)=>Boolean(error&&typeof error==='object'&&'code' in error&&error.code==='INVALID_EXECUTION_INSTRUCTION'),'only explicit execution blocks are transported');
+const sent=await client.sendInstruction('AICC_EXECUTION_V1\nINSTRUCTION_BEGIN\nread\nINSTRUCTION_END','https://chatgpt.com/c/1');
+assert.equal(sent.item.id,'inbox-1');assert.equal(sent.item.state,'READY');assert.equal(requested.length,1);assert.match(requested[0],/POST/);assert.equal(requested.some(item=>item.includes('/launch')),false,'receive never launches');
+const match=await client.pollMatchingResult(sent.correlation);assert.equal(match?.runId,'run-1');assert.equal(reportForComposer(match!),['AICC_RUN_REPORT_V1','Run ID: run-1','Entity: AICC-V2-GPT-BRIDGE-001','Execution type: IMPLEMENTATION','Runtime result: COMPLETED','Gate result: PASS','Summary: 完成'].join('\n'));
+const wrong=await client.pollMatchingResult({...sent.correlation,inboxId:'wrong-inbox'});assert.equal(wrong,null,'wrong inbox cannot be inserted');
+const events:Event[]=[];const target={value:'',focus(){},dispatchEvent(event:Event){events.push(event);return true}};const root={querySelector:(selector:string)=>selector==='[contenteditable="true"]'?null:target};assert.equal(insertIntoComposer('report',root),true);assert.equal(target.value,'report');assert.equal(events.length,1);
+assert.equal(WEB_ADAPTER_CONTRACT.autoExecuteOnReceive,false);assert.equal(WEB_ADAPTER_CONTRACT.autoSendChatGptMessage,false);assert.equal(WEB_ADAPTER_CONTRACT.conversationMetadataAuthority,false);assert.ok(storage.getItem('aicc-gpt-bridge-adapter-correlation-v1'));
+const browserAdapter=readFileSync(join(process.cwd(),'web-adapter/chatgpt-aicc-bridge.js'),'utf8');
+assert.match(browserAdapter,/发送到 AICC/);assert.match(browserAdapter,/插入运行报告/);assert.match(browserAdapter,/127\.0\.0\.1:1420/);assert.equal(browserAdapter.includes('/api/gpt-bridge/launch'),false,'browser adapter never launches execution');assert.equal(browserAdapter.includes("button[type=submit]"),false,'browser adapter never submits ChatGPT message');
+console.log('GPT Bridge 001B adapter contract tests passed');
