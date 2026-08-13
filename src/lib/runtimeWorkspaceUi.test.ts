@@ -16,6 +16,7 @@ assert.match(app,/activeTab==='工作包'/,'WP work-package content has an expli
 assert.match(app,/data-testid="wp-overview-content"/,'WP overview has an explicit branch');
 assert.equal((app.match(/<RuntimeWorkspace/g)??[]).length,2,'WP and PR both own a runtime tab workspace');
 assert.match(workspace,/runtime-execution-inbox/);
+assert.match(workspace,/WEB_BRIDGE/);assert.match(workspace,/查看指令/);assert.match(workspace,/rawInstruction/);assert.match(workspace,/INSTRUCTION_ID/);assert.match(workspace,/未启动执行/);assert.match(workspace,/gateReason/);assert.equal(workspace.includes('onLaunch(item.id)'),true,'launch remains an explicit Owner action');assert.equal(workspace.includes('auto'),false,'inspection has no automatic execution path');
 assert.match(workspace,/runtime-current-execution/);
 assert.match(workspace,/runtime-live-activity/);
 assert.match(workspace,/runtime-run-result/);

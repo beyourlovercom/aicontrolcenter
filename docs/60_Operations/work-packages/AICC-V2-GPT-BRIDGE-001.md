@@ -26,6 +26,13 @@ blocked execution, which is expected for this development worktree. Receive
 did not auto-execute (`AUTO_EXECUTE_ON_RECEIVE = 0`). Rounds 2 and 3 remain
 `NOT_STARTED`.
 
+Round 1 also verified the read-only Execution Inbox inspection surface:
+Inbox ID, `WEB_BRIDGE` source, execution type, state, latest-item identity,
+Gate reason, exact Inbox/Run correlation, and the full received
+`AICC_EXECUTION_V1` instruction are inspectable. The persisted Inbox item
+`owner-uat-001b-round1-direct-20260813` remains `BLOCKED` only because the
+development worktree is dirty; it was not a transport failure.
+
 ## Goal and delivery phases
 
 ## Goal

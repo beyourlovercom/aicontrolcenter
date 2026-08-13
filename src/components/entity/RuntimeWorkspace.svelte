@@ -21,8 +21,12 @@
   export let onCopyReport:(report:unknown)=>void=()=>{};
   export let onSelectRun:(id:string)=>void=()=>{};
 
+  let inspectedInboxId:string|null=null;
   $: focused=history.find(item=>item.runId===selectedRunId)??runtime??history[0]??null;
   $: result=focused?.finalAgentMessage??(focused?.phase==='COMPLETED'?'Codex 运行已完成。':null);
+  $: inspectedInbox=bridgeInbox.find(item=>item.id===inspectedInboxId)??null;
+  function gateReason(item:any){return item?.error??item?.parseErrors?.[0]??item?.gates?.find((gate:any)=>gate.state!=='PASS')?.reason??'所有 Gate 已通过。'}
+  function rawInstruction(item:any){if(item?.rawInstruction)return item.rawInstruction;const instruction=item?.instruction;if(!instruction)return '原始指令不可用（旧记录未保存原文）。';return [`AICC_EXECUTION_V1`,`INSTRUCTION_ID: ${instruction.instructionId}`,`ENTITY_TYPE: ${instruction.entityType}`,`ENTITY_ID: ${instruction.entityId}`,`EXECUTION_TYPE: ${instruction.executionType}`,`REPOSITORY: ${instruction.repository}`,`BRANCH: ${instruction.branch}`,`EXPECTED_HEAD: ${instruction.expectedHead}`,`SANDBOX: ${instruction.sandbox}`,`REQUIRES_AUTHORIZATION: ${instruction.requiresAuthorization}`,'',`INSTRUCTION_BEGIN`,instruction.instructionBody,`INSTRUCTION_END`].join('\n')}
 </script>
 
 <section class="runtime-workspace" data-testid="runtime-tab-workspace">
@@ -31,8 +35,8 @@
       <div class="section-label"><span>执行指令</span><small>AICC_EXECUTION_V1</small></div>
       <textarea value={bridgePayload} oninput={(event)=>onPayloadChange((event.currentTarget as HTMLTextAreaElement).value)} placeholder="粘贴 AICC_EXECUTION_V1，或复制有效示例…"></textarea>
       <div class="runtime-command-actions"><button class="service-action" onclick={onCopyExample}>复制有效示例</button><button class="service-action" onclick={onImport}>导入指令</button></div>
-      {#each bridgeInbox.slice(0,5) as item}
-        <div class="bridge-item"><strong>{item.state}</strong><span>{item.instruction?.workPackageId??item.error??item.id}</span>{#if item.state==='READY'}<button class="service-action" onclick={()=>onLaunch(item.id)}>启动执行</button>{:else if item.runId}<small>Run: {item.runId} · {item.runtimeState??item.terminalState??'等待运行'}</small>{/if}</div>
+      {#each bridgeInbox.slice(0,5) as item, index}
+        <article class="bridge-item bridge-inbox-item" class:latest={index===0} data-testid="inbox-item-{item.id}"><div class="bridge-inbox-summary"><div class="bridge-inbox-heading"><strong>{item.instruction?.sourceType==='WEB_BRIDGE'?'WEB_BRIDGE':item.instruction?.sourceType??'UNKNOWN'} · {item.state}</strong>{#if index===0}<span class="bridge-latest">最新</span>{/if}</div><b>{item.id}</b><span>{item.instruction?.entityId??item.error??'目标不可用'} · {item.instruction?.executionType??'类型不可用'}</span><small>{item.createdAt??item.updatedAt??'时间不可用'}</small><small class="bridge-reason">原因：{gateReason(item)}</small></div><div class="bridge-inbox-actions">{#if item.state==='READY'}<button class="service-action" onclick={()=>onLaunch(item.id)}>启动执行</button>{/if}<button class="service-action" onclick={()=>inspectedInboxId=inspectedInboxId===item.id?null:item.id}>查看指令</button></div>{#if item.runId}<small class="bridge-run-correlation">Run ID: {item.runId} · {item.runtimeState??item.terminalState??'等待运行'}</small>{:else}<small class="bridge-run-correlation">Run ID: — · 未启动执行</small>{/if}{#if inspectedInboxId===item.id}<div class="bridge-inbox-detail" data-testid="inbox-detail"><dl><div><dt>来源</dt><dd>{item.instruction?.sourceType??'UNKNOWN'}</dd></div><div><dt>Inbox ID</dt><dd>{item.id}</dd></div><div><dt>Instruction ID</dt><dd>{item.instruction?.instructionId??'—'}</dd></div><div><dt>Entity Type</dt><dd>{item.instruction?.entityType??'—'}</dd></div><div><dt>Entity ID</dt><dd>{item.instruction?.entityId??'—'}</dd></div><div><dt>Execution Type</dt><dd>{item.instruction?.executionType??'—'}</dd></div><div><dt>Repository</dt><dd>{item.instruction?.repository??'—'}</dd></div><div><dt>Branch</dt><dd>{item.instruction?.branch??'—'}</dd></div><div><dt>Expected HEAD</dt><dd>{item.instruction?.expectedHead??'—'}</dd></div><div><dt>Sandbox</dt><dd>{item.instruction?.sandbox??'—'}</dd></div><div><dt>Requires Authorization</dt><dd>{String(item.instruction?.requiresAuthorization??'—')}</dd></div><div><dt>Inbox State</dt><dd>{item.state}</dd></div><div><dt>Parser result</dt><dd>{item.instruction?'PARSED':item.state==='INVALID'?'INVALID':'UNAVAILABLE'}</dd></div><div><dt>Gate result</dt><dd>{item.gates?.every((gate:any)=>gate.state==='PASS')?'PASS':gateReason(item)}</dd></div><div><dt>Bound Run ID</dt><dd>{item.runId??'— · 未启动执行'}</dd></div></dl><h4>原始指令</h4><pre>{rawInstruction(item)}</pre></div>{/if}</article>
       {/each}
     </section>
   {/if}
