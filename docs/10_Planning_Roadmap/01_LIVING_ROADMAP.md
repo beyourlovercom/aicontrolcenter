@@ -48,6 +48,13 @@ approved baseline after Human UAT PASS.
 `CHROME_BRIDGE_STATUS = PAUSED`
 `NEXT_MAINLINE_FOCUS = RUNTIME`
 
+### M3.8 — Runtime Operations
+Work Packages: `AICC-V2-RUNTIME-OPERATIONS-001` — `IMPLEMENTED / MACHINE_VALIDATED /
+HUMAN_UAT_PENDING`; Runtime Operations is the active mainline.
+
+`RUNTIME_OPERATIONS_ROADMAP_STATUS = ACTIVE`
+`CHROME_BRIDGE_STATUS = PAUSED`
+
 ### M3.75 — Autopilot Until Human UAT
 Work Packages: `AICC-V2-AUTOPILOT-UNTIL-UAT-001`
 

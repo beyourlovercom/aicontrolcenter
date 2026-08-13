@@ -85,6 +85,7 @@ export type RuntimeState = {
   lastAgentMessage?: string;
   blockedReason?: string;
   instructionId?: string;
+  instructionText?: string;
   instructionSourceType?: string;
   instructionSourceReference?: string;
   instructionSha256?: string;
@@ -102,6 +103,7 @@ export type CanonicalExecutionRequest = {
   expectedHead?: string;
   semanticScope?: string[];
   instructionBody?: string;
+  instructionText?: string;
   instructionId?: string;
   sourceType?: string;
   sourceReference?: string;
@@ -317,6 +319,7 @@ export function startRuntime(
       authorizedHead: auth?.headShaAtAuthorization??repo.head,
       codeChangePresent: false,
       instructionId: options.instructionId,
+      instructionText: options.instructionText ?? options.instructionBody,
       instructionSourceType: options.sourceType,
       instructionSourceReference: options.sourceReference,
       instructionSha256: options.instructionBody ? createHash("sha256").update(options.instructionBody).digest("hex") : undefined,
