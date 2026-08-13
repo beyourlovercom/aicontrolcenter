@@ -12,9 +12,13 @@ assert(bridge.includes('AICC · Codex 执行完成')&&bridge.includes('AICC · C
 assert(bridge.includes('notifications.some(notification=>notification.runId===item.runId)'),'notification persistence is idempotent per terminal Run');
 assert(vite.includes("/api/gpt-bridge/notifications")&&vite.includes('readNotifications()'),'canonical notifications are exposed through the local service');
 assert(app.includes("request('/api/gpt-bridge/notifications')")&&app.includes('bridgeNotificationInitialized'),'AICC page consumes persisted terminal notifications without refresh re-notification');
-assert(worker.includes('sourceReference: message.sourceReference')&&worker.includes('MARK_REPORT_INSERTED')&&worker.includes('alreadyInserted'),'extension preserves exact conversation correlation and insertion idempotency');
-assert(content.includes('reportCorrelation?.sourceReference === location.href')&&content.includes('insertReport(true)'),'extension auto-inserts only in the originating ChatGPT conversation');
-assert(legacy.includes('correlation.sourceReference === location.href')&&legacy.includes('insertedPrefix'),'legacy adapter preserves exact conversation and one-time insertion');
+assert(worker.includes('sourceReference: message.sourceReference')&&worker.includes('MARK_REPORT_INSERTED')&&worker.includes('deliveryKey'),'extension preserves exact conversation correlation and insertion idempotency');
+assert(content.includes('reportCorrelation?.sourceReference !== location.href')&&content.includes("messageData?.type === 'DELIVER_REPORT'"),'extension inserts only after worker delivery in the originating ChatGPT conversation');
+assert(worker.includes('DELIVERY_STATE_PREFIX')&&worker.includes("state: 'PENDING'")&&worker.includes("state: 'CLAIMED'")&&worker.includes("state: 'INSERTED'"),'service worker owns durable delivery lifecycle');
+assert(worker.includes('chrome.tabs.sendMessage')&&!content.includes('!reportAlreadyInserted) await insertReport(true)'),'content polling observes but does not independently deliver');
+assert(content.includes("messageData?.type === 'DELIVER_REPORT'")&&content.includes('deliveryKey'),'content inserts only after explicit worker delivery');
+assert(!legacy.match(/correlation\.sourceReference === location\.href[\s\S]*?insert\(\)/),'legacy polling does not create an automatic delivery owner');
+assert(legacy.includes('correlation.sourceReference !== location.href')&&legacy.includes('insertedPrefix'),'legacy adapter preserves exact conversation and one-time insertion');
 assert(worker.includes("message?.type === 'SEND_INSTRUCTION'")&&!worker.includes("message?.type === 'AUTO_EXECUTE'"),'Terminal Handoff does not introduce Auto Execute');
 console.log('terminal handoff contract tests passed');
 

@@ -6,6 +6,7 @@
   var endpoint = 'http://127.0.0.1:1420';
   var key = 'aicc-gpt-bridge-adapter-correlation-v1';
   var insertedPrefix = 'aicc-gpt-bridge-report-inserted-';
+  var lockPrefix = 'aicc-gpt-bridge-report-lock-';
   var panel;
   var reportItem = null;
 
@@ -29,6 +30,10 @@
       throw { reason: '无法连接 AICC 本地服务。确认 127.0.0.1:1420 可用后重试。', code: 'AICC_UNAVAILABLE' };
     });
   }
+  function reportIdentity(item) { var report = item.report || {}; return [report.version || 'AICC_RUN_REPORT_V1', item.runId || report.runId || 'ABSENT', currentConversationId()].join(':'); }
+  function reportMarker(item) { return insertedPrefix + reportIdentity(item); }
+  function currentConversationId() { return window.AICCChatGPTDom.originContext(document, null).conversationId; }
+  function acknowledge(item) { if (item && item.id) request('/api/gpt-bridge/outbox/' + encodeURIComponent(item.id), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ state: 'ACKNOWLEDGED' }) }).catch(function () {}); }
   function sendText(text, originContext, source) {
     if (!String(text || '').trim()) return visibleError({ reason: '没有找到可发送的任务内容。' });
     text = String(text).trim();
@@ -51,22 +56,30 @@
     request('/api/gpt-bridge/outbox').then(function (body) {
       reportItem = (body.items || []).find(function (item) { return item.inboxId === correlation.inboxId && (!correlation.runId || item.runId === correlation.runId); }) || null;
       if (reportItem && reportItem.runId && !correlation.runId) { correlation.runId = reportItem.runId; localStorage.setItem(key, JSON.stringify(correlation)); }
-      if (reportItem && correlation.sourceReference === location.href && !localStorage.getItem(insertedPrefix + (reportItem.runId || (reportItem.report && reportItem.report.runId)))) insert();
-      else if (reportItem) show(localStorage.getItem(insertedPrefix + (reportItem.runId || (reportItem.report && reportItem.report.runId))) ? '运行报告已插入原始对话' : '运行报告已就绪 · Run ID: ' + ((reportItem.report && reportItem.report.runId) || reportItem.runId || 'ABSENT'), 'SUCCESS');
+      var marker = reportItem && reportMarker(reportItem);
+      if (reportItem) show(localStorage.getItem(marker) ? '运行报告已插入原始对话' : '运行报告已就绪 · Run ID: ' + ((reportItem.report && reportItem.report.runId) || reportItem.runId || 'ABSENT'), 'SUCCESS');
     }).catch(function () { show('暂时无法读取运行结果，请稍后重试。', 'ERROR'); });
   }
   async function insert() {
     if (!reportItem) return show('暂无匹配的 AICC_RUN_REPORT_V1。', 'BLOCKED');
     var raw = localStorage.getItem(key); var correlation; try { correlation = raw ? JSON.parse(raw) : null; } catch (_) { correlation = null; }
     var reportRunId = reportItem.runId || (reportItem.report && reportItem.report.runId);
-    if (localStorage.getItem(insertedPrefix + reportRunId)) return show('运行报告已插入原始对话。', 'SUCCESS');
-    if (!correlation || correlation.sourceReference !== location.href) return show('请返回原始 ChatGPT 对话后插入运行报告。', 'BLOCKED');
+    var marker = reportMarker(reportItem);
+    if (localStorage.getItem(marker)) return show('运行报告已插入原始对话。', 'SUCCESS');
+    if (!correlation || correlation.sourceReference !== location.href || !correlation.originContext || correlation.originContext.conversationId !== currentConversationId()) return show('请返回原始 ChatGPT 对话后插入运行报告。', 'BLOCKED');
+    var lock = lockPrefix + marker;
+    var lockValue = localStorage.getItem(lock);
+    if (lockValue) { try { if (Date.now() < JSON.parse(lockValue).expiresAt) return show('运行报告正在插入原始对话。', 'SUCCESS'); } catch (_) {} }
+    var owner = String(Date.now()) + ':' + Math.random();
+    localStorage.setItem(lock, JSON.stringify({ owner: owner, expiresAt: Date.now() + 15000 }));
+    if (JSON.parse(localStorage.getItem(lock)).owner !== owner) return show('运行报告正在插入原始对话。', 'SUCCESS');
     var report = reportItem.report || {};
     var text = ['AICC_RUN_REPORT_V1', 'Run ID: ' + (report.runId || reportItem.runId || 'ABSENT'), 'Entity: ' + (report.entityId || 'ABSENT'), 'Execution type: ' + (report.executionType || 'UNAVAILABLE'), '', 'Runtime Result: ' + (report.runtimeResult || 'UNAVAILABLE'), 'Gate Result: ' + (report.gateResult || 'UNAVAILABLE'), '', 'Summary:', (report.summary || 'UNAVAILABLE')].join('\n');
-    var target = composer(); if (!target) return show('找不到 ChatGPT 当前编辑框。请使用复制回退。', 'ERROR');
+    var target = composer(); if (!target) { localStorage.removeItem(lock); return show('找不到 ChatGPT 当前编辑框。请使用复制回退。', 'ERROR'); }
+    if (window.AICCChatGPTDom.reportFormatPresent(target, text)) { localStorage.setItem(marker, '1'); localStorage.removeItem(lock); acknowledge(reportItem); return show('运行报告已插入原始对话。', 'SUCCESS'); }
     var inserted = window.AICCChatGPTDom.insertTextIntoComposer(target, text);
-    if (!inserted || !(await window.AICCChatGPTDom.verifyComposerText(target, text))) return show('运行报告插入失败：ChatGPT 编辑器未保留报告格式。', 'ERROR');
-    localStorage.setItem(insertedPrefix + reportRunId, '1');
+    if (!inserted || !(await window.AICCChatGPTDom.verifyComposerText(target, text))) { localStorage.removeItem(lock); return show('运行报告插入失败：ChatGPT 编辑器未保留报告格式。', 'ERROR'); }
+    localStorage.setItem(marker, '1'); localStorage.removeItem(lock); acknowledge(reportItem);
     show('运行报告已插入编辑框，请由 Owner 手动发送。', 'SUCCESS');
   }
   function mount() {

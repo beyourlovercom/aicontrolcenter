@@ -12,7 +12,6 @@
   let panel;
   let reportItem = null;
   let reportCorrelation = null;
-  let reportAlreadyInserted = false;
 
   function first(selectors) { return selectors.map(selector => document.querySelector(selector)).find(Boolean) || null; }
   function composer() { return first(window.AICCChatGPTDom.SELECTORS.composer); }
@@ -39,9 +38,7 @@
     if (!result?.ok) return showError(result?.error);
     reportItem = result.item || null;
     reportCorrelation = result.correlation || null;
-    reportAlreadyInserted = Boolean(result.alreadyInserted);
-    if (reportItem && reportCorrelation?.sourceReference === location.href && !reportAlreadyInserted) await insertReport(true);
-    else if (reportItem) setStatus(reportAlreadyInserted ? '运行报告已插入原始对话' : `运行报告已就绪 · Run ID: ${reportItem.report?.runId || reportItem.runId || 'ABSENT'}`, 'SUCCESS');
+    if (reportItem) setStatus(`运行报告已就绪 · Run ID: ${reportItem.report?.runId || reportItem.runId || 'ABSENT'}`, 'SUCCESS');
   }
 
   function reportText(item) {
@@ -51,17 +48,23 @@
 
   async function insertReport(auto = false) {
     if (!reportItem) return setStatus('暂无匹配的 AICC_RUN_REPORT_V1。', 'BLOCKED');
-    if (reportAlreadyInserted) return setStatus('运行报告已插入原始对话。', 'SUCCESS');
-    if (reportCorrelation?.sourceReference !== location.href) return setStatus(auto ? '当前不是原始 ChatGPT 对话，报告保持待插入。' : '请返回原始 ChatGPT 对话后插入运行报告。', 'BLOCKED');
+    if (reportCorrelation?.sourceReference !== location.href || reportCorrelation?.originContext?.conversationId !== window.AICCChatGPTDom.originContext(document, null).conversationId) return setStatus(auto ? '当前不是原始 ChatGPT 对话，报告保持待插入。' : '请返回原始 ChatGPT 对话后插入运行报告。', 'BLOCKED');
     const target = composer();
     if (!target) return showError({ reason: '找不到 ChatGPT 当前编辑框，报告保持待插入。' });
     const text = reportText(reportItem);
+    if (window.AICCChatGPTDom.reportFormatPresent(target, text)) { const marked = await message('MARK_REPORT_INSERTED', { runId: reportItem.runId || reportItem.report?.runId, reportVersion: reportItem.report?.version, sourceReference: location.href, deliveryKey: arguments[1]?.deliveryKey }); if (!marked?.ok) return showError(marked.error); return setStatus('运行报告已插入原始对话。', 'SUCCESS'); }
     const inserted = window.AICCChatGPTDom.insertTextIntoComposer(target, text);
     if (!inserted || !(await window.AICCChatGPTDom.verifyComposerText(target, text))) return setStatus('运行报告插入失败：ChatGPT 编辑器未保留报告格式。', 'ERROR');
-    const marked = await message('MARK_REPORT_INSERTED', { runId: reportItem.runId || reportItem.report?.runId, sourceReference: location.href });
+    const marked = await message('MARK_REPORT_INSERTED', { runId: reportItem.runId || reportItem.report?.runId, reportVersion: reportItem.report?.version, sourceReference: location.href, deliveryKey: arguments[1]?.deliveryKey });
     if (!marked?.ok) return showError(marked?.error);
-    reportAlreadyInserted = true;
     setStatus('运行报告已插入编辑框，请由 Owner 手动发送。', 'SUCCESS');
+  }
+
+  async function deliverReport(messageData) {
+    reportItem = messageData.item || null;
+    reportCorrelation = messageData.correlation || null;
+    if (!reportItem || reportCorrelation?.sourceReference !== location.href || reportCorrelation?.originContext?.conversationId !== window.AICCChatGPTDom.originContext(document, null).conversationId) return;
+    await insertReport(true, messageData);
   }
 
   function mount() {
@@ -75,6 +78,8 @@
     panel.querySelector(SELECTORS.insert).addEventListener('click', insertReport);
     pollResult().then(() => { if (!reportItem) setStatus('AICC 可用 · 等待 Owner 操作', 'IDLE'); });
   }
+
+  chrome.runtime.onMessage.addListener(messageData => { if (messageData?.type === 'DELIVER_REPORT') { void deliverReport(messageData); return false; } });
 
   if (document.body) { mount(); mountNativeActions(); } else new MutationObserver(mount).observe(document.documentElement, { childList: true });
   window.setInterval(mountNativeActions, 1000);
