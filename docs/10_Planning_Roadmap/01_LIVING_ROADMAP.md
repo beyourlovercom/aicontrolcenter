@@ -36,6 +36,14 @@ Work Packages: `AICC-V2-FAST-EXECUTION-PATH-001`
 Work Packages: `AICC-V2-GPT-BRIDGE-001` — `CLOSED`; 001A and 001B complete,
 Human UAT PASS, First Usable Version hard gates 5/5 PASS.
 
+### M3.6 — Terminal Handoff
+Work Packages: `AICC-V2-TERMINAL-HANDOFF-001` — `PLANNED`; next executable
+self-development Work Package.
+
+### M3.7 — Auto Execute Mode
+Work Packages: `AICC-V2-AUTO-EXECUTE-MODE-001` — `PLANNED`; follows Terminal
+Handoff in the self-development sequence.
+
 ### M3.75 — Autopilot Until Human UAT
 Work Packages: `AICC-V2-AUTOPILOT-UNTIL-UAT-001`
 
@@ -117,6 +125,10 @@ Future Work Packages:
 16. AICC-V2-GPT-BRIDGE-001 — closed GPT Bridge 001A/001B and First Usable
     Version hard gates 5/5; remaining Composer fallback ambiguity is a
     non-blocking P1 backlog finding.
+17. AICC-V2-TERMINAL-HANDOFF-001 — planned terminal notification and
+    originating-Composer report handoff.
+18. AICC-V2-AUTO-EXECUTE-MODE-001 — planned opt-in automatic execution after
+    the canonical ALLOW decision.
 
 ## Current safety state
 
