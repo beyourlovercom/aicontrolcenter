@@ -6,6 +6,7 @@
   export let runtime:RuntimeRecord|null=null;
   export let history:RuntimeRecord[]=[];
   export let selectedRunId:string|null=null;
+  export let selectedInboxId:string|null=null;
   export let workPackage:FormalWorkPackage|null=null;
   export let writerLock:WriterLockState={status:'UNAVAILABLE',scope:'repository'};
   export let bridgeInbox:any[]=[];
@@ -26,6 +27,7 @@
   $: focused=selectCanonicalCurrentRuntime(runtime,history,selectedRunId);
   $: result=focused?.finalAgentMessage??(focused?.phase==='COMPLETED'?'Codex 运行已完成。':null);
   $: inspectedInbox=bridgeInbox.find(item=>item.id===inspectedInboxId)??null;
+  $: if(selectedInboxId&&selectedInboxId!==inspectedInboxId&&bridgeInbox.some(item=>item.id===selectedInboxId))inspectedInboxId=selectedInboxId;
   function gateReason(item:any){return item?.error??item?.parseErrors?.[0]??item?.gates?.find((gate:any)=>gate.state!=='PASS')?.reason??'所有 Gate 已通过。'}
   function rawInstruction(item:any){if(item?.rawInstruction)return item.rawInstruction;const instruction=item?.instruction;if(!instruction)return '原始指令不可用（旧记录未保存原文）。';return [`AICC_EXECUTION_V1`,`INSTRUCTION_ID: ${instruction.instructionId}`,`ENTITY_TYPE: ${instruction.entityType}`,`ENTITY_ID: ${instruction.entityId}`,`EXECUTION_TYPE: ${instruction.executionType}`,`REPOSITORY: ${instruction.repository}`,`BRANCH: ${instruction.branch}`,`EXPECTED_HEAD: ${instruction.expectedHead}`,`SANDBOX: ${instruction.sandbox}`,`REQUIRES_AUTHORIZATION: ${instruction.requiresAuthorization}`,'',`INSTRUCTION_BEGIN`,instruction.instructionBody,`INSTRUCTION_END`].join('\n')}
 </script>
