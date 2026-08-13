@@ -1,6 +1,7 @@
 <script lang="ts">
   import RuntimeMonitor from '../RuntimeMonitor.svelte';
   import type {FormalWorkPackage,RuntimeRecord,WriterLockState} from '../../lib/model/entityTypes.ts';
+  import {selectCanonicalCurrentRuntime} from '../../lib/runtimeManager.ts';
 
   export let runtime:RuntimeRecord|null=null;
   export let history:RuntimeRecord[]=[];
@@ -22,7 +23,7 @@
   export let onSelectRun:(id:string)=>void=()=>{};
 
   let inspectedInboxId:string|null=null;
-  $: focused=history.find(item=>item.runId===selectedRunId)??runtime??history[0]??null;
+  $: focused=selectCanonicalCurrentRuntime(runtime,history,selectedRunId);
   $: result=focused?.finalAgentMessage??(focused?.phase==='COMPLETED'?'Codex 运行已完成。':null);
   $: inspectedInbox=bridgeInbox.find(item=>item.id===inspectedInboxId)??null;
   function gateReason(item:any){return item?.error??item?.parseErrors?.[0]??item?.gates?.find((gate:any)=>gate.state!=='PASS')?.reason??'所有 Gate 已通过。'}
@@ -48,7 +49,7 @@
 
   <section class="runtime-live-section" data-testid="runtime-live-activity">
     <div class="section-label"><span>运行监控 / 实时活动</span><small>Runtime Monitor</small></div>
-    <RuntimeMonitor runtime={runtime} {workPackage} {writerLock} {emptyTitle} {emptyCapability} {emptyReason}/>
+    <RuntimeMonitor runtime={focused} {workPackage} {writerLock} {emptyTitle} {emptyCapability} {emptyReason}/>
   </section>
 
   <section class="runtime-result-card" data-testid="runtime-run-result">
