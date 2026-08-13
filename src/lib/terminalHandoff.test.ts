@@ -20,6 +20,7 @@ assert(worker.includes('POLL_RESULT')&&!pollSource.includes('chrome.tabs.sendMes
 assert(content.includes("message('MARK_REPORT_INSERTED'")&&!content.includes('messageData?.type === \'INSERT_REPORT\''),'content inserts only after explicit Owner delivery request');
 assert(content.includes('AUTO_REPORT_INSERT_DEFAULT = false'),'automatic production report insertion is off by default');
 assert(content.includes('MANUAL_REPORT_INSERT_AVAILABLE = true')&&content.includes('data-aicc-insert')&&content.includes('插入运行报告'),'manual report fallback remains visible independently of automatic insertion settings');
+assert(content.includes('function isInsertableReport')&&content.includes('item?.state === \'READY\'')&&content.includes('item?.report?.runId'),'manual button binds to the canonical READY Outbox report projection');
 assert(content.includes("addEventListener('click', requestReportDelivery)")&&content.includes("const result = await pollResult()"),'manual fallback is the only delivery trigger');
 const contentPollSource=content.match(/async function pollResult[\s\S]*?(?=function reportText)/)?.[0]??'';
 assert(!contentPollSource.includes('insertReport('),'read-only polling never inserts reports');

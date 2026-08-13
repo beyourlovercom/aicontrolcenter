@@ -21,7 +21,8 @@
   function setStatus(message, state) { const status = panel?.querySelector(SELECTORS.status); if (status) { status.textContent = message; status.dataset.aiccState = state; } }
   function showError(error) { setStatus(error?.reason || '适配器操作失败。', 'ERROR'); }
   function message(type, data = {}) { return new Promise(resolve => chrome.runtime.sendMessage({ type, ...data }, resolve)); }
-  function syncManualReportButton() { const button = panel?.querySelector(SELECTORS.insert); if (!button) return; const ready = reportItem?.state === 'READY'; button.disabled = !ready; button.setAttribute('aria-disabled', String(!ready)); button.title = ready ? '插入当前运行报告' : '暂无可用运行报告'; }
+  function isInsertableReport(item) { return item?.state === 'READY' && Boolean(item?.runId || item?.report?.runId); }
+  function syncManualReportButton() { const button = panel?.querySelector(SELECTORS.insert); if (!button) return; const ready = isInsertableReport(reportItem); button.disabled = !ready; button.setAttribute('aria-disabled', String(!ready)); button.title = ready ? '插入当前运行报告' : '暂无可用运行报告'; }
   function ensureManualReportButton() { if (!panel) return; let button = panel.querySelector(SELECTORS.insert); if (!button) { button = document.createElement('button'); button.dataset.aiccInsert = 'true'; button.textContent = '插入运行报告'; panel.appendChild(button); } if (button.dataset.aiccBound !== 'true') { button.addEventListener('click', requestReportDelivery); button.dataset.aiccBound = 'true'; } syncManualReportButton(); }
 
   async function sendTask(text, originContext, source) {
@@ -40,8 +41,8 @@
   async function pollResult() {
     const result = await message('POLL_RESULT');
     if (!result?.ok) { showError(result?.error); return result; }
-    reportItem = result.item || null;
-    reportCorrelation = result.correlation || null;
+    reportItem = result.item?.item || result.item || null;
+    reportCorrelation = result.correlation || result.item?.correlation || null;
     ensureManualReportButton();
     if (reportItem) setStatus(`${AUTO_REPORT_INSERT_DEFAULT ? '运行报告已自动处理' : '运行报告已就绪'} · Run ID: ${reportItem.report?.runId || reportItem.runId || 'ABSENT'}`, 'SUCCESS');
     return result;
@@ -53,7 +54,7 @@
   }
 
   async function insertReport() {
-    if (!reportItem || reportItem.state !== 'READY') return setStatus('暂无可用的 AICC_RUN_REPORT_V1。', 'BLOCKED');
+    if (!isInsertableReport(reportItem)) return setStatus('暂无可用的 AICC_RUN_REPORT_V1。', 'BLOCKED');
     if (reportCorrelation?.sourceReference !== location.href || reportCorrelation?.originContext?.conversationId !== window.AICCChatGPTDom.originContext(document, null).conversationId) return setStatus('请返回原始 ChatGPT 对话后插入运行报告。', 'BLOCKED');
     const target = composer();
     if (!target) return showError({ reason: '找不到 ChatGPT 当前编辑框，报告保持待插入。' });
@@ -68,7 +69,7 @@
 
   async function requestReportDelivery() {
     const result = await pollResult();
-    if (!result?.ok || reportItem?.state !== 'READY') return setStatus('暂无可用的 AICC_RUN_REPORT_V1。', 'BLOCKED');
+    if (!result?.ok || !isInsertableReport(reportItem)) return setStatus('暂无可用的 AICC_RUN_REPORT_V1。', 'BLOCKED');
     await insertReport();
   }
 
