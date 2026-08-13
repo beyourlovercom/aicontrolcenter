@@ -11,7 +11,7 @@ assert.match(app,/async function refreshRuntimeProjection\(\)/,'runtime data pro
 assert.match(app,/activeTab==='运行'[\s\S]*<RuntimeWorkspace/,'Runtime workspace remains inside the active tab');
 assert.match(runtime,/data-testid="runtime-live-activity"[\s\S]*<RuntimeMonitor/,'Runtime tab owns the live monitor');
 assert.equal(app.includes('{#key'),false,'no keyed root/workspace remount boundary');
-assert.equal(app.includes("if(refresh&&!['STARTING','RUNNING','STOPPING'].includes(raw.runtime?.phase??''))await loadSnapshot(false)"),true,'service recovery avoids global refresh during active runtime');
+assert.equal(app.includes('if(refresh){await refreshRuntimeProjection();await loadBridge()}'),true,'service recovery avoids global refresh and uses bounded projections');
 resetRuntimeLifecycleMetrics();recordAppMount();recordWorkspaceMount();const metrics=readRuntimeLifecycleMetrics();assert.deepEqual(metrics,{appMountCount:1,workspaceMountCount:1,fullPageRefreshCount:0},'instrumented lifecycle remains mounted without page refresh');
 assert.match(app,/recordAppMount\(\)/);assert.match(runtime,/recordWorkspaceMount\(\)/);
 console.log('runtime tab isolation matrix passed');

@@ -5,6 +5,7 @@ REPOSITORY_ROOT="/Users/a/AI/007/AIcontrolcenter"
 LABEL="com.aicc.v2.local-service"
 PLIST="$HOME/Library/LaunchAgents/$LABEL.plist"
 HEALTH_URL="http://127.0.0.1:1420/api/health"
+SUPERVISOR_LOCK_DIR="${TMPDIR:-/tmp}/aicc-v2-local-service-supervisor.lock"
 
 health_ok() {
   RESPONSE="$(curl --silent --show-error --max-time 1 "$HEALTH_URL" 2>/dev/null || true)"
@@ -24,40 +25,48 @@ canonical_pid() {
   [ "$CHECK_CWD" = "$REPOSITORY_ROOT" ] && printf '%s' "$CHECK_COMMAND" | grep -Eq 'node_modules/.bin/vite|vite .*127\.0\.0\.1'
 }
 
-terminate_canonical_pid() {
-  TARGET_PID="$1"
-  canonical_pid "$TARGET_PID" || return 2
-  kill -TERM "$TARGET_PID" 2>/dev/null || true
-  ATTEMPT=0
-  while kill -0 "$TARGET_PID" 2>/dev/null && [ "$ATTEMPT" -lt 10 ]; do
-    sleep 0.2
-    ATTEMPT=$((ATTEMPT + 1))
-  done
-  if kill -0 "$TARGET_PID" 2>/dev/null; then
-    canonical_pid "$TARGET_PID" || return 2
-    kill -KILL "$TARGET_PID" 2>/dev/null || true
+acquire_singleton() {
+  if mkdir "$SUPERVISOR_LOCK_DIR" 2>/dev/null; then
+    printf '%s\n' "$$" > "$SUPERVISOR_LOCK_DIR/pid"
+    trap 'rm -f "$SUPERVISOR_LOCK_DIR/pid"; rmdir "$SUPERVISOR_LOCK_DIR" 2>/dev/null || true' EXIT
+    return 0
   fi
+  EXISTING_PID="$(cat "$SUPERVISOR_LOCK_DIR/pid" 2>/dev/null || true)"
+  if [ -n "$EXISTING_PID" ] && kill -0 "$EXISTING_PID" 2>/dev/null; then
+    echo "SUPERVISOR_SINGLETON_ALREADY_RUNNING pid=$EXISTING_PID" >&2
+    return 1
+  fi
+  rm -f "$SUPERVISOR_LOCK_DIR/pid"
+  rmdir "$SUPERVISOR_LOCK_DIR" 2>/dev/null || return 1
+  mkdir "$SUPERVISOR_LOCK_DIR" 2>/dev/null || return 1
+  printf '%s\n' "$$" > "$SUPERVISOR_LOCK_DIR/pid"
+  trap 'rm -f "$SUPERVISOR_LOCK_DIR/pid"; rmdir "$SUPERVISOR_LOCK_DIR" 2>/dev/null || true' EXIT
 }
 
 run_watchdog() {
   NPM_PATH="$1"
+  acquire_singleton || exit 0
   APP_PID=""
   FAILED_HEALTH=0
+  HEALTH_BACKOFF=1
   trap '[ -z "$APP_PID" ] || kill -TERM "$APP_PID" 2>/dev/null || true; exit 0' TERM INT
   while :; do
+    SLEEP_SECONDS=1
     PORT_PID="$(listener_pid)"
     if [ -n "$PORT_PID" ]; then
       if health_ok; then
         FAILED_HEALTH=0
+        HEALTH_BACKOFF=1
       elif canonical_pid "$PORT_PID"; then
         FAILED_HEALTH=$((FAILED_HEALTH + 1))
+        echo "PROCESS_ALIVE_HEALTH_DEGRADED pid=$PORT_PID failures=$FAILED_HEALTH recovery=retry" >&2
         if [ "$FAILED_HEALTH" -ge 2 ]; then
-          echo "STALE_CANONICAL_SERVICE pid=$PORT_PID recovery=starting" >&2
-          terminate_canonical_pid "$PORT_PID" || true
-          FAILED_HEALTH=0
+          SLEEP_SECONDS="$HEALTH_BACKOFF"
+          [ "$HEALTH_BACKOFF" -lt 8 ] && HEALTH_BACKOFF=$((HEALTH_BACKOFF * 2))
         fi
       else
         FAILED_HEALTH=0
+        HEALTH_BACKOFF=1
         echo "PORT_1420_CONFLICT pid=$PORT_PID process=$(/bin/ps -p "$PORT_PID" -o command= 2>/dev/null || true)" >&2
       fi
     else
@@ -68,9 +77,12 @@ run_watchdog() {
         APP_PID=$!
       fi
     fi
-    sleep 1
+    sleep "$SLEEP_SECONDS"
   done
 }
+
+# HEALTH_FAILURE_DIRECT_KILL_PATH_COUNT=0
+# Health timeout is never authority to kill the process hosting the AICC Web UI.
 
 case "${1:-status}" in
   install|enable)
