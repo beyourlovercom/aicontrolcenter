@@ -18,7 +18,7 @@
   import {resolveEntityContext} from './lib/context/entityContext';
   import {projectOwnerRoadmapNodes,resolveOwnerStatusProjection,resolveOwnerWorkflowStages} from './lib/context/ownerStatusProjection';
   import {resolvePrTabView} from './lib/context/prTabContent';
-  import {selectCanonicalCurrentRuntime} from './lib/runtimeManager.ts';
+  import {selectCanonicalCurrentRuntime} from './lib/runtimeSelection.ts';
   import type {ActionEligibility,FormalWorkPackage,HumanUatRecord,SelectedEntityRef,WorkPackageEntityContext} from './lib/model/entityTypes';
 
   type Drawer='roadmap'|'status'|null;

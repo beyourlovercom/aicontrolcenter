@@ -1,7 +1,7 @@
 <script lang="ts">
   import RuntimeMonitor from '../RuntimeMonitor.svelte';
   import type {FormalWorkPackage,RuntimeRecord,WriterLockState} from '../../lib/model/entityTypes.ts';
-  import {selectCanonicalCurrentRuntime} from '../../lib/runtimeManager.ts';
+  import {selectCanonicalCurrentRuntime} from '../../lib/runtimeSelection.ts';
 
   export let runtime:RuntimeRecord|null=null;
   export let history:RuntimeRecord[]=[];

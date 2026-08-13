@@ -1,4 +1,5 @@
-import { buildPrompt, parseEvent, resolveRuntimeExecutionPolicy, selectCanonicalCurrentRuntime, type RuntimeState } from './runtimeManager.ts';
+import { buildPrompt, parseEvent, resolveRuntimeExecutionPolicy, type RuntimeState } from './runtimeManager.ts';
+import {selectCanonicalCurrentRuntime} from './runtimeSelection.ts';
 import { readWorkPackage } from './controlService.ts';
 import { unlinkSync } from 'node:fs';
 import { join } from 'node:path';
