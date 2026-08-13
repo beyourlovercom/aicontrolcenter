@@ -1,8 +1,19 @@
 # AICC-V2-RUNTIME-OPERATIONS-001
 
-Status: IMPLEMENTED / MACHINE_VALIDATED / HUMAN_UAT_PENDING
+Status: CLOSED
 Type: OWNER_RUNTIME_OPERATIONS
 Prerequisite: `AICC-V2-AUTO-EXECUTE-MODE-001` CLOSED
+
+`IMPLEMENTATION = PASS`
+`MACHINE_VALIDATION = PASS`
+`HUMAN_UAT = PASS`
+`PACKAGE_STATUS = CLOSED`
+`RUNTIME_OPERATIONS_V1 = APPROVED_BASELINE`
+
+Owner Human UAT verified task scope isolation, real Auto Execute execution,
+completed Run persistence, per-Run instruction/result views, result copying,
+and zero cross-Run result leakage. The changed result expansion placement is
+retained as a non-blocking P1 UI follow-up.
 
 ## Purpose
 
@@ -47,3 +58,16 @@ multi-run behavior, and the absence of clipboard side effects during polling,
 completion, refresh and reconnect.
 
 No Human UAT result is preselected by this plan.
+
+## Closure
+
+`TASK_SCOPE_ISOLATION = PASS`
+`AUTO_EXECUTE_REAL_RUN = PASS`
+`COMPLETED_RUN_PERSISTENCE = PASS`
+`PER_RUN_INSTRUCTION = PASS`
+`PER_RUN_RESULT = PASS`
+`RESULT_COPY = PASS`
+`CROSS_RUN_RESULT_LEAKAGE = 0`
+
+`AICC Scope Ownership Baseline v1` remains preserved as the canonical scope
+rule. `AUTO_EXECUTE_V1 = APPROVED_BASELINE` and `CHROME_BRIDGE = PAUSED`.
