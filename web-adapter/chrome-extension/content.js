@@ -4,7 +4,6 @@
   window.__AICC_GPT_BRIDGE_EXTENSION__ = true;
 
   const SELECTORS = Object.freeze({
-    composer: ['[contenteditable="true"]', 'textarea'],
     mount: '[data-aicc-gpt-bridge-extension]',
     send: '[data-aicc-send]',
     insert: '[data-aicc-insert]',
@@ -14,8 +13,7 @@
   let reportItem = null;
 
   function first(selectors) { return selectors.map(selector => document.querySelector(selector)).find(Boolean) || null; }
-  function composer() { return first(SELECTORS.composer); }
-  function composerText(target) { return target && ('value' in target ? target.value : target.innerText || target.textContent || ''); }
+  function composer() { return first(window.AICCChatGPTDom.SELECTORS.composer); }
   function selectedText() { return window.getSelection?.().toString().trim() || ''; }
   function setStatus(message, state) { const status = panel?.querySelector(SELECTORS.status); if (status) { status.textContent = message; status.dataset.aiccState = state; } }
   function showError(error) { setStatus(error?.reason || '适配器操作失败。', 'ERROR'); }
@@ -42,17 +40,16 @@
 
   function reportText(item) {
     const report = item?.report || {};
-    return ['AICC_RUN_REPORT_V1', `Run ID: ${report.runId || item.runId || 'ABSENT'}`, `Entity: ${report.entityId || 'ABSENT'}`, `Execution type: ${report.executionType || 'UNAVAILABLE'}`, `Runtime result: ${report.runtimeResult || 'UNAVAILABLE'}`, `Gate result: ${report.gateResult || 'UNAVAILABLE'}`, `Summary: ${report.summary || 'UNAVAILABLE'}`].join('\n');
+    return ['AICC_RUN_REPORT_V1', `Run ID: ${report.runId || item.runId || 'ABSENT'}`, `Entity: ${report.entityId || 'ABSENT'}`, `Execution type: ${report.executionType || 'UNAVAILABLE'}`, '', `Runtime Result: ${report.runtimeResult || 'UNAVAILABLE'}`, `Gate Result: ${report.gateResult || 'UNAVAILABLE'}`, '', 'Summary:', `${report.summary || 'UNAVAILABLE'}`].join('\n');
   }
 
-  function insertReport() {
+  async function insertReport() {
     if (!reportItem) return setStatus('暂无匹配的 AICC_RUN_REPORT_V1。', 'BLOCKED');
     const target = composer();
     if (!target) return showError({ reason: '找不到 ChatGPT 当前编辑框。请使用 AICC 的复制回退。' });
     const text = reportText(reportItem);
-    if ('value' in target) target.value = text; else target.textContent = text;
-    target.dispatchEvent(new Event('input', { bubbles: true }));
-    target.focus();
+    const inserted = window.AICCChatGPTDom.insertTextIntoComposer(target, text);
+    if (!inserted || !(await window.AICCChatGPTDom.verifyComposerText(target, text))) return setStatus('运行报告插入失败：ChatGPT 编辑器未保留报告格式。', 'ERROR');
     setStatus('运行报告已插入编辑框，请由 Owner 手动发送。', 'SUCCESS');
   }
 

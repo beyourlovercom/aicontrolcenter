@@ -140,9 +140,12 @@ export function reportForComposer(item: AdapterOutboxItem): string {
     `Run ID: ${report.runId ?? item.runId ?? 'ABSENT'}`,
     `Entity: ${report.entityId ?? 'ABSENT'}`,
     `Execution type: ${report.executionType ?? 'UNAVAILABLE'}`,
-    `Runtime result: ${report.runtimeResult ?? 'UNAVAILABLE'}`,
-    `Gate result: ${report.gateResult ?? 'UNAVAILABLE'}`,
-    `Summary: ${report.summary ?? 'UNAVAILABLE'}`
+    '',
+    `Runtime Result: ${report.runtimeResult ?? 'UNAVAILABLE'}`,
+    `Gate Result: ${report.gateResult ?? 'UNAVAILABLE'}`,
+    '',
+    'Summary:',
+    `${report.summary ?? 'UNAVAILABLE'}`
   ].join('\n');
 }
 
@@ -150,6 +153,7 @@ export type ComposerElement = {
   value?: string;
   textContent?: string | null;
   innerText?: string;
+  ownerDocument?: { execCommand?: (command: string, showUi?: boolean, value?: string) => boolean };
   dispatchEvent?: (event: Event) => boolean;
   focus?: () => void;
 };
@@ -160,8 +164,11 @@ export function insertIntoComposer(text: string, root: ComposerRoot, eventFactor
   const composer = root.querySelector('[contenteditable="true"]') ?? root.querySelector('textarea') ?? root.querySelector('input');
   if (!composer) return false;
   composer.focus?.();
-  if ('value' in composer) composer.value = text;
-  else composer.textContent = text;
+  if ('value' in composer) composer.value = `${composer.value ?? ''}${composer.value ? '\n\n' : ''}${text}`;
+  else if (composer.ownerDocument?.execCommand) {
+    const inserted = composer.ownerDocument.execCommand('insertText', false, text);
+    if (inserted === false) return false;
+  } else return false;
   composer.dispatchEvent?.(eventFactory());
   return true;
 }

@@ -8,7 +8,7 @@
   var panel;
   var reportItem = null;
 
-  function composer() { return document.querySelector('[contenteditable="true"]') || document.querySelector('textarea'); }
+  function composer() { return window.AICCChatGPTDom && document.querySelector(window.AICCChatGPTDom.SELECTORS.composer.join(',')); }
   function textOf(element) { return element && ('value' in element ? element.value : element.innerText || element.textContent || ''); }
   function show(message, state) {
     var status = panel && panel.querySelector('[data-aicc-status]');
@@ -51,13 +51,13 @@
       if (reportItem) show('运行报告已就绪 · Run ID: ' + ((reportItem.report && reportItem.report.runId) || reportItem.runId || 'ABSENT'), 'SUCCESS');
     }).catch(function () { show('暂时无法读取运行结果，请稍后重试。', 'ERROR'); });
   }
-  function insert() {
+  async function insert() {
     if (!reportItem) return show('暂无匹配的 AICC_RUN_REPORT_V1。', 'BLOCKED');
     var report = reportItem.report || {};
-    var text = ['AICC_RUN_REPORT_V1', 'Run ID: ' + (report.runId || reportItem.runId || 'ABSENT'), 'Entity: ' + (report.entityId || 'ABSENT'), 'Execution type: ' + (report.executionType || 'UNAVAILABLE'), 'Runtime result: ' + (report.runtimeResult || 'UNAVAILABLE'), 'Gate result: ' + (report.gateResult || 'UNAVAILABLE'), 'Summary: ' + (report.summary || 'UNAVAILABLE')].join('\n');
+    var text = ['AICC_RUN_REPORT_V1', 'Run ID: ' + (report.runId || reportItem.runId || 'ABSENT'), 'Entity: ' + (report.entityId || 'ABSENT'), 'Execution type: ' + (report.executionType || 'UNAVAILABLE'), '', 'Runtime Result: ' + (report.runtimeResult || 'UNAVAILABLE'), 'Gate Result: ' + (report.gateResult || 'UNAVAILABLE'), '', 'Summary:', (report.summary || 'UNAVAILABLE')].join('\n');
     var target = composer(); if (!target) return show('找不到 ChatGPT 当前编辑框。请使用复制回退。', 'ERROR');
-    if ('value' in target) target.value = text; else target.textContent = text;
-    target.dispatchEvent(new Event('input', { bubbles: true })); target.focus();
+    var inserted = window.AICCChatGPTDom.insertTextIntoComposer(target, text);
+    if (!inserted || !(await window.AICCChatGPTDom.verifyComposerText(target, text))) return show('运行报告插入失败：ChatGPT 编辑器未保留报告格式。', 'ERROR');
     show('运行报告已插入编辑框，请由 Owner 手动发送。', 'SUCCESS');
   }
   function mount() {
