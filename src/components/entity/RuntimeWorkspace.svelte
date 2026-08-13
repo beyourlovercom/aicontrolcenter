@@ -25,6 +25,7 @@
   export let onLaunch:(id:string)=>void=()=>{};
   export let onCopyReport:(report:unknown)=>void=()=>{};
   export let onSelectRun:(id:string)=>void=()=>{};
+  $: scopedBridgeOutbox=workPackage?.id?bridgeOutbox.filter(item=>item.report?.workPackageId===workPackage.id):[];
 
   let inspectedInboxId:string|null=null,instructionExpandedId:string|null=null,resultExpandedId:string|null=null,copiedRunId:string|null=null,copyTimer:number|undefined;
   onMount(()=>{recordWorkspaceMount();return ()=>{if(copyTimer)clearTimeout(copyTimer)}});
@@ -71,6 +72,6 @@
   <section class="runtime-history-card" data-testid="runtime-history">
     <div class="section-label"><span>运行记录</span><small>{runRecords.length} 条</small></div>
     {#if executionRows.length}{#each executionRows as row}<article class="runtime-history-item" class:active={row.runId===focused?.runId} data-testid="runtime-run-row-{row.runId}"><button class="runtime-history-select" onclick={()=>row.runId&&onSelectRun(row.runId)}><span><strong>{row.run?.phase??row.inbox?.state??'UNAVAILABLE'}</strong><small>{row.run?.workPackageId??row.inbox?.instruction?.workPackageId??'目标不可用'} · {formatOwnerLocalTime(row.run?.startedAt??row.inbox?.createdAt)}</small></span><code>{row.runId??'—'}</code></button><div class="runtime-run-actions"><button class="service-action" onclick={()=>toggleInstruction(row.runId?`run:${row.runId}`:`inbox:${row.inbox.id}`)}>查看指令</button><button class="service-action" disabled={!resultForRun(row.run)} aria-disabled={!resultForRun(row.run)} onclick={()=>row.runId&&copyRunResult(row.runId)}>运行结果</button>{#if row.runId&&copiedRunId===row.runId}<span class="runtime-copy-feedback" role="status">已复制</span>{/if}</div>{#if instructionExpandedId===`run:${row.runId}`||(!row.runId&&instructionExpandedId===`inbox:${row.inbox.id}`)}<pre class="runtime-instruction-detail" data-testid="runtime-instruction-view-{row.runId??row.inbox.id}">{instructionForRun(row)}</pre>{/if}{#if row.runId&&resultExpandedId===row.runId&&resultForRun(row.run)}<pre class="runtime-result-detail" data-testid="runtime-result-view-{row.runId}">{resultForRun(row.run)}</pre>{/if}</article>{/each}{:else}<p class="runtime-empty-copy">暂无运行记录。</p>{/if}
-    {#if showInbox}<div class="runtime-outbox"><div class="section-label"><span>结果发件箱</span><small>AICC_RUN_REPORT_V1</small></div>{#each bridgeOutbox.slice(0,3) as item}<div class="bridge-item"><strong>{item.state}</strong><span>{item.report?.runId??'无 Run ID'}</span><button class="service-action" onclick={()=>onCopyReport(item.report)}>复制报告</button></div>{/each}</div>{/if}
+    {#if showInbox}<div class="runtime-outbox"><div class="section-label"><span>结果发件箱</span><small>AICC_RUN_REPORT_V1</small></div>{#each scopedBridgeOutbox.slice(0,3) as item}<div class="bridge-item"><strong>{item.state}</strong><span>{item.report?.runId??'无 Run ID'}</span><button class="service-action" onclick={()=>onCopyReport(item.report)}>复制报告</button></div>{/each}</div>{/if}
   </section>
 </section>

@@ -15,6 +15,19 @@ A lower layer may not override a higher layer. A conflict is reported as
 `BASELINE_CONFLICT` and execution stops until Owner-approved change control is
 complete.
 
+## AICC Scope Ownership Baseline v1
+
+- Status: `APPROVED_BASELINE`
+- `ENTITY_DETAIL_SCOPE = STRICT`
+- `CROSS_ENTITY_DETAIL_MIXING = 0`
+- `GLOBAL_AGGREGATION_REQUIRES_GLOBAL_SURFACE = 1`
+
+Work Package, Pull Request, and Run detail surfaces consume only explicitly
+correlated canonical records. Unknown pass-through work remains executable but
+is not attached to a selected entity until correlation exists. Cross-entity
+aggregation is presented only through the Roadmap `全局任务` navigation view;
+that view is a projection and never an authority or a second source of truth.
+
 ## Governing standards
 
 - `AICC-V2-CODE-ARCHITECTURE-STANDARD-001`
