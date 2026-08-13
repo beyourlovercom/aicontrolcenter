@@ -12,6 +12,7 @@
   let panel;
   let reportItem = null;
   let reportCorrelation = null;
+  const AUTO_REPORT_INSERT_DEFAULT = false;
 
   function first(selectors) { return selectors.map(selector => document.querySelector(selector)).find(Boolean) || null; }
   function composer() { return first(window.AICCChatGPTDom.SELECTORS.composer); }
@@ -38,7 +39,7 @@
     if (!result?.ok) return showError(result?.error);
     reportItem = result.item || null;
     reportCorrelation = result.correlation || null;
-    if (reportItem) setStatus(`运行报告已就绪 · Run ID: ${reportItem.report?.runId || reportItem.runId || 'ABSENT'}`, 'SUCCESS');
+    if (reportItem) setStatus(`${AUTO_REPORT_INSERT_DEFAULT ? '运行报告已自动处理' : '运行报告已就绪'} · Run ID: ${reportItem.report?.runId || reportItem.runId || 'ABSENT'}`, 'SUCCESS');
   }
 
   function reportText(item) {
@@ -67,6 +68,12 @@
     await insertReport(true, messageData);
   }
 
+  async function requestReportDelivery() {
+    const result = await message('REQUEST_REPORT_DELIVERY', { conversationId: window.AICCChatGPTDom.originContext(document, null).conversationId });
+    if (!result?.ok) return showError(result?.error);
+    setStatus(result.delivery?.claimed ? '已领取运行报告，正在插入当前对话…' : '该运行报告已处理，未重复插入。', result.delivery?.claimed ? 'RUNNING' : 'SUCCESS');
+  }
+
   function mount() {
     if (document.querySelector(SELECTORS.mount)) return;
     panel = document.createElement('aside');
@@ -75,11 +82,11 @@
     panel.style.cssText = 'position:fixed;right:16px;bottom:16px;z-index:2147483647;display:grid;gap:7px;width:220px;padding:12px;border:1px solid #d8dee8;border-radius:10px;background:#fff;box-shadow:0 8px 28px #0002;font:13px system-ui;color:#1f2937';
     document.body.appendChild(panel);
     panel.querySelector(SELECTORS.send).addEventListener('click', sendInstruction);
-    panel.querySelector(SELECTORS.insert).addEventListener('click', insertReport);
+    panel.querySelector(SELECTORS.insert).addEventListener('click', requestReportDelivery);
     pollResult().then(() => { if (!reportItem) setStatus('AICC 可用 · 等待 Owner 操作', 'IDLE'); });
   }
 
-  chrome.runtime.onMessage.addListener(messageData => { if (messageData?.type === 'DELIVER_REPORT') { void deliverReport(messageData); return false; } });
+  chrome.runtime.onMessage.addListener(messageData => { if (messageData?.type === 'INSERT_REPORT') { void deliverReport(messageData); return false; } });
 
   if (document.body) { mount(); mountNativeActions(); } else new MutationObserver(mount).observe(document.documentElement, { childList: true });
   window.setInterval(mountNativeActions, 1000);

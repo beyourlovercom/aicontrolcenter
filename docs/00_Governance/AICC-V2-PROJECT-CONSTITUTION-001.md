@@ -41,6 +41,10 @@ complete.
 9. Multiple independent Codex runs may execute in parallel. AICC does not use
    a repository-global Writer Lock or pre-Codex conflict predictor to serialize
    them; Codex CLI and OS/Git protections remain authoritative.
+10. Observation is read-only. Polling, refresh, reconnect, page load, worker
+    wake, and MutationObserver activity may not directly cause external side
+    effects. A side effect requires one durable identity and one canonical
+    authority.
 
 ## MVP delivery discipline
 

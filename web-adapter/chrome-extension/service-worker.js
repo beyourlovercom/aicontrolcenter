@@ -49,7 +49,7 @@ async function claimDelivery(item, correlation) {
   let result;
   deliveryQueue = deliveryQueue.then(async () => {
     const stored = (await chrome.storage.local.get(key))[key];
-    if (stored?.state === 'CLAIMED' || stored?.state === 'INSERTED') { result = { key, state: stored.state, claimed: false }; return; }
+    if (stored?.state === 'CLAIMED' || stored?.state === 'DELIVERED' || stored?.state === 'ACKNOWLEDGED') { result = { key, state: stored.state, claimed: false }; return; }
     if (!stored) await chrome.storage.local.set({ [key]: { state: 'PENDING', key, pendingAt: new Date().toISOString(), runId: item.runId, inboxId: item.inboxId } });
     await chrome.storage.local.set({ [key]: { state: 'CLAIMED', key, claimedAt: new Date().toISOString(), runId: item.runId, inboxId: item.inboxId } });
     result = { key, state: 'CLAIMED', claimed: true };
@@ -58,7 +58,7 @@ async function claimDelivery(item, correlation) {
   return result || { key, state: null, claimed: false };
 }
 
-async function pollResult(message, sender) {
+async function pollResult(message) {
   const stored = (await chrome.storage.local.get(CORRELATION_KEY))[CORRELATION_KEY];
   const correlation = message.correlation || stored;
   if (!correlation?.inboxId) return { item: null, correlation: null };
@@ -66,17 +66,19 @@ async function pollResult(message, sender) {
   const item = (Array.isArray(body.items) ? body.items : []).find(candidate => candidate.inboxId === correlation.inboxId && (!correlation.runId || candidate.runId === correlation.runId)) || null;
   const resolvedCorrelation = item?.runId && !correlation.runId ? { ...correlation, runId: item.runId } : correlation;
   if (item?.runId && !correlation.runId) await chrome.storage.local.set({ [CORRELATION_KEY]: resolvedCorrelation });
-  let delivery = { key: null, state: null, claimed: false };
-  const senderUrl = sender?.tab?.url || '';
-  const sameConversation = Boolean(item && resolvedCorrelation?.sourceReference === senderUrl && resolvedCorrelation?.originContext?.conversationId);
-  if (sameConversation) {
-    delivery = await claimDelivery(item, resolvedCorrelation);
-    if (delivery.claimed && sender?.tab?.id !== undefined) {
-      try { await chrome.tabs.sendMessage(sender.tab.id, { type: 'DELIVER_REPORT', item, correlation: resolvedCorrelation, deliveryKey: delivery.key }); }
-      catch { /* the durable CLAIMED state prevents duplicate delivery after a tab wake/reconnect */ }
-    }
-  }
-  return { item, correlation: resolvedCorrelation, delivery };
+  return { item, correlation: resolvedCorrelation, delivery: { key: null, state: null, claimed: false } };
+}
+
+async function requestReportDelivery(message, sender) {
+  const observed = await pollResult({ correlation: message.correlation });
+  const correlation = observed.correlation;
+  if (!observed.item || !correlation || correlation.sourceReference !== sender?.tab?.url || correlation.originContext?.conversationId !== message.conversationId) throw failure('REPORT_NOT_BOUND_TO_CONVERSATION', '当前报告不属于原始 ChatGPT 会话。', '返回原始对话后重试。');
+  const delivery = await claimDelivery(observed.item, correlation);
+  if (!delivery.claimed) return { item: observed.item, correlation, delivery };
+  await chrome.storage.local.set({ [delivery.key]: { state: 'DELIVERED', key: delivery.key, deliveredAt: new Date().toISOString(), runId: observed.item.runId } });
+  if (sender?.tab?.id === undefined) throw failure('DELIVERY_TAB_REQUIRED', '找不到当前 ChatGPT 标签页。', '在原始 ChatGPT 对话中重试。');
+  await chrome.tabs.sendMessage(sender.tab.id, { type: 'INSERT_REPORT', item: observed.item, correlation, deliveryKey: delivery.key });
+  return { item: observed.item, correlation, delivery: { ...delivery, state: 'DELIVERED' } };
 }
 
 async function markReportInserted(message) {
@@ -84,12 +86,12 @@ async function markReportInserted(message) {
   const correlation = (await chrome.storage.local.get(CORRELATION_KEY))[CORRELATION_KEY];
   if (!correlation || correlation.runId !== message.runId || correlation.sourceReference !== message.sourceReference) throw failure('INSERT_CORRELATION_MISMATCH', '运行报告与当前 ChatGPT 会话不匹配。', '仅在原始对话中插入运行报告。');
   const key = message.deliveryKey || `${DELIVERY_STATE_PREFIX}${message.originConversationId || correlation.originContext.conversationId}:${message.runId}:${message.reportVersion || 'AICC_RUN_REPORT_V1'}`;
-  await chrome.storage.local.set({ [key]: { state: 'INSERTED', key, insertedAt: new Date().toISOString(), runId: message.runId } });
+  await chrome.storage.local.set({ [key]: { state: 'ACKNOWLEDGED', key, acknowledgedAt: new Date().toISOString(), runId: message.runId } });
   return { inserted: true, deliveryKey: key };
 }
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  const operation = message?.type === 'SEND_INSTRUCTION' ? sendInstruction({ ...message, tabId: sender?.tab?.id }) : message?.type === 'POLL_RESULT' ? pollResult(message, sender) : message?.type === 'MARK_REPORT_INSERTED' ? markReportInserted(message) : Promise.reject(failure('MESSAGE_UNSUPPORTED', '不支持的适配器消息。', '刷新 ChatGPT 页面后重试。'));
+  const operation = message?.type === 'SEND_INSTRUCTION' ? sendInstruction({ ...message, tabId: sender?.tab?.id }) : message?.type === 'POLL_RESULT' ? pollResult(message) : message?.type === 'REQUEST_REPORT_DELIVERY' ? requestReportDelivery(message, sender) : message?.type === 'MARK_REPORT_INSERTED' ? markReportInserted(message) : Promise.reject(failure('MESSAGE_UNSUPPORTED', '不支持的适配器消息。', '刷新 ChatGPT 页面后重试。'));
   operation.then(value => sendResponse({ ok: true, ...value })).catch(error => sendResponse({ ok: false, error: error?.code ? error : failure('WEB_ADAPTER_ERROR', '适配器操作失败。', '检查 AICC 服务后重试。') }));
   return true;
 });

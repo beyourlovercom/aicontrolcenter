@@ -13,10 +13,12 @@ assert(bridge.includes('notifications.some(notification=>notification.runId===it
 assert(vite.includes("/api/gpt-bridge/notifications")&&vite.includes('readNotifications()'),'canonical notifications are exposed through the local service');
 assert(app.includes("request('/api/gpt-bridge/notifications')")&&app.includes('bridgeNotificationInitialized'),'AICC page consumes persisted terminal notifications without refresh re-notification');
 assert(worker.includes('sourceReference: message.sourceReference')&&worker.includes('MARK_REPORT_INSERTED')&&worker.includes('deliveryKey'),'extension preserves exact conversation correlation and insertion idempotency');
-assert(content.includes('reportCorrelation?.sourceReference !== location.href')&&content.includes("messageData?.type === 'DELIVER_REPORT'"),'extension inserts only after worker delivery in the originating ChatGPT conversation');
-assert(worker.includes('DELIVERY_STATE_PREFIX')&&worker.includes("state: 'PENDING'")&&worker.includes("state: 'CLAIMED'")&&worker.includes("state: 'INSERTED'"),'service worker owns durable delivery lifecycle');
-assert(worker.includes('chrome.tabs.sendMessage')&&!content.includes('!reportAlreadyInserted) await insertReport(true)'),'content polling observes but does not independently deliver');
-assert(content.includes("messageData?.type === 'DELIVER_REPORT'")&&content.includes('deliveryKey'),'content inserts only after explicit worker delivery');
+assert(content.includes('reportCorrelation?.sourceReference !== location.href')&&content.includes("messageData?.type === 'INSERT_REPORT'"),'extension inserts only after worker delivery in the originating ChatGPT conversation');
+assert(worker.includes('DELIVERY_STATE_PREFIX')&&worker.includes("state: 'PENDING'")&&worker.includes("state: 'CLAIMED'")&&worker.includes("state: 'DELIVERED'")&&worker.includes("state: 'ACKNOWLEDGED'"),'service worker owns durable delivery lifecycle');
+const pollSource=worker.match(/async function pollResult[\s\S]*?(?=async function requestReportDelivery)/)?.[0]??'';
+assert(worker.includes('REQUEST_REPORT_DELIVERY')&&worker.includes('chrome.tabs.sendMessage')&&!pollSource.includes('chrome.tabs.sendMessage'),'polling observes but does not independently deliver');
+assert(content.includes("messageData?.type === 'INSERT_REPORT'")&&content.includes('deliveryKey'),'content inserts only after explicit worker delivery');
+assert(content.includes('AUTO_REPORT_INSERT_DEFAULT = false'),'automatic production report insertion is off by default');
 assert(!legacy.match(/correlation\.sourceReference === location\.href[\s\S]*?insert\(\)/),'legacy polling does not create an automatic delivery owner');
 assert(legacy.includes('correlation.sourceReference !== location.href')&&legacy.includes('insertedPrefix'),'legacy adapter preserves exact conversation and one-time insertion');
 assert(worker.includes("message?.type === 'SEND_INSTRUCTION'")&&!worker.includes("message?.type === 'AUTO_EXECUTE'"),'Terminal Handoff does not introduce Auto Execute');
