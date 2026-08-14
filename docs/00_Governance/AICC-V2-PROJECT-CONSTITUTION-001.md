@@ -1,9 +1,9 @@
 # AICC V2 Project Constitution
 
 - Document ID: `AICC-V2-PROJECT-CONSTITUTION-001`
-- Version: `1.2`
+- Version: `1.3`
 - Status: `APPROVED_BASELINE`
-- Effective: `2026-08-13`
+- Effective: `2026-08-14`
 
 This is the highest project-level engineering authority for AICC V2.
 
@@ -12,8 +12,78 @@ This is the highest project-level engineering authority for AICC V2.
 `Project Constitution → Approved Baselines → Living Roadmap → Formal Work Package → Implementation → Tests → Human UAT`
 
 A lower layer may not override a higher layer. A conflict is reported as
-`BASELINE_CONFLICT` and execution stops until Owner-approved change control is
-complete.
+`BASELINE_CONFLICT`. AICC itself must not implement that conflict as a
+pre-Codex execution gate; Codex and repository-local rules remain responsible
+for execution-time interpretation and for returning the explicit reason.
+
+## Highest architecture constraint — AICC is transport and display only
+
+This rule has the highest architectural precedence inside AICC V2 and applies
+to every current and future execution path, UI, bridge, runtime adapter, API,
+keyboard shortcut, automation, and integration.
+
+```text
+AICC_TRANSPORT_ONLY = 1
+AICC_DISPLAY_ONLY = 1
+AICC_DECISION_AUTHORITY = 0
+AICC_BUSINESS_JUDGMENT = 0
+AICC_GOVERNANCE_JUDGMENT = 0
+AICC_PERMISSION_JUDGMENT = 0
+AICC_EXECUTABILITY_JUDGMENT = 0
+AICC_PASS_FAIL_BLOCKED_AUTHORITY = CODEX
+AICC_RESULT_REWRITE = 0
+```
+
+AICC is the transport, execution-state carrier, evidence/display surface, and
+result-return path between GPT/Owner and Codex. It does not decide whether a
+task should execute and does not duplicate Codex reasoning.
+
+AICC may only:
+
+- receive an instruction;
+- create and persist durable execution identity;
+- bind the execution to its origin conversation/message/entity when known;
+- prevent duplicate transport or duplicate result return for the same durable
+  identity;
+- deliver the instruction to Codex;
+- launch and observe the real Codex process;
+- capture, persist, and display runtime/process evidence;
+- preserve the Codex result without semantic reinterpretation;
+- return the result to the originating GPT conversation exactly once.
+
+AICC must never independently decide or block based on:
+
+- repository, branch, HEAD, worktree, or Git state;
+- Work Package existence, completeness, scope, or lifecycle;
+- Owner authorization, governance, review, or approval rules;
+- whether file modification, commit, push, PR, merge, deploy, or another task
+  action is allowed;
+- task feasibility, implementation safety, dependency readiness, test
+  sufficiency, or business correctness;
+- any other semantic condition that belongs to Codex or repository-local
+  execution rules.
+
+Those findings belong to Codex. Codex is responsible for returning
+`PASS`, `FAIL`, `BLOCKED`, or `CANCELLED` together with an explicit reason and
+supporting evidence. AICC stores and displays that result; it does not replace,
+upgrade, downgrade, hide, or reinterpret it.
+
+AICC transport/runtime health and Codex execution outcome are separate facts:
+
+```text
+AICC_STATUS:
+QUEUED | SENT | RUNNING | RESULT_RECEIVED | RETURNED_TO_GPT | DELIVERY_FAILED
+
+CODEX_RESULT:
+PASS | FAIL | BLOCKED | CANCELLED | NOT_STARTED
+
+CODEX_REASON:
+returned by Codex; preserved by AICC
+```
+
+`DELIVERY_FAILED` is valid only for a real AICC transport/runtime failure such
+as inability to reach or launch the Codex runtime. It must never be used as a
+substitute for a Codex semantic `BLOCKED` result.
 
 ## AICC Scope Ownership Baseline v1
 
@@ -58,6 +128,15 @@ that view is a projection and never an authority or a second source of truth.
     wake, and MutationObserver activity may not directly cause external side
     effects. A side effect requires one durable identity and one canonical
     authority.
+11. No AICC feature may introduce a new semantic pre-Codex gate under another
+    name such as preflight, policy check, safety check, readiness check,
+    authorization check, governance check, repository check, or validation
+    gate. Infrastructure-level delivery checks may only establish whether the
+    instruction can be transported to Codex and whether the result can be
+    returned.
+12. When AICC and Codex statuses are displayed together, the UI must identify
+    their owners explicitly. `AICC_STATUS` describes transport/runtime state;
+    `CODEX_RESULT` and `CODEX_REASON` describe task execution outcome.
 
 ## MVP delivery discipline
 
@@ -132,6 +211,12 @@ the five gates. This Constitution update does not authorize those expansions.
 Version `1.0` was the approved baseline effective `2026-08-12`. Version `1.1`
 is an Owner-approved governance update and preserves the meaning and history of
 that prior baseline; it supersedes it without silently rewriting its record.
+Version `1.2`, effective `2026-08-13`, established the pass-through control
+plane and removed duplicated pre-Codex execution authority from AICC.
+Version `1.3`, effective `2026-08-14`, elevates `AICC = transport + status +
+display + return, never judgment` to the highest architecture constraint and
+requires explicit separation of AICC transport status from Codex execution
+outcome.
 
 Current conformance is assessed separately from the approved status of this
 document and its baselines.
