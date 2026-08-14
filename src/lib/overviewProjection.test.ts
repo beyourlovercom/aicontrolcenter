@@ -12,6 +12,9 @@ assert.match(actions,/item\.report\?\.runId===runtime\.runId/,'report matching i
 assert.match(actions,/运行已完成，报告已生成/,'completed run with report has truthful action');
 assert.match(actions,/运行已完成，正在生成运行报告/,'missing report remains explicitly pending');
 assert.match(actions,/ownerStatusCode==='WAITING_UAT'/,'waiting UAT action uses projected Owner state');
+assert.match(actions,/closed=context\.lifecycle\.currentStage==='CLOSED'/,'owner action uses canonical closed stage');
+assert.match(actions,/已完成，无需操作/,'closed WP has no-op current action');
+assert.equal(actions.includes("label:'启动执行',detail:'准备就绪，可以开始执行'"),true,'non-closed start action remains supported');
 assert.ok(actions.indexOf("label:'开始人工 UAT'")<actions.indexOf("label:'查看报告'"),'UAT is prioritized over report access');
 assert.equal((actions.match(/class="action primary"/g)??[]).length,1,'one primary Owner action');
 assert.match(app,/resolveOwnerStatusProjection\(context,bridgeOutbox\)/,'all owner status surfaces use the shared projection');

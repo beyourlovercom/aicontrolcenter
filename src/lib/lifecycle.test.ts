@@ -52,8 +52,10 @@ for(const closedId of closedIds){
   assert.equal(closedContext.lifecycle.effectiveStatus,'COMPLETE',`${closedId} status`);
   assert.equal(closedContext.lifecycle.stages.find(stage=>stage.id==='HUMAN_UAT')?.status,'PASS',`${closedId} UAT`);
   assert.equal(closedContext.progress,100,`${closedId} progress`);
+  assert.equal(closedContext.availableActions.find(action=>action.id==='START_CODEX')?.enabled,false,`${closedId} no start action`);
 }
 const currentFormal=readWorkPackage('AICC-V2-WORK-PACKAGE-LIFECYCLE-001');
 const currentSnapshot=createProjectSnapshot({roadmap:{source:'test',content:'## Active V2 Milestones\n### M3.86 — Lifecycle\nWork Packages: `AICC-V2-WORK-PACKAGE-LIFECYCLE-001`\n## Legacy Historical Milestones'},repository:lifecycleFixtureRepo,formalWorkPackages:{'AICC-V2-WORK-PACKAGE-LIFECYCLE-001':currentFormal}});
 const currentContext=resolveEntityContext(currentSnapshot,{type:'work_package',id:'AICC-V2-WORK-PACKAGE-LIFECYCLE-001'});assert.equal(currentContext.type,'work_package');if(currentContext.type!=='work_package')throw new Error('current lifecycle context required');assert.notEqual(currentContext.lifecycle.currentStage,'PLANNED');assert.equal(currentContext.lifecycle.stages.find(stage=>stage.id==='IMPLEMENTATION')?.status,'COMPLETE');assert.equal(currentContext.lifecycle.stages.find(stage=>stage.id==='VALIDATION')?.status,'COMPLETE');assert.equal(currentContext.lifecycle.stages.find(stage=>stage.id==='HUMAN_UAT')?.status,'WAITING_UAT');
+assert.equal(currentContext.availableActions.find(action=>action.id==='START_CODEX')?.enabled,true,'current lifecycle WP can retain execution action outside UAT navigation');
 console.log('real browser lifecycle fixture matrix passed');

@@ -17,8 +17,11 @@
   $: matchingReport=runtime?.runId?bridgeOutbox.find(item=>item.report?.runId===runtime.runId):null;
   $: terminalReportReady=Boolean(runtime?.phase==='COMPLETED'&&runtime.exitCode===0&&matchingReport);
   $: terminalReportPending=Boolean(runtime?.phase==='COMPLETED'&&runtime.exitCode===0&&!terminalReportReady&&context.lifecycle.currentStage!=='HUMAN_UAT'&&context.humanUat?.status!=='PASS');
+  $: closed=context.lifecycle.currentStage==='CLOSED';
   $: humanUat=context.lifecycle.currentStage==='HUMAN_UAT'||ownerStatusCode==='WAITING_UAT';
-  $: currentAction=activeRuntime
+  $: currentAction=closed
+    ? {label:'已完成',detail:'已完成，无需操作',tab:'证据',enabled:false,action:null as ActionEligibility['id']|null}
+    : activeRuntime
     ? {label:'查看运行',detail:`正在执行 · ${runtime?.runId??'当前运行'}`,tab:'运行',enabled:true,action:null as ActionEligibility['id']|null}
     : retry?.enabled
       ? {label:'重试',detail:'执行失败，可重新尝试',tab:'运行',enabled:true,action:'RETRY' as ActionEligibility['id']}
