@@ -1,6 +1,6 @@
 # AICC-V2-WORK-PACKAGE-LIFECYCLE-001
 
-Status: IMPLEMENTED / MACHINE_VALIDATED / HUMAN_UAT_PENDING
+Status: CLOSED
 Type: OWNER_WORK_PACKAGE_LIFECYCLE
 Role: canonical lifecycle read-model and Owner projection
 Prerequisite: `AICC-V2-WORKSPACE-CONTEXT-001` CLOSED
@@ -9,12 +9,14 @@ IMPLEMENTATION: PASS
 MACHINE_VALIDATION: PASS
 REVIEW_APPLICABILITY: N_A
 DELIVERY_APPLICABILITY: N_A
-HUMAN_UAT: PENDING
+HUMAN_UAT: PASS
 
 `IMPLEMENTATION = PASS`
 `MACHINE_VALIDATION = PASS`
-`HUMAN_UAT = PENDING`
-`PACKAGE_STATUS = OPEN`
+`HUMAN_UAT = PASS`
+`PACKAGE_STATUS = CLOSED`
+`WORK_PACKAGE_LIFECYCLE_V1 = APPROVED_BASELINE`
+`HUMAN_UAT_WORKSPACE_V1 = APPROVED_BASELINE`
 
 ## Goal
 
@@ -96,5 +98,28 @@ is introduced by this Work Package.
 ## Human UAT status
 
 `MACHINE_VALIDATION = PASS`
-`OWNER_HUMAN_UAT = PENDING`
-`PACKAGE_STATUS = IMPLEMENTED / MACHINE_VALIDATED / HUMAN_UAT_PENDING`
+`OWNER_HUMAN_UAT = PASS`
+`PACKAGE_STATUS = CLOSED`
+
+## Approved Human UAT Workspace V1 baseline
+
+`OPEN_UAT_MODE = ACTIONABLE`
+`CLOSED_UAT_MODE = READ_ONLY_HISTORY`
+`HUMAN_UAT_AUTHORITY = OWNER`
+`UAT_ACTION_AUTHORITY_COUNT = 1`
+`UAT_FOREIGN_ENTITY_DATA_COUNT = 0`
+`OWNER_ACTIONS_AT_TAB_TOP = 1`
+`BOTTOM_BUSINESS_ACTION_COUNT = 0`
+
+Open UAT has one top action row. Read actions are `验收证据`、`运行结果`、
+`原始指令`; mutation actions are `保存进度`、`退回整改`、`通过UAT`.
+The summary fields are `验收状态`、`验收进度`、`验收方式`. The checklist
+columns are `检查项`、`预期结果`、`实际结果`、`状态`; actual results,
+checkbox state, issues and Owner note are persisted by `保存进度`.
+`通过UAT` requires required items, non-empty actual results and no unresolved
+blocking issues. Human UAT PASS does not automatically close the Work Package.
+
+Closed UAT is read-only history with the top read actions plus `已完成 · 只读`.
+Its summary includes `验收状态`、`验收进度`、`验收方式` and actual completion time.
+Its historical checklist uses the same four columns, and checklist state,
+actual results, issue history and Owner notes are not editable.
