@@ -45,7 +45,18 @@ state.lastActivityAt=new Date().toISOString();
 persist(state);
 let child;
 try{
-  child=spawn(spec.command??'codex',spec.args??['exec','--sandbox',state.sandboxMode??'workspace-write','--json','-'],{cwd:spec.repositoryRoot,shell:false,stdio:['pipe','pipe','pipe']});
+  const deliveryProfile=state.executionProfile==='OWNER_AUTHORIZED_GIT_DELIVERY';
+  const childEnvironment=deliveryProfile ? (() => {
+    const environment={...process.env};
+    delete environment.GH_TOKEN;
+    delete environment.GITHUB_TOKEN;
+    environment.HOME=environment.HOME??process.env.USERPROFILE??'/Users/a';
+    environment.PATH=[environment.PATH,'/Users/a/.local/bin','/opt/homebrew/bin','/usr/bin','/bin'].filter(Boolean).join(':');
+    return environment;
+  })() : process.env;
+  const childArgs=spec.args??['exec','--sandbox',state.sandboxMode??'workspace-write','--json','-'];
+  const deliveryArgs=deliveryProfile ? ['-c','sandbox_workspace_write.network_access=true',...childArgs] : childArgs;
+  child=spawn(spec.command??'codex',deliveryArgs,{cwd:spec.repositoryRoot,shell:false,env:childEnvironment,stdio:['pipe','pipe','pipe']});
   state.pid=child.pid??null;state.pidAlive=true;persist(state);
   let buffer='';
   child.stdout?.on('data',(chunk:Buffer|string)=>{buffer+=chunk.toString();const parts=buffer.split('\n');buffer=parts.pop()??'';for(const line of parts){parseEvent(line,state,false);persist(state)}});

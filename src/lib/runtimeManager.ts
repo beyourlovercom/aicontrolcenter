@@ -62,6 +62,7 @@ export type RuntimeState = {
   events: string[];
   executionType?: string;
   sandboxMode?: string;
+  executionProfile?: 'OWNER_AUTHORIZED_GIT_DELIVERY';
   authorizedHead?: string;
   authorizedExecutionHead?: string;
   architectureAuthoritySha?: string;
@@ -108,6 +109,7 @@ export type CanonicalExecutionRequest = {
   sourceType?: string;
   sourceReference?: string;
   passThrough?: boolean;
+  executionProfile?: 'OWNER_AUTHORIZED_GIT_DELIVERY';
 };
 export function resolveRuntimeExecutionPolicy(executionType:string,requestedSandbox?:CanonicalExecutionRequest['sandbox']){
   const sandboxMode:"workspace-write"|"read-only"=["READ_ONLY_AUDIT","REVIEW","ANALYSIS"].includes(executionType)?"read-only":"workspace-write";
@@ -325,6 +327,7 @@ export function startRuntime(
       instructionSha256: options.instructionBody ? createHash("sha256").update(options.instructionBody).digest("hex") : undefined,
       instructionLength: options.instructionBody?.length,
       passThrough,
+      executionProfile: options.executionProfile,
     };
   save(s);
   try {
