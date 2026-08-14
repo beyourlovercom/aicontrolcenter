@@ -2,7 +2,7 @@
 
 ## Current milestone
 
-`M3.88 — GPT ↔ AICC ↔ Codex Closed Loop`
+`M4.1 — GPT ↔ AICC ↔ Codex Closed Loop`
 
 ## Authority
 
@@ -22,7 +22,9 @@ Current Work Package: `AICC-V2-GPT-AICC-CODEX-CLOSED-LOOP-001`
 
 Current implementation phase: `Phase 1 — Unified Action Layer`
 
-`AICC-V2-PR-RUNNER-001` implementation is preserved and paused for M3.88 closed-loop completion before its Human UAT progression resumes.
+Owner progression decision: `M4.1` is the current mainline. The existing
+`AICC-V2-PR-RUNNER-001` implementation and evidence are preserved; its remaining
+Human UAT/closure work does not redefine or block the M4.1 transport architecture.
 
 ## Active V2 Milestones
 
@@ -44,7 +46,7 @@ Human UAT PASS, First Usable Version hard gates 5/5 PASS.
 
 ### M3.6 — Terminal Handoff
 Work Packages: `AICC-V2-TERMINAL-HANDOFF-001` — `IMPLEMENTED / OWNER_UAT_PENDING`.
-Its existing correlation/result-handoff capabilities are reused by M3.88 where
+Its existing correlation/result-handoff capabilities are reused by M4.1 where
 compatible with Constitution v1.3.
 
 ### M3.7 — Auto Execute Mode
@@ -83,7 +85,17 @@ Workspace V1 approved baseline after real Owner browser UAT PASS.
 `RUNTIME_WORKSPACE_V1 = APPROVED_BASELINE`
 `HUMAN_UAT = PASS`
 
-### M3.88 — GPT ↔ AICC ↔ Codex Closed Loop
+### M3.9 — Local Service Autostart
+Work Packages: `AICC-V2-LOCAL-SERVICE-AUTOSTART-001`
+
+### M4 — PR Runner Foundation
+Work Packages: `AICC-V2-PR-RUNNER-001` — `IMPLEMENTED / MACHINE_VALIDATED / HUMAN_UAT_PENDING`.
+
+Existing PR Runner implementation and evidence are preserved. Its remaining
+Owner Human UAT/closure is a bounded closeout activity. No new PR Runner
+architecture or scope expansion is authorized as part of M4.1.
+
+### M4.1 — GPT ↔ AICC ↔ Codex Closed Loop
 Work Packages: `AICC-V2-GPT-AICC-CODEX-CLOSED-LOOP-001` — `ACTIVE / OWNER_AUTHORIZED`.
 
 Purpose: connect the already-delivered execution panel, GPT Bridge, Codex
@@ -123,19 +135,10 @@ AICC_PASS_FAIL_BLOCKED_AUTHORITY = CODEX
 AICC_RESULT_REWRITE = 0
 ```
 
-`M3_88_ROADMAP_STATUS = ACTIVE`
-`CURRENT_M3_88_PHASE = PHASE_1_UNIFIED_ACTION_LAYER`
-`M4_PROGRESSION = PAUSED_FOR_M3_88_CLOSED_LOOP`
-
-### M3.9 — Local Service Autostart
-Work Packages: `AICC-V2-LOCAL-SERVICE-AUTOSTART-001`
-
-### M4 — PR Runner Foundation
-Work Packages: `AICC-V2-PR-RUNNER-001` — `IMPLEMENTED / MACHINE_VALIDATED / HUMAN_UAT_PENDING / PAUSED_FOR_M3_88_CLOSED_LOOP`.
-
-Existing PR Runner implementation and evidence are preserved. M3.88 does not
-rebuild M4. M4 Human UAT/progression resumes after the M3.88 closed-loop Owner
-Human UAT passes.
+`M4_1_ROADMAP_STATUS = ACTIVE`
+`CURRENT_M4_1_PHASE = PHASE_1_UNIFIED_ACTION_LAYER`
+`M4_PR_RUNNER_IMPLEMENTATION = PRESERVED`
+`M4_PR_RUNNER_HUMAN_UAT = PENDING`
 
 ### M5 — Review + Exact-head CI
 Work Packages: `AICC-V2-REVIEW-CI-001`
@@ -160,7 +163,9 @@ Work Packages: `AICC-V2-PROJECT-REGISTRY-001`
 ```text
 M3.87 Runtime Workspace V1 Freeze — CLOSED
 ↓
-M3.88 GPT ↔ AICC ↔ Codex Closed Loop — ACTIVE
+M4 PR Runner Foundation — IMPLEMENTED / MACHINE_VALIDATED / HUMAN_UAT_PENDING
+↓
+M4.1 GPT ↔ AICC ↔ Codex Closed Loop — ACTIVE
   Phase 1 Unified Action Layer
   ↓
   Phase 2 GPT → AICC
@@ -173,16 +178,16 @@ M3.88 GPT ↔ AICC ↔ Codex Closed Loop — ACTIVE
   ↓
   Phase 6 Owner Human UAT
 ↓
-M3.9 Local Service Autostart
-↓
-M4 PR Runner Foundation — resume preserved implementation
-↓
 M5 Review + Exact-head CI
 ↓
 M6 Autonomous PR Delivery
 ↓
 M7 WP Automatic Lifecycle
 ```
+
+M4 closeout may be completed as a bounded Owner UAT/closure activity without
+changing the M4.1 architecture. M4.1 is the current development mainline by
+explicit Owner decision.
 
 ## Current execution architecture
 
@@ -210,6 +215,10 @@ create durable execution identity, launch/reach Codex, persist correlation, or
 return the result. Such failures remain distinct from Codex task outcomes.
 
 ## Historical traceability
+
+The former `M3.88 — GPT ↔ AICC ↔ Codex Closed Loop` label is superseded by
+`M4.1` to match the actual Roadmap order after PR Runner Foundation. The Work
+Package ID remains unchanged so execution history and references stay stable.
 
 Legacy Work Packages and earlier Roadmap language remain historical evidence.
 Where historical wording assigns semantic pre-Codex gates, Writer Lock execution
