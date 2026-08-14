@@ -32,4 +32,12 @@ assert.equal(workspace.includes('负责人'),false,'owner summary card is remove
 assert.match(workspace,/type="checkbox"/,'checklist uses checkbox controls');
 assert.match(workspace,/manualChecklist/,'missing checklist uses the manual compact checklist');
 assert.match(workspace,/disabled={!editable}/,'closed checklist controls are read-only');
+assert.match(workspace,/uat-history-summary/,'closed history uses the four-field summary');
+for(const column of ['检查项','预期结果','实际结果','状态']) assert.equal(workspace.includes(column),true,`history checklist column: ${column}`);
+assert.match(workspace,/uat-history-table/,'closed history uses a table layout');
+assert.match(workspace,/historicalActualResult/,'historical actual result is visible');
+assert.match(workspace,/uat-history-pass/,'historical pass uses success check styling');
+assert.match(workspace,/完成时间/,'completion time is visible in history');
+assert.match(workspace,/uat-history-note/,'historical Owner note section is preserved');
+assert.match(workspace,/formatOwnerLocalTime/,'historical timestamps use the shared local formatter');
 console.log('human UAT contract tests passed');
