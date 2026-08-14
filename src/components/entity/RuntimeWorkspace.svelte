@@ -16,12 +16,14 @@
   export let bridgeOutbox:any[]=[];
   export let bridgePayload='';
   export let autoExecute=false;
+  export let instructionState:'TEXT_READY'|'IMPORTED_PENDING'|'RUN_STARTED'='TEXT_READY';
   export let showInbox=true;
   export let emptyTitle='暂无运行记录';
   export let emptyCapability='不可用';
   export let emptyReason='';
   export let onPayloadChange:(value:string)=>void=()=>{};
   export let onPasteInstruction:()=>void=()=>{};
+  export let onImportInstruction:()=>void=()=>{};
   export let onManualExecute:()=>void=()=>{};
   export let onCopyExample:()=>void=()=>{};
   export let onLaunch:(id:string)=>void=()=>{};
@@ -53,8 +55,9 @@
 <section class="runtime-workspace" data-testid="runtime-tab-workspace">
   {#if showInbox}
     <section class="runtime-command-panel" data-testid="runtime-execution-inbox">
-      <div class="runtime-top-action-bar" data-testid="runtime-top-action-bar"><div><button class="service-action" onclick={onPasteInstruction}>粘贴指令</button><button class="service-action" disabled={autoExecute} aria-disabled={autoExecute} onclick={onManualExecute}>执行指令</button></div><div><button class="service-action" onclick={copySelectedOrLatestResult}>复制结果</button><button class="service-action" onclick={onCopyExample}>复制有效示例</button></div></div>
+      <div class="runtime-top-action-bar" data-testid="runtime-top-action-bar"><div><button class="service-action" onclick={onPasteInstruction}>粘贴指令</button><button class="service-action" onclick={onImportInstruction}>导入指令</button><button class="service-action" disabled={autoExecute||instructionState!=='IMPORTED_PENDING'} aria-disabled={autoExecute||instructionState!=='IMPORTED_PENDING'} onclick={onManualExecute}>执行指令</button></div><div><button class="service-action" onclick={copySelectedOrLatestResult}>复制结果</button><button class="service-action" onclick={onCopyExample}>复制有效示例</button></div></div>
       <textarea value={bridgePayload} oninput={(event)=>onPayloadChange((event.currentTarget as HTMLTextAreaElement).value)} placeholder="粘贴 AICC_EXECUTION_V1，或复制有效示例…"></textarea>
+      <div class="runtime-instruction-state" data-testid="runtime-instruction-state">{instructionState}</div>
       {#each bridgeInbox.filter(item=>!item.runId).slice(0,5) as item, index}
         <article class="bridge-item bridge-inbox-item" class:latest={index===0} data-testid="inbox-item-{item.id}"><div class="bridge-inbox-summary"><div class="bridge-inbox-heading"><strong>{item.instruction?.sourceType==='WEB_BRIDGE'?'WEB_BRIDGE':item.instruction?.sourceType??'UNKNOWN'} · {item.state}</strong>{#if index===0}<span class="bridge-latest">最新</span>{/if}<time>{formatOwnerLocalTime(item.createdAt??item.updatedAt)}</time></div><b>{item.id}</b><span>{item.instruction?.entityId??item.error??'目标不可用'} · {item.instruction?.executionType??'类型不可用'}</span><small class="bridge-reason">原因：{gateReason(item)}</small></div><div class="bridge-inbox-actions">{#if item.state==='READY'}<button class="service-action" onclick={()=>onLaunch(item.id)}>启动执行</button>{/if}<button class="service-action" onclick={()=>toggleInstruction(`inbox:${item.id}`)}>查看指令</button><button class="service-action" disabled>运行结果</button></div>{#if inspectedInboxId===item.id||instructionExpandedId===`inbox:${item.id}`}<div class="bridge-inbox-detail" data-testid="inbox-detail"><dl><div><dt>来源</dt><dd>{item.instruction?.sourceType??'UNKNOWN'}</dd></div><div><dt>Inbox ID</dt><dd>{item.id}</dd></div><div><dt>Instruction ID</dt><dd>{item.instruction?.instructionId??'—'}</dd></div><div><dt>Entity ID</dt><dd>{item.instruction?.entityId??'—'}</dd></div><div><dt>Inbox State</dt><dd>{item.state}</dd></div><div><dt>Bound Run ID</dt><dd>— · 未启动执行</dd></div></dl><h4>原始指令</h4><pre>{rawInstruction(item)}</pre></div>{/if}</article>
       {/each}

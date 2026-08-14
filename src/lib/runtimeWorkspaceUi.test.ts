@@ -22,7 +22,7 @@ assert.equal((app.match(/<RuntimeWorkspace/g)??[]).length,2,'WP and PR both own 
 assert.match(workspace,/runtime-execution-inbox/);
 assert.match(app,/from '\.\/lib\/runtimeSelection\.ts'/,'App uses the browser-safe runtime selection module');
 assert.match(workspace,/from '\.\.\/\.\.\/lib\/runtimeSelection\.ts'/,'Runtime workspace avoids Node-only runtime manager imports');
-assert.match(workspace,/WEB_BRIDGE/);assert.match(workspace,/查看指令/);assert.match(workspace,/rawInstruction/);assert.match(workspace,/INSTRUCTION_ID/);assert.match(workspace,/未启动执行/);assert.match(workspace,/gateReason/);assert.equal(workspace.includes('onLaunch(item.id)'),true,'launch remains an explicit Owner action');assert.equal(workspace.includes('auto'),false,'inspection has no automatic execution path');
+assert.match(workspace,/WEB_BRIDGE/);assert.match(workspace,/查看指令/);assert.match(workspace,/rawInstruction/);assert.match(workspace,/INSTRUCTION_ID/);assert.match(workspace,/未启动执行/);assert.match(workspace,/gateReason/);assert.equal(workspace.includes('onLaunch(item.id)'),true,'launch remains an explicit Owner action');assert.match(workspace,/disabled\={autoExecute\|\|instructionState!==\'IMPORTED_PENDING\'}/,'manual execution is unavailable while Auto Execute is ON or before import');
 assert.match(workspace,/runtime-current-execution/);
 assert.match(workspace,/runtime-live-activity/);
 assert.match(workspace,/runtime-run-row-\{row\.runId\}/,'each Run renders its own result row');
