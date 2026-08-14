@@ -2,9 +2,9 @@
   import StatusTabs from '../StatusTabs.svelte';
   import type {AiccStatus} from '../../lib/workflow.ts';
   export let entityType:'work_package'|'pull_request'='work_package';
-  export let activeTab='概览';
+  export let activeTab='运行';
   export let statuses:Record<string,AiccStatus>={};
-  export let tabs:string[]=['概览','流程','工作包','运行','验证','UAT','证据'];
+  export let tabs:string[]=['运行','UAT','概览','证据','授权'];
   export let onSelect:(tab:string)=>void=()=>{};
 </script>
 

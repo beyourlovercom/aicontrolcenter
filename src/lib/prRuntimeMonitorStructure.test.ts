@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
+import './entityExecutionWorkspace.test.ts';
 const app=readFileSync(new URL('../App.svelte',import.meta.url),'utf8');
 const workspace=readFileSync(new URL('../components/entity/RuntimeWorkspace.svelte',import.meta.url),'utf8');
 const actions=readFileSync(new URL('../components/entity/PrOwnerActionZone.svelte',import.meta.url),'utf8');
@@ -7,9 +8,13 @@ const eligibility=readFileSync(new URL('./context/actionEligibility.ts',import.m
 assert.equal((app.match(/<RuntimeWorkspace/g)??[]).length,2,'WP and PR use the shared runtime workspace');
 assert.equal((workspace.match(/<RuntimeMonitor/g)??[]).length,1,'the canonical RuntimeMonitor has one implementation');
 assert(workspace.includes('emptyTitle'), 'runtime workspace preserves empty-state inputs');
-assert(app.includes('emptyTitle="暂无 PR 运行记录"'),'PR empty state is explicit');
-assert(app.includes('PR_EXECUTION_CONTRACT_NOT_BOUND'),'PR execution block reason is visible');
+assert.match(app,/entityType="pull_request"[\s\S]*bridgePayload=\{bridgePayload\}/,'PR uses the shared executable workspace contract');
+assert(!app.includes('showInbox={false}'),'PR execution workspace is not disabled');
 assert(actions.includes("'PR_CREATE_DRAFT'"),'Draft PR action remains available through contextual resolver');
 assert(eligibility.includes("action('PR_CREATE_DRAFT'"),'Draft PR action is owned by the explicit Owner action path');
-assert(app.includes('runtime={null} history={[]}'), 'parent WP runtime is not passed to PR workspace');
+assert(app.includes('runtime={context.runtime} history={scopedRuntimeHistory}'), 'PR runtime is scoped to the selected PR');
+assert.match(app,/tabs=\{context\.tabs\}/,'PR workspace uses the resolved PR tab contract');
+assert.match(app,/activeTab==='UAT'.*HumanUatWorkspace context=\{context\}/,'PR UAT tab uses the shared UAT workspace');
+assert.match(app,/activeTab==='证据'.*PrEvidencePanel/,'PR Evidence tab uses the existing evidence workspace');
+assert(!app.includes("activeTab==='流程'"),'PR Flow is not rendered as an independent tab');
 console.log('PR runtime monitor structure tests passed');

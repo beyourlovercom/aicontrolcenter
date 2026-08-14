@@ -34,6 +34,9 @@ export type RuntimePhase =
 export type RuntimeState = {
   runId: string;
   workPackageId: string;
+  entityType?: 'work_package'|'pull_request';
+  entityId?: string;
+  parentWorkPackageId?: string;
   authorizationId: string;
   authoritySha: string;
   branch: string;
@@ -110,6 +113,9 @@ export type CanonicalExecutionRequest = {
   sourceReference?: string;
   passThrough?: boolean;
   executionProfile?: 'OWNER_AUTHORIZED_GIT_DELIVERY';
+  entityType?: 'work_package'|'pull_request';
+  entityId?: string;
+  parentWorkPackageId?: string;
 };
 export function resolveRuntimeExecutionPolicy(executionType:string,requestedSandbox?:CanonicalExecutionRequest['sandbox']){
   const sandboxMode:"workspace-write"|"read-only"=["READ_ONLY_AUDIT","REVIEW","ANALYSIS"].includes(executionType)?"read-only":"workspace-write";
@@ -179,9 +185,9 @@ export function reconcileProcessExit(state:RuntimeState,code:number|null,signal:
   else {state.phase='FAILED';state.failure=signal?`PROCESS_EXIT_SIGNAL:${signal}`:'PROCESS_EXIT_NONZERO'}
   return state;
 }
-export function readRuntime(workPackageId?: string): RuntimeState | null {
+export function readRuntime(workPackageId?: string, entityType?: RuntimeState['entityType'], entityId?: string): RuntimeState | null {
   const candidates = readStoredRuntimes()
-    .filter((item) => !workPackageId || item.workPackageId === workPackageId)
+    .filter((item) => !entityId ? (!workPackageId || item.workPackageId === workPackageId) : item.entityType === entityType && item.entityId === entityId)
     .sort((a,b)=>Date.parse(b.lastActivityAt||b.startedAt)-Date.parse(a.lastActivityAt||a.startedAt));
   const active = candidates.find(item=>["STARTING","RUNNING","STOPPING"].includes(item.phase));
   const current = active ?? candidates[0];
@@ -192,7 +198,7 @@ export function readRuntime(workPackageId?: string): RuntimeState | null {
     if (monitored.phase !== before || monitored.healthWarning || monitored.pidAlive !== current.pidAlive || monitored.writerLockReleased !== current.writerLockReleased) save(monitored);
     return monitored;
   }
-  return readRuntimeHistory().find(item=>!workPackageId||item.workPackageId===workPackageId)??null;
+  return readRuntimeHistory().find(item=>entityId ? item.entityType===entityType&&item.entityId===entityId : (!workPackageId||item.workPackageId===workPackageId))??null;
 }
 function readStoredRuntimes():RuntimeState[]{
   const files=[RUN_FILE];
@@ -299,11 +305,16 @@ export function startRuntime(
   const auth = matchingStoredAuth ?? (options.allowReadOnlyWithoutAuthorization && isReadOnly ? { authorizationId: "read-only-local-audit", workPackageId: wpId, authoritySha: repo.remoteMain, branch: repo.branch, headShaAtAuthorization: repo.head, repositoryRoot: repo.repository, scope: ["read_repository", "read_work_package"], allowed: ["read_only_audit"], forbidden: ["arbitrary_shell", "push", "merge"], authorizedAt: new Date().toISOString() } : storedAuth);
   const scope = passThrough?[]:[];
   if (!info.available) throw new Error("CODEX_UNAVAILABLE");
+  const entityType=options.entityType??'work_package';
+  const entityId=options.entityId??wpId;
   const now = new Date().toISOString(),
     runId=`run-${Date.now()}-${Math.random().toString(36).slice(2,8)}`,
     s: RuntimeState = {
       runId,
-      workPackageId: wpId,
+      workPackageId: entityType==='work_package'?entityId:(options.parentWorkPackageId??'UNBOUND'),
+      entityType,
+      entityId,
+      parentWorkPackageId: options.parentWorkPackageId,
       authorizationId: auth?.authorizationId??"pass-through",
       authoritySha: auth?.authoritySha??"NOT_APPLICABLE",
       branch: auth?.branch??repo.branch,

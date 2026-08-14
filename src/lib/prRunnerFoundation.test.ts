@@ -4,6 +4,7 @@ import {createProjectSnapshot} from './model/projectModel.ts';
 import {resolveEntityContext} from './context/entityContext.ts';
 import {parseOwnerHumanUatPlan} from './humanUat.ts';
 import {resolveAvailableActions} from './context/actionEligibility.ts';
+import {deterministicPrDeliveryBranch} from './controlService.ts';
 
 const wpA='AICC-V2-PR-RUNNER-001',wpB='AICC-V2-RUNTIME-OPERATIONS-001';
 const roadmap=`## Active V2 Milestones\n### M4 — PR Runner Foundation\nWork Packages: \`${wpA}\`, \`${wpB}\`\n## Legacy Historical Milestones`;
@@ -36,6 +37,10 @@ if(unknown.type==='pull_request')assert.equal(unknown.parentWorkPackageId,null);
 const plan=readFileSync(new URL('../../docs/60_Operations/work-packages/AICC-V2-PR-RUNNER-001.md',import.meta.url),'utf8');
 assert.equal(parseOwnerHumanUatPlan(plan).length,5);
 assert.equal(parseOwnerHumanUatPlan(plan).every(item=>item.id.startsWith('HUA-PR-')),true);
+const sourceBranch='rebuild/aicc-v2',deliveryBranch=deterministicPrDeliveryBranch(wpA,'pr-workspace-001');
+assert.notEqual(sourceBranch,deliveryBranch,'PR delivery branch is isolated from integration branch');
+assert.equal(deterministicPrDeliveryBranch(wpA,'pr-workspace-001'),deliveryBranch,'reconnect reuses deterministic delivery branch');
+assert.match(readFileSync(new URL('./context/prTabContent.ts',import.meta.url),'utf8'),/deliveryBranch/,'PR workspace projects delivery branch metadata');
 const vite=readFileSync(new URL('../../vite.config.ts',import.meta.url),'utf8');
 assert(vite.includes("readPrCreationRequest(p.prId)"));
 assert(vite.includes("status:'ALREADY_REQUESTED'"));

@@ -34,7 +34,7 @@
         : start?.enabled&&codexAvailable
           ? {label:'启动执行',detail:'准备就绪，可以开始执行',tab:'运行',enabled:true,action:'START_CODEX' as ActionEligibility['id']}
           : authorize?.enabled
-            ? {label:'确认授权',detail:'需要 Owner 授权后才能执行',tab:'概览',enabled:true,action:'AUTHORIZE' as ActionEligibility['id']}
+            ? {label:'确认授权',detail:'需要 Owner 授权后才能执行',tab:'授权',enabled:true,action:'AUTHORIZE' as ActionEligibility['id']}
             : {label:'启动执行',detail:start?.reasonLabel??'当前状态暂不可执行',tab:'运行',enabled:false,action:null as ActionEligibility['id']|null};
 
   function activate(){if(currentAction.action)onAction(currentAction.action);else onNavigate(currentAction.tab)}

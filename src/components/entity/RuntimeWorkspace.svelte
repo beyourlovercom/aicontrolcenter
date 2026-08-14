@@ -8,6 +8,8 @@
 
   export let runtime:RuntimeRecord|null=null;
   export let history:RuntimeRecord[]=[];
+  export let entityType:'work_package'|'pull_request'='work_package';
+  export let entityId='';
   export let selectedRunId:string|null=null;
   export let selectedInboxId:string|null=null;
   export let workPackage:FormalWorkPackage|null=null;
@@ -25,11 +27,13 @@
   export let onPasteInstruction:()=>void=()=>{};
   export let onImportInstruction:()=>void=()=>{};
   export let onManualExecute:()=>void=()=>{};
+  export let onImportAndRun:()=>void=()=>{};
+  export let onCopyResult:()=>void=()=>{};
   export let onCopyExample:()=>void=()=>{};
   export let onLaunch:(id:string)=>void=()=>{};
   export let onCopyReport:(report:unknown)=>void=()=>{};
   export let onSelectRun:(id:string)=>void=()=>{};
-  $: scopedBridgeOutbox=workPackage?.id?bridgeOutbox.filter(item=>item.report?.workPackageId===workPackage.id):[];
+  $: scopedBridgeOutbox=bridgeOutbox.filter(item=>entityType==='pull_request'?item.report?.entityType?.toLowerCase()==='pull_request'&&item.report?.entityId===entityId:workPackage?.id&&item.report?.workPackageId===workPackage.id);
 
   let inspectedInboxId:string|null=null,instructionExpandedId:string|null=null,resultExpandedId:string|null=null,copiedRunId:string|null=null,copyTimer:number|undefined;
   onMount(()=>{recordWorkspaceMount();return ()=>{if(copyTimer)clearTimeout(copyTimer)}});
@@ -49,13 +53,12 @@
   function formatDuration(start?:string,end?:string){if(!start)return '不可用';const from=Date.parse(start),to=end?Date.parse(end):Date.now();if(!Number.isFinite(from)||!Number.isFinite(to))return '不可用';const seconds=Math.max(0,Math.floor((to-from)/1000));return `${Math.floor(seconds/60)}分${String(seconds%60).padStart(2,'0')}秒`}
   function toggleInstruction(id:string){instructionExpandedId=instructionExpandedId===id?null:id}
   async function copyRunResult(runId:string){const run=runtimeForRun(runId),result=resultForRun(run);if(!result)return;resultExpandedId=runId;try{if(!navigator.clipboard?.writeText)throw new Error('CLIPBOARD_UNAVAILABLE');await navigator.clipboard.writeText(result);copiedRunId=runId;if(copyTimer)clearTimeout(copyTimer);copyTimer=window.setTimeout(()=>copiedRunId=null,1800)}catch{copiedRunId=null}}
-  async function copySelectedOrLatestResult(){const candidate=(focused&&resultForRun(focused))?focused:runRecords.find(run=>Boolean(resultForRun(run)));if(candidate)await copyRunResult(candidate.runId)}
 </script>
 
 <section class="runtime-workspace" data-testid="runtime-tab-workspace">
   {#if showInbox}
     <section class="runtime-command-panel" data-testid="runtime-execution-inbox">
-      <div class="runtime-top-action-bar" data-testid="runtime-top-action-bar"><div><button class="service-action" onclick={onPasteInstruction}>粘贴指令</button><button class="service-action" onclick={onImportInstruction}>导入指令</button><button class="service-action" disabled={autoExecute||instructionState!=='IMPORTED_PENDING'} aria-disabled={autoExecute||instructionState!=='IMPORTED_PENDING'} onclick={onManualExecute}>执行指令</button></div><div><button class="service-action" onclick={copySelectedOrLatestResult}>复制结果</button><button class="service-action" onclick={onCopyExample}>复制有效示例</button></div></div>
+      <div class="runtime-top-action-bar" data-testid="runtime-top-action-bar"><div><button class="service-action" onclick={onPasteInstruction}>粘贴指令</button><button class="service-action" onclick={onImportInstruction}>导入指令</button><button class="service-action" disabled={autoExecute||instructionState!=='IMPORTED_PENDING'} aria-disabled={autoExecute||instructionState!=='IMPORTED_PENDING'} onclick={onManualExecute}>执行指令</button></div><div><button class="service-action" onclick={onCopyResult}>复制结果</button><button class="service-action" onclick={onCopyExample}>复制有效示例</button></div></div>
       <textarea value={bridgePayload} oninput={(event)=>onPayloadChange((event.currentTarget as HTMLTextAreaElement).value)} placeholder="粘贴 AICC_EXECUTION_V1，或复制有效示例…"></textarea>
       <div class="runtime-instruction-state" data-testid="runtime-instruction-state">{instructionState}</div>
       {#each bridgeInbox.filter(item=>!item.runId).slice(0,5) as item, index}
@@ -66,7 +69,7 @@
 
   <section class="runtime-current-card" data-testid="runtime-current-execution">
     <div class="section-label"><span>当前执行</span><small>{focused?.runId??'暂无匹配运行'}</small></div>
-    {#if focused}<div class="runtime-current-grid"><div><small>状态</small><strong>{focused.phase}</strong></div><div><small>当前活动</small><strong>{focused.currentTask||focused.latestEvent||'UNAVAILABLE'}</strong></div><div><small>Run ID</small><strong class="mono">{focused.runId}</strong></div><div><small>耗时</small><strong>{formatDuration(focused.startedAt,focused.completedAt??(['COMPLETED','FAILED','STOPPED'].includes(focused.phase)?focused.lastActivityAt:undefined))}</strong></div><div><small>PID</small><strong>{focused.pid??'不可用'}</strong></div>{#if ['COMPLETED','FAILED','STOPPED'].includes(focused.phase)}<div><small>退出码</small><strong>{focused.exitCode??'不可用'}</strong></div>{/if}</div><div class="runtime-run-times"><span>开始：{formatOwnerLocalTime(focused.startedAt)}</span>{#if focused.completedAt}<span>结束：{formatOwnerLocalTime(focused.completedAt)}</span>{/if}</div>{:else}<p class="runtime-empty-copy">当前没有绑定到所选实体的运行。</p>{/if}
+    {#if focused}<div class="runtime-current-grid"><div><small>实体绑定</small><strong>{entityType.toUpperCase()} · {entityId||workPackage?.id||'UNBOUND'}</strong></div><div><small>状态</small><strong>{focused.phase}</strong></div><div><small>当前活动</small><strong>{focused.currentTask||focused.latestEvent||'UNAVAILABLE'}</strong></div><div><small>Run ID</small><strong class="mono">{focused.runId}</strong></div><div><small>耗时</small><strong>{formatDuration(focused.startedAt,focused.completedAt??(['COMPLETED','FAILED','STOPPED'].includes(focused.phase)?focused.lastActivityAt:undefined))}</strong></div><div><small>PID</small><strong>{focused.pid??'不可用'}</strong></div>{#if ['COMPLETED','FAILED','STOPPED'].includes(focused.phase)}<div><small>退出码</small><strong>{focused.exitCode??'不可用'}</strong></div>{/if}</div><div class="runtime-run-times"><span>开始：{formatOwnerLocalTime(focused.startedAt)}</span>{#if focused.completedAt}<span>结束：{formatOwnerLocalTime(focused.completedAt)}</span>{/if}</div>{:else}<p class="runtime-empty-copy">当前没有绑定到所选实体的运行。</p>{/if}
   </section>
 
   <section class="runtime-live-section" data-testid="runtime-live-activity">

@@ -1,6 +1,7 @@
 import {execFileSync, spawn} from 'node:child_process';
-import {mkdirSync, readFileSync, renameSync, unlinkSync, writeFileSync} from 'node:fs';
+import {mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, unlinkSync, writeFileSync} from 'node:fs';
 import {join} from 'node:path';
+import {tmpdir} from 'node:os';
 import {parseEvent, reconcileProcessExit, type RuntimeState} from '../src/lib/runtimeManager.ts';
 import {buildOwnerGitDeliveryEnvironment, resolveGitHubCredential, redactSecret, stripGitHubCredentialEnvironment} from '../src/lib/gitCredentialBridge.ts';
 
@@ -13,6 +14,7 @@ const historyFile=join(spec.stateDir,'runtime-history.json');
 const maxHistory=20;
 
 let ephemeralGithubToken:string|undefined;
+let ephemeralGithubConfigDir:string|undefined;
 function scrubState(state:RuntimeState){
   if(!ephemeralGithubToken)return;
   for(const key of Object.keys(state) as (keyof RuntimeState)[]){
@@ -35,6 +37,11 @@ function persist(state:RuntimeState){
   renameSync(historyTemp,historyFile);
 }
 function releaseLock(){try{unlinkSync(spec.lockFile)}catch{}}
+function cleanupEphemeralGitHubCredential(){
+  if(!ephemeralGithubConfigDir)return;
+  rmSync(ephemeralGithubConfigDir,{recursive:true,force:true});
+  ephemeralGithubConfigDir=undefined;
+}
 function finish(state:RuntimeState,code:number|null,signal:string|null){
   state.processCloseObserved=true;
   state.processSignal=signal;
@@ -47,7 +54,7 @@ function finish(state:RuntimeState,code:number|null,signal:string|null){
   state.codeChangePresent=state.postRunHead!==state.authorizedHead||(state.changedFiles?.length??0)>0;
   state.implementationResult=['IMPLEMENTATION','REMEDIATION'].includes(state.executionType??'')?(state.codeChangePresent?'CODE_CHANGE_PRESENT':'NO_IMPLEMENTATION_CHANGE'):'READ_ONLY';
   reconcileProcessExit(state,code,signal);
-  persist(state);releaseLock();
+  persist(state);releaseLock();cleanupEphemeralGitHubCredential();
 }
 const state=spec.state;
 state.supervisorPid=process.pid;
@@ -60,6 +67,8 @@ try{
   const childEnvironment=deliveryProfile ? (() => {
     ephemeralGithubToken=resolveGitHubCredential(process.env);
     const environment=buildOwnerGitDeliveryEnvironment(process.env,ephemeralGithubToken);
+    ephemeralGithubConfigDir=mkdtempSync(join(tmpdir(),'aicc-gh-config-'));
+    environment.GH_CONFIG_DIR=ephemeralGithubConfigDir;
     environment.HOME=environment.HOME??process.env.USERPROFILE??'/Users/a';
     environment.PATH=[environment.PATH,'/Users/a/.local/bin','/opt/homebrew/bin','/usr/bin','/bin'].filter(Boolean).join(':');
     return environment;
@@ -75,4 +84,4 @@ try{
   child.on('exit',(code,signal)=>{state.processExitObserved=true;exitCode=code;exitSignal=signal;state.exitCode=code;state.processSignal=signal;state.pidAlive=false;persist(state)});
   child.on('close',(code)=>finish(state,code??exitCode??null,exitSignal));
   child.stdin?.end(spec.prompt);
-}catch(error){state.phase='FAILED';state.failure=error instanceof Error?error.message:'SUPERVISOR_SPAWN_FAILED';state.pidAlive=false;persist(state);releaseLock();process.exitCode=1}
+}catch(error){state.phase='FAILED';state.failure=error instanceof Error?error.message:'SUPERVISOR_SPAWN_FAILED';state.pidAlive=false;persist(state);releaseLock();cleanupEphemeralGitHubCredential();process.exitCode=1}
