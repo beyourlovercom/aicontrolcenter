@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
 import {canPassHumanUat,resolveHumanUatStatus} from './humanUat.ts';
+const workspace=readFileSync(new URL('../components/entity/HumanUatWorkspace.svelte',import.meta.url),'utf8');
 const pass=[{id:'1',title:'a',description:'a',state:'PASS' as const},{id:'2',title:'b',description:'b',state:'N_A' as const}];
 assert.equal(canPassHumanUat(pass),true);assert.equal(resolveHumanUatStatus(null,pass),'IN_PROGRESS');
 assert.equal(canPassHumanUat([{...pass[0],state:'PENDING'}]),false);assert.equal(canPassHumanUat([{...pass[0],state:'FAIL'}]),false);
@@ -7,4 +9,10 @@ assert.equal(resolveHumanUatStatus({repository:'r',workPackageId:'w',entityType:
 const override={repository:'r',workPackageId:'w',entityType:'work_package' as const,status:'PASS' as const,decision:'PASS' as const,decisionMode:'OWNER_OVERRIDE_PASS' as const,items:[{...pass[0],state:'PENDING' as const}],createdAt:'',updatedAt:'',source:''};
 assert.equal(resolveHumanUatStatus(override,override.items),'PASS');
 assert.equal(override.items[0].state,'PENDING');
+assert.match(workspace,/lifecycleUatStatus/,'UAT workspace reads canonical lifecycle stage');
+assert.match(workspace,/record\?\.status==='PASS'\|\|lifecycleUatStatus==='PASS'/,'closed canonical UAT PASS is preserved without a record');
+assert.match(workspace,/历史 UAT 已通过，未保存结构化逐项清单/,'historical pass has no false 0/0 empty state');
+assert.match(workspace,/currentStatus==='PASS'\?'已通过'/,'closed UAT renders completed state');
+assert.match(workspace,/currentStatus==='NEEDS_REMEDIATION'\?'未通过'/,'failed UAT renders failed state');
+assert.match(workspace,/enteredUat/,'not-entered copy is gated by lifecycle stage');
 console.log('human UAT contract tests passed');
