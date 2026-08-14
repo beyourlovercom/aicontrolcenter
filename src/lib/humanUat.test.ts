@@ -11,7 +11,7 @@ assert.equal(resolveHumanUatStatus(override,override.items),'PASS');
 assert.equal(override.items[0].state,'PENDING');
 assert.match(workspace,/lifecycleUatStatus/,'UAT workspace reads canonical lifecycle stage');
 assert.match(workspace,/record\?\.status==='PASS'\|\|lifecycleUatStatus==='PASS'/,'closed canonical UAT PASS is preserved without a record');
-assert.match(workspace,/历史 UAT 已通过，未保存结构化逐项清单/,'historical pass has no false 0/0 empty state');
+assert.equal(workspace.includes('暂无可解析的 Owner Human UAT 计划。'),false,'missing checklist does not use long fallback prose');
 assert.match(workspace,/currentStatus==='PASS'\?'已通过'/,'closed UAT renders completed state');
 assert.match(workspace,/currentStatus==='NEEDS_REMEDIATION'\?'未通过'/,'failed UAT renders failed state');
 assert.match(workspace,/enteredUat/,'not-entered copy is gated by lifecycle stage');
@@ -27,4 +27,9 @@ assert.equal(workspace.includes('uat-round-actions'),false,'round navigation is 
 assert.equal(workspace.includes('class="uat-actions"'),false,'bottom business action bar removed');
 assert.match(workspace,/uat-action-read/,'read actions share one row');
 assert.match(workspace,/uat-action-mutate/,'mutation actions share one row');
+for(const icon of ['📎','▶️','📄','💾','↩️','✅']) assert.equal(workspace.includes(icon),true,`action icon present: ${icon}`);
+assert.equal(workspace.includes('负责人'),false,'owner summary card is removed');
+assert.match(workspace,/type="checkbox"/,'checklist uses checkbox controls');
+assert.match(workspace,/manualChecklist/,'missing checklist uses the manual compact checklist');
+assert.match(workspace,/disabled={!editable}/,'closed checklist controls are read-only');
 console.log('human UAT contract tests passed');
