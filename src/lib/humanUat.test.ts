@@ -40,4 +40,11 @@ assert.match(workspace,/uat-history-pass/,'historical pass uses success check st
 assert.match(workspace,/完成时间/,'completion time is visible in history');
 assert.match(workspace,/uat-history-note/,'historical Owner note section is preserved');
 assert.match(workspace,/formatOwnerLocalTime/,'historical timestamps use the shared local formatter');
+assert.match(workspace,/open-uat-checklist/,'open UAT uses a table layout');
+assert.match(workspace,/uat-actual-result/,'open UAT actual results are editable');
+assert.match(workspace,/uat-status-check/,'open UAT status uses a checkable control');
+assert.match(workspace,/oninput=\{\(event\)=>updateActualResult/,'actual results are kept in the save draft');
+assert.match(workspace,/oninput=\{overall\}/,'Owner note stays on the top save path');
+assert.match(workspace,/有未保存修改/,'unsaved UAT changes are visible');
+assert.match(workspace,/canPassDraft/,'final pass validates the draft checklist');
 console.log('human UAT contract tests passed');
