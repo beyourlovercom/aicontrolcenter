@@ -15,4 +15,14 @@ assert.match(workspace,/历史 UAT 已通过，未保存结构化逐项清单/,'
 assert.match(workspace,/currentStatus==='PASS'\?'已通过'/,'closed UAT renders completed state');
 assert.match(workspace,/currentStatus==='NEEDS_REMEDIATION'\?'未通过'/,'failed UAT renders failed state');
 assert.match(workspace,/enteredUat/,'not-entered copy is gated by lifecycle stage');
+assert.match(workspace,/data-testid="uat-top-action-bar"/,'UAT business actions are in the top action bar');
+assert.equal((workspace.match(/查看验收证据/g)??[]).length,1,'one evidence read action');
+assert.equal((workspace.match(/查看运行结果/g)??[]).length,1,'one run result read action');
+assert.equal((workspace.match(/查看原始指令/g)??[]).length,1,'one instruction read action');
+assert.equal((workspace.match(/保存进度/g)??[]).length,1,'one save action');
+assert.equal((workspace.match(/退回整改/g)??[]).length,1,'remediation uses the canonical label');
+assert.equal((workspace.match(/通过 UAT/g)??[]).length,1,'one UAT pass action');
+for(const legacy of ['开始人工 UAT','继续人工 UAT','直接通过 UAT','标记需整改']) assert.equal(workspace.includes(legacy),false,`legacy UAT action removed: ${legacy}`);
+assert.equal(workspace.includes('uat-round-actions'),false,'round navigation is not a second business action bar');
+assert.equal(workspace.includes('class="uat-actions"'),false,'bottom business action bar removed');
 console.log('human UAT contract tests passed');

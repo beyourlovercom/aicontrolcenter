@@ -15,7 +15,8 @@ assert.match(actions,/ownerStatusCode==='WAITING_UAT'/,'waiting UAT action uses 
 assert.match(actions,/closed=context\.lifecycle\.currentStage==='CLOSED'/,'owner action uses canonical closed stage');
 assert.match(actions,/已完成，无需操作/,'closed WP has no-op current action');
 assert.equal(actions.includes("label:'启动执行',detail:'准备就绪，可以开始执行'"),true,'non-closed start action remains supported');
-assert.ok(actions.indexOf("label:'开始人工 UAT'")<actions.indexOf("label:'查看报告'"),'UAT is prioritized over report access');
+assert.equal(actions.includes("label:'开始人工 UAT'"),false,'legacy UAT start action is removed');
+assert.match(actions,/label:'查看当前 UAT'/,'UAT navigation remains available without a second start action');
 assert.equal((actions.match(/class="action primary"/g)??[]).length,1,'one primary Owner action');
 assert.match(app,/resolveOwnerStatusProjection\(context,bridgeOutbox\)/,'all owner status surfaces use the shared projection');
 assert.match(app,/resolveOwnerWorkflowStages\(context,bridgeOutbox\)/,'workflow uses the shared owner projection');

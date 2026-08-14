@@ -26,7 +26,7 @@
     : retry?.enabled
       ? {label:'重试',detail:'执行失败，可重新尝试',tab:'运行',enabled:true,action:'RETRY' as ActionEligibility['id']}
       : humanUat
-        ? {label:context.humanUat?.status==='IN_PROGRESS'?'查看当前 UAT':'开始人工 UAT',detail:context.humanUat?.status==='IN_PROGRESS'?'正在进行人工验收':'机器执行已完成，等待人工验收',tab:'UAT',enabled:true,action:null as ActionEligibility['id']|null}
+        ? {label:'查看当前 UAT',detail:context.humanUat?.status==='IN_PROGRESS'?'正在进行人工验收':'机器执行已完成，等待人工验收',tab:'UAT',enabled:true,action:null as ActionEligibility['id']|null}
         : terminalReportReady
           ? {label:'查看报告',detail:'运行已完成，报告已生成',tab:'运行',enabled:true,action:null as ActionEligibility['id']|null}
         : terminalReportPending
