@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {canPassHumanUat,resolveHumanUatStatus} from './humanUat.ts';
 const workspace=readFileSync(new URL('../components/entity/HumanUatWorkspace.svelte',import.meta.url),'utf8');
+const styles=readFileSync(new URL('../app.css',import.meta.url),'utf8');
 const pass=[{id:'1',title:'a',description:'a',state:'PASS' as const},{id:'2',title:'b',description:'b',state:'N_A' as const}];
 assert.equal(canPassHumanUat(pass),true);assert.equal(resolveHumanUatStatus(null,pass),'IN_PROGRESS');
 assert.equal(canPassHumanUat([{...pass[0],state:'PENDING'}]),false);assert.equal(canPassHumanUat([{...pass[0],state:'FAIL'}]),false);
@@ -50,4 +51,8 @@ assert.match(workspace,/canPassDraft/,'final pass validates the draft checklist'
 assert.match(workspace,/没有正式逐项验收清单/,'no structured checklist uses a lightweight confirmation');
 assert.match(workspace,/问题记录（历史）/,'closed issue history is explicitly read-only history');
 assert.match(workspace,/Owner 备注（历史）/,'closed Owner note history is explicitly preserved');
+assert.match(styles,/\.uat-action-bar \.uat-action-mutate\{margin-left:auto\}/,'mutation actions align to the right');
+assert.match(styles,/\.uat-summary\{margin:var\(--space-3\) 0;grid-template-columns:repeat\(3/,'summary row uses equal compact columns');
+assert.match(styles,/\.uat-summary>div\{min-height:68px;padding:var\(--space-3\)\}/,'summary blocks share height and padding');
+assert.match(styles,/\.uat-checklist\{margin-top:var\(--space-3\)\}/,'summary to checklist spacing is compact');
 console.log('human UAT contract tests passed');
