@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import {createProjectSnapshot} from './model/projectModel.ts';
 import {resolveEntityContext} from './context/entityContext.ts';
+import {readWorkPackage} from './controlService.ts';
 const roadmap='## Active V2 Milestones\n### M1 — Control Surface Finalization\nWork Packages: `AICC-V2-UI-WORKFLOW-001`\n## Legacy Historical Milestones';
 const snapshot=createProjectSnapshot({roadmap:{source:'docs/60_Operations/work-packages/AICC-V2-WORK-PACKAGE-LIFECYCLE-001.md',content:roadmap},repository:{repository:'local',branch:'feature',head:'head',localMain:'main',remoteMain:'main',worktree:'CLEAN',lastCommit:'test'},formalWorkPackages:{'AICC-V2-UI-WORKFLOW-001':{id:'AICC-V2-UI-WORKFLOW-001',title:'UI Workflow',source:'test',fields:{},sections:{}}},authorization:{authorizationId:'auth',workPackageId:'AICC-V2-UI-WORKFLOW-001',authoritySha:'main',branch:'feature',headShaAtAuthorization:'head',repositoryRoot:'local',authorizedAt:'now'},lifecycleEvidence:[{repository:'local',workPackageId:'AICC-V2-UI-WORKFLOW-001',implementation:{status:'COMPLETE',recordedAt:'now'},validation:{status:'COMPLETE',checks:['test'],recordedAt:'now'}}],humanUat:[{repository:'local',workPackageId:'AICC-V2-UI-WORKFLOW-001',entityType:'work_package',status:'IN_PROGRESS',items:[],createdAt:'now',updatedAt:'now',source:'Owner UAT'}]});
 const current=resolveEntityContext(snapshot,{type:'work_package',id:'AICC-V2-UI-WORKFLOW-001'});
@@ -41,3 +42,18 @@ const lifecycleFixture= createProjectSnapshot({roadmap:{source:'test',content:li
 const lifecycleWaiting=resolveEntityContext(lifecycleFixture,{type:'work_package',id:'AICC-V2-LIFECYCLE-FIXTURE-001'});assert.equal(lifecycleWaiting.status,'WAITING_UAT');
 const lifecyclePassed=createProjectSnapshot({roadmap:{source:'test',content:lifecycleFixtureRoadmap},repository:lifecycleFixtureRepo,formalWorkPackages:{'AICC-V2-LIFECYCLE-FIXTURE-001':lifecycleFixtureFormal},authorization:lifecycleFixtureAuth,lifecycleEvidence:[{repository:'/repo',workPackageId:'AICC-V2-LIFECYCLE-FIXTURE-001',implementation:{status:'COMPLETE',recordedAt:'now'},validation:{status:'COMPLETE',checks:['test'],recordedAt:'now'}}],humanUat:[{repository:'/repo',workPackageId:'AICC-V2-LIFECYCLE-FIXTURE-001',entityType:'work_package',status:'PASS',items:[],createdAt:'now',updatedAt:'now',source:'test'}]});const lifecyclePassedContext=resolveEntityContext(lifecyclePassed,{type:'work_package',id:'AICC-V2-LIFECYCLE-FIXTURE-001'});assert.notEqual(lifecyclePassedContext.status,'NOT_STARTED');
 console.log('work package lifecycle projection matrix passed');
+const closedIds=['AICC-V2-AUTO-EXECUTE-MODE-001','AICC-V2-RUNTIME-OPERATIONS-001','AICC-V2-WORKSPACE-CONTEXT-001'];
+for(const closedId of closedIds){
+  const closedFormal=readWorkPackage(closedId);
+  const closedSnapshot=createProjectSnapshot({roadmap:{source:'test',content:`## Active V2 Milestones\n### M3.86 — Lifecycle\nWork Packages: \`${closedId}\`\n## Legacy Historical Milestones`},repository:lifecycleFixtureRepo,formalWorkPackages:{[closedId]:closedFormal}});
+  const closedContext=resolveEntityContext(closedSnapshot,{type:'work_package',id:closedId});
+  assert.equal(closedContext.type,'work_package');if(closedContext.type!=='work_package')throw new Error('closed fixture context required');
+  assert.equal(closedContext.lifecycle.currentStage,'CLOSED',`${closedId} current stage`);
+  assert.equal(closedContext.lifecycle.effectiveStatus,'COMPLETE',`${closedId} status`);
+  assert.equal(closedContext.lifecycle.stages.find(stage=>stage.id==='HUMAN_UAT')?.status,'PASS',`${closedId} UAT`);
+  assert.equal(closedContext.progress,100,`${closedId} progress`);
+}
+const currentFormal=readWorkPackage('AICC-V2-WORK-PACKAGE-LIFECYCLE-001');
+const currentSnapshot=createProjectSnapshot({roadmap:{source:'test',content:'## Active V2 Milestones\n### M3.86 — Lifecycle\nWork Packages: `AICC-V2-WORK-PACKAGE-LIFECYCLE-001`\n## Legacy Historical Milestones'},repository:lifecycleFixtureRepo,formalWorkPackages:{'AICC-V2-WORK-PACKAGE-LIFECYCLE-001':currentFormal}});
+const currentContext=resolveEntityContext(currentSnapshot,{type:'work_package',id:'AICC-V2-WORK-PACKAGE-LIFECYCLE-001'});assert.equal(currentContext.type,'work_package');if(currentContext.type!=='work_package')throw new Error('current lifecycle context required');assert.notEqual(currentContext.lifecycle.currentStage,'PLANNED');assert.equal(currentContext.lifecycle.stages.find(stage=>stage.id==='IMPLEMENTATION')?.status,'COMPLETE');assert.equal(currentContext.lifecycle.stages.find(stage=>stage.id==='VALIDATION')?.status,'COMPLETE');assert.equal(currentContext.lifecycle.stages.find(stage=>stage.id==='HUMAN_UAT')?.status,'WAITING_UAT');
+console.log('real browser lifecycle fixture matrix passed');

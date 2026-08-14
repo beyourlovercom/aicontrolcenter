@@ -4,6 +4,7 @@ import type {AiccProjectSnapshot,FormalizationState,LifecycleStage,ResolvedAutho
 const stage=(id:string,label:string,status:AiccStatus,evidence:string[]=[],reasonCode?:string):LifecycleStage=>({id,label,status,evidence,...(reasonCode?{reasonCode}:{})});
 const complete=(value?:string)=>Boolean(value&&/^(PASS|COMPLETE|CLOSED|APPROVED_BASELINE)$/i.test(value.trim()));
 const notApplicable=(value?:string)=>!value||/^(N_A|NA|NOT_APPLICABLE|NONE|NO)$/i.test(value.trim());
+const contractFields=(fields:Record<string,string>)=>Object.fromEntries(Object.entries(fields).map(([key,value])=>[key.toUpperCase().replace(/[\s-]+/g,'_'),value]));
 
 /**
  * The only lifecycle authority used by Entity Context and the Roadmap read model.
@@ -15,7 +16,7 @@ export function resolveWorkPackageLifecycle(id:string,formalization:Formalizatio
   const uat=snapshot.humanUat.value?.find(record=>record.workPackageId===id)??null;
   const evidence=snapshot.lifecycleEvidence.value?.find(item=>item.workPackageId===id)??null;
   const runtime=snapshot.runtime.value?.workPackageId===id?snapshot.runtime.value:null;
-  const fields=formal?.fields??{};
+  const fields=contractFields(formal?.fields??{});
   const statuses:Record<string,AiccStatus>={PLANNED:'NOT_STARTED',READY:'NOT_STARTED',OWNER_AUTHORIZATION:'NOT_STARTED',IMPLEMENTATION:'NOT_STARTED',VALIDATION:'NOT_STARTED',REVIEW:'N_A',DELIVERY:'N_A',HUMAN_UAT:'NOT_STARTED',CLOSED:'NOT_STARTED'};
   const evidenceByStage:Record<string,string[]>={};
   const mark=(id:string,status:AiccStatus,...facts:string[])=>{statuses[id]=status;if(facts.length)evidenceByStage[id]=facts;};
@@ -29,7 +30,18 @@ export function resolveWorkPackageLifecycle(id:string,formalization:Formalizatio
     mark('PLANNED','COMPLETE','正式 Work Package 合同已发现。');
     mark('READY','COMPLETE','正式 Work Package 合同已通过结构读取。');
 
-    const authRequired=!/^(false|no|0)$/i.test(fields.REQUIRES_AUTHORIZATION??fields['Requires Authorization']??'');
+    const closedContract=complete(fields.PACKAGE_STATUS)&&complete(fields.IMPLEMENTATION)&&complete(fields.MACHINE_VALIDATION)&&complete(fields.HUMAN_UAT);
+    if(closedContract){
+      mark('OWNER_AUTHORIZATION','COMPLETE','Owner-approved closed Work Package contract。');
+      mark('IMPLEMENTATION','COMPLETE','正式合同记录实现已完成。');
+      mark('VALIDATION','COMPLETE','正式合同记录机器验证已完成。');
+      mark('HUMAN_UAT','PASS','Owner Human UAT 通过证据已记录。');
+      mark('CLOSED','COMPLETE','正式合同记录 Work Package 已关闭。');
+    }
+    const authRequired=!/^(false|no|0)$/i.test(fields.REQUIRES_AUTHORIZATION??'');
+    if(closedContract){
+      // Closed contract facts are authoritative; do not re-open an earlier gate.
+    } else {
     if(!authRequired||authorization.state==='VALID'||complete(fields.OWNER_AUTHORIZATION))mark('OWNER_AUTHORIZATION','COMPLETE','授权合同或有效授权证据已满足。');
     else mark('OWNER_AUTHORIZATION','WAITING_OWNER','等待 Owner 授权。');
 
@@ -59,8 +71,9 @@ export function resolveWorkPackageLifecycle(id:string,formalization:Formalizatio
     else if(humanPass)mark('HUMAN_UAT','PASS','Owner Human UAT 通过证据已记录。');
     else if(prerequisites)mark('HUMAN_UAT','WAITING_UAT','机器前置阶段已完成，等待 Owner 人工验收。');
 
-    const closed=Boolean(evidence?.closure?.status==='COMPLETE'||(humanPass&&/^(CLOSED|COMPLETE)$/i.test(fields.PACKAGE_STATUS??fields.Status??'')));
+    const closed=Boolean(evidence?.closure?.status==='COMPLETE'||(humanPass&&/^(CLOSED|COMPLETE)$/i.test(fields.PACKAGE_STATUS??'')));
     if(closed)mark('CLOSED','COMPLETE','Work Package 关闭证据已记录。');
+    }
   }
 
   const stages=wpStages.map(([stageId,label])=>stage(stageId,label,statuses[stageId],evidenceByStage[stageId]??[],statuses[stageId]==='N_A'?'STAGE_NOT_APPLICABLE':undefined));

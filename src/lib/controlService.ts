@@ -42,7 +42,12 @@ export function readWorkPackage(id: string): WorkPackage {
   const text = readFileSync(source, 'utf8');
   const heading = text.match(/^#\s+(.+)$/m)?.[1] ?? id;
   const fields: Record<string, string> = {};
-  for (const line of text.split('\n')) { const match = line.match(/^(?:\*\*)?([^:*]+?)(?:\*\*)?:\s*(.+)$/); if (match) fields[match[1].trim()] = match[2].trim().replace(/^`|`$/g, ''); }
+  for (const line of text.split('\n')) {
+    const colon=line.match(/^(?:\*\*)?([^:*]+?)(?:\*\*)?:\s*(.+)$/);
+    const equality=line.match(/^`?\s*([^=`:]+?)\s*(?:=|:)\s*([^`]+?)\s*`?\s*$/);
+    const match=colon??equality;
+    if(match)fields[match[1].trim().replace(/^`|`$/g,'')]=match[2].trim().replace(/^`|`$/g,'');
+  }
   const sections: Record<string, string> = {};
   let section = ''; for (const line of text.split('\n')) { const headingMatch = line.match(/^##\s+(.+?)\s*$/); if (headingMatch) { section = headingMatch[1].trim(); sections[section] = ''; } else if (section) sections[section] += `${sections[section] ? '\n' : ''}${line}`; }
   for (const key of Object.keys(sections)) sections[key] = sections[key].trim();
