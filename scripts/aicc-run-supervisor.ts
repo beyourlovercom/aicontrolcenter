@@ -2,6 +2,7 @@ import {execFileSync, spawn} from 'node:child_process';
 import {mkdirSync, readFileSync, renameSync, unlinkSync, writeFileSync} from 'node:fs';
 import {join} from 'node:path';
 import {parseEvent, reconcileProcessExit, type RuntimeState} from '../src/lib/runtimeManager.ts';
+import {buildOwnerGitDeliveryEnvironment, resolveGitHubCredential, redactSecret, stripGitHubCredentialEnvironment} from '../src/lib/gitCredentialBridge.ts';
 
 type SupervisorSpec={state:RuntimeState;stateDir:string;repositoryRoot:string;lockFile:string;prompt:string;command?:string;args?:string[]};
 const specFile=process.argv[2];
@@ -11,7 +12,17 @@ const runFile=spec.state.passThrough?join(spec.stateDir,`runtime-${spec.state.ru
 const historyFile=join(spec.stateDir,'runtime-history.json');
 const maxHistory=20;
 
+let ephemeralGithubToken:string|undefined;
+function scrubState(state:RuntimeState){
+  if(!ephemeralGithubToken)return;
+  for(const key of Object.keys(state) as (keyof RuntimeState)[]){
+    const value=state[key];
+    if(typeof value==='string')state[key]=redactSecret(value,ephemeralGithubToken) as RuntimeState[typeof key];
+    else if(Array.isArray(value))state[key]=value.map(item=>typeof item==='string'?redactSecret(item,ephemeralGithubToken):item) as RuntimeState[typeof key];
+  }
+}
 function persist(state:RuntimeState){
+  scrubState(state);
   mkdirSync(spec.stateDir,{recursive:true});
   const runTemp=`${runFile}.${process.pid}.tmp`;
   writeFileSync(runTemp,JSON.stringify(state,null,2),{mode:0o600});
@@ -47,13 +58,12 @@ let child;
 try{
   const deliveryProfile=state.executionProfile==='OWNER_AUTHORIZED_GIT_DELIVERY';
   const childEnvironment=deliveryProfile ? (() => {
-    const environment={...process.env};
-    delete environment.GH_TOKEN;
-    delete environment.GITHUB_TOKEN;
+    ephemeralGithubToken=resolveGitHubCredential(process.env);
+    const environment=buildOwnerGitDeliveryEnvironment(process.env,ephemeralGithubToken);
     environment.HOME=environment.HOME??process.env.USERPROFILE??'/Users/a';
     environment.PATH=[environment.PATH,'/Users/a/.local/bin','/opt/homebrew/bin','/usr/bin','/bin'].filter(Boolean).join(':');
     return environment;
-  })() : process.env;
+  })() : stripGitHubCredentialEnvironment(process.env);
   const childArgs=spec.args??['exec','--sandbox',state.sandboxMode??'workspace-write','--json','-'];
   const deliveryArgs=deliveryProfile ? ['-c','sandbox_workspace_write.network_access=true',...childArgs] : childArgs;
   child=spawn(spec.command??'codex',deliveryArgs,{cwd:spec.repositoryRoot,shell:false,env:childEnvironment,stdio:['pipe','pipe','pipe']});
