@@ -47,4 +47,7 @@ assert.match(workspace,/oninput=\{\(event\)=>updateActualResult/,'actual results
 assert.match(workspace,/oninput=\{overall\}/,'Owner note stays on the top save path');
 assert.match(workspace,/有未保存修改/,'unsaved UAT changes are visible');
 assert.match(workspace,/canPassDraft/,'final pass validates the draft checklist');
+assert.match(workspace,/没有正式逐项验收清单/,'no structured checklist uses a lightweight confirmation');
+assert.match(workspace,/问题记录（历史）/,'closed issue history is explicitly read-only history');
+assert.match(workspace,/Owner 备注（历史）/,'closed Owner note history is explicitly preserved');
 console.log('human UAT contract tests passed');
