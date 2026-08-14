@@ -16,15 +16,13 @@ AICC_DECISION_AUTHORITY = 0
 AICC_PASS_FAIL_BLOCKED_AUTHORITY = CODEX
 ```
 
-Closed Work Packages: `AICC-VISIBLE-SLICE-001`, `AICC-OPENSPEC-READMODEL-001`, `AICC-CONTROL-LOOP-001A`
+Closed Work Packages: `AICC-VISIBLE-SLICE-001`, `AICC-OPENSPEC-READMODEL-001`, `AICC-CONTROL-LOOP-001A`, `AICC-V2-PR-RUNNER-001`
 
 Current Work Package: `AICC-V2-GPT-AICC-CODEX-CLOSED-LOOP-001`
 
 Current implementation phase: `Phase 1 — Unified Action Layer`
 
-Owner progression decision: `M4.1` is the current mainline. The existing
-`AICC-V2-PR-RUNNER-001` implementation and evidence are preserved; its remaining
-Human UAT/closure work does not redefine or block the M4.1 transport architecture.
+Owner progression decision: `M4` is closed after final real PR Canary / Owner Human UAT PASS. `M4.1` is now the sole current development mainline.
 
 ## Active V2 Milestones
 
@@ -89,11 +87,15 @@ Workspace V1 approved baseline after real Owner browser UAT PASS.
 Work Packages: `AICC-V2-LOCAL-SERVICE-AUTOSTART-001`
 
 ### M4 — PR Runner Foundation
-Work Packages: `AICC-V2-PR-RUNNER-001` — `IMPLEMENTED / MACHINE_VALIDATED / HUMAN_UAT_PENDING`.
+Work Packages: `AICC-V2-PR-RUNNER-001` — `CLOSED / HUMAN_UAT_PASS`.
 
-Existing PR Runner implementation and evidence are preserved. Its remaining
-Owner Human UAT/closure is a bounded closeout activity. No new PR Runner
-architecture or scope expansion is authorized as part of M4.1.
+PR Runner Foundation V1, PR Workspace, global repository PR read model,
+Roadmap PR projection, one-to-many WP→PR rendering, real PR Canary projection,
+reconnect idempotency, and historical PR preservation passed Owner Human UAT.
+
+`M4_PR_RUNNER_FOUNDATION = APPROVED_BASELINE`
+`M4_OWNER_UAT = PASS`
+`M4_ROADMAP_STATUS = CLOSED`
 
 ### M4.1 — GPT ↔ AICC ↔ Codex Closed Loop
 Work Packages: `AICC-V2-GPT-AICC-CODEX-CLOSED-LOOP-001` — `ACTIVE / OWNER_AUTHORIZED`.
@@ -137,8 +139,8 @@ AICC_RESULT_REWRITE = 0
 
 `M4_1_ROADMAP_STATUS = ACTIVE`
 `CURRENT_M4_1_PHASE = PHASE_1_UNIFIED_ACTION_LAYER`
-`M4_PR_RUNNER_IMPLEMENTATION = PRESERVED`
-`M4_PR_RUNNER_HUMAN_UAT = PENDING`
+`M4_PR_RUNNER_IMPLEMENTATION = APPROVED_BASELINE`
+`M4_PR_RUNNER_HUMAN_UAT = PASS`
 
 ### M5 — Review + Exact-head CI
 Work Packages: `AICC-V2-REVIEW-CI-001`
@@ -163,7 +165,7 @@ Work Packages: `AICC-V2-PROJECT-REGISTRY-001`
 ```text
 M3.87 Runtime Workspace V1 Freeze — CLOSED
 ↓
-M4 PR Runner Foundation — IMPLEMENTED / MACHINE_VALIDATED / HUMAN_UAT_PENDING
+M4 PR Runner Foundation — CLOSED / HUMAN_UAT_PASS
 ↓
 M4.1 GPT ↔ AICC ↔ Codex Closed Loop — ACTIVE
   Phase 1 Unified Action Layer
@@ -185,9 +187,7 @@ M6 Autonomous PR Delivery
 M7 WP Automatic Lifecycle
 ```
 
-M4 closeout may be completed as a bounded Owner UAT/closure activity without
-changing the M4.1 architecture. M4.1 is the current development mainline by
-explicit Owner decision.
+M4 is closed. New PR Runner feature expansion belongs to later Roadmap scope and must not reopen M4 by default. M4.1 is the current development mainline by explicit Owner decision.
 
 ## Current execution architecture
 
