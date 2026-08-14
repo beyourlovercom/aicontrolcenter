@@ -1,7 +1,8 @@
 # AICC-V2-GPT-AICC-CODEX-CLOSED-LOOP-001
 
-Status: `PLANNED / OWNER_AUTHORIZED_FOR_DESIGN`
+Status: `ACTIVE / OWNER_AUTHORIZED`
 Type: `GPT_AICC_CODEX_CLOSED_LOOP`
+Roadmap Milestone: `M3.88 — GPT ↔ AICC ↔ Codex Closed Loop`
 Authority: `AICC-V2-PROJECT-CONSTITUTION-001 v1.3`
 Execution Standard: `AICC-V2-CANONICAL-EXECUTION-STANDARD-001 v1.3`
 
@@ -34,6 +35,99 @@ Codex under any name, including preflight, readiness, authorization, policy,
 safety, governance, validation, repository, branch, worktree, Work Package,
 conflict, or permission checks.
 
+## Roadmap implementation phases
+
+These are implementation phases inside this single Work Package. They are not
+separate Roadmap Work Packages and do not create a new execution authority.
+
+### Phase 1 — Unified Action Layer
+
+Unify the existing execution-panel actions so buttons, shortcuts, Bridge, and
+API all call the same canonical implementation.
+
+```text
+⌥⌘V  Paste Instruction / 粘贴指令
+⌥⌘R  Import & Run / 导入执行
+⌥⌘C  Copy Result / 复制结果
+```
+
+Target actions:
+
+```text
+pasteInstruction(payload)
+importInstruction(payload)
+importAndRun(payload)
+executeCurrentInstruction()
+copyResult()
+getExecution(executionId)
+getResult(executionId)
+```
+
+### Phase 2 — GPT → AICC
+
+Add/retain the compact inline `✦ AICC` action only on executable Assistant
+content. One Owner click captures exactly the originating instruction and calls
+the same canonical `importAndRun()` path used by AICC itself.
+
+The Chrome extension must not simulate keyboard shortcuts or DOM clicks as its
+execution protocol.
+
+### Phase 3 — AICC → Codex Pure Pass-through
+
+Remove or bypass all remaining semantic pre-Codex execution gates in the new
+closed-loop path. AICC may establish transport truth only; Codex owns all
+repository/task reasoning and `PASS / FAIL / BLOCKED / CANCELLED` outcomes.
+
+### Phase 4 — Codex → AICC Canonical Result
+
+Persist one canonical result identity per execution. Manual `复制结果`, AICC
+History, Chrome Bridge, and GPT return all read the same stored result.
+
+Minimum identity:
+
+```text
+execution_id
+instruction_id when available
+result_id
+result_hash
+```
+
+### Phase 5 — AICC → GPT Exactly-once Return
+
+Bind the result to the originating ChatGPT conversation/message and return it
+at most once.
+
+Minimum correlation:
+
+```text
+origin_conversation_id or stable conversation reference
+origin_message_id or stable source reference
+return_state
+```
+
+Return lifecycle:
+
+```text
+RESULT_READY
+→ RETURN_SUBMITTING
+→ RETURNED_TO_GPT
+→ CLOSED
+```
+
+DOM rerender, MutationObserver, refresh, reconnect, polling, and service restart
+must never resubmit a result already marked `RETURNED_TO_GPT`.
+
+### Phase 6 — Owner Human UAT
+
+Validate the complete visible loop:
+
+```text
+GPT → AICC → Codex → AICC → originating GPT conversation
+```
+
+One Owner click must create one Codex run and one returned result. Manual
+shortcuts remain a fully usable fallback.
+
 ## Existing capabilities to reuse
 
 Reuse the existing AICC execution panel and current canonical actions rather
@@ -56,23 +150,6 @@ Optional future shortcut:
 Buttons, keyboard shortcuts, Chrome Bridge, and API calls must converge on the
 same canonical action layer. The Chrome extension must not simulate keyboard
 shortcuts or DOM clicks as its execution protocol.
-
-## Canonical action layer
-
-Target actions:
-
-```text
-pasteInstruction(payload)
-importInstruction(payload)
-importAndRun(payload)
-executeCurrentInstruction()
-copyResult()
-getExecution(executionId)
-getResult(executionId)
-```
-
-UI controls and shortcuts are human interaction adapters. Chrome Bridge and
-future integrations call the same underlying actions directly.
 
 ## Inbound flow
 
@@ -197,19 +274,6 @@ result_id
 result_hash
 return_state
 ```
-
-Return lifecycle:
-
-```text
-RESULT_READY
-→ RETURN_SUBMITTING
-→ RETURNED_TO_GPT
-→ CLOSED
-```
-
-Once a `result_id` is `RETURNED_TO_GPT`, DOM rerenders, MutationObserver
-activity, page refresh, reconnect, polling, or service restart must never submit
-that same result again.
 
 `MUTATION_OBSERVER_IS_EXECUTION_AUTHORITY = 0`
 `DOM_RESCAN_CAUSES_RESULT_RESUBMIT = 0`
