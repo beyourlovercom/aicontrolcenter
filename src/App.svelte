@@ -1,492 +1,201 @@
 <script lang="ts">
-  import { onDestroy, onMount } from 'svelte';
-  import { cancelSync as cancelledSync, authorizeWorkPackage, controlCodex, createCodexRuntimePoller, emptyState, loadControlLoop, ownerBlocker, readCodexRuntime, repositoryStatusEvidence, requestSync, runtimePhaseCopy, runtimeSupportsControl, syncAllowed, syncOutcome, syncState as getSyncState, syncWorkspace, type CodexControlAction, type ControlLoopState, type RoadmapEntry, type SyncState } from './lib/controlLoop';
+  import {onDestroy,onMount,tick} from 'svelte';
+  import RoadmapTree from './components/RoadmapTree.svelte';
+  import GlobalTaskView from './components/GlobalTaskView.svelte';
+  import GlobalPrWorkspace from './components/GlobalPrWorkspace.svelte';
+  import StatusTabs from './components/StatusTabs.svelte';
+  import WorkflowTimeline from './components/WorkflowTimeline.svelte';
+  import PRWorkflowTimeline from './components/PRWorkflowTimeline.svelte';
+  import EntityHeader from './components/entity/EntityHeader.svelte';
+  import EntityEvidencePanel from './components/entity/EntityEvidencePanel.svelte';
+  import PrEvidencePanel from './components/entity/PrEvidencePanel.svelte';
+  import MilestoneView from './components/entity/MilestoneView.svelte';
+  import OwnerActionZone from './components/entity/OwnerActionZone.svelte';
+  import PrOwnerActionZone from './components/entity/PrOwnerActionZone.svelte';
+  import CurrentContextLocator from './components/CurrentContextLocator.svelte';
+  import RuntimeWorkspace from './components/entity/RuntimeWorkspace.svelte';
+  import HumanUatWorkspace from './components/entity/HumanUatWorkspace.svelte';
+  import EntityOperationsWorkspace from './components/entity/EntityOperationsWorkspace.svelte';
+  import AuthorizationWorkspace from './components/entity/AuthorizationWorkspace.svelte';
+  import {recordAppMount} from './lib/runtimeLifecycleInstrumentation.ts';
+  import {createProjectSnapshot,normalizeRoadmap,type RawProjectSources} from './lib/model/projectModel';
+  import {resolveEntityContext} from './lib/context/entityContext';
+  import {projectOwnerRoadmapNodes,resolveOwnerStatusProjection,resolveOwnerWorkflowStages} from './lib/context/ownerStatusProjection';
+  import {resolvePrTabView} from './lib/context/prTabContent';
+  import {selectCanonicalCurrentRuntime} from './lib/runtimeSelection.ts';
+  import {scopeInboxToEntity} from './lib/entityScope.ts';
+  import {buildGlobalTaskGroups} from './lib/globalTaskView.ts';
+  import {lockExecutionContext,persistExecutionContextLock,readExecutionContextLock,unlockExecutionContext,type ExecutionContextLock} from './lib/executionContext.ts';
+  import type {ActionEligibility,FormalWorkPackage,HumanUatRecord,SelectedEntityRef,WorkPackageEntityContext} from './lib/model/entityTypes';
+  import {createExecutionActionLayer,registerMacShortcuts,type ExecutionActionLayer} from './lib/executionActionLayer';
 
-  type Tab = 'overview' | 'openspec' | 'codex' | 'validation';
+  type Drawer='roadmap'|'status'|null;
+  type Feedback={state:'IDLE'|'RUNNING'|'SUCCESS'|'BLOCKED'|'ERROR';title:string;message:string;code?:string;next?:string};
+  const HEALTH_FAILURE_THRESHOLD=2,HEALTH_RECOVERY_THRESHOLD=2;
+  let drawer:Drawer=null,leftWidth=320,rightWidth=320,leftCollapsed=false,rightCollapsed=false,busy=false,codexInfo:any=null,selectionRequest=0,runtimeTimer:number|undefined,serviceTimer:number|undefined,bridgeTimer:number|undefined,runtimePollInFlight=false,bridgePollInFlight=false,bridgeInboxInitialized=false,bridgeSeenInboxIds=new Set<string>(),bridgeNotificationInitialized=false,bridgeSeenNotificationIds=new Set<string>(),selectedInboxId:string|null=null,pendingInstructionId:string|null=null,instructionState:'TEXT_READY'|'IMPORTED_PENDING'|'RUN_STARTED'='TEXT_READY',serviceState:'正常'|'正在重连'|'异常'='正在重连',serviceDetails:any=null,serviceLogs:any=null,serviceActionMessage='正在读取本地服务状态…',recoveryToast:string|null=null,recoveryToastTimer:number|undefined,refreshInFlight:Promise<void>|null=null,bridgeInbox:any[]=[],bridgeOutbox:any[]=[],bridgePayload='',runtimeHistory:any[]=[],selectedRunId:string|null=null,healthFailures=0,healthSuccesses=0,autoExecute=false,globalWorkspace=false,globalPrWorkspace=false;
+  let descriptions:{repositoryKey:string;entityType:string;entityId:string;description:string}[]=[];
+  function readSelection():SelectedEntityRef|null{try{const stored=JSON.parse(localStorage.getItem('aicc-v2-workspace-navigation')||'{}').entity;if(stored&&(stored.type==='milestone'||stored.type==='work_package'||stored.type==='pull_request')&&typeof stored.id==='string')return stored as SelectedEntityRef}catch{}return null}
+  const WORKSPACE_NAVIGATION_KEY='aicc-v2-workspace-navigation';
+  type WorkspaceNavigation={entity?:SelectedEntityRef;activeTab?:string;selectedInboxId?:string|null;selectedRunId?:string|null};
+  const WORKSPACE_TABS=['运行','UAT','概览','证据','授权'];
+  function readWorkspaceNavigation():WorkspaceNavigation{try{return JSON.parse(localStorage.getItem(WORKSPACE_NAVIGATION_KEY)||'{}')}catch{return {}}}
+  const initialWorkspace=readWorkspaceNavigation();
+  let selectedEntity:SelectedEntityRef=initialWorkspace.entity??readSelection()??{type:'milestone',id:'M1'};
+  let executionContextLock:ExecutionContextLock=readExecutionContextLock();
+  selectedInboxId=initialWorkspace.selectedInboxId??null;
+  selectedRunId=initialWorkspace.selectedRunId??null;
+  let raw:RawProjectSources={formalWorkPackages:{},localDevelopment:true};
+  let feedback:Feedback={state:'IDLE',title:'',message:''};
+  let activeTab=WORKSPACE_TABS.includes(initialWorkspace.activeTab??'')?initialWorkspace.activeTab!:'运行';
+  function persistWorkspaceNavigation(value:WorkspaceNavigation={entity:selectedEntity,activeTab,selectedInboxId,selectedRunId}){try{localStorage.setItem(WORKSPACE_NAVIGATION_KEY,JSON.stringify(value))}catch{}}
+  $: persistWorkspaceNavigation({entity:selectedEntity,activeTab,selectedInboxId,selectedRunId});
+  $: snapshot=createProjectSnapshot(raw);
+  $: context=resolveEntityContext(snapshot,selectedEntity);
+  $: prTab=context.type==='pull_request'?resolvePrTabView(context,activeTab):null;
+  $: prUatRecord=context.type==='pull_request'?snapshot.humanUat.value?.find(item=>item.entityType==='pull_request'&&(item.entityId===context.id||item.prIdentity===context.id))??null:null;
+  $: roadmapNodes=projectOwnerRoadmapNodes(snapshot.roadmap.value??[],selectedEntity,ownerStatus);
+  $: descriptionKey=`${snapshot.repository.value?.repository??'local'}|${selectedEntity.type}|${selectedEntity.id}`;
+  $: selectedDescription=descriptions.find(item=>`${item.repositoryKey}|${item.entityType}|${item.entityId}`===descriptionKey)?.description??context.title;
+  $: ownerStatus=resolveOwnerStatusProjection(context,bridgeOutbox);
+  $: ownerWorkflowStages=resolveOwnerWorkflowStages(context,bridgeOutbox);
+  $: displayRuntime=selectCanonicalCurrentRuntime(context.runtime,runtimeHistory,selectedRunId);
+  $: scopedRuntimeHistory=runtimeHistory.filter((item:any)=>context.type==='pull_request'?item.entityType==='pull_request'&&item.entityId===context.id:item.entityType?item.entityType==='work_package'&&item.entityId===context.id:item.workPackageId===context.id);
+  $: scopedBridgeInbox=scopeInboxToEntity(bridgeInbox,selectedEntity);
+  $: globalTaskGroups=buildGlobalTaskGroups(bridgeInbox);
+  $: tabStatuses=context.type==='work_package'?{运行:displayRuntime&&['STARTING','RUNNING','STOPPING'].includes(displayRuntime.phase)?'IN_PROGRESS':displayRuntime?'PASS':'NOT_STARTED',UAT:ownerWorkflowStages.find(stage=>stage.id==='HUMAN_UAT')?.status??'N_A',概览:ownerStatus.status,证据:snapshot.repository.availability==='AVAILABLE'?'PASS':'BLOCKED',授权:context.authorization.state==='VALID'?'PASS':'NOT_STARTED'}:{};
 
-  type WorkItem = RoadmapEntry & { key: string; summary: string; gate: string; progress: string; progressPercent: number; parent: string; dependency: string; change: string; path: string; spec: string; task: string; run: string; criteria: string[] };
-  let selected: WorkItem = { key: 'loading', id: 'LOADING', title: '正在读取正式路线图', summary: '正在读取仓库证据。', status: 'CURRENT', authorization: 'CHECKING', gate: 'CHECKING', progress: '0 / 0', progressPercent: 0, parent: '项目路线图', dependency: 'unknown', change: 'unknown', path: 'docs/10_Planning_Roadmap/01_LIVING_ROADMAP.md', spec: 'unknown', task: 'unknown', run: 'unknown', criteria: [] };
-  let activeTab: Tab = 'overview';
-  let query = '';
-  let refreshing = false;
-  let toast = '';
-  let controlLoop: ControlLoopState = emptyState;
-  let syncState: SyncState = { kind: 'idle' };
-  let authorizationConfirming = false;
-  let controlPending = false;
-  let runtimeObservationError = '';
-  $: syncCode = controlLoop.evaluation?.blockers[0] ?? getSyncState(controlLoop.evaluation);
-  $: syncCopy = ownerBlocker(syncCode);
-  $: repositoryStatus = repositoryStatusEvidence(controlLoop);
-  $: codexRuntime = controlLoop.codexRuntime;
-
-  const runtimePoller = createCodexRuntimePoller({
-    read: readCodexRuntime,
-    onRuntime: (runtime) => {
-      controlLoop = { ...controlLoop, codexRuntime: runtime };
-      runtimeObservationError = '';
-    },
-    onError: (message) => {
-      runtimeObservationError = message;
+  function setFeedback(value:Feedback){feedback=value}
+  function toggleExecutionContextLock(){executionContextLock=executionContextLock.locked?unlockExecutionContext():lockExecutionContext(selectedEntity);persistExecutionContextLock(executionContextLock);setFeedback({state:'SUCCESS',title:executionContextLock.locked?'执行上下文已锁定':'执行上下文已解锁',message:executionContextLock.locked?`新任务默认绑定：${executionContextLock.entity?.id??'当前实体'}`:'未锁定默认上下文，未声明实体的任务保持 UNKNOWN。',code:executionContextLock.locked?'EXECUTION_CONTEXT_LOCKED':'EXECUTION_CONTEXT_UNLOCKED'})}
+  function openGlobalWorkspace(){globalWorkspace=true;globalPrWorkspace=false;drawer=null}
+  function openGlobalPrWorkspace(){globalWorkspace=false;globalPrWorkspace=true;drawer=null}
+  async function navigateGlobalEntity(entity:SelectedEntityRef){globalWorkspace=false;globalPrWorkspace=false;selectedEntity=entity;activeTab=entity.type==='work_package'?'运行':'概览';selectedInboxId=null;selectionRequest+=1;persistSelection(entity);if(entity.type==='work_package'){await readFormalWorkPackage(entity.id,selectionRequest);await refreshRuntimeProjection();}else if(entity.type==='pull_request'){await refreshRuntimeProjection();}}
+  async function request(url:string,options?:RequestInit){const response=await fetch(url,options);const data=await response.json();if(!response.ok){const value=typeof data.error==='object'?data.error:{code:data.error,message:data.error};throw new Error(`${value.code??'ACTION_ERROR'}: ${value.message??'操作失败'}`)}return data}
+  async function boundedRequest(url:string,options?:RequestInit){return Promise.race([request(url,options),new Promise<never>((_,reject)=>window.setTimeout(()=>reject(new Error('SOURCE_TIMEOUT')),3000))])}
+  async function pollService(refresh=true){try{const data=await boundedRequest('/api/health');serviceDetails=data.status;const healthy=Boolean(data.ok&&data.service==='aicc-local-control');if(healthy){healthFailures=0;healthSuccesses+=1;if(healthSuccesses>=HEALTH_RECOVERY_THRESHOLD&&serviceState!=='正常'){serviceState='正常';serviceActionMessage='本地服务正常';recoveryToast='本地服务已恢复';if(recoveryToastTimer)clearTimeout(recoveryToastTimer);recoveryToastTimer=window.setTimeout(()=>recoveryToast=null,2500);if(refresh){await refreshRuntimeProjection();await loadBridge()}}else if(healthSuccesses>=HEALTH_RECOVERY_THRESHOLD){serviceState='正常'}}else{healthSuccesses=0;healthFailures+=1;if(healthFailures>=HEALTH_FAILURE_THRESHOLD){serviceState='正在重连';serviceActionMessage='本地服务正在恢复…'}}}catch{healthSuccesses=0;healthFailures+=1;if(healthFailures>=HEALTH_FAILURE_THRESHOLD){serviceState='正在重连';serviceDetails=null;serviceActionMessage='本地服务正在恢复…'}}}
+  async function restartService(){if(!window.confirm('AICC 将暂时断开连接，launchd 会重启本地服务，页面随后自动重连。确定继续吗？'))return;serviceState='正在重连';serviceActionMessage='本地服务正在重新连接…';setFeedback({state:'RUNNING',title:'正在重启本地服务…',message:'页面将自动重新连接，不会修改项目证据。',code:'SERVICE_RESTARTING'});void request('/api/service/restart',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({confirmed:true})}).catch(error=>{if(serviceState!=='正常'){serviceActionMessage='本地服务正在重新连接…';return}const message=error instanceof Error?error.message:'SUPERVISOR_RESTART_FAILED';serviceState='异常';serviceActionMessage='本地服务重启失败';setFeedback({state:'ERROR',title:'本地服务重启失败',message,code:message.split(':')[0]})});}
+  async function viewServiceLogs(){serviceLogs={loading:true,stdout:'正在加载…',stderr:''};serviceActionMessage='正在读取服务日志…';try{serviceLogs=await request('/api/service/logs');serviceActionMessage='服务日志已加载'}catch(error){const code=error instanceof Error?error.message:'SERVICE_LOG_READ_FAILED';serviceLogs={loading:false,stdout:'',stderr:`服务日志读取失败\n${code}`};serviceActionMessage='服务日志读取失败';}}
+  async function loadBridge(){try{const [inbox,outbox,notifications]=await Promise.all([request('/api/gpt-bridge/inbox'),request('/api/gpt-bridge/outbox'),request('/api/gpt-bridge/notifications')]);const items=inbox.items??[];bridgeInbox=items;bridgeOutbox=outbox.items??[];const notificationItems=notifications.items??[];if(!bridgeNotificationInitialized){bridgeSeenNotificationIds=new Set(notificationItems.map((item:any)=>item.id));bridgeNotificationInitialized=true}else{const incoming=notificationItems.find((item:any)=>!bridgeSeenNotificationIds.has(item.id));if(incoming){bridgeSeenNotificationIds.add(incoming.id);setFeedback({state:incoming.phase==='FAILED'?'ERROR':incoming.phase==='STOPPED'?'BLOCKED':'SUCCESS',title:incoming.title,message:incoming.message,code:`TERMINAL_${incoming.phase}`})}}notificationItems.forEach((item:any)=>bridgeSeenNotificationIds.add(item.id));if(!bridgeInboxInitialized){bridgeSeenInboxIds=new Set(items.map((item:any)=>item.id));if(selectedInboxId&&!items.some((item:any)=>item.id===selectedInboxId))selectedInboxId=null;bridgeInboxInitialized=true}}catch{/* bridge state is shown as unavailable by the service status */}}
+  async function loadAutoExecute(){try{const result=await request('/api/settings/auto-execute');autoExecute=result.enabled===true}catch{autoExecute=false}}
+  async function toggleAutoExecute(){const next=!autoExecute;try{const result=await request('/api/settings/auto-execute',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({enabled:next})});autoExecute=result.enabled===true;setFeedback({state:'SUCCESS',title:autoExecute?'自动执行已开启':'自动执行已关闭',message:autoExecute?'新收到的任务将自动启动 Codex。':'新收到的任务需要 Owner 手动启动 Codex。',code:autoExecute?'AUTO_EXECUTE_ON':'AUTO_EXECUTE_OFF'})}catch(error){setFeedback({state:'ERROR',title:'自动执行设置未保存',message:error instanceof Error?error.message:'AUTO_EXECUTE_SETTING_ERROR',code:'AUTO_EXECUTE_SETTING_ERROR'})}}
+  function incomingEntity(item:any):SelectedEntityRef|null{const type=String(item?.instruction?.entityType??'').toLowerCase();const id=item?.instruction?.entityId;if(!id||!['milestone','work_package','pull_request'].includes(type))return null;return {type,id} as SelectedEntityRef}
+  async function focusIncomingInbox(item:any){const target=incomingEntity(item);if(!target)return;selectedEntity=target;activeTab='运行';drawer=null;selectionRequest+=1;persistSelection(target);if(target.type==='work_package'){await readFormalWorkPackage(target.id,selectionRequest);await refreshRuntimeProjection();}await tick();selectedInboxId=item.id;await tick();const element=document.querySelector(`[data-testid="inbox-item-${CSS.escape(item.id)}"]`) as HTMLElement|null;element?.scrollIntoView({block:'nearest',behavior:'smooth'})}
+  async function pollIncomingInbox(){if(bridgePollInFlight)return;bridgePollInFlight=true;try{const response=await request('/api/gpt-bridge/inbox');const items=response.items??[];const incoming=bridgeInboxInitialized?items.find((item:any)=>!bridgeSeenInboxIds.has(item.id)&&item.instruction?.sourceType==='WEB_BRIDGE'):null;bridgeInbox=items;items.forEach((item:any)=>bridgeSeenInboxIds.add(item.id));bridgeInboxInitialized=true;if(incoming)await focusIncomingInbox(incoming)}catch{/* live incoming detection preserves the last truthful inbox projection */}finally{bridgePollInFlight=false}}
+  function startIncomingInboxPolling(){if(bridgeTimer)return;bridgeTimer=window.setInterval(()=>void pollIncomingInbox(),1000)}
+  function updateBridgePayload(value:string){bridgePayload=value;pendingInstructionId=null;instructionState='TEXT_READY'}
+  async function importBridge(value=bridgePayload){if(!value.trim())throw new Error('INSTRUCTION_TEXT_REQUIRED');const lockedTarget=executionContextLock.locked?executionContextLock.entity??undefined:undefined;const executionTarget=lockedTarget??selectedEntity;const result=await request('/api/gpt-bridge/inbox',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({payload:value,sourceType:'CLIPBOARD',executionContext:executionTarget,workPackageId:executionTarget.type==='work_package'?executionTarget.id:undefined})});bridgeInbox=[result.item,...bridgeInbox.filter(item=>item.id!==result.item?.id)];return result.item;}
+  async function importInstruction(){if(!bridgePayload.trim()){setFeedback({state:'ERROR',title:'导入失败',message:'请先粘贴或输入一条非空指令。',code:'INSTRUCTION_TEXT_REQUIRED'});return}try{const item=await importBridge(bridgePayload);if(item?.runId||item?.state==='LAUNCHED'){pendingInstructionId=null;instructionState='RUN_STARTED';setFeedback({state:'SUCCESS',title:'指令已导入并自动执行',message:`已绑定 Runtime：${item.runId??'等待 Runtime'}`,code:'IMPORT_AUTO_EXECUTE'})}else{pendingInstructionId=item?.id??null;instructionState='IMPORTED_PENDING';setFeedback({state:'SUCCESS',title:'指令已导入',message:'指令已进入待执行状态，请点击“执行指令”。',code:'IMPORTED_PENDING'})}}catch(error){pendingInstructionId=null;instructionState='TEXT_READY';setFeedback({state:'ERROR',title:'指令导入失败',message:error instanceof Error?error.message:'IMPORT_INSTRUCTION_FAILED',code:'IMPORT_INSTRUCTION_FAILED'})}}
+  async function pasteInstruction(){let text='';try{text=await navigator.clipboard.readText()}catch{setFeedback({state:'ERROR',title:'无法读取系统剪贴板',message:'请检查浏览器剪贴板权限后重试。',code:'CLIPBOARD_READ_FAILED'});return}bridgePayload=text;pendingInstructionId=null;instructionState='TEXT_READY';if(!text.trim())setFeedback({state:'ERROR',title:'剪贴板为空',message:'请先复制一条指令，再点击“粘贴指令”。',code:'EMPTY_CLIPBOARD'});else setFeedback({state:'SUCCESS',title:'指令已粘贴',message:'内容已填入执行框，请点击“导入指令”继续。',code:'TEXT_READY'})}
+  async function executeInstruction(){if(autoExecute)return;const item=pendingInstructionId?bridgeInbox.find(candidate=>candidate.id===pendingInstructionId&&candidate.state==='READY'&&candidate.rawInstruction===bridgePayload):null;if(!item){setFeedback({state:'ERROR',title:'没有待执行指令',message:'请先导入当前文本，再点击“执行指令”。',code:'INSTRUCTION_NOT_IMPORTED'});return}try{const launched=await launchBridge(item.id);if(launched){pendingInstructionId=null;instructionState='RUN_STARTED'}}catch(error){setFeedback({state:'ERROR',title:'指令未执行',message:error instanceof Error?error.message:'MANUAL_EXECUTION_FAILED',code:'MANUAL_EXECUTION_FAILED'})}}
+  async function launchBridge(id:string){try{const result=await request('/api/gpt-bridge/launch',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({inboxId:id})});bridgeInbox=bridgeInbox.map(item=>item.id===id?result.item:item);if(result.item?.runId)selectedRunId=result.item.runId;instructionState='RUN_STARTED';setFeedback({state:'SUCCESS',title:'Bridge 执行已启动',message:`已绑定真实 Codex Runtime：${result.item?.runId??'等待 Runtime'}`,code:'BRIDGE_LAUNCHED'});void loadBridge();startRuntimePolling();return result.item}catch(error){const message=error instanceof Error?error.message:'BRIDGE_LAUNCH_ERROR';setFeedback({state:'ERROR',title:'Bridge 执行未启动',message,code:message.split(':')[0],next:'检查授权、正式 Work Package、范围和 Writer Lock 后重试。'});try{const latest=await request('/api/gpt-bridge/inbox');bridgeInbox=latest.items??bridgeInbox;}catch{/* visible feedback remains authoritative */}return null}}
+  async function canonicalImportInstruction(payload=bridgePayload){const item=await importBridge(payload);pendingInstructionId=item?.runId?null:item?.id??null;instructionState=item?.runId?'RUN_STARTED':'IMPORTED_PENDING';return item}
+  async function canonicalImportAndRun(payload=bridgePayload){const item=await importBridge(payload);return item?.runId?item:await launchBridge(item.id)}
+  async function canonicalCopyResult(){const run=displayRuntime;const result=run&&['COMPLETED','FAILED','STOPPED'].includes(run.phase)?run.finalAgentMessage??null:null;if(result)await navigator.clipboard?.writeText(result);return result}
+  let executionActions:ExecutionActionLayer;
+  $: executionActions=createExecutionActionLayer({pasteInstruction,importInstruction:canonicalImportInstruction,executeCurrentInstruction:executeInstruction,copyResult:canonicalCopyResult,getExecution:(id)=>runtimeHistory.find(item=>item.runId===id)??null,getResult:(id)=>runtimeHistory.find(item=>item.runId===id)?.finalAgentMessage??null,executeImported:async(item)=>launchBridge(item.id)});
+  async function refreshRuntimeProjection(){try{const query=`?entityType=${encodeURIComponent(selectedEntity.type)}&entityId=${encodeURIComponent(selectedEntity.id)}`;const [data,inbox,outbox]=await Promise.all([request(`/api/codex/runtime${query}`),request('/api/gpt-bridge/inbox'),request('/api/gpt-bridge/outbox')]);const nextRuntime=data.runtime&&typeof data.runtime==='object'?data.runtime:null;raw={...raw,runtime:nextRuntime};if(Array.isArray(data.history))runtimeHistory=data.history.filter((item:any)=>item&&typeof item==='object'&&typeof item.runId==='string');if(nextRuntime)selectedRunId=nextRuntime.runId;codexInfo=data.info;bridgeInbox=Array.isArray(inbox.items)?inbox.items:bridgeInbox;bridgeOutbox=Array.isArray(outbox.items)?outbox.items:bridgeOutbox;return nextRuntime}catch{return null}}
+  async function copyBridgeExample(){const result=await request('/api/gpt-bridge/example');if(result.payload)await navigator.clipboard?.writeText(result.payload);}
+  async function readFormalWorkPackage(id:string,token:number){try{const workPackage=await boundedRequest(`/api/work-packages/${encodeURIComponent(id)}`) as FormalWorkPackage;if(workPackage.id!==id)throw new Error('FORMAL_WP_ID_MISMATCH');if(token===selectionRequest)raw={...raw,formalWorkPackages:{...raw.formalWorkPackages,[id]:workPackage},sourceErrors:{...raw.sourceErrors,formalWorkPackageRead:undefined,formalWorkPackages:undefined}}}catch(error){if(token===selectionRequest)raw={...raw,sourceErrors:{...raw.sourceErrors,formalWorkPackageRead:error instanceof Error?error.message.split(':')[0]:'FORMAL_WP_READ_FAILED'}}}}
+  async function performLoadSnapshot(showFeedback=true){
+    if(showFeedback)setFeedback({state:'RUNNING',title:'正在刷新状态…',message:'正在重建项目快照与当前实体上下文。',code:'REFRESHING'});
+    const selectedAtStart=selectedEntity;
+    const runtimeQuery=['work_package','pull_request'].includes(selectedAtStart.type)?`?entityType=${encodeURIComponent(selectedAtStart.type)}&entityId=${encodeURIComponent(selectedAtStart.id)}`:'';
+    const [roadmapResult,repositoryResult,authorizationResult,runtimeResult,descriptionResult,uatResult,lifecycleEvidenceResult,formalPackagesResult,pullRequestsResult,allUatResult,allEvidenceResult]=await Promise.allSettled([boundedRequest('/api/roadmap'),boundedRequest('/api/repository'),boundedRequest(`/api/authorization?workPackageId=${encodeURIComponent(selectedAtStart.type==='work_package'?selectedAtStart.id:'')}`),boundedRequest(`/api/codex/runtime${runtimeQuery}`),boundedRequest('/api/entity-descriptions'),selectedAtStart.type==='work_package'?boundedRequest(`/api/human-uat?workPackageId=${encodeURIComponent(selectedAtStart.id)}`):Promise.resolve({record:null}),selectedAtStart.type==='work_package'?boundedRequest(`/api/lifecycle-evidence?workPackageId=${encodeURIComponent(selectedAtStart.id)}`):Promise.resolve({record:null}),boundedRequest('/api/work-packages'),boundedRequest('/api/pull-requests'),boundedRequest('/api/human-uat'),boundedRequest('/api/lifecycle-evidence')]);
+    const sourceErrors:RawProjectSources['sourceErrors']={};
+    const next:RawProjectSources={...raw,sourceErrors};
+    if(roadmapResult.status==='fulfilled'){try{normalizeRoadmap(roadmapResult.value.content,next.localDevelopment===true,next.pullRequests??[],next.runtime??null);next.roadmap=roadmapResult.value}catch{next.roadmap=null;sourceErrors.roadmap='ROADMAP_PARSE_FAILED'}}else{next.roadmap=null;sourceErrors.roadmap='ROADMAP_UNAVAILABLE'}
+    if(repositoryResult.status==='fulfilled')next.repository=repositoryResult.value;else sourceErrors.repository='REPOSITORY_UNAVAILABLE';
+    if(authorizationResult.status==='fulfilled')next.authorization=authorizationResult.value.record??null;else sourceErrors.authorizations='AUTHORIZATION_UNAVAILABLE';
+    if(runtimeResult.status==='fulfilled'){next.runtime=runtimeResult.value.runtime&&typeof runtimeResult.value.runtime==='object'?runtimeResult.value.runtime:null;runtimeHistory=Array.isArray(runtimeResult.value.history)?runtimeResult.value.history.filter((item:any)=>item&&typeof item==='object'&&typeof item.runId==='string'):[];const persistedRun=selectedRunId&&runtimeHistory.some((item:any)=>item.runId===selectedRunId)?selectedRunId:null;selectedRunId=next.runtime&&['STARTING','RUNNING','STOPPING'].includes(next.runtime.phase)?next.runtime.runId:persistedRun;codexInfo=runtimeResult.value.info}else sourceErrors.runtime='RUNTIME_UNAVAILABLE';
+    if(descriptionResult.status==='fulfilled')descriptions=descriptionResult.value.records??[];
+    if(uatResult.status==='fulfilled'&&selectedAtStart.type==='work_package')next.humanUat=uatResult.value.record?[uatResult.value.record]:[];
+    if(lifecycleEvidenceResult.status==='fulfilled'&&selectedAtStart.type==='work_package')next.lifecycleEvidence=lifecycleEvidenceResult.value.record?[lifecycleEvidenceResult.value.record]:[];
+    if(formalPackagesResult.status==='fulfilled'&&Array.isArray(formalPackagesResult.value.items))next.formalWorkPackages=Object.fromEntries(formalPackagesResult.value.items.map((item:FormalWorkPackage)=>[item.id,item]));
+    if(pullRequestsResult.status==='fulfilled'&&Array.isArray(pullRequestsResult.value.items))next.pullRequests=pullRequestsResult.value.items;
+    if(allUatResult.status==='fulfilled'&&Array.isArray(allUatResult.value.records))next.humanUat=allUatResult.value.records;
+    if(allEvidenceResult.status==='fulfilled'&&Array.isArray(allEvidenceResult.value.records))next.lifecycleEvidence=allEvidenceResult.value.records;
+    raw=next;
+    if(next.roadmap?.content){const hydrated=resolveHydratedSelection(createProjectSnapshot(next).roadmap.value??[]);if(hydrated.type!==selectedEntity.type||hydrated.id!==selectedEntity.id){selectedEntity=hydrated;selectionRequest+=1;persistSelection(hydrated);}}
+    const formalTarget=selectedEntity.type==='work_package'?selectedEntity.id:null;
+    if(formalTarget)await readFormalWorkPackage(formalTarget,selectionRequest);
+    if(showFeedback)setFeedback({state:'SUCCESS',title:'状态已刷新',message:'项目快照与当前实体上下文已重新构建。',code:'REFRESH_SUCCESS'});
+  }
+  async function loadSnapshot(showFeedback=true){if(refreshInFlight){if(showFeedback)setFeedback({state:'RUNNING',title:'正在刷新状态…',message:'已有一次刷新正在进行，已合并本次请求。',code:'REFRESHING'});return refreshInFlight}refreshInFlight=performLoadSnapshot(showFeedback).catch(error=>{const message=error instanceof Error?error.message:'REFRESH_FAILED';setFeedback({state:'ERROR',title:'状态刷新失败',message,code:message.split(':')[0]})}).finally(()=>{refreshInFlight=null});return refreshInFlight}
+  async function saveDescription(value:string){const target={...selectedEntity};const response=await request(value.trim()?'/api/entity-descriptions':'/api/entity-descriptions',{method:value.trim()?'POST':'DELETE',headers:{'Content-Type':'application/json'},body:JSON.stringify({repositoryKey:snapshot.repository.value?.repository??'local',entityType:target.type,entityId:target.id,description:value})});if(target.type!==selectedEntity.type||target.id!==selectedEntity.id)throw new Error('DESCRIPTION_TARGET_MISMATCH');if(value.trim())descriptions=[...descriptions.filter(item=>!(item.repositoryKey===(snapshot.repository.value?.repository??'local')&&item.entityType===target.type&&item.entityId===target.id)),response.record];else descriptions=descriptions.filter(item=>!(item.repositoryKey===(snapshot.repository.value?.repository??'local')&&item.entityType===target.type&&item.entityId===target.id));setFeedback({state:'SUCCESS',title:value.trim()?'描述已保存':'已恢复默认描述',message:'Owner 本地描述元数据已更新。',code:value.trim()?'DESCRIPTION_SAVED':'DESCRIPTION_OVERRIDE_CLEARED'});}
+  async function saveHumanUat(record:HumanUatRecord){try{const target=selectedEntity;if(target.type!==record.entityType||target.id!==(record.entityId??record.workPackageId))throw new Error('UAT_TARGET_MISMATCH');const payload={...record,repository:snapshot.repository.value?.repository??record.repository};const response=await request(`/api/human-uat?entityType=${encodeURIComponent(record.entityType)}&entityId=${encodeURIComponent(record.entityId??record.workPackageId)}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});raw={...raw,humanUat:[response.record,...(raw.humanUat??[]).filter(item=>!(item.entityType===record.entityType&&(item.entityId??item.workPackageId)===(record.entityId??record.workPackageId)))]};await loadSnapshot(false);const override=record.decisionMode==='OWNER_OVERRIDE_PASS';setFeedback({state:'SUCCESS',title:override?'人工 UAT 已直接通过':'UAT 进度已保存',message:override?'Owner 直接通过已持久化，未逐项验收事实已保留。':'Owner Human UAT 记录已持久化。',code:override?'OWNER_OVERRIDE_PASS':record.status==='PASS'?'UAT_PASS_SAVED':'UAT_PROGRESS_SAVED'});}catch(error){const message=error instanceof Error?error.message:'UAT_OVERRIDE_ERROR';setFeedback({state:'ERROR',title:record.decisionMode==='OWNER_OVERRIDE_PASS'?'人工 UAT 直接通过失败':'UAT 保存失败',message,code:message.split(':')[0],next:'检查当前实体与本地服务状态。'});}}
+  function startRuntimePolling(){if(runtimeTimer)clearInterval(runtimeTimer);runtimeTimer=window.setInterval(async()=>{if(runtimePollInFlight)return;runtimePollInFlight=true;try{const nextRuntime=await refreshRuntimeProjection();const active=Boolean(nextRuntime&&['STARTING','RUNNING','STOPPING'].includes(nextRuntime.phase));const pendingInbox=bridgeInbox.some(item=>item.state==='READY'||item.state==='LAUNCHED');if(!active&&!pendingInbox){if(runtimeTimer)clearInterval(runtimeTimer);runtimeTimer=undefined}}finally{runtimePollInFlight=false}},1000)}
+  function findRoadmapNode(nodes:any[],id:string):any{for(const node of nodes){if(node.id===id)return node;const found=findRoadmapNode(node.children??[],id);if(found)return found}return null}
+  function resolveHydratedSelection(nodes:any[]):SelectedEntityRef{const persisted=readSelection();if(persisted&&findRoadmapNode(nodes,persisted.id))return persisted;const active:any[]=[];const walk=(items:any[],parent:any=null)=>{for(const node of items){if(node.type==='work_package'&&['IN_PROGRESS','WAITING_OWNER','WAITING_UAT'].includes(node.status))active.push({node,parent});walk(node.children??[],node)}};walk(nodes);if(active.length===1)return {type:'work_package',id:active[0].node.id};if(active.length>1){const parents=[...new Set(active.map(item=>item.parent?.id).filter(Boolean))];return {type:'milestone',id:parents.length===1?parents[0]:(nodes[0]?.id??'M1')}}return {type:'milestone',id:nodes[0]?.id??'M1'};}
+  function persistSelection(selection:SelectedEntityRef){selectedEntity=selection;persistWorkspaceNavigation()}
+  function roadmapPath(nodes:any[],id:string,path:any[]=[]):any[]{for(const node of nodes){if(node.id===id)return [...path,node];const found=roadmapPath(node.children??[],id,[...path,node]);if(found.length)return found}return []}
+  async function locateSelectedEntity(){const path=roadmapPath(roadmapNodes,selectedEntity.id);if(!path.length)return;const stored:Record<string,boolean>={};try{Object.assign(stored,JSON.parse(localStorage.getItem('aicc-v2-roadmap-collapse')||'{}'))}catch{}for(const node of path)if(node.children?.length)stored[node.id]=true;localStorage.setItem('aicc-v2-roadmap-collapse',JSON.stringify(stored));await tick();const target=document.querySelector(`[data-roadmap-node="${CSS.escape(selectedEntity.id)}"]`) as HTMLElement|null;const container=document.querySelector('.roadmap-scroll-region') as HTMLElement|null;if(target&&container){const top=target.getBoundingClientRect().top-container.getBoundingClientRect().top+container.scrollTop;container.scrollTo({top:Math.max(0,top-container.clientHeight/2),behavior:'smooth'});target.classList.add('locate-highlight');window.setTimeout(()=>target.classList.remove('locate-highlight'),900)}}
+  async function select(id:string){
+    const node=findRoadmapNode(roadmapNodes,id);
+    if(!node)return;
+    globalWorkspace=false;selectedEntity={type:node.type,id:node.id} as SelectedEntityRef;activeTab=selectedEntity.type==='work_package'?'运行':'概览';selectedInboxId=null;drawer=null;selectionRequest+=1;persistSelection(selectedEntity);
+    if(selectedEntity.type==='work_package'){await readFormalWorkPackage(selectedEntity.id,selectionRequest);await refreshRuntimeProjection();}else if(selectedEntity.type==='pull_request'){await refreshRuntimeProjection();}
+  }
+  function toggleSidebar(side:'roadmap'|'status'){
+    if(window.matchMedia('(max-width: 900px)').matches){drawer=drawer===side?null:side;return}
+    if(side==='roadmap')leftCollapsed=!leftCollapsed;else rightCollapsed=!rightCollapsed;
+  }
+  function eligibility(id:ActionEligibility['id']){return context.availableActions.find(action=>action.id===id)}
+  async function post(url:string,body:unknown){return request(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)})}
+  async function runAction(id:ActionEligibility['id']){
+    // Execution is a live operation: refresh the bounded read model before
+    // evaluating its button state so a stale browser snapshot never becomes
+    // an accidental authorization or execution blocker.
+    if((id==='START_CODEX'||id==='RETRY')&&selectedEntity.type==='work_package'){
+      setFeedback({state:'RUNNING',title:id==='RETRY'?'正在重新读取运行状态…':'正在读取运行状态…',message:'只更新当前运行、Inbox 和报告，不重建整个页面。',code:'RUNTIME_PROJECTION_REFRESH'});
+      await refreshRuntimeProjection();
+      await tick();
     }
-  });
-
-  const evidence = [
-    ['C', '项目章程 Project Charter', 'docs/00_Governance/01_PROJECT_CHARTER.md'],
-    ['R', '在用路线图 Living Roadmap', 'docs/10_Planning_Roadmap/01_LIVING_ROADMAP.md'],
-    ['W', '当前工作包 Current Work Package', 'docs/60_Operations/work-packages/AICC-CODEX-ONLY-MIGRATION-001.md'],
-    ['P', 'OpenSpec 提案 Proposal', 'openspec/changes/aicc-visible-slice-001/proposal.md'],
-    ['T', 'OpenSpec 任务 Tasks', 'openspec/changes/aicc-visible-slice-001/tasks.md'],
-    ['CX', 'Codex App Server 配置 Config', 'Codex profile: sol']
-  ];
-
-  $: formalItems = (controlLoop.roadmap?.entries ?? []).map((entry) => ({
-    ...entry,
-    key: entry.id,
-    summary: `${entry.status} / ${entry.authorization}`,
-    gate: entry.status,
-    progress: `${entry.status}`,
-    progressPercent: entry.status === 'CLOSED' ? 100 : 0,
-    parent: entry.milestone ?? 'UNASSIGNED',
-    dependency: 'Formal Work Package evidence',
-    change: entry.id.toLowerCase(),
-    path: `docs/60_Operations/work-packages/${entry.id}.md`,
-    spec: 'formal', task: 'formal', run: 'read-only', criteria: []
-  } satisfies WorkItem));
-  $: filteredRoadmap = formalItems.filter((item) => {
-    const needle = query.trim().toLowerCase();
-    return !needle || `${item.id} ${item.title} ${item.summary}`.toLowerCase().includes(needle);
-  });
-  $: if (selected.key === 'loading') {
-    const current = formalItems.find((item) => item.id === controlLoop.roadmap?.currentWorkPackage);
-    if (current) selected = current;
+    const available=eligibility(id);
+    if(!available?.enabled){setFeedback({state:'BLOCKED',title:'当前操作不可用',message:available?.reasonLabel??'当前实体或状态不允许此操作。',code:available?.reasonCode??'ACTION_NOT_AVAILABLE'});return}
+    busy=true;
+    const running:Record<string,[string,string,string]>={REFRESH:['正在刷新状态…','正在重建项目快照。','REFRESHING'],AUTHORIZE:['正在验证授权条件…','正在检查仓库状态与正式 Work Package。','AUTHORIZING'],START_CODEX:['正在启动 Codex…','正在验证匹配授权、仓库状态和 Writer Lock。','CODEX_STARTING'],STOP_CODEX:['正在停止 Codex…','正在请求当前 WP 的受管进程停止。','CODEX_STOPPING'],SAFE_MAIN_SYNC:['正在同步本地 main…','正在执行安全 fast-forward 检查。','SYNCING'],RETRY:['正在重新启动 Codex…','正在复用当前 WP Execution Lease 并执行实时预检。','RETRYING'],PR_CREATE_DRAFT:['正在准备 Draft PR…','将请求 Codex 基于实际仓库事实创建 Draft PR。','PR_DRAFT_CREATING'],PR_OPEN:['正在打开 PR…','正在读取真实 PR 身份。','PR_OPENING']};
+    const copy=running[id];setFeedback({state:'RUNNING',title:copy[0],message:copy[1],code:copy[2]});
+    let resultMessage='最新结果已写入当前实体上下文。';try{
+      if(id==='REFRESH')await loadSnapshot(false);
+      if(id==='AUTHORIZE'&&selectedEntity.type==='work_package'){const requestedId=selectedEntity.id;const result=await post('/api/authorization',{workPackageId:requestedId,selectedEntityId:requestedId,confirmed:true});if(result.record?.workPackageId!==requestedId)throw new Error('AUTHORIZATION_PERSISTENCE_INTEGRITY_FAILED');await loadSnapshot(false);await tick();const refreshedSnapshot=createProjectSnapshot(raw);const refreshed=resolveEntityContext(refreshedSnapshot,selectedEntity);if(refreshed.type!=='work_package'||refreshed.id!==requestedId||refreshed.authorization.state!=='VALID'||refreshed.authorization.record?.workPackageId!==requestedId||refreshed.authorization.record?.headShaAtAuthorization!==refreshedSnapshot.repository.value?.head)throw new Error('AUTHORIZATION_POSTCONDITION_FAILED');if(result.warning)resultMessage=result.warning;}
+      if(id==='START_CODEX'&&selectedEntity.type==='work_package'){await post('/api/codex/start',{workPackageId:selectedEntity.id});startRuntimePolling();}
+      if(id==='RETRY'&&selectedEntity.type==='work_package'){await post('/api/codex/start',{workPackageId:selectedEntity.id});startRuntimePolling();}
+      if(id==='PR_CREATE_DRAFT'&&selectedEntity.type==='pull_request'){const parent=(context.type==='pull_request'?context.parentWorkPackageId:null);if(!parent)throw new Error('PR_PARENT_WP_UNKNOWN');await post('/api/pr-runner/create-draft',{workPackageId:parent,prId:selectedEntity.id});startRuntimePolling();}
+      if(id==='PR_OPEN'&&context.type==='pull_request'&&context.record?.url)window.open(context.record.url,'_blank','noopener');
+      if(id==='STOP_CODEX')await post('/api/codex/stop',{});
+      if(id==='SAFE_MAIN_SYNC')await post('/api/repository/sync-main',{});
+      if(!['START_CODEX','RETRY'].includes(id))await loadSnapshot(false); else await refreshRuntimeProjection();
+      const success:Record<string,[string,string]>={REFRESH:['状态已刷新','REFRESH_SUCCESS'],AUTHORIZE:['Owner 授权已创建','AUTHORIZATION_SUCCESS'],START_CODEX:['Codex 已启动','CODEX_STARTED'],STOP_CODEX:['Codex 已停止','CODEX_STOPPED'],SAFE_MAIN_SYNC:['本地 main 已同步','SYNC_SUCCESS'],RETRY:['重试完成','RETRY_SUCCESS'],PR_CREATE_DRAFT:['Draft PR 创建执行已启动','PR_DRAFT_EXECUTION_STARTED'],PR_OPEN:['PR 已打开','PR_OPENED']};
+      setFeedback({state:'SUCCESS',title:success[id][0],message:resultMessage,code:success[id][1]});
+    }catch(error){const message=error instanceof Error?error.message:'ACTION_ERROR';const code=message.split(':')[0];setFeedback({state:'ERROR',title:'Owner 操作未完成',message,code,next:code==='UNKNOWN_OR_CONFLICTING_DIRTY'?'处理列出的冲突文件后重试授权。':'检查当前实体证据与安全门。'})}finally{busy=false}
   }
-
-  function choose(item: WorkItem) {
-    selected = item;
-  }
-
-  function announce(message: string) {
-    toast = message;
-    window.setTimeout(() => {
-      if (toast === message) toast = '';
-    }, 1900);
-  }
-
-  async function refresh() {
-    refreshing = true;
-    controlLoop = await loadControlLoop();
-    refreshing = false;
-    if (controlLoop.codexRuntime) runtimeObservationError = '';
-    runtimePoller.start(controlLoop.codexRuntime);
-    announce(controlLoop.status === 'VERIFIED' ? '远端 Authority 已验证；未执行 fetch。' : `Authority 状态：${controlLoop.status}`);
-  }
-
-  function requestAuthorization() {
-    authorizationConfirming = true;
-  }
-
-  function cancelAuthorization() {
-    authorizationConfirming = false;
-  }
-
-  async function confirmAuthorization() {
-    const workPackageId = controlLoop.roadmap?.currentWorkPackage;
-    if (!workPackageId) return;
-    try {
-      controlLoop = { ...controlLoop, authorization: await authorizeWorkPackage(workPackageId, true) };
-      authorizationConfirming = false;
-      await refresh();
-    } catch (error) {
-      authorizationConfirming = false;
-      announce(`授权被阻止：${error instanceof Error ? error.message : String(error)}`);
-    }
-  }
-
-  async function runCodexControl(action: CodexControlAction) {
-    if (controlPending) return;
-    controlPending = true;
-    try {
-      const runtime = await controlCodex(action);
-      controlLoop = { ...controlLoop, codexRuntime: runtime };
-      runtimeObservationError = '';
-      runtimePoller.start(runtime);
-    } catch (error) {
-      announce(`Codex 操作被阻止：${error instanceof Error ? error.message : String(error)}`);
-    } finally {
-      controlPending = false;
-    }
-  }
-
-  async function syncLocalMain() {
-    if (!syncAllowed(controlLoop.evaluation)) return;
-    syncState = requestSync(controlLoop.evaluation);
-  }
-
-  function cancelSync() {
-    syncState = cancelledSync();
-  }
-
-  async function confirmSync() {
-    syncState = { kind: 'loading' };
-    try {
-      const result = await syncWorkspace();
-      syncState = syncOutcome(result);
-      if (!result.success) return;
-      await refresh();
-    } catch (error) {
-      syncState = { kind: 'failure', message: `同步被阻止：${error instanceof Error ? error.message : String(error)}` };
-    }
-  }
-
-  onMount(() => {
-    void refresh();
-  });
-  onDestroy(() => runtimePoller.stop());
+  function resize(side:'left'|'right',event:PointerEvent){const startX=event.clientX,start=side==='left'?leftWidth:rightWidth;const move=(next:PointerEvent)=>{const value=Math.max(side==='left'?240:260,Math.min(420,start+(side==='left'?next.clientX-startX:startX-next.clientX)));if(side==='left')leftWidth=value;else rightWidth=value};const up=()=>{removeEventListener('pointermove',move);removeEventListener('pointerup',up);localStorage.setItem(`aicc-v2-${side}-width`,String(side==='left'?leftWidth:rightWidth))};addEventListener('pointermove',move);addEventListener('pointerup',up)}
+  onMount(()=>{recordAppMount();const removeShortcuts=registerMacShortcuts(executionActions);leftWidth=+localStorage.getItem('aicc-v2-left-width')!||320;rightWidth=+localStorage.getItem('aicc-v2-right-width')!||320;void loadAutoExecute();void loadSnapshot(false).then(()=>{if(raw.runtime&&['STARTING','RUNNING','STOPPING'].includes(raw.runtime.phase))startRuntimePolling()});void pollService(false);void loadBridge().finally(startIncomingInboxPolling);serviceTimer=window.setInterval(()=>void pollService(true),1500);return removeShortcuts});onDestroy(()=>{if(runtimeTimer)clearInterval(runtimeTimer);if(serviceTimer)clearInterval(serviceTimer);if(bridgeTimer)clearInterval(bridgeTimer);if(recoveryToastTimer)clearTimeout(recoveryToastTimer)});
 </script>
 
+<svelte:head><title>AICC V2 · Control Center</title><meta name="viewport" content="width=device-width, initial-scale=1"/></svelte:head>
 <div class="app-shell">
-  <header class="topbar">
-    <div class="brand-cell">
-      <div class="brand-mark">✓</div>
-      <div>
-        <div class="brand-name">AI Control Center</div>
-        <div class="brand-subtitle">Authority · OpenSpec · Codex App Server</div>
-      </div>
-    </div>
+  <header class="global-header"><div class="brand"><div class="brand-icon">A</div><div><strong>AI Control Center</strong><span>V2 · Local Web First</span></div></div><div class="header-context"><span class:warning={serviceState!=='正常'} class="status-dot"></span>本地服务：{serviceState} <span class="mono">AIcontrolcenter</span></div><div class="header-actions"><button class="auto-execute-toggle" class:enabled={autoExecute} aria-pressed={autoExecute} data-testid="auto-execute-toggle" onclick={toggleAutoExecute}>自动执行：{autoExecute?'ON':'OFF'}</button><button class="service-action" onclick={restartService}>重启本地服务</button><button class="service-action" onclick={viewServiceLogs}>查看服务日志</button><button class="sidebar-toggle" data-tooltip={leftCollapsed?'打开左侧 Roadmap':'关闭左侧 Roadmap'} aria-label={leftCollapsed?'打开左侧 Roadmap':'关闭左侧 Roadmap'} onclick={()=>toggleSidebar('roadmap')}>{leftCollapsed?'》':'《'}</button><span class="branch-badge">{snapshot.repository.value?.branch??'repository unavailable'}</span><button class="sidebar-toggle" data-tooltip={rightCollapsed?'打开右侧状态栏':'关闭右侧状态栏'} aria-label={rightCollapsed?'打开右侧状态栏':'关闭右侧状态栏'} onclick={()=>toggleSidebar('status')}>{rightCollapsed?'《':'》'}</button></div></header>
+  {#if recoveryToast}<div class="recovery-toast" role="status" data-testid="service-recovery-toast">{recoveryToast}</div>{/if}{#if serviceLogs}<section class="service-log-card"><div><strong>本地服务日志</strong><button class="service-log-close" onclick={()=>serviceLogs=null}>关闭</button></div><h4>Supervisor / 启动状态</h4><p>{serviceState} · {serviceDetails?.binding??'127.0.0.1'}:{serviceDetails?.port??1420}</p><h4>标准输出</h4><pre>{serviceLogs.stdout}</pre><h4>错误输出</h4><pre>{serviceLogs.stderr}</pre></section>{/if}
+  <div class:left-collapsed={leftCollapsed} class:right-collapsed={rightCollapsed} class="workspace" style={`--left-width:${leftWidth}px;--right-width:${rightWidth}px`}>
+  <aside class:drawer-open={drawer==='roadmap'} class="roadmap panel"><div class="panel-header"><div><span class="kicker">01 / ROADMAP</span><h2>项目路线图</h2></div></div><CurrentContextLocator context={context} executionContextLock={executionContextLock} onToggleExecutionContextLock={toggleExecutionContextLock} onLocate={locateSelectedEntity}/><div class="roadmap-scroll-region"><div class="roadmap-scroll-content"><GlobalTaskView navigationOnly groups={globalTaskGroups} onNavigateEntity={navigateGlobalEntity} onOpenWorkspace={openGlobalWorkspace} onOpenPrWorkspace={openGlobalPrWorkspace}/>{#if snapshot.roadmap.availability==='AVAILABLE'}<RoadmapTree nodes={roadmapNodes} selectedId={selectedEntity.id} onSelect={select}/>{:else}<section class="roadmap-source-error" data-testid="roadmap-read-error"><strong>路线图暂时不可用</strong><p>无法读取或解析正式 Roadmap。</p><code>{snapshot.roadmap.errorCode??'ROADMAP_READ_FAILED'}</code></section>{/if}</div></div><footer class="roadmap-footer"><span title={snapshot.roadmapSource}>数据来源：01_LIVING_ROADMAP.md</span></footer></aside>
+    <div class="resize-handle" onpointerdown={(event)=>resize('left',event)} role="separator" aria-label="调整路线图宽度"></div>
+    <main class="center panel"><div class="center-inner">
+      <EntityHeader {context} statusOverride={ownerStatus.status} statusLabelOverride={ownerStatus.label} description={selectedDescription} onSave={saveDescription}/>
+      {#if globalPrWorkspace}
+        <GlobalPrWorkspace records={snapshot.pullRequests.value??[]} onSelect={navigateGlobalEntity}/>
+      {:else if globalWorkspace}
+        <GlobalTaskView center groups={globalTaskGroups} onNavigateEntity={navigateGlobalEntity} onOpenWorkspace={openGlobalWorkspace} onOpenPrWorkspace={openGlobalPrWorkspace}/>
+      {:else if context.type==='milestone'}
+        <MilestoneView context={context} onSelect={select}/>
+      {:else if context.type==='work_package'}
+          <EntityOperationsWorkspace entityType="work_package" activeTab={activeTab} statuses={tabStatuses} tabs={WORKSPACE_TABS} onSelect={(tab)=>activeTab=tab}>
+          <div slot="workflow" class="workflow-section"><div class="section-label"><span>Workflow</span><small>WP 9-stage lifecycle</small></div><WorkflowTimeline stages={ownerWorkflowStages} currentStage={context.lifecycle.currentStage}/><div class="current-stage"><strong>当前阶段：{context.lifecycle.currentStage}</strong><p>{context.lifecycle.currentStage==='HUMAN_UAT'?'等待 Owner 完成真实 UI Human UAT。':'当前阶段由统一生命周期解析器确定。'}</p></div></div>
+          {#if activeTab==='运行'}<RuntimeWorkspace runtime={displayRuntime} history={runtimeHistory} selectedRunId={selectedRunId} selectedInboxId={selectedInboxId} workPackage={context.formalWorkPackage} writerLock={context.writerLock} bridgeInbox={scopedBridgeInbox} bridgeOutbox={bridgeOutbox} bridgePayload={bridgePayload} autoExecute={autoExecute} instructionState={instructionState} onPayloadChange={updateBridgePayload} onPasteInstruction={pasteInstruction} onImportInstruction={importInstruction} onManualExecute={executeInstruction} onCopyExample={copyBridgeExample} onLaunch={launchBridge} onCopyReport={(report)=>navigator.clipboard?.writeText(JSON.stringify(report,null,2))} onSelectRun={(id)=>selectedRunId=id}/>{:else if activeTab==='UAT'}<HumanUatWorkspace context={context} repository={snapshot.repository.value?.repository??'local'} record={context.humanUat} onSave={saveHumanUat} onNavigate={(tab)=>activeTab=tab}/>{:else if activeTab==='概览'}<section class="overview" data-testid="wp-overview-content"><OwnerActionZone context={context} ownerStatusCode={ownerStatus.status} {busy} codexAvailable={Boolean(codexInfo?.available)} bridgeOutbox={bridgeOutbox} onAction={runAction} onNavigate={(tab)=>activeTab=tab}/>{#if feedback.state!=='IDLE'}<div class="feedback-bar {feedback.state.toLowerCase()}" data-testid="owner-action-feedback" data-feedback-state={feedback.state.toLowerCase()}><div class="feedback-state">{feedback.state}</div><div><strong>{feedback.title}</strong><p>{feedback.message}</p>{#if feedback.code}<code>{feedback.code}</code>{/if}{#if feedback.next}<small>下一步：{feedback.next}</small>{/if}</div></div>{/if}<p class="overview-summary">当前状态：{ownerStatus.label} · {context.formalization}</p></section>{:else if activeTab==='证据'}<section data-testid="wp-evidence-content"><p>{context.evidence.join(' · ')}</p></section>{:else if activeTab==='授权'}<AuthorizationWorkspace context={context} repository={snapshot.repository.value?.repository??'不可用'}/>{:else}<section class="tab-error" data-testid="wp-tab-error"><strong>当前标签不可用</strong><p>请重新选择一个操作标签。</p></section>{/if}
+        </EntityOperationsWorkspace>
 
-    <div class="search-cell">
-      <label class="search-box">
-        <span class="search-icon">⌕</span>
-        <input bind:value={query} type="search" placeholder="搜索 Roadmap、Work Package、Change" aria-label="搜索 Roadmap、Work Package、Change" />
-      </label>
-    </div>
-
-    <div class="authority-cell">
-      <div>
-        <div class="micro-label">远端 Authority</div>
-        <div class="authority-value">origin/main · {controlLoop.status}</div>
-      </div>
-      <button class="primary-button" type="button" onclick={refresh}>{refreshing ? '验证中…' : '刷新状态'}</button>
-    </div>
-  </header>
-
-  <div class="workspace">
-    <aside class="roadmap-pane">
-      <div class="pane-heading">
-        <div class="eyebrow">项目路线图</div>
-        <div class="heading-row">
-          <h2>{controlLoop.roadmap?.project ?? 'AI Control Center'}</h2>
-          <span class="accent-chip">{controlLoop.roadmap?.progressPercent ?? 0}%</span>
-        </div>
-        <p>项目 → 里程碑 → 工作包 · 当前：{controlLoop.roadmap?.currentMilestone ?? 'CHECKING'}</p>
-      </div>
-
-      <div class="roadmap-scroll">
-        {#each controlLoop.roadmap?.milestones ?? [] as milestone}
-          <div class="milestone-summary"><strong>{milestone.id} — {milestone.title}</strong><b>{milestone.progressPercent}%</b></div>
-          {#each filteredRoadmap.filter((item) => item.parent === milestone.id) as item}
-          <button class:active={selected.key === item.key} class="work-row" type="button" onclick={() => choose(item)}>
-            <span class="node-icon">{item.id.slice(-3)}</span>
-            <span class="tree-copy">
-              <span class="tree-name">{item.title}</span>
-              <span class="tree-code">{item.id}</span>
-              <span class="mini-metrics"><span>{item.status}</span><span>{item.authorization}</span></span>
-            </span>
-            <span class:done={item.status === 'CLOSED'} class:current={item.id === controlLoop.roadmap?.currentWorkPackage} class="status-dot"></span>
-          </button>
-          {/each}
-          {#each milestone.futureItems.filter((item) => item.toLowerCase().includes(query.trim().toLowerCase())) as futureItem}
-            <div class="future-work-row" data-kind="future-placeholder">
-              <span class="future-node">○</span>
-              <span class="tree-copy">
-                <span class="tree-name">{futureItem}</span>
-                <span class="tree-code">未来规划 / 尚未正式化</span>
-              </span>
-            </div>
-          {/each}
-        {/each}
-      </div>
-
-      <div class="security-area">
-        <div class="security-card">
-          <div class="security-label">当前安全模式</div>
-          <strong>只读 V1</strong>
-          <p>OpenSpec 只解析；Codex 仅在 Owner 授权和固定能力范围内运行；任意 shell、越权写入和自动授权全部禁用。</p>
-        </div>
-      </div>
-    </aside>
-
-    <main class="detail-pane" aria-live="polite">
-      <div class="detail-hero">
-        <div>
-          <div class="eyebrow">{selected.id}</div>
-          <h1>{selected.title}</h1>
-          <p>{selected.summary}</p>
-        </div>
-        {#if controlLoop.authorization?.valid}
-          <span class="accent-chip">AUTHORIZED_FOR_IMPLEMENTATION</span>
-        {:else}
-          <button class="primary-button" type="button" onclick={requestAuthorization}>授权本工作包</button>
-        {/if}
-      </div>
-
-      {#if authorizationConfirming}
-        <div class="confirm-box authorization-box" role="dialog" aria-label="确认工作包授权">
-          <strong>确认授权本工作包？</strong>
-          <span>授权将绑定 Work Package ID、Authority SHA、当前分支、工作区、范围、允许/禁止能力与时间戳。不会启动 Codex。</span>
-          <div class="confirm-actions">
-            <button class="secondary-button" type="button" onclick={cancelAuthorization}>取消</button>
-            <button class="primary-button" type="button" onclick={confirmAuthorization}>确认授权</button>
-          </div>
-        </div>
-      {/if}
-
-      <nav class="tabs" aria-label="工作包详情">
-        {#each [['overview', '概览'], ['openspec', 'OpenSpec'], ['codex', 'Codex 状态'], ['validation', '验证']] as tab}
-          <button class:active={activeTab === tab[0]} type="button" onclick={() => activeTab = tab[0] as Tab}>{tab[1]}</button>
-        {/each}
-      </nav>
-
-      {#if activeTab === 'overview'}
-        <section class="tab-panel">
-          <div class="metric-grid">
-            <article class="metric-card">
-              <div class="eyebrow">正式 Authority</div>
-              <div class="metric-value">{controlLoop.status}</div>
-              <div class="metric-note mono">origin/main · {controlLoop.authority?.remoteMainSha ?? 'unknown'}</div>
-            </article>
-            <article class="metric-card">
-              <div class="eyebrow">当前关卡</div>
-              <div class="metric-value">{selected.gate}</div>
-              <div class="metric-note">{selected.authorization}</div>
-            </article>
-            <article class="metric-card">
-              <div class="eyebrow">全局进度</div>
-              <div class="metric-value">{controlLoop.roadmap?.progressPercent ?? 0}%</div>
-              <div class="progress-track"><span style={`width:${controlLoop.roadmap?.progressPercent ?? 0}%`}></span></div>
-            </article>
-          </div>
-
-          <article class="content-card">
-            <div class="section-title-row"><h3>正式合同</h3><span class="accent-chip">{selected.status}</span></div>
-            <dl class="contract-grid">
-              <div><dt>正式文件</dt><dd class="mono">{selected.path}</dd></div>
-              <div><dt>授权状态</dt><dd>{selected.authorization}</dd></div>
-              <div><dt>当前里程碑</dt><dd>{controlLoop.roadmap?.currentMilestone ?? selected.parent}</dd></div>
-              <div><dt>路线图 Authority</dt><dd class="mono">{controlLoop.roadmap?.authoritySha ?? 'unknown'}</dd></div>
-              <div><dt>后续工作包</dt><dd>{controlLoop.roadmap?.nextWorkPackages.join(', ') ?? 'unknown'}</dd></div>
-              <div><dt>远端策略</dt><dd>只读查询 remote main，不执行 git fetch</dd></div>
-            </dl>
-          </article>
-
-          <article class="content-card">
-            <div class="section-title-row"><h3>Owner 授权证据</h3><span class="accent-chip">{controlLoop.authorization?.status ?? 'UNKNOWN'}</span></div>
-            <dl class="contract-grid">
-              <div><dt>Work Package</dt><dd class="mono">{controlLoop.authorization?.record?.workPackageId ?? 'UNKNOWN'}</dd></div>
-              <div><dt>Authority SHA</dt><dd class="mono">{controlLoop.authorization?.record?.authoritySha ?? 'UNKNOWN'}</dd></div>
-              <div><dt>分支</dt><dd>{controlLoop.authorization?.record?.branch ?? 'UNKNOWN'}</dd></div>
-              <div><dt>工作区</dt><dd class="mono">{controlLoop.authorization?.record?.worktree ?? 'UNKNOWN'}</dd></div>
-              <div><dt>范围</dt><dd>{controlLoop.authorization?.record?.scope.join(', ') ?? 'UNKNOWN'}</dd></div>
-              <div><dt>允许能力</dt><dd class="mono">{controlLoop.authorization?.record?.allowedCapabilities.join(', ') ?? 'UNKNOWN'}</dd></div>
-              <div><dt>禁止能力</dt><dd class="mono">{controlLoop.authorization?.record?.forbiddenCapabilities.join(', ') ?? 'UNKNOWN'}</dd></div>
-              <div><dt>授权时间</dt><dd>{controlLoop.authorization?.record?.authorizedAt ?? 'UNKNOWN'}</dd></div>
-            </dl>
-            {#if controlLoop.authorization?.blocker}<div class="sync-status failure" role="status">{controlLoop.authorization.blocker}</div>{/if}
-          </article>
-
-          <article class="content-card">
-            <div class="section-title-row"><h3>本地 main 同步状态</h3><span class="accent-chip">{getSyncState(controlLoop.evaluation)}</span></div>
-            <div class="sync-explanation"><strong>{syncCopy.reason}</strong><span class="mono">{syncCode}</span><small>下一步：{syncCopy.nextStep}</small></div>
-            <dl class="contract-grid">
-              <div><dt>远端 Main SHA</dt><dd class="mono">{controlLoop.authority?.remoteMainSha ?? 'unknown'}</dd></div>
-              <div><dt>本地 Main SHA</dt><dd class="mono">{controlLoop.identity?.localMainSha ?? 'unknown'}</dd></div>
-              <div><dt>当前分支</dt><dd>{controlLoop.identity?.currentBranch ?? 'detached / unknown'}</dd></div>
-              <div><dt>当前 HEAD</dt><dd class="mono">{controlLoop.identity?.localHead ?? 'unknown'}</dd></div>
-              <div><dt>工作区</dt><dd>{controlLoop.identity?.worktreeClean ? 'CLEAN' : 'DIRTY'}</dd></div>
-              <div><dt>检查时间</dt><dd>{controlLoop.authority?.checkedAt ?? 'not checked'}</dd></div>
-            </dl>
-            <div class="criteria-grid">
-              {#each controlLoop.evaluation?.blockers ?? ['CHECKING'] as blocker}
-                <div class="criterion"><b>!</b><span>{ownerBlocker(blocker).reason}<small class="mono">{blocker}</small></span></div>
-              {/each}
-            </div>
-            <button class="primary-button" type="button" disabled={!syncAllowed(controlLoop.evaluation) || syncState.kind === 'loading'} onclick={syncLocalMain}>同步本地 main</button>
-            {#if syncState.kind === 'confirming'}
-              <div class="confirm-box" role="dialog" aria-label="确认同步">
-                <strong>确认同步本地 main？</strong>
-                <span>仅执行固定 fetch → revalidate → switch → ff-only merge。</span>
-                <div class="confirm-actions">
-                  <button class="secondary-button" type="button" onclick={cancelSync}>取消</button>
-                  <button class="primary-button" type="button" onclick={confirmSync}>确认同步</button>
-                </div>
-              </div>
-            {:else if syncState.kind === 'loading'}
-              <div class="sync-status" role="status">同步中…</div>
-            {:else if syncState.kind === 'success' || syncState.kind === 'failure' || syncState.kind === 'cancelled'}
-              <div class:success={syncState.kind === 'success'} class:failure={syncState.kind === 'failure'} class="sync-status" role="status">{syncState.message}</div>
-            {/if}
-          </article>
-
-          <article class="content-card">
-            <div class="section-title-row"><h3>下一工作包执行判定</h3><span class="accent-chip">后续工作包关卡</span></div>
-            <div class="resolver-summary"><strong>当前候选工作包</strong><span>{controlLoop.resolver?.workPackage?.id ?? '暂无候选工作包'}</span><strong>执行</strong><span>{controlLoop.resolver?.decision ?? 'UNKNOWN'}</span></div>
-            {#if controlLoop.resolver?.workPackage}
-              <dl class="contract-grid">
-                <div><dt>WP ID</dt><dd class="mono">{controlLoop.resolver.workPackage.id}</dd></div>
-                <div><dt>标题</dt><dd>{controlLoop.resolver.workPackage.title}</dd></div>
-                <div><dt>Authority SHA</dt><dd class="mono">{controlLoop.resolver.workPackage.authoritySha}</dd></div>
-                <div><dt>OpenSpec 变更</dt><dd class="mono">{controlLoop.resolver.workPackage.openspecChange}</dd></div>
-                <div><dt>依赖关系</dt><dd>{controlLoop.resolver.workPackage.dependencies.map((dependency) => `${dependency.id}=${dependency.status}`).join(', ')}</dd></div>
-              </dl>
-            {/if}
-            <div class="criteria-grid">
-              {#each controlLoop.resolver?.blockers ?? ['UNKNOWN'] as blocker}
-                <div class="criterion"><b>!</b><span>{blocker === 'WORK_PACKAGE_NOT_AUTHORIZED' ? '等待 Owner 授权' : '存在执行阻塞'}<small class="mono">{blocker}</small><small>下一步：完成当前 Post-UAT Closure / Owner Authorization</small></span></div>
-              {/each}
-            </div>
-          </article>
-
-          <article class="content-card">
-            <div class="section-title-row"><h3>正式路线图证据</h3><span class="secondary-note">{controlLoop.roadmap?.entries.length ?? 0} 个工作包</span></div>
-            <div class="criteria-grid">
-              {#each controlLoop.roadmap?.entries ?? [] as item, index}
-                <div class="criterion"><b>{String(index + 1).padStart(2, '0')}</b><span>{item.id}: {item.status} / {item.authorization}</span></div>
-              {/each}
-            </div>
-          </article>
-        </section>
-      {:else if activeTab === 'openspec'}
-        <section class="tab-panel">
-          <article class="content-card no-top-margin">
-            <div class="section-title-row">
-              <div><h3>OpenSpec 工件图</h3><span class="secondary-note mono">Change: {selected.change}</span></div>
-              <span class="accent-chip">只读</span>
-            </div>
-            <div class="artifact-grid">
-              {#each [['01','Proposal','COMPLETE'],['02','Specs','COMPLETE'],['03','Design','COMPLETE'],['04','Tasks',selected.task],['05','Validation','NOT STARTED']] as artifact, index}
-                <div class:ready={index < 3} class:current={index === 3} class="artifact-card">
-                  <div class="eyebrow">{artifact[0]}</div>
-                  <strong>{artifact[1]}</strong>
-                  <span>{artifact[2]}</span>
-                </div>
-              {/each}
-            </div>
-          </article>
-
-          <article class="content-card">
-            <div class="section-title-row"><h3>OpenSpec 操作策略</h3><span class="secondary-note">V1 与未来关卡</span></div>
-            <div class="policy-row"><span>读取 Artifacts</span><b class="allow">ALLOW</b></div>
-            <div class="policy-row"><span>Explore / Propose / Update / Verify</span><b class="future">FUTURE GOVERNED ACTION</b></div>
-            <div class="policy-row"><span>Apply</span><b class="deny">OWNER AUTHORIZATION REQUIRED</b></div>
-            <div class="policy-row"><span>Sync</span><b class="deny">PERMANENT DENY</b></div>
-            <div class="policy-row"><span>Archive</span><b class="deny">OWNER CLOSURE ONLY</b></div>
-          </article>
-        </section>
-      {:else if activeTab === 'codex'}
-        <section class="tab-panel">
-          <div class="metric-grid">
-            <article class="metric-card"><div class="eyebrow">Codex 引擎</div><div class="metric-value">{codexRuntime?.engine ?? 'UNKNOWN'}</div><div class="metric-note">profile: {codexRuntime?.profile ?? 'UNKNOWN'}</div></article>
-            <article class="metric-card"><div class="eyebrow">当前运行状态</div><div class="metric-value">{codexRuntime ? runtimePhaseCopy(codexRuntime.currentPhase) : '未知'}</div><div class="metric-note mono">{codexRuntime?.currentPhase ?? 'UNKNOWN'}</div></article>
-            <article class="metric-card"><div class="eyebrow">当前任务</div><div class="metric-value">{codexRuntime?.currentTask ?? 'UNKNOWN'}</div><div class="metric-note mono">{codexRuntime?.currentEvent ?? 'NO_OBSERVED_EVENT'}</div></article>
-          </div>
-
-          <article class="content-card">
-            <div class="section-title-row"><h3>Codex 运行观察</h3><span class="accent-chip">{codexRuntime?.sessionState ?? 'UNKNOWN'}</span></div>
-            {#if runtimeObservationError}
-              <div class="sync-status failure" role="alert">Runtime 观察失败：<span class="mono">{runtimeObservationError}</span>。自动观察已停止，请刷新状态后重试。</div>
-            {/if}
-            <dl class="contract-grid">
-              <div><dt>进程 PID</dt><dd class="mono">{codexRuntime?.processId ?? 'UNKNOWN'}</dd></div>
-              <div><dt>进程状态</dt><dd class="mono">{codexRuntime?.processState ?? 'UNKNOWN'}</dd></div>
-              <div><dt>Session</dt><dd class="mono">{codexRuntime?.sessionId ?? 'UNKNOWN'}</dd></div>
-              <div><dt>Thread</dt><dd class="mono">{codexRuntime?.threadId ?? 'UNKNOWN'}</dd></div>
-              <div><dt>Turn</dt><dd class="mono">{codexRuntime?.turnId ?? 'UNKNOWN'}</dd></div>
-              <div><dt>当前工作包</dt><dd class="mono">{codexRuntime?.activeWorkPackage ?? 'UNKNOWN'}</dd></div>
-              <div><dt>分支</dt><dd>{codexRuntime?.branch ?? 'UNKNOWN'}</dd></div>
-              <div><dt>工作区</dt><dd class="mono">{codexRuntime?.worktree ?? 'UNKNOWN'}</dd></div>
-              <div><dt>最后活动</dt><dd>{codexRuntime?.lastActivity ?? 'UNKNOWN'}</dd></div>
-              <div><dt>Writer Lock</dt><dd class="mono">{codexRuntime ? (codexRuntime.writerLockHeld ? 'HELD' : 'NOT_HELD') : 'UNKNOWN'}</dd></div>
-              <div><dt>退出状态</dt><dd class="mono">{codexRuntime?.exitStatus ?? 'NOT_OBSERVED'}</dd></div>
-              <div><dt>失败证据</dt><dd class="mono">{codexRuntime?.failure ?? 'NONE'}</dd></div>
-              <div><dt>测试状态</dt><dd class="mono">{codexRuntime?.testState ?? 'UNKNOWN'}</dd></div>
-              <div><dt>独立审查</dt><dd class="mono">{codexRuntime?.reviewState ?? 'UNKNOWN'}</dd></div>
-              <div><dt>PR</dt><dd class="mono">{codexRuntime?.pullRequest ?? 'UNKNOWN'}</dd></div>
-              <div><dt>CI 状态</dt><dd class="mono">{codexRuntime?.ciState ?? 'UNKNOWN'}</dd></div>
-              <div><dt>阻塞</dt><dd class="mono">{codexRuntime?.blocker ?? 'NONE'}</dd></div>
-              <div><dt>下一步</dt><dd>{codexRuntime?.nextAction ?? 'UNKNOWN'}</dd></div>
-            </dl>
-            <div class="runtime-controls">
-              {#each [['START','启动 Codex'],['PAUSE','暂停'],['RESUME','恢复'],['STOP_AFTER_CURRENT_STEP','当前步骤后停止'],['RETRY','重试']] as action}
-                <button class="secondary-button" type="button" title={runtimeSupportsControl(codexRuntime, action[0] as CodexControlAction) ? '' : 'UNSUPPORTED_CONTROL'} disabled={controlPending || !runtimeSupportsControl(codexRuntime, action[0] as CodexControlAction)} onclick={() => runCodexControl(action[0] as CodexControlAction)}>{action[1]}{runtimeSupportsControl(codexRuntime, action[0] as CodexControlAction) ? '' : '（不支持）'}</button>
-              {/each}
-            </div>
-          </article>
-
-          <div class="callout"><strong>Codex 能力策略：</strong>Codex App Server 使用固定 profile `sol` 和预定义能力。Owner UI 不接受 shell 文本；任何仓库写入必须保持唯一 Writer Lock、范围绑定和独立审查。</div>
-        </section>
-      {:else}
-        <section class="tab-panel">
-          <article class="content-card no-top-margin">
-            <div class="section-title-row"><h3>受控验证流程</h3><span class="accent-chip">{codexRuntime?.currentPhase ?? 'UNKNOWN'}</span></div>
-            <div class="pipeline">
-              {#each [
-                ['01','Authority 关卡','远端 main 与正式 WP 已检查','PASS','pass'],
-                ['02','OpenSpec 解析','工件与任务图已检测','PASS','pass'],
-                ['03','Owner 授权','Apply 或 Runtime 前必须授权','WAITING','wait'],
-                ['04','Codex 委派计划','并行读取，单一写入通道','LOCKED','locked'],
-                ['05','实现与测试','只读 V1 中已禁用','LOCKED','locked'],
-                ['06','独立审查','独立证据合同','LOCKED','locked'],
-                ['07','Owner 交接','停止于 WAITING_OWNER_ACCEPTANCE','LOCKED','locked']
-              ] as step}
-                <div class="pipeline-step">
-                  <span class="step-number">{step[0]}</span>
-                  <div><strong>{step[1]}</strong><span>{step[2]}</span></div>
-                  <b class={step[4]}>{step[3]}</b>
-                </div>
-              {/each}
-            </div>
-          </article>
-        </section>
-      {/if}
-    </main>
-
-    <aside class="evidence-pane">
-      <div class="section-title-row">
-        <div><div class="eyebrow">仓库状态</div><h3>Authority 健康度</h3></div>
-        <span class="accent-chip">{controlLoop.roadmap?.progressPercent ?? 0}%</span>
-      </div>
-
-      <div class="health-card">
-        <div><span>本地 HEAD</span><b class="mono">{repositoryStatus.localHead}</b></div>
-        <div><span>远端 main</span><b class="mono">{repositoryStatus.remoteMain}</b></div>
-        <div><span>工作区</span><b class:allow={repositoryStatus.worktree === 'CLEAN'} class:deny={repositoryStatus.worktree === 'DIRTY'}>{repositoryStatus.worktree}</b></div>
-        <div><span>Authority</span><b>{repositoryStatus.authority}</b></div>
-        <div><span>当前工作包</span><b class="mono">{repositoryStatus.currentWorkPackage}</b></div>
-        <div><span>后续工作包关卡</span><b>{repositoryStatus.nextWpGate}</b></div>
-      </div>
-
-      <div class="section-title-row stack-heading"><h3>执行状态</h3><span class="secondary-note">只读探测</span></div>
-      <div class="stack-list">
-        {#each [['OS','OpenSpec','已解析正式工件','DETECTED'],['CX','Codex App Server',`profile: ${codexRuntime?.profile ?? 'UNKNOWN'} · PID ${codexRuntime?.processId ?? 'UNKNOWN'}`,codexRuntime?.processState ?? 'UNKNOWN'],['RN','Codex Run',codexRuntime?.threadId ?? 'NO_OBSERVED_THREAD',codexRuntime?.currentPhase ?? 'UNKNOWN'],['WL','Writer Lock',codexRuntime?.activeWorkPackage ?? 'NO_ACTIVE_WORK_PACKAGE',codexRuntime ? (codexRuntime.writerLockHeld ? 'HELD' : 'NOT_HELD') : 'UNKNOWN']] as item}
-          <div class="stack-row"><span class="stack-icon">{item[0]}</span><div><strong>{item[1]}</strong><span>{item[2]}</span></div><b>{item[3]}</b></div>
-        {/each}
-      </div>
-
-      <div class="section-title-row stack-heading"><h3>正式证据</h3><span class="secondary-note">只读来源</span></div>
-      <div class="evidence-list">
-        {#each evidence as file}
-          <button type="button" onclick={() => announce(`原型操作：打开 ${file[1]}`)}>
-            <span class="stack-icon">{file[0]}</span>
-            <span><strong>{file[1]}</strong><small>{file[2]}</small></span>
-            <b>›</b>
-          </button>
-        {/each}
-      </div>
-
-      <div class="callout compact"><strong>Authority first：</strong>OpenSpec 与 Codex Runtime 无权改变正式授权；发生冲突时停止并显示 AUTHORITY_DRIFT。</div>
-    </aside>
+      {:else if prTab}<section class="pr-panel"><EntityOperationsWorkspace entityType="pull_request" activeTab={activeTab} statuses={{}} tabs={context.tabs} onSelect={(tab)=>activeTab=tab}><div slot="workflow" class="pr-workflow-header"><div class="section-label"><span>Pull Request workspace</span><small>PR facts · strict scope</small></div><div class="pr-notice"><strong>{context.record?.number?`PR #${context.record.number}`:context.id} · {context.record?.title??'PR identity not bound'}</strong><span>{context.record?.state??'UNKNOWN'} · {context.record?.url??'尚未绑定真实远端 PR'}</span><span>Parent WP: {context.parentWorkPackageId??'UNKNOWN'}</span></div><PRWorkflowTimeline stages={context.stages} currentStage={context.currentStage}/></div>{#if activeTab==='运行'}<RuntimeWorkspace entityType="pull_request" entityId={context.id} runtime={context.runtime} history={scopedRuntimeHistory} selectedRunId={selectedRunId} selectedInboxId={selectedInboxId} workPackage={null} writerLock={{status:'NOT_HELD',scope:'repository'}} bridgeInbox={scopedBridgeInbox} bridgeOutbox={bridgeOutbox} bridgePayload={bridgePayload} autoExecute={autoExecute} instructionState={instructionState} onPayloadChange={updateBridgePayload} onPasteInstruction={pasteInstruction} onImportInstruction={importInstruction} onManualExecute={executeInstruction} onCopyExample={copyBridgeExample} onLaunch={launchBridge} onCopyReport={(report)=>navigator.clipboard?.writeText(JSON.stringify(report,null,2))} onSelectRun={(id)=>selectedRunId=id}/>{:else if activeTab==='UAT'}<HumanUatWorkspace context={context} repository={snapshot.repository.value?.repository??'local'} record={prUatRecord} onSave={saveHumanUat} onNavigate={(tab)=>activeTab=tab}/>{:else if activeTab==='证据'}<PrEvidencePanel context={context}/>{:else}<div class="pr-tab-view" data-testid="pr-tab-content" data-pr-tab={prTab.tab}>{#if prTab.tab==='概览'}<PrOwnerActionZone context={context} {busy} onAction={runAction} onNavigate={(tab)=>activeTab=tab}/>{#if feedback.state!=='IDLE'}<div class="feedback-bar {feedback.state.toLowerCase()}" data-testid="pr-action-feedback"><div class="feedback-state">{feedback.state}</div><div><strong>{feedback.title}</strong><p>{feedback.message}</p>{#if feedback.code}<code>{feedback.code}</code>{/if}</div></div>{/if}{/if}<div class="section-label"><span>{prTab.title}</span><small>{prTab.tab}</small></div>{#if prTab.description}<p class="pr-tab-description">{prTab.description}</p>{/if}<div class="runtime-list">{#each prTab.rows as row}<div><span>{row[0]}</span><b>{row[1]}</b></div>{/each}</div></div>{/if}</EntityOperationsWorkspace></section>{/if}
+    </div></main>
+    <div class="resize-handle" onpointerdown={(event)=>resize('right',event)} role="separator" aria-label="调整状态宽度"></div>
+  <aside class:drawer-open={drawer==='status'} class="status panel"><div class="panel-header"><div><span class="kicker">03 / EVIDENCE</span><h2>状态与证据</h2></div><div class="status-tools"><button class="service-action" onclick={()=>runAction('REFRESH')}>刷新状态</button>{#if context.type==='work_package'}<button class="service-action" onclick={()=>runAction('SAFE_MAIN_SYNC')}>同步本地 main</button>{/if}</div></div><EntityEvidencePanel {context} repository={snapshot.repository.value} {codexInfo} runtimeOverride={displayRuntime}/></aside>
   </div>
-
-  {#if toast}<div class="toast" role="status">{toast}</div>{/if}
 </div>

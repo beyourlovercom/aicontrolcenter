@@ -1,0 +1,2 @@
+<script lang="ts">import StatusDot from './StatusDot.svelte';import type {AiccStatus} from '../lib/workflow';export let active='运行';export let statuses:Record<string,AiccStatus>={};export let onSelect:(tab:string)=>void=()=>{};export let tabs=['运行','UAT','概览','证据','授权'];</script>
+<nav class="status-tabs" data-testid="wp-tabs">{#each tabs as tab}<button class:active={active===tab} onclick={()=>onSelect(tab)}><StatusDot status={statuses[tab]??'NOT_STARTED'} /><span>{tab}</span></button>{/each}</nav>

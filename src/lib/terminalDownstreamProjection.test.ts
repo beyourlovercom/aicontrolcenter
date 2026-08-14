@@ -1,0 +1,27 @@
+import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
+import {join} from 'node:path';
+import {isRetryableRuntimePhase} from './context/actionEligibility.ts';
+import {INBOX_STATES,OUTBOX_STATES} from './bridgeCore.ts';
+
+const root=process.cwd();
+const bridge=readFileSync(join(root,'src/lib/bridgeCore.ts'),'utf8');
+const app=readFileSync(join(root,'src/App.svelte'),'utf8');
+const ownerActions=readFileSync(join(root,'src/components/entity/OwnerActionZone.svelte'),'utf8');
+assert.equal(isRetryableRuntimePhase('FAILED'),true);
+assert.equal(isRetryableRuntimePhase('STOPPED'),true);
+assert.equal(isRetryableRuntimePhase('RECOVERY_REQUIRED'),true);
+assert.equal(isRetryableRuntimePhase('COMPLETED'),false,'a successful terminal run is not a retry projection');
+assert.equal(isRetryableRuntimePhase('RUNNING'),false);
+assert.equal(INBOX_STATES.includes('CONSUMED'),true);
+assert.equal(OUTBOX_STATES.includes('READY'),true);
+assert.match(bridge,/function reconcilePersistedExecutions\(\)/);
+assert.match(bridge,/export function readOutbox\(\)\{reconcilePersistedExecutions\(\);/);
+assert.match(bridge,/x\.executionId===item\.executionId&&x\.runId===item\.runId/);
+assert.match(bridge,/executionId:item\.executionId,runId:item\.runId/);
+assert.match(app,/bridgeInbox=Array\.isArray\(inbox\.items\)\?inbox\.items:bridgeInbox;bridgeOutbox=Array\.isArray\(outbox\.items\)\?outbox\.items:bridgeOutbox/,'live Runtime polling refreshes downstream Bridge projection');
+assert.match(app,/void loadBridge\(\);startRuntimePolling\(\)/,'Bridge launch starts live Runtime projection');
+assert.match(app,/runtimePollInFlight=false/,'live Runtime polling has overlap protection');
+assert.match(app,/Promise\.all\(\[request\(`\/api\/codex\/runtime/,'live polling reads canonical Runtime and downstream state together');
+assert.match(ownerActions,/运行已完成，正在生成运行报告/,'report-pending is not projected as failure');
+console.log('terminal downstream projection tests passed');

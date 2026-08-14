@@ -1,0 +1,36 @@
+import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
+
+const app=readFileSync(new URL('../App.svelte',import.meta.url),'utf8');
+const main=readFileSync(new URL('../main.ts',import.meta.url),'utf8');
+const workspace=readFileSync(new URL('../components/entity/RuntimeWorkspace.svelte',import.meta.url),'utf8');
+const entityWorkspace=readFileSync(new URL('../components/entity/EntityOperationsWorkspace.svelte',import.meta.url),'utf8');
+const css=readFileSync(new URL('../app.css',import.meta.url),'utf8');
+
+assert.equal((app.match(/<EntityOperationsWorkspace/g)??[]).length,2,'WP and PR share the entity workspace hierarchy');
+assert.match(entityWorkspace,/slot name="workflow"/);
+assert.match(entityWorkspace,/StatusTabs/);
+assert.match(entityWorkspace,/StatusTabs active=\{activeTab\}/,'tab underline receives the selected tab state');
+assert.match(entityWorkspace,/active-tab-content/);
+assert.match(main,/mount\(App, \{ target: document\.getElementById\('app'\)! \}\)/,'App is mounted through the real browser entry point');
+assert.match(app,/from '\.\/lib\/runtimeSelection\.ts'/,'App mount path uses a browser-safe runtime selector');
+assert.doesNotMatch(app,/from '\.\/lib\/runtimeManager\.ts'/,'App mount path does not import Node-only runtime manager code');
+assert.match(app,/WORKSPACE_TABS=\['运行','UAT','概览','证据','授权'\]/,'WP tabs use the canonical order');
+assert.match(app,/activeTab==='授权'[\s\S]*<AuthorizationWorkspace/,'WP authorization content has an explicit branch');
+assert.match(app,/activeTab==='概览'[\s\S]*data-testid="wp-overview-content"/,'original overview remains reachable');
+assert.equal((app.match(/<RuntimeWorkspace/g)??[]).length,2,'WP and PR both own a runtime tab workspace');
+assert.match(workspace,/runtime-execution-inbox/);
+assert.match(app,/from '\.\/lib\/runtimeSelection\.ts'/,'App uses the browser-safe runtime selection module');
+assert.match(workspace,/from '\.\.\/\.\.\/lib\/runtimeSelection\.ts'/,'Runtime workspace avoids Node-only runtime manager imports');
+assert.match(workspace,/WEB_BRIDGE/);assert.match(workspace,/查看指令/);assert.match(workspace,/rawInstruction/);assert.match(workspace,/INSTRUCTION_ID/);assert.match(workspace,/未启动执行/);assert.match(workspace,/gateReason/);assert.equal(workspace.includes('onLaunch(item.id)'),true,'launch remains an explicit Owner action');assert.match(workspace,/disabled\={autoExecute\|\|instructionState!==\'IMPORTED_PENDING\'}/,'manual execution is unavailable while Auto Execute is ON or before import');
+assert.match(workspace,/runtime-current-execution/);
+assert.match(workspace,/runtime-live-activity/);
+assert.match(workspace,/runtime-run-row-\{row\.runId\}/,'each Run renders its own result row');
+assert.match(workspace,/runtime-run-actions/,'Run action controls belong to each Run row');
+assert.match(workspace,/runtime-history/);
+assert.match(app,/class="status panel"[\s\S]*EntityEvidencePanel[\s\S]*<\/aside>/);
+assert.doesNotMatch(app,/class="status panel"[\s\S]*bridge-core-card/);
+assert.doesNotMatch(app,/RuntimeMonitor[\s\S]*StatusTabs/);
+assert.match(app,/recoveryToastTimer=window\.setTimeout/);
+assert.match(css,/\.recovery-toast/);
+console.log('runtime workspace UI contract tests passed');

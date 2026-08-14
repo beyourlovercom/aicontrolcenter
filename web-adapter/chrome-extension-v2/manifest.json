@@ -1,0 +1,14 @@
+{
+  "manifest_version": 3,
+  "name": "AICC Bridge V2",
+  "version": "0.1.0",
+  "description": "Minimal owner-controlled ChatGPT to AICC bridge.",
+  "permissions": ["storage"],
+  "host_permissions": ["http://127.0.0.1:1420/*"],
+  "background": { "service_worker": "service-worker.js" },
+  "content_scripts": [{
+    "matches": ["https://chatgpt.com/*", "https://chat.openai.com/*"],
+    "js": ["chatgpt-dom.js", "content.js"],
+    "run_at": "document_idle"
+  }]
+}

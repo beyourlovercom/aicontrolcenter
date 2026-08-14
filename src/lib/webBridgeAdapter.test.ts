@@ -1,0 +1,26 @@
+import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
+import {join} from 'node:path';
+import {WebBridgeClient,insertIntoComposer,reportForComposer,WEB_ADAPTER_CONTRACT,type AdapterStorage} from './webBridgeAdapter.ts';
+
+const storageData=new Map<string,string>();
+const storage:AdapterStorage={getItem:key=>storageData.get(key)??null,setItem:(key,value)=>storageData.set(key,value)};
+let requested:string[]=[];
+const reports=[{id:'outbox-1',state:'READY',inboxId:'inbox-1',runId:'run-1',report:{runId:'run-1',entityId:'AICC-V2-GPT-BRIDGE-001',executionType:'IMPLEMENTATION',runtimeResult:'COMPLETED',gateResult:'PASS',summary:'完成'}}];
+const fakeFetch=async(url:string,init?:RequestInit)=>{requested.push(`${init?.method??'GET'} ${url}`);if(url.endsWith('/inbox'))return new Response(JSON.stringify({item:{id:'inbox-1',state:'READY',instruction:{instructionId:'instruction-1'}}}),{status:200});return new Response(JSON.stringify({items:reports}),{status:200});};
+const client=new WebBridgeClient({fetchImpl:fakeFetch,storage});
+const sent=await client.sendInstruction('检查当前 AICC 仓库状态','https://chatgpt.com/c/1',{conversationId:'conversation-1',conversationUrl:'https://chatgpt.com/c/1',messageId:'msg-1'});
+assert.equal(sent.item.id,'inbox-1');assert.equal(sent.item.state,'READY');assert.equal(requested.length,1);assert.match(requested[0],/POST/);assert.equal(requested.some(item=>item.includes('/launch')),false,'receive never launches');
+const match=await client.pollMatchingResult(sent.correlation);assert.equal(match?.runId,'run-1');assert.equal(reportForComposer(match!),['AICC_RUN_REPORT_V1','Run ID: run-1','Entity: AICC-V2-GPT-BRIDGE-001','Execution type: IMPLEMENTATION','','Runtime Result: COMPLETED','Gate Result: PASS','','Summary:','完成'].join('\n'));
+const wrong=await client.pollMatchingResult({...sent.correlation,inboxId:'wrong-inbox'});assert.equal(wrong,null,'wrong inbox cannot be inserted');
+const events:Event[]=[];const target={value:'existing owner text',focus(){},dispatchEvent(event:Event){events.push(event);return true}};const root={querySelector:(selector:string)=>selector==='[contenteditable="true"]'?null:target};assert.equal(insertIntoComposer('report',root),true);assert.equal(target.value,'existing owner text\n\nreport');assert.equal(events.length,1);
+const editorEvents:Event[]=[];let editorText='existing owner text';const editor={textContent:editorText,innerText:editorText,ownerDocument:{execCommand:(_command:string,_showUi?:boolean,value?:string)=>{editorText+=`\n\n${value??''}`;editor.innerText=editorText;return true}},focus(){},dispatchEvent(event:Event){editorEvents.push(event);return true}};const editorRoot={querySelector:(selector:string)=>selector==='[contenteditable="true"]'?editor:null};assert.equal(insertIntoComposer('report',editorRoot),true);assert.equal(editorText,'existing owner text\n\nreport');assert.equal(editorEvents.length,1);
+assert.equal(WEB_ADAPTER_CONTRACT.autoExecuteOnReceive,false);assert.equal(WEB_ADAPTER_CONTRACT.autoSendChatGptMessage,false);assert.equal(WEB_ADAPTER_CONTRACT.conversationMetadataAuthority,true);assert.equal(sent.correlation.originContext?.messageId,'msg-1');assert.ok(storage.getItem('aicc-gpt-bridge-adapter-correlation-v1'));
+const browserAdapter=readFileSync(join(process.cwd(),'web-adapter/chatgpt-aicc-bridge.js'),'utf8');
+assert.match(browserAdapter,/AICC/);assert.match(browserAdapter,/127\.0\.0\.1:1420/);assert.equal(browserAdapter.includes('/api/gpt-bridge/launch'),false,'browser adapter never launches execution');assert.equal(browserAdapter.includes("button[type=submit]"),false,'browser adapter never submits ChatGPT message');
+const domAdapter=readFileSync(join(process.cwd(),'web-adapter/chatgpt-dom.js'),'utf8');
+assert.match(domAdapter,/AICC 执行/);assert.match(domAdapter,/✦/);assert.match(domAdapter,/mountAssistantAiccActions/);assert.match(domAdapter,/mountComposerAiccAction/);assert.match(domAdapter,/data-aicc-composer-action/);assert.match(domAdapter,/isExecutableSurface/);assert.equal((domAdapter.match(/aicc-composer-action/g)??[]).length>0,true);
+assert.match(domAdapter,/execCommand\('insertText'/,'contenteditable insertion uses editor-compatible input semantics');
+assert.match(domAdapter,/verifyComposerText/,'composer insertion has bounded reconciliation verification');
+assert.equal(domAdapter.includes('node.textContent = text'),false,'adapter does not directly replace contenteditable DOM');
+console.log('GPT Bridge 001B adapter contract tests passed');
