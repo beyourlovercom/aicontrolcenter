@@ -5,7 +5,7 @@ import {resolveWorkPackageLifecycle} from './lifecycleResolver.ts';
 import {resolveAvailableActions} from './actionEligibility.ts';
 import {resolveLifecycleProgress,resolveMilestoneProgress} from '../progress.ts';
 
-function findNode(nodes:RoadmapNode[],selected:SelectedEntityRef){for(const milestone of nodes){if(milestone.id===selected.id)return milestone;const child=milestone.children.find(item=>item.id===selected.id);if(child)return child;}return null;}
+function findNode(nodes:RoadmapNode[],selected:SelectedEntityRef):RoadmapNode|null{for(const node of nodes){if(node.id===selected.id)return node;const child=findNode(node.children,selected);if(child)return child;}return null;}
 function milestoneContext(snapshot:AiccProjectSnapshot,entity:Extract<SelectedEntityRef,{type:'milestone'}>,node:RoadmapNode):MilestoneEntityContext{
   const wps=node.children.filter(child=>child.type==='work_package'),prs=node.children.filter(child=>child.type==='pull_request');
   const complete=wps.filter(child=>['COMPLETE','PASS'].includes(child.status)).length,waiting=wps.filter(child=>['WAITING_OWNER','WAITING_UAT','IN_PROGRESS'].includes(child.status)).length,blocked=wps.filter(child=>['BLOCKED','FAILED'].includes(child.status)).length;

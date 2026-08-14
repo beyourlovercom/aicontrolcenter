@@ -78,7 +78,8 @@ Work Packages: `AICC-V2-AUTOPILOT-UNTIL-UAT-001`
 Work Packages: `AICC-V2-LOCAL-SERVICE-AUTOSTART-001`
 
 ### M4 — PR Runner Foundation
-Work Packages: `AICC-V2-PR-RUNNER-001`
+Work Packages: `AICC-V2-PR-RUNNER-001` — `ACTIVE`; PR Runner Foundation V1
+implemented / machine validated / Human UAT pending.
 
 ### M5 — Review + Exact-head CI
 Work Packages: `AICC-V2-REVIEW-CI-001`

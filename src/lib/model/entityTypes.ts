@@ -18,7 +18,7 @@ export type HumanUatItem={id:string;title:string;description:string;state:HumanU
 export type HumanUatRecord={repository:string;workPackageId:string;entityType:'work_package';status:'NOT_STARTED'|'IN_PROGRESS'|'NEEDS_REMEDIATION'|'PASS';ownerLabel?:string;items:HumanUatItem[];overallNote?:string;decision?:'PASS';decisionMode?:'ITEMIZED_PASS'|'OWNER_OVERRIDE_PASS';decisionCode?:'ITEMIZED_PASS'|'OWNER_OVERRIDE_PASS';createdAt:string;updatedAt:string;finalDecisionAt?:string;source:string};
 export type LifecycleEvidenceRecord={repository:string;workPackageId:string;implementation:{status:'COMPLETE'|'FAILED';commitSha?:string;source?:'VERIFIED_EXISTING_CHECKPOINT';recordedAt:string};validation:{status:'COMPLETE'|'FAILED';checks:string[];recordedAt:string};closure?:{status:'COMPLETE';recordedAt:string;source:string};};
 export type WriterLockState={status:'HELD'|'NOT_HELD'|'UNAVAILABLE';scope:'repository';workPackageId?:string};
-export type PullRequestRecord={id:string;workPackageId:string;status:AiccStatus;url?:string;sourceBranch?:string;targetBranch?:string;headSha?:string;commitEvidence?:string;reviewEvidence?:string;ciEvidence?:string;filesChanged?:number;mergeability?:string;mergeResult?:string;mainVerification?:string;fixture?:boolean};
+export type PullRequestRecord={id:string;workPackageId:string;status:AiccStatus;number?:number;title?:string;repository?:string;url?:string;sourceBranch?:string;targetBranch?:string;headSha?:string;state?:'DRAFT'|'OPEN'|'CLOSED'|'MERGED';draft?:boolean;createdAt?:string;updatedAt?:string;mergeState?:string;correlatedBranch?:string;correlatedWorktree?:string;latestCommit?:string;commitEvidence?:string;reviewEvidence?:string;ciEvidence?:string;filesChanged?:number;mergeability?:string;mergeResult?:string;mainVerification?:string;fixture?:boolean;correlationSource?:'FORMAL_WP'|'EXTERNAL_FACT'|'UNKNOWN'};
 
 export type AiccProjectSnapshot={
   roadmap:SourceValue<RoadmapNode[]>;
@@ -37,7 +37,7 @@ export type LifecycleStage={id:string;label:string;status:AiccStatus;evidence:st
 export type WorkPackageLifecycle={currentStage:string;effectiveStatus:AiccStatus;stages:LifecycleStage[]};
 export type AuthorizationEffectiveState='NONE'|'VALID'|'STALE_HEAD'|'STALE_BRANCH'|'CONTEXT_MISMATCH'|'CONFLICT'|'UNAVAILABLE';
 export type ResolvedAuthorization={state:AuthorizationEffectiveState;record:AuthorizationRecord|null;reasonCode?:string};
-export type ActionId='REFRESH'|'AUTHORIZE'|'START_CODEX'|'STOP_CODEX'|'RETRY'|'SAFE_MAIN_SYNC'|'PR_START_CODEX'|'PR_OPEN'|'PR_RETRY'|'PR_STOP'|'PR_APPROVE_MERGE';
+export type ActionId='REFRESH'|'AUTHORIZE'|'START_CODEX'|'STOP_CODEX'|'RETRY'|'SAFE_MAIN_SYNC'|'PR_CREATE_DRAFT'|'PR_OPEN'|'PR_START_CODEX'|'PR_RETRY'|'PR_STOP'|'PR_APPROVE_MERGE';
 export type ActionEligibility={id:ActionId;visible:boolean;enabled:boolean;reasonCode?:string;reasonLabel?:string};
 
 type ContextBase={entity:SelectedEntityRef;type:SelectedEntityRef['type'];id:string;title:string;displayTitle:string;status:AiccStatus;statusLabel:string;progress:number|null;breadcrumb:string;evidence:string[];availableActions:ActionEligibility[]};

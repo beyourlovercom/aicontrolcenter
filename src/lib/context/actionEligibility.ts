@@ -4,7 +4,7 @@ const action=(id:ActionEligibility['id'],visible:boolean,enabled:boolean,reasonC
 export function isRetryableRuntimePhase(phase:string|undefined){return Boolean(phase&&['FAILED','STOPPED','RECOVERY_REQUIRED'].includes(phase));}
 export function resolveAvailableActions(entity:SelectedEntityRef,snapshot:AiccProjectSnapshot,formalization?:FormalizationState,lifecycle?:WorkPackageLifecycle,authorization?:ResolvedAuthorization):ActionEligibility[]{
   if(entity.type==='milestone')return [action('REFRESH',true,true)];
-  if(entity.type==='pull_request')return [action('REFRESH',true,true),action('PR_START_CODEX',true,false,'PR_EXECUTION_CONTRACT_NOT_BOUND','PR 尚未绑定独立 Codex 执行合同'),action('PR_STOP',true,false,'PR_NO_ACTIVE_EXECUTION','当前没有活动中的 PR 执行'),action('PR_RETRY',true,false,'PR_RETRY_NOT_AVAILABLE','当前没有可重试的 PR 执行'),action('PR_OPEN',true,false,'PR_NOT_BOUND','未绑定真实 GitHub PR'),action('PR_APPROVE_MERGE',true,false,'PR_MERGE_EVIDENCE_MISSING','当前 Demo PR 未绑定真实 PR / CI / Merge evidence')];
+  if(entity.type==='pull_request'){const record=snapshot.pullRequests.value?.find(item=>item.id===entity.id);return [action('REFRESH',true,true),action('PR_CREATE_DRAFT',true,!record?.url,'PR_ALREADY_BOUND','当前 PR 已存在，继续执行不会重复创建'),action('PR_OPEN',Boolean(record?.url),Boolean(record?.url),'PR_NOT_BOUND','当前尚未绑定真实 GitHub PR')];}
   const repo=snapshot.repository.value,runtime=snapshot.runtime.value;
   const matchingRuntime=runtime?.workPackageId===entity.id?runtime:null;
   const activeRuntime=Boolean(matchingRuntime&&['STARTING','RUNNING','STOPPING'].includes(matchingRuntime.phase));

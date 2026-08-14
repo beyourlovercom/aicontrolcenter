@@ -9,7 +9,7 @@ assert.equal((workspace.match(/<RuntimeMonitor/g)??[]).length,1,'the canonical R
 assert(workspace.includes('emptyTitle'), 'runtime workspace preserves empty-state inputs');
 assert(app.includes('emptyTitle="暂无 PR 运行记录"'),'PR empty state is explicit');
 assert(app.includes('PR_EXECUTION_CONTRACT_NOT_BOUND'),'PR execution block reason is visible');
-assert(actions.includes("'PR_START_CODEX'"),'PR start action remains available through contextual resolver');
-assert(eligibility.includes("action('PR_START_CODEX',true,false,'PR_EXECUTION_CONTRACT_NOT_BOUND'"),'PR start remains truthfully blocked');
+assert(actions.includes("'PR_CREATE_DRAFT'"),'Draft PR action remains available through contextual resolver');
+assert(eligibility.includes("action('PR_CREATE_DRAFT'"),'Draft PR action is owned by the explicit Owner action path');
 assert(app.includes('runtime={null} history={[]}'), 'parent WP runtime is not passed to PR workspace');
 console.log('PR runtime monitor structure tests passed');
