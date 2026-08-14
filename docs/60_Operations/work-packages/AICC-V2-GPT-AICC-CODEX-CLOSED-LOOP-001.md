@@ -2,7 +2,8 @@
 
 Status: `ACTIVE / OWNER_AUTHORIZED`
 Type: `GPT_AICC_CODEX_CLOSED_LOOP`
-Roadmap Milestone: `M3.88 — GPT ↔ AICC ↔ Codex Closed Loop`
+Roadmap Milestone: `M4.1 — GPT ↔ AICC ↔ Codex Closed Loop`
+Current Phase: `Phase 1 — Unified Action Layer`
 Authority: `AICC-V2-PROJECT-CONSTITUTION-001 v1.3`
 Execution Standard: `AICC-V2-CANONICAL-EXECUTION-STANDARD-001 v1.3`
 
@@ -410,7 +411,12 @@ One concise Owner UAT round should validate the visible closed loop:
 5. Refresh/reconnect/DOM rerender does not duplicate execution or result return.
 6. Manual shortcuts remain usable as fallback.
 
-## Relationship to historical Work Packages
+## Relationship to M4 and historical Work Packages
+
+`AICC-V2-PR-RUNNER-001` remains `IMPLEMENTED / MACHINE_VALIDATED /
+HUMAN_UAT_PENDING`; its implementation/evidence are preserved while M4.1 is the
+current development mainline by explicit Owner decision. M4.1 does not reopen or
+redesign PR Runner.
 
 `AICC-V2-GPT-BRIDGE-001`, `AICC-V2-TERMINAL-HANDOFF-001`,
 `AICC-V2-AUTO-EXECUTE-MODE-001`, and
