@@ -64,3 +64,15 @@ The application is authority-first and Codex-only. It uses fixed typed repositor
 The build is an unsigned/ad-hoc UAT artifact only. It does not create a Release or Deploy. R2 remains unresolved and Human UAT remains pending. 001B remains `PLANNED` / `NOT_AUTHORIZED`; 001C through 001F are future placeholders and receive no fabricated status, authorization, or formal Work Package path.
 
 <!-- GPT_GITHUB_WRITE_TEST -->
+
+## M11.5 Roadmap Registration
+
+### M11.5 AICC Self Development Real Run
+
+Status: `PLANNED`
+
+Work Package: `AICC-M11.5-REAL-RUN-001`
+
+Description:
+
+验证 AICC 是否可以根据 Living Roadmap 自动驱动自身开发。
