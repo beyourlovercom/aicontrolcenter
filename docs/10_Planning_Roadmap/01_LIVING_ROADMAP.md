@@ -181,3 +181,10 @@ The application is authority-first and Codex-only. It uses fixed typed repositor
 The historical bootstrap formalization label remains only as a documented legacy compatibility note. The Entity Context Foundation is not reopened by the Dual Panel Work Package.
 
 The build is an unsigned/ad-hoc UAT artifact only. It does not create a Release or Deploy. AICC-V2-005 remains `WAITING_OWNER_HUMAN_UAT`; only the Owner can produce the final Human UAT PASS. `AICC_SELF_DEVELOPMENT_READY` remains `NOT_YET_PASS`. `AICC-V2-PR-RUNNER-001` is ready for Owner authorization as the bootstrap self-development Work Package; no PR Runner code is implemented here.
+
+## M6.2 Real Delivery Canary Validation
+
+Documentation-only validation target for `AICC-M6.2-REAL-DELIVERY-CANARY-001`.
+The canary must provision an isolated Delivery Context, worktree, deterministic
+delivery branch, and provider-bound execution before creating and validating a
+real PR. It stops at `READY_FOR_OWNER_UAT`; merge and release remain Owner-gated.
