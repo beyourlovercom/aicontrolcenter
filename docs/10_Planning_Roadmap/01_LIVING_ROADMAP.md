@@ -1,8 +1,23 @@
 # AI Control Center Living Roadmap
 
+Roadmap-Revision: 2
+Updated-At: 2026-08-17T08:45:00.000Z
+
 ## Current milestone
 
-`M4 — PR Runner Foundation`
+`M8 — AICC Lifecycle Intelligence`
+
+Status: `PLANNED / GOVERNANCE_BASELINE`
+
+AICC positioning: `Lifecycle Governance Control Center`
+
+Roadmap and Current Context UI/projection behavior is governed by the frozen
+canonical standard:
+`docs/00_Governance/AICC-V2-UI-INTERACTION-STANDARD-001.md`.
+
+AICC is not the primary Work Package creator. The governed product flow is:
+
+Human → ChatGPT / GPT Web → GitHub WP + Roadmap → AICC Lifecycle Intelligence → Codex Execution → PR / CI / Delivery Evidence
 
 ## Authority
 
@@ -10,9 +25,20 @@ Current Authority: `fcd41386fafd6ee2083e73cdee71bee68a3a1e09`
 
 Closed Work Packages: `AICC-VISIBLE-SLICE-001`, `AICC-OPENSPEC-READMODEL-001`, `AICC-CONTROL-LOOP-001A`
 
-Current Work Package: `AICC-V2-PR-RUNNER-001`
+Current Work Package: `AICC-V2-REVIEW-EXACT-HEAD-CI-001`
 
-Next Work Package after `AICC_SELF_DEVELOPMENT_READY`: `AICC-V2-PR-RUNNER-001`
+Current implementation phase: `Phase 6 — Owner Human UAT`
+
+### AICC-V2-REVIEW-EXACT-HEAD-CI-001 Phase Plan
+
+Phase 1 — Exact-head Evidence Model [COMPLETE]
+Phase 2 — Review Integration [COMPLETE]
+Phase 3 — CI Integration [COMPLETE]
+Phase 4 — Stale Evidence Invalidation [COMPLETE]
+Phase 5 — PR Workspace Projection [COMPLETE]
+Phase 6 — Owner UAT [ACTIVE]
+
+Next Work Package: `AICC-V2-REVIEW-EXACT-HEAD-CI-001` (`M5_REVIEW_AND_EXACT_HEAD_CI`)
 
 AICC_SELF_DEVELOPMENT_READY: `NOT_YET_PASS`
 
@@ -37,7 +63,7 @@ Work Packages: `AICC-V2-GPT-BRIDGE-001` — `CLOSED`; 001A and 001B complete,
 Human UAT PASS, First Usable Version hard gates 5/5 PASS.
 
 ### M3.6 — Terminal Handoff
-Work Packages: `AICC-V2-TERMINAL-HANDOFF-001` — `IMPLEMENTED / OWNER_UAT_PENDING`;
+Work Packages: `AICC-V2-TERMINAL-HANDOFF-001` — `PLANNED`;
 next executable self-development Work Package.
 
 ### M3.7 — Auto Execute Mode
@@ -88,26 +114,181 @@ Work Packages: `AICC-V2-AUTOPILOT-UNTIL-UAT-001`
 Work Packages: `AICC-V2-LOCAL-SERVICE-AUTOSTART-001`
 
 ### M4 — PR Runner Foundation
-Work Packages: `AICC-V2-PR-RUNNER-001` — `ACTIVE`; PR Runner Foundation V1
-implemented / machine validated / Human UAT pending.
+Work Packages: `AICC-V2-PR-RUNNER-001` — `CLOSED / HUMAN_UAT_PASS`; PR Runner
+Foundation V1 implemented and accepted.
+
+### M4.1 — GPT ↔ AICC ↔ Codex Closed Loop
+Work Package: `AICC-V2-GPT-AICC-CODEX-CLOSED-LOOP-001`
+Status: `FUNCTIONALLY_USABLE_WITH_KNOWN_UI_LIMITATIONS`
+Current milestone: `M4.1 — GPT ↔ AICC ↔ Codex Closed Loop`
+Current Work Package: `AICC-V2-GPT-AICC-CODEX-CLOSED-LOOP-001`
+Current implementation phase: `Phase 6 core closed-loop path — functionally usable`
+WP subtitle: `M4.1 practical closure · Human UAT not claimed`
+
+### AICC-V2-GPT-AICC-CODEX-CLOSED-LOOP-001 Phase Plan
+
+Phase 1 — Unified Action Layer [COMPLETE]
+Phase 2 — GPT → AICC [COMPLETE]
+Phase 3 — AICC → Codex Pure Pass-through [COMPLETE]
+Phase 4 — Codex → AICC Canonical Result [COMPLETE]
+Phase 5 — AICC → GPT Exactly-once Return [COMPLETE]
+Phase 6 — Owner Human UAT [FUNCTIONALLY_USABLE_WITH_KNOWN_UI_LIMITATIONS; FULL_OWNER_HUMAN_UAT NOT CLAIMED]
+
+Known non-blocking UI limitations: executable surface detection, floating action rail
+anchoring, ChatGPT DOM compatibility, and Bridge UI refinements may require later
+stabilization. Blocking defect classes remain duplicate execution, duplicate result
+insertion, wrong-conversation result return, canonical result loss/overwrite, and
+infinite adapter retry/page freeze.
+
+Future backlog: `AICC Web Bridge Stabilization` (not started in M4.1 closure).
 
 ### M5 — Review + Exact-head CI
-Work Packages: `AICC-V2-REVIEW-CI-001`
+Work Packages: `AICC-V2-REVIEW-EXACT-HEAD-CI-001`
+Status: `ACTIVE / OWNER_AUTHORIZED`
+Current implementation phase: `Phase 6 — Owner Human UAT`
 
 ### M6 — Autonomous PR Delivery
-Work Packages: `AICC-V2-AUTO-DELIVERY-001`
+Work Packages: `AICC-V2-AUTONOMOUS-PR-DELIVERY-001`
+Status: `CURRENT`
 
-### M7 — WP Automatic Lifecycle
-Work Packages: `AICC-V2-WP-LIFECYCLE-001`
+Phase 1 — Delivery Workspace Provisioning + Auto Stage Foundation [COMPLETE]
 
-### M8 — Evidence & Audit
-Work Packages: `AICC-V2-EVIDENCE-001`
+Phase 2 — Automatic Review Integration [COMPLETE]
 
-### M9 — Mobile Owner Console
-Work Packages: `AICC-V2-MOBILE-OWNER-001`
+Phase 3 — Automatic CI Integration [COMPLETE]
 
-### M10 — Multi-project AICC
-Work Packages: `AICC-V2-PROJECT-REGISTRY-001`
+Phase 4 — FAIL → Automatic Remediation [COMPLETE]
+
+Phase 5 — New Head → Automatic Revalidation [COMPLETE]
+
+Phase 6 — Automatic PR State Progression [COMPLETE]
+
+Phase 7 — Stop Condition + Retry Budget [COMPLETE]
+
+Phase 8 — READY_FOR_OWNER_UAT [CURRENT]
+
+Target: Owner-started Work Packages receive one deterministic delivery context,
+isolated worktree identity, delivery branch, and later PR binding. Automatic
+coding, review approval, merge, and deployment remain out of scope.
+
+### AICC-V2-AUTONOMOUS-PR-DELIVERY-001 Phase Plan
+
+Phase 1 — 自动阶段推进 [COMPLETE]
+Phase 2 — 自动 Review [COMPLETE]
+Phase 3 — 自动 CI [CURRENT]
+Phase 4 — FAIL → 自动 Remediation [PLANNED]
+Phase 5 — 新 Head → 自动重新验证 [PLANNED]
+Phase 6 — 自动 PR 状态推进 [PLANNED]
+Phase 7 — 停止条件 / Retry Budget [PLANNED]
+Phase 8 — READY_FOR_OWNER_UAT [PLANNED]
+
+Target outcome: Owner starts one Work Package / PR, AICC advances implementation,
+test/build, review, CI, remediation and revalidation through PR state progression
+to READY_FOR_OWNER_UAT, where Owner UAT remains the human stop point. Autonomous
+merge and deploy are not included in this milestone baseline.
+
+### M7 — Autonomous Development Operations
+Status: `CORE_COMPLETE`
+
+- M7.0 WP Lifecycle Unification — `PASS`
+- M7.1 Multi WP Scheduler — `PASS`
+- M7.2 Provider Intelligence — `PASS`
+- M7.3 Autonomous Execution Policy — `PASS`
+- M7.4 Autonomous Remediation Loop — `PASS`
+- M7.5 Autonomous Delivery Governance — `PASS`
+- M7.6 Self Hosted M8 Bootstrap — `PASS`
+- M7.7 Roadmap Milestone Alignment — `PASS`
+
+### M7.8 — AICC Proposal Intelligence
+Definition: `Optional Autonomous Proposal Source`
+
+AICC can analyze, suggest, explain, and evaluate risk. AICC cannot replace GPT
+planning, become the GitHub Work Package source of truth, directly activate a
+Work Package, or bypass Owner governance.
+
+- M7.8.1 Auto Create UI Runtime — `PASS`
+- M7.8.2 Auto Create Interaction Fix — `PASS`
+- M7.8.3 Proposal Experience — `PASS`
+- M7.8.4 Governance Hardening — `PASS`
+- M7.8.5 Decision Risk Baseline Model — `PASS`
+- M7.8.6 Risk Score Engine V2 — `PASS`
+- M7.8.7 Optional Autonomous Proposal Source — `PASS`
+
+### M8 — AICC Lifecycle Intelligence
+Goal: connect `GitHub → AICC → Codex`.
+Work Packages: `AICC-V2-GPT-CODEX-BRIDGE-001` — GPT ↔ Codex Execution Bridge
+
+- M8.0 GitHub Lifecycle Intelligence
+- M8.1 Delivery Evidence Intelligence
+- M8.2 GPT ↔ Codex Bridge
+  - M8.2.1.8 GPT Auto Control Loop Three-Round Human UAT — `COMPLETE / HUMAN_UAT_PASS`
+
+`M8.2.1.8_GPT_AUTO_CONTROL_LOOP_UAT = HUMAN_UAT_PASS`
+`THREE_ROUND_AUTO_LOOP = PASS`
+`AUTO_LOOP_V2_MINIMUM_CLOSED_LOOP = COMPLETE`
+
+The closed three-round chapter proved Round 1 → Round 2 → Round 3 automatic
+Luna execution, automatic feedback return to the same GPT Conversation,
+terminal `AICC_OWNER_UAT_V1`, persisted `WAITING_OWNER_UAT`, no fourth Run, and
+stable terminal projection with zero Owner actions after the Round 1 start.
+
+Repeated artificial three-round testing is no longer the active objective. The
+next validation class is the real planning/delivery E2E flow from Owner
+Requirement through GPT Roadmap planning, Formal WP and Roadmap persistence,
+PR delivery planning and real PR binding, AICC projection and automated
+execution, to Owner UAT. That next phase is not implemented by this closure.
+
+### M9 — Multi Repository & Multi Project Operations
+Goals: Project Registry, Repository Registry, Multi Worktree, and Cross Project
+Dependency Intelligence.
+
+### M10 — Autonomous Development Operations
+Goals: Issue Intelligence, Autonomous Proposal Loop, Autonomous Remediation,
+and Continuous Delivery Intelligence.
+
+## AICC V2 Core Control Loop Baseline
+
+Status: `OWNER_APPROVED_BASELINE`
+
+Canonical authority: `docs/00_Governance/AICC_V2_CORE_CONTROL_LOOP.md`
+
+Core:
+
+- `ONE_WP_ONE_GPT_CONVERSATION = TRUE`
+- `GPT_WEB = PLANNING_AND_NEXT_ACTION_AUTHORITY`
+- `CODEX_DEFAULT_EXECUTOR = LUNA`
+- `AICC_DECISION_AUTHORITY = 0`
+
+Explicitly rejected for V2:
+
+- `NO_PLANNER_CLI_PER_TASK = TRUE`
+- `NO_AUTOMATIC_SOL_LUNA_PLANNER_SWITCHING = TRUE`
+- `NO_COMPLEX_LEVEL_ROUTING = TRUE`
+
+V2 Final Closure Gate:
+
+AICC V2 may not be frozen or transitioned to AICC V3 until the complete real
+End-to-End Human UAT has passed:
+
+Requirement → GPT → Formal WP → AICC → PR Plan → Tasks → Codex Luna → AICC
+Feedback → Same GPT Conversation → next Tasks → Owner UAT → remediation if
+needed → WP Complete.
+
+`AICC_V2_FINAL_E2E_HUMAN_UAT = REQUIRED`
+
+## Governance baseline
+
+`AICC_DECISION_AUTHORITY = 0`
+
+Roadmap and Current Context visual projection is governed by the frozen
+canonical baseline
+`docs/00_Governance/AICC-V2-UI-INTERACTION-STANDARD-001.md`. Roadmap status and
+progress must use this Markdown document's explicit metadata and must not be
+independently inferred or calculated by AICC.
+
+AICC may analyze, recommend, explain, and project. AICC may not self approve,
+override Owner, replace GPT planning, bypass GitHub Source of Truth, or release
+automatically.
 
 ## Legacy Historical Milestones
 
@@ -152,7 +333,9 @@ Future Work Packages:
 4. AICC-POST-MERGE-UAT-001 — 001A closeout, roadmap authority update, and macOS UAT build.
 5. AICC-POST-MERGE-UAT-001-R1 — first Human UAT remediation (Human UAT failed).
 6. AICC-POST-MERGE-UAT-001-R2 — Human UAT remediation remains unresolved and blocked by the Codex-only architecture migration; it is not closed and Human UAT remains pending.
-7. AICC-CODEX-ONLY-MIGRATION-001 — current Codex-only migration through a new main-bound Human UAT artifact.
+7. AICC-CODEX-ONLY-MIGRATION-001 — historical Codex-only migration; its
+   configured `sol` runtime wording is superseded for the V2 Core Control Loop
+   by `docs/00_Governance/AICC_V2_CORE_CONTROL_LOOP.md`.
 8. 001B — OpenSpec Binding (planned, owner authorization not authorized).
 9. AICC-V2-VISUAL-IDENTITY-UNIFICATION-001 — Visual Identity Unification (ready for Owner authorization; visual remediation only).
 11. AICC-V2-SELF-RELOAD-RESILIENCE-001 — Self-Reload Resilience (future; no implementation started).
@@ -163,10 +346,28 @@ Future Work Packages:
 16. AICC-V2-GPT-BRIDGE-001 — closed GPT Bridge 001A/001B and First Usable
     Version hard gates 5/5; remaining Composer fallback ambiguity is a
     non-blocking P1 backlog finding.
-17. AICC-V2-TERMINAL-HANDOFF-001 — planned terminal notification and
-    originating-Composer report handoff.
-18. AICC-V2-AUTO-EXECUTE-MODE-001 — planned opt-in automatic execution after
-    the canonical ALLOW decision.
+17. AICC-V2-TERMINAL-HANDOFF-001 — `PLANNED`; next executable WP.
+18. AICC-V2-AUTO-EXECUTE-MODE-001 — `CLOSED`; Auto Execute V1 approved
+    baseline after Human UAT PASS.
+19. AICC-V2-RUNTIME-OPERATIONS-001 — `CLOSED`; Runtime Operations V1 approved
+    baseline after Owner Human UAT PASS.
+20. AICC-V2-CHROME-BRIDGE-REBUILD-001 — `PAUSED / HUMAN_UAT_NOT_COMPLETED`;
+    minimal V2 Chrome Bridge, separate from the frozen Legacy extension.
+21. AICC-V2-RUNTIME-WORKSPACE-REFINE-001 — `CLOSED`; Runtime Workspace V1
+    frozen after real Owner browser UAT PASS.
+
+## Self-development target
+
+After both Work Packages PASS, `AICC_SELF_DEVELOPMENT_MODE = ENABLED`.
+AICC responsibilities remain limited to instruction transport, Codex process
+launch, runtime observation, evidence and terminal persistence,
+Run/Instruction/Chat correlation, report return, and Owner-facing runtime UI.
+
+`ONE_REPOSITORY_MANY_PARALLEL_RUNS = YES`
+`ONE_REPOSITORY_MANY_PARALLEL_PRS = YES`
+
+`NEXT_MAINLINE_FOCUS = AICC-V2-PR-RUNNER-001`
+`NEXT_MAINLINE_FOCUS_LABEL = PR Runner`
 
 ## Current safety state
 
@@ -181,3 +382,30 @@ The application is authority-first and Codex-only. It uses fixed typed repositor
 The historical bootstrap formalization label remains only as a documented legacy compatibility note. The Entity Context Foundation is not reopened by the Dual Panel Work Package.
 
 The build is an unsigned/ad-hoc UAT artifact only. It does not create a Release or Deploy. AICC-V2-005 remains `WAITING_OWNER_HUMAN_UAT`; only the Owner can produce the final Human UAT PASS. `AICC_SELF_DEVELOPMENT_READY` remains `NOT_YET_PASS`. `AICC-V2-PR-RUNNER-001` is ready for Owner authorization as the bootstrap self-development Work Package; no PR Runner code is implemented here.
+
+## M6.2 Real Delivery Canary Validation
+
+Documentation-only validation target for `AICC-M6.2-REAL-DELIVERY-CANARY-001`.
+The canary must provision an isolated Delivery Context, worktree, deterministic
+delivery branch, and provider-bound execution before creating and validating a
+real PR. It stops at `READY_FOR_OWNER_UAT`; merge and release remain Owner-gated.
+
+## M7 Phase 0 — WP Lifecycle Unification
+
+`AICC-M7-PHASE-0-WP-LIFECYCLE-UNIFICATION-001` — `ACTIVE`; roadmap and new
+Work Packages use one lifecycle through Delivery Provisioning, Delivery
+Context, Execution Context, and the Provider Runtime.
+
+## M8 — Autonomous Product Engineering Platform Bootstrap
+
+M8 Work Packages are created through the AICC Work Package lifecycle only.
+
+- M8.0 Multi Repository Workspace
+- M8.1 Project Registry
+- M8.2 Team Ownership
+- M8.3 Cross Project Development
+- M8.4 Production Governance
+
+Bootstrap state: `SELF_HOSTED_BOOTSTRAP` until all required systems and gates
+are ready; then `M8_READY`. AICC cannot approve itself, merge its own PRs, or
+release production.
