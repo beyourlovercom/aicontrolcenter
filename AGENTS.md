@@ -8,6 +8,108 @@ OpenSpec, Codex sessions, runtime state, dashboards, local workspaces, caches, a
 
 No tool, agent, artifact, task checkbox, local session, or application state may authorize its own execution.
 
+## Permanent global state architecture
+
+All AICC status, lifecycle, progress, binding, and state-facing UI must follow this architecture. This is a permanent cross-module rule and applies to existing migrations and all future modules.
+
+### Layer 1 — Domain canonical data
+
+Domain entities remain independently authoritative. They must not be collapsed into one monolithic state file merely for UI convenience.
+
+- Work Package (`WP`) → its own canonical Work Package files, Living Roadmap structure, lifecycle data, and governed metadata.
+- Pull Request (`PR`) → its own canonical PR record, snapshot, provider evidence, and binding data.
+- Task → one canonical Task state model. Task status must not be inferred independently by each UI surface.
+- Run / Execution → canonical Runtime / Execution state and durable execution evidence.
+
+The domain canonical sources remain the write and truth authorities for their own bounded semantics.
+
+`DOMAIN_CANONICAL_DATA_REMAINS_INDEPENDENT = TRUE`
+`WP_PR_TASK_RUN_COLLAPSED_STORAGE = FORBIDDEN`
+
+### Layer 2 — Global State Projection
+
+AICC must provide one shared read-only projection layer above the domain canonical sources:
+
+`AICC Global State Read Model`
+
+Its canonical directory / projection implementation is responsible for:
+
+- reading the real Layer 1 canonical sources;
+- resolving and preserving explicit entity binding between WP / PR / Task / Run / Execution;
+- exposing one normalized state vocabulary without rewriting domain truth;
+- producing efficient entity and cross-entity read models;
+- maintaining monotonic projection revision metadata;
+- performing revision-aware cache invalidation;
+- preventing stale cached state from overriding newer canonical source state;
+- preserving `UNKNOWN` / unresolved states when the underlying source does not establish a value;
+- keeping separately governed state dimensions separate when their semantics differ.
+
+The Global State Read Model is a projection, not a new business authority, lifecycle decision authority, execution authority, or write-back authority.
+
+It must not invent PASS / FAIL / BLOCKED / COMPLETE, ownership, binding, progress, or lifecycle facts that are absent from Layer 1 canonical data.
+
+`GLOBAL_STATE_READ_MODEL = REQUIRED`
+`GLOBAL_STATE_READ_MODEL_AUTHORITY = READ_ONLY_PROJECTION`
+`GLOBAL_STATE_WRITE_AUTHORITY = NONE`
+`AICC_STATE_INFERENCE_AUTHORITY = 0`
+`UNKNOWN_MUST_NOT_BE_GUESSED = TRUE`
+
+### State-dimension separation
+
+The projection layer must not collapse semantically independent state machines into one status field.
+
+At minimum, keep distinct where applicable:
+
+- Run / Execution lifecycle;
+- result availability;
+- feedback-delivery lifecycle;
+- GPT / AICC control-loop lifecycle;
+- WP / PR / Task domain lifecycle.
+
+For example, `Run = COMPLETED` does not by itself mean `Feedback Delivery = DELIVERED` or `Control Loop = COMPLETE`.
+
+### Layer 3 — UI read contract
+
+All production UI state and progress surfaces must consume Layer 2 rather than independently re-reading, re-deriving, or caching Layer 1 domain state.
+
+This includes, without exception for normal production state rendering:
+
+- left navigation / quick lists;
+- center workspaces;
+- right inspectors / evidence context;
+- Global Feedback Island;
+- Runtime Summary / Runtime Monitor projections;
+- Desktop App;
+- Mobile / Web control surfaces;
+- future state, status, progress, lifecycle, and binding UI.
+
+`UI_STATE_READ_AUTHORITY = AICC_GLOBAL_STATE_READ_MODEL`
+`UI_DIRECT_DOMAIN_STATE_DERIVATION = FORBIDDEN`
+`DUPLICATE_UI_STATUS_RESOLVER = FORBIDDEN`
+
+UI actions may invoke the appropriate governed domain command/write path, but UI rendering must then read the resulting state back through the Global State Read Model. The Read Model itself must never become a write API.
+
+### Required projection flow
+
+```text
+WP canonical data
+PR canonical data
+Task canonical state
+Run / Execution canonical state
+        ↓
+Canonical State Directory / Global State Projection
+        ↓
+AICC Global State Read Model
+        ↓
+Left / Center / Right UI
+Global Feedback Island
+Runtime Summary
+Desktop App
+Mobile / Web
+```
+
+All future status synchronization, lifecycle projection, progress rendering, cross-surface consistency fixes, and state-related regressions must be solved by restoring this flow rather than adding local UI-specific status logic or one-off synchronization patches.
+
 ## Permanent denials
 
 - Arbitrary shell strings from the application UI or runtime.
