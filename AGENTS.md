@@ -239,6 +239,151 @@ Layer 3 consumer
 
 Do not add per-component status resolvers, ad hoc `setInterval` refreshes, latest-run fallbacks, selection-based status fallbacks, or one-off synchronization bridges to hide a broken Global State Read Model flow.
 
+## Permanent Roadmap hierarchy semantics
+
+AICC Roadmap hierarchy uses one fixed semantic model. Milestone identity, structural Roadmap grouping, execution planning units, delivery units, tasks, and runtime executions must remain distinct.
+
+### Canonical hierarchy vocabulary
+
+`M#` is the only Milestone entity identifier form.
+
+`#.#` is a Roadmap Section number under a Milestone. A Roadmap Section is a structural grouping node only; it is not a business entity and does not create a new global entity class.
+
+`WP` is the Work Package execution-planning unit.
+
+`PR` is the delivery unit.
+
+`Task` is the execution task.
+
+`Run / Execution` is the exact runtime execution identity.
+
+`Phase` is an implementation phase owned by a Work Package.
+
+`Gate` is an acceptance or closure gate and must not be confused with a Milestone or Roadmap Section.
+
+`AICC_ROADMAP_HIERARCHY_SEMANTICS_V1 = FROZEN`
+`MILESTONE_ID_FORMAT = M#`
+`ROADMAP_SECTION_ID_FORMAT = #.#`
+`M#.#_AS_ENTITY_ID = FORBIDDEN`
+`TRACK_ENTITY = NOT_USED`
+
+Historical prose may retain legacy labels such as `M8.3` for traceability, but production parsers, read models, selectors, lifecycle logic, and UI must not treat `M#.#` as a Milestone or business entity.
+
+### Roadmap Section contract
+
+Roadmap Sections exist only to organize canonical Roadmap structure beneath a Milestone and above Work Packages.
+
+They may be rendered as expandable/collapsible grouping nodes, show their title, show descendant Work Package counts, and expose summaries derived from descendant Work Package projections.
+
+They must not own independent canonical business state, lifecycle state, execution authority, write authority, authorization, Work Package execution, PR execution, Task execution, or Run execution.
+
+`ROADMAP_SECTION_IS_STRUCTURAL_NODE = TRUE`
+`ROADMAP_SECTION_IS_BUSINESS_ENTITY = FALSE`
+`ROADMAP_SECTION_EXECUTION_AUTHORITY = NONE`
+`ROADMAP_SECTION_WRITE_AUTHORITY = NONE`
+`ROADMAP_SECTION_LIFECYCLE_AUTHORITY = NONE`
+`ROADMAP_SECTION_AUTHORIZATION_AUTHORITY = NONE`
+
+If a Section status or progress summary is displayed, it must be a Layer 2 derived summary of its descendant Work Packages and must never become an independent Layer 1 lifecycle source.
+
+`ROADMAP_SECTION_STATUS_SOURCE = DESCENDANT_WORK_PACKAGE_PROJECTION`
+`ROADMAP_SECTION_PROGRESS_SOURCE = DESCENDANT_WORK_PACKAGE_PROJECTION`
+
+### Blueprint and execution hierarchy
+
+The canonical Blueprint hierarchy is:
+
+```text
+Milestone
+    ↓
+Roadmap Section
+    ↓
+Work Package
+```
+
+The canonical execution/delivery hierarchy is:
+
+```text
+Work Package
+    ↓
+Pull Request
+    ↓
+Task
+    ↓
+Run / Execution
+```
+
+`BLUEPRINT_HIERARCHY = MILESTONE -> ROADMAP_SECTION -> WORK_PACKAGE`
+`EXECUTION_HIERARCHY = WORK_PACKAGE -> PR -> TASK -> RUN`
+
+A Work Package remains the real execution-planning and governed lifecycle unit beneath Roadmap structure.
+
+`WORK_PACKAGE_IS_EXECUTION_PLANNING_UNIT = TRUE`
+
+### Phase ownership
+
+Implementation phases belong to Work Packages, not to Milestones and not to Roadmap Sections.
+
+For example, Phase 0 through Phase N beneath a Section are phases of the bound Work Package, even when the UI visually groups them under that Section.
+
+`PHASE_OWNER = WORK_PACKAGE`
+`MILESTONE_PHASE_AUTHORITY = NONE`
+`SECTION_PHASE_AUTHORITY = NONE`
+
+### Global navigation contract
+
+Roadmap Sections do not create a new Global Track or Global Section product surface.
+
+The global navigation remains:
+
+```text
+Blueprint | WP | PR | Task
+```
+
+Do not add `Track` or `Section` as a first-level global navigation entity merely because Roadmap Sections exist structurally.
+
+`GLOBAL_TRACK_NAVIGATION = NO`
+`GLOBAL_SECTION_NAVIGATION = NO`
+`ROADMAP_SECTION_GLOBAL_WORKSPACE = NO`
+`ROADMAP_SECTION_GLOBAL_QUICK_LIST = NO`
+`GLOBAL_NAVIGATION = BLUEPRINT | WP | PR | TASK`
+
+Blueprint / Roadmap UI may render the structural hierarchy `Milestone -> Roadmap Section -> Work Package`. Global WP remains a direct cross-Section Work Package view.
+
+### Read Model contract
+
+Roadmap Layer 2 projections must preserve the structural distinction:
+
+```text
+milestones[]
+  -> sections[]
+       -> work_packages[]
+```
+
+They must not model Roadmap Sections as nested Milestone entities.
+
+`NODE_TYPE_MILESTONE = milestone`
+`NODE_TYPE_SECTION = roadmap_section`
+`NODE_TYPE_WORK_PACKAGE = work_package`
+`ROADMAP_SECTION_ENTITY_AUTHORITY = NONE`
+
+Roadmap parsing and structural discovery must derive Section and Work Package membership from canonical Roadmap hierarchy, not from identifier prefixes, hard-coded module allowlists, or UI convenience assumptions.
+
+`WORK_PACKAGE_EXISTENCE_AUTHORITY = CANONICAL_ROADMAP_STRUCTURE`
+`WORK_PACKAGE_ID_PREFIX_IS_AUTHORITY = NO`
+`ROADMAP_SECTION_DISCOVERY_AUTHORITY = CANONICAL_ROADMAP_STRUCTURE`
+
+### Status and PASS semantics
+
+A structural projection test result such as `SECTION_8_4_PROJECTION = PASS` means only that the Roadmap Section and its descendants were projected correctly. It must not be interpreted as business completion of that Section or its Work Packages.
+
+Do not use `M8.3 = PASS`, `M8.4 = PASS`, or equivalent forms to represent Section business completion.
+
+`SECTION_PROJECTION_PASS_IS_BUSINESS_COMPLETE = FALSE`
+`ROADMAP_STRUCTURE_PASS_IS_LIFECYCLE_COMPLETE = FALSE`
+
+Business lifecycle state remains owned by the appropriate canonical Layer 1 entity, especially Work Packages beneath the Section.
+
 ## Permanent denials
 
 - Arbitrary shell strings from the application UI or runtime.
