@@ -34,6 +34,8 @@ Registry without starting Codex remediation.
 | AICC-BUG-001 | UNTRIAGED | Reported | Runtime Workspace test contract | Recovery-toast baseline assertion conflicts with current feedback baseline | UNKNOWN | 2026-08-20 |
 | AICC-BUG-002 | UNTRIAGED | Reported | Runtime Workspace current activity projection | Completed Runtime can retain a live-process activity label | UNKNOWN | 2026-08-20 |
 | AICC-BUG-003 | UNTRIAGED | Reported | Task/WP Roadmap binding test contract | Stale Milestone expectation is `M8` while canonical Roadmap binding is `M8.2` | UNKNOWN | 2026-08-20 |
+| AICC-BUG-004 | UNTRIAGED | Reported | AICC Bridge feedback status projection | Completed run leaves Bridge status stale and does not expose GPT feedback delivery truth | UNKNOWN | 2026-08-20 |
+| AICC-BUG-005 | UNTRIAGED | Reported | AICC Web Bridge action buttons | Buttons 5 and 6 do not insert/return results to GPT while button 3 succeeds | UNKNOWN | 2026-08-20 |
 
 ## Bug Records
 
@@ -171,6 +173,111 @@ NOT_YET
 ### Additional Evidence
 
 - This record concerns the stale test assertion, not a PR lifecycle projection defect.
+
+## AICC-BUG-004
+
+- Title: Completed Bridge run leaves the feedback/status projection at `STARTING · NOT_READY · PAUSED` and does not expose whether GPT feedback was delivered.
+- Severity: UNTRIAGED
+- Status: Reported
+- Affected Module: AICC Web Bridge status projection / GPT feedback-delivery presentation
+- Discovered At: 2026-08-20
+- Discovered By: OWNER
+- Environment: AICC Web Bridge connected to ChatGPT
+- Commit SHA: NOT_CAPTURED
+- Blocks Current Scope: UNKNOWN
+
+### Expected
+
+When a command sent through the Bridge finishes, the Bridge must truthfully project the completed Run/Execution state while separately exposing the GPT feedback-delivery lifecycle. A completed execution must not remain visually stuck in a pre-execution state, and the UI should distinguish feedback pending, delivered, or failed without collapsing those independent lifecycle dimensions.
+
+### Actual
+
+The owner observed a run whose result panel showed `COMPLETED`, `Codex finished`, and `Result = Available`, while the Bridge status line still displayed `STARTING · NOT_READY · PAUSED`. The same surface did not truthfully indicate whether the completed result had been inserted/submitted back into the bound GPT conversation.
+
+### Reproduction
+
+1. Use the AICC Bridge to send a command to AICC/Codex.
+2. Wait until the Run Result panel reaches `COMPLETED` / `Codex finished` / `Result = Available`.
+3. Inspect the Bridge status line.
+4. Verify separately in the bound GPT conversation whether feedback was actually inserted/submitted.
+5. Compare the real execution and feedback-delivery facts with the Bridge projection.
+
+### Evidence
+
+- Owner-provided screenshot on 2026-08-20 showed `STARTING · NOT_READY · PAUSED` while Run `run-1787206250756-ueg845` was `COMPLETED`, `Codex finished`, with `Result = Available`.
+- The screenshot did not establish whether GPT insertion/submission succeeded; that fact remains unverified and must not be guessed.
+
+### Deferred Reason
+
+The owner requested canonical recording only. No explicit severity or remediation authorization was supplied.
+
+### Target Remediation Phase
+
+Final Project Bug Sweep unless explicitly reprioritized.
+
+### Resolution
+
+NOT_YET
+
+### Additional Evidence
+
+- Keep Run/Execution lifecycle and GPT feedback-delivery lifecycle separate during future triage; this record does not establish a root cause.
+
+## AICC-BUG-005
+
+- Title: Bridge buttons `5 插入 AICC 结果` and `6 执行下一步` do not return/insert results to the GPT chat while `3 插入 Codex 结果` succeeds.
+- Severity: UNTRIAGED
+- Status: Reported
+- Affected Module: AICC Web Bridge action routing / GPT result insertion
+- Discovered At: 2026-08-20
+- Discovered By: OWNER
+- Environment: AICC Web Bridge connected to ChatGPT
+- Commit SHA: NOT_CAPTURED
+- Blocks Current Scope: UNKNOWN
+
+### Expected
+
+The Bridge action buttons must perform their governed result-delivery behavior consistently. `5 插入 AICC 结果` should insert the AICC result into the bound GPT conversation. `6 执行下一步`, when it produces a completed execution result, should return that result through the governed GPT feedback path. `3 插入 Codex 结果` should continue to insert the Codex result exactly as shown in the result preview.
+
+### Actual
+
+The owner observed:
+
+- the dedicated GPT insertion action can successfully insert a result into GPT;
+- clicking `6 执行下一步` produces no result in the GPT chat;
+- clicking `5 插入 AICC 结果` produces no result in the GPT chat;
+- clicking `3 插入 Codex 结果` works normally, and the inserted content matches the result preview.
+
+### Reproduction
+
+1. Open the connected AICC Web Bridge in ChatGPT.
+2. Use the available result/preview state as the source.
+3. Trigger `3 插入 Codex 结果` and confirm the result is inserted into GPT.
+4. Trigger `5 插入 AICC 结果` and observe that no result appears in GPT.
+5. Trigger `6 执行下一步` and observe that no result is returned to GPT after the action/execution path completes.
+6. Compare all three outcomes against the same bound conversation and result preview.
+
+### Evidence
+
+- Owner live observation on 2026-08-20 in the connected GPT/AICC workflow.
+- `3 插入 Codex 结果` was confirmed working and matched the result preview.
+- `5 插入 AICC 结果` and `6 执行下一步` were confirmed to produce no GPT result.
+
+### Deferred Reason
+
+The owner requested Bug capture without remediation. No explicit severity or priority was supplied.
+
+### Target Remediation Phase
+
+Final Project Bug Sweep unless explicitly reprioritized.
+
+### Resolution
+
+NOT_YET
+
+### Additional Evidence
+
+- Potential relation to AICC-BUG-004 is not established. Keep this record separate because it concerns explicit button action behavior rather than only lifecycle/status projection.
 
 ## Initial Migration Audit
 
