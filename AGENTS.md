@@ -469,3 +469,100 @@ This Work Package must not introduce:
 - automatic Work Package authorization;
 - production deployment, destructive database operations, secrets mutation, security architecture changes, or irreversible external writes;
 - Human UAT PASS without human evidence.
+
+## Parallel Bug Governance — AICC_PARALLEL_BUG_GOVERNANCE_V1
+
+This frozen rule applies to all AICC development work. Mainline development
+and the Bug Backlog operate in parallel: discovering a Bug does not itself
+authorize interrupting the current Work Package.
+
+- `P0`: immediately report and interrupt.
+- `P1`: interrupt only when it blocks the current authorized scope; otherwise
+  record and continue unless the Owner reprioritizes.
+- `P2` and `P3`: record and defer; do not interrupt or fix opportunistically.
+- `UNTRIAGED`: record only; do not invent severity.
+
+`BUG_DISCOVERY_DOES_NOT_INTERRUPT_MAINLINE = TRUE`
+`P2_P3_NORMAL_DEVELOPMENT_INTERRUPTION = FORBIDDEN`
+`UNRELATED_OPPORTUNISTIC_FIX = FORBIDDEN`
+`FINAL_PROJECT_BUG_SWEEP = REQUIRED`
+
+`AICC_SEVERITY_JUDGMENT = NO`
+`AICC_DECISION_AUTHORITY = 0`
+
+### Canonical Bug Registry
+
+`AICC_CANONICAL_BUG_REGISTRY_V1 = FROZEN`
+`CANONICAL_BUG_REGISTRY = docs/80_Bug_Record/01_bug_record.md`
+
+- All deferred AICC Bugs must be recorded there; do not maintain competing Bug
+  lists as authority.
+- New evidence for the same underlying defect updates its existing stable Bug
+  record; never renumber or silently delete historical Bug IDs.
+- Closing a Bug requires explicit Fixed → Verified → Closed evidence.
+
+## GPT Bug Capture Bridge — AICC_GPT_BUG_CAPTURE_BRIDGE_V1
+
+`GPT_BUG_CAPTURE_PROTOCOL = AICC_BUG_CAPTURE_V1`
+`GPT_BUG_CAPTURE_REGISTRY = docs/80_Bug_Record/01_bug_record.md`
+
+- GPT → AICC → Registry capture requires a complete explicit protocol block;
+  ordinary chat prose is never classified as a Bug.
+- AICC persists `CAPTURE_ID + SOURCE_CONVERSATION + SOURCE_MESSAGE` and
+  reconciles it exactly once before Registry mutation.
+- AICC performs no semantic Bug, severity, blocking, or remediation judgment.
+- Bug capture does not authorize an automatic Task, Work Package, Codex
+  remediation, test change, or other fix.
+
+## GPT GitHub Bug Registry — AICC_GPT_GITHUB_BUG_REGISTRY_V1
+
+Status: FROZEN
+
+Canonical Registry: `docs/80_Bug_Record/01_bug_record.md`
+
+- GPT may directly persist confirmed Bug records to the canonical GitHub
+  Registry; Local Codex is not required solely for Bug recording.
+- Direct GPT GitHub writes are limited to Bug Registry governance and
+  bookkeeping. Bug recording does not authorize remediation, application-code
+  changes, or test-code changes.
+- Before every GitHub Registry write, read the latest remote file and blob SHA.
+  Never overwrite a newer remote Registry version.
+- Reconcile existing Bug IDs before allocating a new ID. Never renumber or
+  silently delete historical Bug records.
+- The same underlying defect updates its existing record and appends evidence.
+  If Bug identity is uncertain, do not force a duplicate match.
+- AICC does not decide severity; GPT must use `UNTRIAGED` when governed
+  severity is not established. Non-blocking Bug recording must not interrupt
+  active mainline work.
+
+`AICC_GPT_GITHUB_BUG_REGISTRY_V1 = FROZEN`
+`GPT_CHAT_DIRECT_GITHUB_WRITE = YES`
+`LOCAL_CODEX_REQUIRED_FOR_BUG_RECORDING = NO`
+`CANONICAL_BUG_REGISTRY = docs/80_Bug_Record/01_bug_record.md`
+`BUG_RECORDING_ONLY = YES`
+`BUG_RECORDING_AUTHORIZES_FIX = NO`
+`AICC_SEVERITY_JUDGMENT = NO`
+`AICC_DECISION_AUTHORITY = 0`
+
+## Bug Registry Enforcement — AICC_BUG_REGISTRY_ENFORCEMENT_V1
+
+`AICC_BUG_REGISTRY_ENFORCEMENT_V1 = FROZEN`
+
+This is the mandatory execution layer for
+`AICC_PARALLEL_BUG_GOVERNANCE_V1` and `AICC_CANONICAL_BUG_REGISTRY_V1`.
+
+Every governed Codex development Run must read `AGENTS.md` and
+`docs/80_Bug_Record/01_bug_record.md` before execution. When a confirmed
+non-blocking defect is discovered, search the registry first; update the
+existing record and append evidence when the underlying defect already has a
+stable Bug ID. Bug recording must not broaden implementation scope.
+
+`EVERY_CODEX_RUN_PRECHECK = REQUIRED`
+`DURING_EXECUTION_BUG_CAPTURE = REQUIRED`
+`SEARCH_EXISTING_BUGS = REQUIRED`
+`CREATE_DUPLICATE_BUG = NO`
+`DUPLICATE_PROTECTION = PASS`
+`BUG_RECORDING_AUTHORIZES_FIX = NO`
+`UNRELATED_OPPORTUNISTIC_FIX = FORBIDDEN`
+`AICC_SEVERITY_JUDGMENT = NO`
+`AICC_DECISION_AUTHORITY = 0`
