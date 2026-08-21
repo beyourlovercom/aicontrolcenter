@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import {projectTaskModelForContext,type ActiveTaskProjectContext} from './bridgeCore.ts';
+import {projectTaskModelForContext,projectTaskProjectionForContext,type ActiveTaskProjectContext} from './bridgeCore.ts';
 
 const task=(projectId:string,repositoryIdentity:string)=>({
   taskId:'SAME',projectId,repositoryIdentity,status:'READY',executionId:undefined,runId:undefined
@@ -19,4 +19,11 @@ assert.equal(aAgain.projectContextRevision,3);
 assert.equal(aModel.entities.some(entity=>entity.identity.projectId==='b'),false);
 assert.equal(bModel.entities.some(entity=>entity.identity.projectId==='a'),false);
 assert.equal(aAgain.entities.every(entity=>entity.identity.projectId==='a'),true);
+const aCache=projectTaskProjectionForContext(a1,registry(task('a','repo-a')));
+const bCache=projectTaskProjectionForContext(b2,registry(task('b','repo-b')));
+const aRevision3Cache=projectTaskProjectionForContext(a3,registry(task('a','repo-a')));
+assert.deepEqual([aCache.projectId,aCache.repositoryIdentity,aCache.projectContextRevision],['a','repo-a',1]);
+assert.deepEqual([bCache.projectId,bCache.repositoryIdentity,bCache.projectContextRevision],['b','repo-b',2]);
+assert.deepEqual([aRevision3Cache.projectId,aRevision3Cache.repositoryIdentity,aRevision3Cache.projectContextRevision],['a','repo-a',3]);
+assert.notEqual(aCache.projectId,bCache.projectId);
 console.log('Bridge project-scoped model authority A-B-A passed');

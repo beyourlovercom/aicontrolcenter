@@ -5,7 +5,7 @@ import type {AiccGlobalStateReadModel} from './globalStateReadModel.ts';
 export const TASK_PROJECTION_SCHEMA_VERSION='aicc.task.projection.v1';
 export const TASK_PROJECTION_CACHE_KEY='aicc.task.snapshot.v1';
 export type TaskProjectionItem=CanonicalTaskRecord & {runtimeStatus:string|null;canonicalResult:CanonicalExecutionResult|null;resultId:string|null;resultHash:string|null};
-export type TaskProjection={schemaVersion:typeof TASK_PROJECTION_SCHEMA_VERSION;generatedAt:string;items:TaskProjectionItem[];legacyCount:number;globalProjectionRevision?:number;entityRevisions?:AiccGlobalStateReadModel['entityRevisions']};
+export type TaskProjection={schemaVersion:typeof TASK_PROJECTION_SCHEMA_VERSION;generatedAt:string;items:TaskProjectionItem[];legacyCount:number;projectId?:string;repositoryIdentity?:string;projectContextRevision?:number;globalProjectionRevision?:number;entityRevisions?:AiccGlobalStateReadModel['entityRevisions']};
 export function buildTaskProjection(registry:TaskRegistryProjection,runtimes:RuntimeRecord[]=[]):TaskProjection{
   const runtimeByRun=new Map(runtimes.filter(item=>item?.runId).map(item=>[item.runId,item]));
   const items=registry.items.map(task=>{const runtime=task.runId?runtimeByRun.get(task.runId):task.executionId?runtimeByRun.get(task.executionId):undefined;const result=runtime?.canonicalResult??null;return {...task,runtimeStatus:runtime?.phase??null,canonicalResult:result,resultId:result?.resultId??null,resultHash:result?.resultHash??null};});
