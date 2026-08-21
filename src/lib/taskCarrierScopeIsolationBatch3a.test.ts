@@ -103,4 +103,9 @@ const foreignExistingItem=inboxItem(scopeA,'foreign-existing-item','foreign-exis
 const foreignExisting=canonicalTaskFromInbox(inboxItem(scopeB,'foreign-existing-item','foreign-existing-task'));
 assert.throws(()=>canonicalTaskFromInbox(foreignExistingItem,undefined,foreignExisting),/FOREIGN_TASK_SCOPE_BINDING/);
 
+// R2/R3: canonicalTaskFromInbox must reject an InboxItem whose item scope and instruction scope are foreign/mismatched.
+const mismatchItem=inboxItem(scopeA,'scope-mismatch-item','scope-mismatch-task');
+const itemWithForeignInstruction={...mismatchItem,instruction:instruction(scopeB,'mismatched-instruction')};
+assert.throws(()=>canonicalTaskFromInbox(itemWithForeignInstruction),/TASK_PROJECT_SCOPE_REQUIRED/,'InboxItem with mismatched instruction scope must be rejected');
+
 console.log('Batch3A task carrier scope isolation passed');

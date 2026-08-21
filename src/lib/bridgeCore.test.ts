@@ -60,6 +60,10 @@ assert.ok(TASK_LIFECYCLE_STATUSES.includes('WAITING_OWNER'),'Owner review remain
 assert.equal(parseExecutionV1(valid.split('\n').join('\n\n')).instructionBody,'Inspect only and report.','contenteditable paragraph boundaries parse canonically');
 assert.equal(normalizeExecutionProtocol(valid.split('\n').join('\n\n')),normalizeExecutionProtocol(valid),'protocol normalization is stable');
 const firstSubmission=submitExecution(valid,'GPT_BLOCK','https://chatgpt.com/c/idempotency',{conversationId:'idempotency'},undefined,undefined,true,'aicc-submission-idempotency-001');
+assert.equal(firstSubmission.projectId,'aicc','submitted InboxItem uses the current active project\'s projectId');
+assert.equal(firstSubmission.instruction?.projectId,'aicc','canonical instruction embedded in InboxItem uses the current active project\'s projectId');
+assert.equal(firstSubmission.repositoryIdentity,'beyourlovercom/aicontrolcenter','submitted InboxItem uses the current active project\'s repositoryIdentity');
+assert.equal(firstSubmission.instruction?.repositoryIdentity,'beyourlovercom/aicontrolcenter','canonical instruction embedded in InboxItem uses the current active project\'s repositoryIdentity');
 const duplicateSubmission=submitExecution(valid,'GPT_BLOCK','https://chatgpt.com/c/idempotency',{conversationId:'idempotency'},undefined,undefined,true,'aicc-submission-idempotency-002');
 assert.notEqual(duplicateSubmission.id,firstSubmission.id,'each received submission occurrence creates its own execution chain');
 assert.equal(readInbox().filter(item=>item.instruction?.instructionId==='test-001'&&item.instruction?.originContext?.conversationId==='idempotency').length,2,'identical submission occurrences are both forwarded');
