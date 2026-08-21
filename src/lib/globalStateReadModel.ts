@@ -232,6 +232,7 @@ function identityKey(identity:CanonicalEntityIdentity):string{return `${identity
 function sourceKey(identity:SourceEntityIdentity):string{return `${identity.projectId}:${identity.repositoryIdentity}:${identity.domain}:${identity.id}`}
 function sameIdentity(left:CanonicalEntityIdentity,right:CanonicalEntityIdentity):boolean{return left.projectId===right.projectId&&left.repositoryIdentity===right.repositoryIdentity&&left.kind===right.kind&&left.id===right.id}
 function sameSourceIdentity(left:SourceEntityIdentity,right:SourceEntityIdentity):boolean{return left.projectId===right.projectId&&left.repositoryIdentity===right.repositoryIdentity&&left.domain===right.domain&&left.id===right.id}
+function sameScope(left:{projectId:string;repositoryIdentity:string},right:{projectId:string;repositoryIdentity:string}):boolean{return left.projectId===right.projectId&&left.repositoryIdentity===right.repositoryIdentity}
 function validateSource(source:ProjectionSourceEvidence):void{
   if(source.sourceDomain!==source.sourceEntity.domain)throw new Error('SOURCE_DOMAIN_MISMATCH');
   nonEmpty(source.sourceEntity.id,'SOURCE_ENTITY_ID');
@@ -290,8 +291,7 @@ export function explicitBinding<K extends BindingKind>(kind:K,from:BindingEndpoi
 
 export type GlobalStateProjectContext=Readonly<{projectId:string;repositoryIdentity:string;projectContextRevision:number}>;
 
-export function createEmptyGlobalStateReadModel(context?:GlobalStateProjectContext):AiccGlobalStateReadModel{
-  if(!context)return createEmptyGlobalStateReadModel({projectId:'NOT_AVAILABLE',repositoryIdentity:'NOT_AVAILABLE',projectContextRevision:0});
+export function createEmptyGlobalStateReadModel(context:GlobalStateProjectContext):AiccGlobalStateReadModel{
   if(!context.projectId||!context.repositoryIdentity||!Number.isSafeInteger(context.projectContextRevision)||context.projectContextRevision<0)throw new Error('PROJECT_CONTEXT_INVALID');
   return freeze({
     schema:GLOBAL_STATE_READ_MODEL_SCHEMA,
@@ -361,7 +361,8 @@ function incidentBindingSignatures(identity:CanonicalEntityIdentity,bindings:rea
 
 export function projectGlobalStateReadModel(previous:AiccGlobalStateReadModel,candidate:GlobalStateProjectionCandidate,projectedAt=new Date().toISOString()):AiccGlobalStateReadModel{
   for(const entity of candidate.entities)if(entity.identity.projectId!==previous.projectId||entity.identity.repositoryIdentity!==previous.repositoryIdentity)throw new Error('FOREIGN_PROJECT_ENTITY');
-  for(const binding of candidate.bindings)if(binding.from.projectId!==previous.projectId||binding.from.repositoryIdentity!==previous.repositoryIdentity||binding.to.projectId!==previous.projectId||binding.to.repositoryIdentity!==previous.repositoryIdentity)throw new Error('FOREIGN_PROJECT_BINDING');
+  for(const entity of candidate.entities)for(const dimension of entity.dimensions)if(!sameScope(dimension.source.sourceEntity,previous))throw new Error('FOREIGN_PROJECT_PROVENANCE');
+  for(const binding of candidate.bindings)if(!sameScope(binding.from,previous)||!sameScope(binding.to,previous)||!sameScope(binding.source.sourceEntity,previous))throw new Error('FOREIGN_PROJECT_BINDING');
   const normalized=normalizeCandidate(candidate);
   const previousEntities=new Map(previous.entities.map(entity=>[identityKey(entity.identity),entity]));
   const nextInputs=new Map(normalized.entities.map(entity=>[identityKey(entity.identity),entity]));
