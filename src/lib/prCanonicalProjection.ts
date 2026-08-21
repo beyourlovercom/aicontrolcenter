@@ -56,14 +56,14 @@ export function projectPrLayer2(previous:AiccGlobalStateReadModel,pullRequests:r
   const projectScope=scope??previous;
   if(scope&&(scope.projectId!==previous.projectId||scope.repositoryIdentity!==previous.repositoryIdentity))throw new Error('PROJECT_SCOPE_MISMATCH');
   const records=pullRequests.filter(validIdentity).map(record=>{
-    const repository=record.repository.trim(),prNumber=record.number;if(scope&&scope.repositoryIdentity!==repository)return null;const identityKey=prIdentityKey(repository,prNumber,scope),state=lifecycle(record);
+    const repository=record.repository.trim(),prNumber=record.number;if(repository!==previous.repositoryIdentity)return null;const identityKey=prIdentityKey(repository,prNumber,projectScope),state=lifecycle(record);
     const source=projectionSource(sourceEntityIdentity(projectScope,'PULL_REQUEST',identityKey),sourceRevision(record,revision));
     const value=state==='UNKNOWN'?unknownDimensionValue('pr.lifecycle'):knownDimensionValue('pr.lifecycle',state);
     return {record,repository,prNumber,identityKey,source,value};
   }).filter((item):item is NonNullable<typeof item>=>Boolean(item)).sort((a,b)=>a.identityKey.localeCompare(b.identityKey));
   const candidate:GlobalStateProjectionCandidate={
     entities:records.map(item=>({identity:entityIdentity(projectScope,'PULL_REQUEST',item.identityKey),dimensions:[dimensionProjection('pr.lifecycle',item.value,item.source)]})),
-    bindings:records.flatMap(item=>item.record.workPackageId?[explicitBinding('WP_TO_PR',entityIdentity(projectScope,'WORK_PACKAGE',item.record.workPackageId),entityIdentity(projectScope,'PULL_REQUEST',item.identityKey),item.source)]:[])
+    bindings:records.flatMap(item=>item.record.workPackageId&&item.record.workPackageId.trim()?[explicitBinding('WP_TO_PR',entityIdentity(projectScope,'WORK_PACKAGE',item.record.workPackageId),entityIdentity(projectScope,'PULL_REQUEST',item.identityKey),item.source)]:[])
   };
   const model=projectGlobalStateReadModel(previous,candidate);
   const result:PrLayer2Record[]=records.map(item=>{const presentationLifecycle=lifecycle(item.record);return {selectionId:item.record.id,identityKey:item.identityKey,repository:item.repository,prNumber:item.prNumber,record:item.record,lifecycle:item.value,presentationLifecycle,lifecycleStatus:lifecycleStatus(presentationLifecycle),parentWpId:item.record.workPackageId??null,mappingStatus:item.record.workPackageId?'MAPPED' as const:'UNMAPPED' as const};});

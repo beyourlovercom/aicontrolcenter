@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import {availableSourceRevision,createEmptyGlobalStateReadModel,entityIdentity,explicitBinding,projectGlobalStateReadModel,projectionSource,sourceEntityIdentity} from './globalStateReadModel.ts';
+import {projectPrLayer2} from './prCanonicalProjection.ts';
 
 const a={projectId:'aicc',repositoryIdentity:'beyourlovercom/aicontrolcenter',projectContextRevision:1} as const;
 const b={projectId:'erpbeyourlovercom',repositoryIdentity:'beyourlovercom/erpbeyourlovercom',projectContextRevision:1} as const;
@@ -12,4 +13,9 @@ assert.equal(aModel.entities.length,1);
 assert.throws(()=>projectGlobalStateReadModel(createEmptyGlobalStateReadModel(a),{entities:[{identity:bTask,dimensions:[]}],bindings:[]}),/FOREIGN_PROJECT_ENTITY/);
 assert.throws(()=>explicitBinding('TASK_TO_EXECUTION',aTask,entityIdentity(b,'EXECUTION','SAME'),source(a,'SAME')),/CROSS_PROJECT_BINDING/);
 assert.equal(source(a,'SAME').sourceEntity.projectId,'aicc');
+const aPr=projectPrLayer2(createEmptyGlobalStateReadModel(a),[{id:'selection-a',repository:a.repositoryIdentity,number:7,workPackageId:'SAME',state:'OPEN',updatedAt:'now'} as any]).model;
+const bPr=projectPrLayer2(createEmptyGlobalStateReadModel(b),[{id:'selection-b',repository:b.repositoryIdentity,number:7,workPackageId:'SAME',state:'OPEN',updatedAt:'now'} as any]).model;
+assert.equal(aPr.entities[0]?.identity.id,'7');
+assert.equal(bPr.entities[0]?.identity.id,'7');
+assert.equal(projectPrLayer2(createEmptyGlobalStateReadModel(a),[{id:'foreign',repository:b.repositoryIdentity,number:7,state:'OPEN'} as any]).records.length,0);
 console.log('Scoped Canonical Identity V2 isolation passed');

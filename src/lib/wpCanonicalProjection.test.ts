@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
-import {createEmptyGlobalStateReadModel,resolveExplicitBindings} from './globalStateReadModel.ts';
+import {createEmptyGlobalStateReadModel,entityIdentity,resolveExplicitBindings} from './globalStateReadModel.ts';
 import {createProjectSnapshot} from './model/projectModel.ts';
 import {projectGlobalWorkPackages} from './globalWorkspaceProjection.ts';
 import {projectWpLayer2,projectWpRoadmapNodes,ROADMAP_GROUP_IS_ENTITY,WP_IDENTITY_KEY,WP_ID_PREFIX_DEPENDENCY,WP_MILESTONE_BINDING_SOURCE,WP_PR_BINDING_INFERENCE_AUTHORITY,WP_PROGRESS_INFERENCE_AUTHORITY,WP_ROADMAP_GROUP_SOURCE,WP_TASK_BINDING_INFERENCE_AUTHORITY} from './wpCanonicalProjection.ts';
@@ -23,8 +23,8 @@ const snapshot=(content=roadmap(),extras:Record<string,unknown>={})=>createProje
 
 const explicitTask={taskId:'task-a',bindingState:'BOUND' as const,formalWpId:wpA,instruction:{bindingState:'BOUND' as const,formalWpId:wpA}};
 const inferredTask={taskId:'task-ignore',workPackageId:wpA,instruction:{workPackageId:wpA}};
-const explicitPr={id:'pr-a',workPackageId:wpA,status:'IN_PROGRESS' as const,correlationSource:'EXTERNAL_FACT' as const};
-const inferredPr={id:'pr-ignore',workPackageId:wpA,status:'COMPLETE' as const,correlationSource:'UNKNOWN' as const};
+const explicitPr={id:'pr-a',repository:scope.repositoryIdentity,number:7,workPackageId:wpA,status:'IN_PROGRESS' as const,correlationSource:'EXTERNAL_FACT' as const};
+const inferredPr={id:'pr-ignore',repository:scope.repositoryIdentity,number:8,workPackageId:wpA,status:'COMPLETE' as const,correlationSource:'UNKNOWN' as const};
 
 const first=projectWpLayer2(createEmptyGlobalStateReadModel(scope),snapshot(),[explicitTask,inferredTask],scope);
 const alpha=first.records.find(record=>record.id===wpA)!;
@@ -38,7 +38,7 @@ assert.equal(alpha.milestoneId,'M8');
 assert.equal(alpha.milestoneTitle,'M8 — Canonical parent');
 assert.equal(WP_MILESTONE_BINDING_SOURCE,'CANONICAL_ROADMAP_STRUCTURE');
 assert.deepEqual(alpha.taskIds,['task-a'],'only an explicit canonical Task binding is projected');
-assert.equal(resolveExplicitBindings(first.model,'WP_TO_TASK',{kind:'WORK_PACKAGE',id:alpha.identityKey}).bindings.length,1);
+assert.equal(resolveExplicitBindings(first.model,'WP_TO_TASK',entityIdentity(scope,'WORK_PACKAGE',alpha.id)).bindings.length,1);
 assert.equal(WP_TASK_BINDING_INFERENCE_AUTHORITY,0);
 assert.equal(alpha.prIds.length,0);
 assert.equal(alpha.implementation.state,'UNKNOWN');
@@ -50,8 +50,8 @@ assert.equal(WP_PROGRESS_INFERENCE_AUTHORITY,0);
 
 const withPr=projectWpLayer2(first.model,snapshot(roadmap(),{pullRequests:[explicitPr,inferredPr]}),[explicitTask,inferredTask],scope);
 const alphaWithPr=withPr.records.find(record=>record.id===wpA)!;
-assert.deepEqual(alphaWithPr.prIds,['pr-a'],'only explicit PR binding is projected');
-assert.equal(resolveExplicitBindings(withPr.model,'WP_TO_PR',{kind:'WORK_PACKAGE',id:alphaWithPr.identityKey}).bindings.length,1);
+assert.deepEqual(alphaWithPr.prIds,['7'],'only explicit PR binding is projected');
+assert.equal(resolveExplicitBindings(withPr.model,'WP_TO_PR',entityIdentity(scope,'WORK_PACKAGE',alphaWithPr.id)).bindings.length,1);
 assert.equal(WP_PR_BINDING_INFERENCE_AUTHORITY,0);
 assert.notEqual(alphaWithPr.lifecycleStatus,'COMPLETE','Task/PR facts cannot fabricate WP completion');
 const withTerminalRun=projectWpLayer2(withPr.model,snapshot(roadmap(),{pullRequests:[explicitPr],runtime:{runId:'completed-run',workPackageId:wpA,authorizationId:'auth',authoritySha:'sha',branch:'rebuild/aicc-v2',startingHeadSha:'sha',pid:null,threadId:null,phase:'COMPLETED',currentTask:'done',latestEvent:'done',startedAt:'now',lastActivityAt:'now',implementationResult:'CODE_CHANGE_PRESENT'}}),[explicitTask],scope);
@@ -80,7 +80,7 @@ assert.equal(center.layer2,afterA,'center consumes the shared Layer 2 record');
 const app=readFileSync(new URL('../App.svelte',import.meta.url),'utf8');
 assert.match(app,/projectWpRoadmapNodes\(roadmapProjection\?\.nodes\?\?\[\],wpProjection\)/,'left WP state consumes Layer 2');
 assert.match(app,/projectGlobalWorkPackages\(snapshot,globalTasks,wpProjection\)/,'center WP state consumes Layer 2');
-assert.match(app,/resolveEntityContext\(snapshot,selectedEntity,prLayer2,wpProjection\)/,'right WP context consumes Layer 2');
+assert.match(app,/resolveEntityContext\(snapshot,selectedEntity,prLayer2,wpProjection/,'right WP context consumes Layer 2');
 assert.match(app,/function navigateGlobalEntity/,'existing WP selection and routing remain App-level');
 assert.doesNotMatch(readFileSync(new URL('./wpCanonicalProjection.ts',import.meta.url),'utf8'),/M\\d\+.*prefix|startsWith\(['"]AICC/,'WP parent or existence prefix guessing is absent');
 

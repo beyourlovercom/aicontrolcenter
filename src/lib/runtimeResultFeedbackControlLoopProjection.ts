@@ -168,8 +168,6 @@ export type Phase5LifecycleProjection=Readonly<{
 
 const text=(value:unknown):string|null=>typeof value==='string'&&value.trim()?value.trim():null;
 const stable=(value:unknown):string=>JSON.stringify(value)??'UNAVAILABLE';
-const source=(domain:SourceDomain,id:string,value:unknown):ProjectionSourceEvidence=>
-  projectionSource(sourceEntityIdentity(domain,id),availableSourceRevision(stable(value)));
 const dimension=<D extends 'task.lifecycle'|'execution.lifecycle'|'run.lifecycle'|'feedback.lifecycle'|'feedback.delivery'|'controlLoop.lifecycle'>(name:D,value:string|null,authority:ProjectionSourceEvidence)=>
   dimensionProjection(name,value?knownDimensionValue(name,value):unknownDimensionValue(name),authority);
 const revision=(model:AiccGlobalStateReadModel,kind:'RUN'|'EXECUTION'|'RESULT'|'FEEDBACK'|'CONTROL_LOOP',id:string)=>

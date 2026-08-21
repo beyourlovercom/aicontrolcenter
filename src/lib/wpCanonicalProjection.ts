@@ -45,8 +45,8 @@ const taskBinding=(task:any):{wpId:string;taskId:string}|null=>{
   const taskId=task?.taskId??task?.id??task?.instructionId;
   return bindingState==='BOUND'&&typeof wpId==='string'&&wpId.trim()&&typeof taskId==='string'&&taskId.trim()?{wpId,taskId}:null;
 };
-const prBinding=(pr:any):{wpId:string;prId:string}|null=>
-  typeof pr?.workPackageId==='string'&&pr.workPackageId.trim()&&typeof pr?.id==='string'&&pr.id.trim()&&pr.correlationSource!=='UNKNOWN'?{wpId:pr.workPackageId,prId:pr.id}:null;
+const prBinding=(pr:any,repositoryIdentity:string):{wpId:string;prId:string}|null=>
+  typeof pr?.workPackageId==='string'&&pr.workPackageId.trim()&&typeof pr?.repository==='string'&&pr.repository===repositoryIdentity&&typeof pr?.number==='number'&&Number.isSafeInteger(pr.number)&&pr.number>0&&pr.correlationSource!=='UNKNOWN'?{wpId:pr.workPackageId,prId:String(pr.number)}:null;
 
 function formalization(snapshot:AiccProjectSnapshot,id:string):FormalizationState{
   const formal=snapshot.formalWorkPackages.value?.[id];
@@ -74,7 +74,7 @@ export function projectWpLayer2(previous:AiccGlobalStateReadModel,snapshot:AiccP
     const uat=snapshot.humanUat.value?.find(item=>item.entityType==='work_package'&&item.workPackageId===id)??null;
     const fields=formal?.fields??{};
     const taskIds=tasks.map(taskBinding).filter((binding):binding is {wpId:string;taskId:string}=>Boolean(binding&&binding.wpId===id)).map(binding=>binding.taskId).sort();
-    const prIds=prs.map(prBinding).filter((binding):binding is {wpId:string;prId:string}=>Boolean(binding&&binding.wpId===id)).map(binding=>binding.prId).sort();
+    const prIds=prs.map(pr=>prBinding(pr,previous.repositoryIdentity)).filter((binding):binding is {wpId:string;prId:string}=>Boolean(binding&&binding.wpId===id)).map(binding=>binding.prId).sort();
     const milestoneTitle=milestone.title.startsWith(`${milestone.id} — `)?milestone.title:`${milestone.id} — ${milestone.title}`;
     const phasePlanAvailability=node.phaseProgress?'AVAILABLE' as const:'NOT_AVAILABLE' as const;
     const structure={id,identityKey,title:node.displayTitle??formal?.title??node.title,milestoneId:milestone.id,milestoneTitle,phase:node.phaseProgress?.currentPhaseTitle??null,phasePlanAvailability,roadmapGroupNumber:node.roadmapGroupNumber??null,roadmapGroupTitle:node.roadmapGroupTitle??null};
