@@ -1,5 +1,5 @@
 import type {RuntimeRecord} from './model/entityTypes.ts';
-import {createEmptyGlobalStateReadModel} from './globalStateReadModel.ts';
+import {createEmptyGlobalStateReadModel,type GlobalStateProjectContext} from './globalStateReadModel.ts';
 import {exactResultForRun,exactRunLayer2,projectPhase5Lifecycle,type Phase5LifecycleProjection,type ResultLayer2Record,type RunLayer2Record} from './runtimeResultFeedbackControlLoopProjection.ts';
 
 export type RuntimeFeedbackProjection={
@@ -55,9 +55,10 @@ export function projectControlLoopFeedbackFromGlobalState(projection:Phase5Lifec
   return {state:'RUNNING',title:'自动控制循环进行中',message:record.controlLoopId,code:`CONTROL_LOOP_${lifecycle}`,terminal:false};
 }
 
-/** Compatibility entry point; it immediately projects the exact Run to Layer 2. */
-export function projectRuntimeFeedback(runtime:RuntimeRecord):RuntimeFeedbackProjection{
-  const projection=projectPhase5Lifecycle(createEmptyGlobalStateReadModel(),{runs:[runtime]});
+/** Projects the exact Run to Layer 2 using an explicit project context. Fails closed if runtime scope does not match context. */
+export function projectRuntimeFeedback(runtime:RuntimeRecord,context:GlobalStateProjectContext):RuntimeFeedbackProjection{
+  if(runtime.projectId!==context.projectId||runtime.repositoryIdentity!==context.repositoryIdentity)return {state:'ERROR',title:'Runtime 状态异常',message:'项目上下文不匹配，无法确认执行状态。',code:'PROJECT_CONTEXT_MISMATCH',terminal:true};
+  const projection=projectPhase5Lifecycle(createEmptyGlobalStateReadModel(context),{runs:[runtime]});
   return projectRuntimeFeedbackFromGlobalState(projection,runtime.runId);
 }
 

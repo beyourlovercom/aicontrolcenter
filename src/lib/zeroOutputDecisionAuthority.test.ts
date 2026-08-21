@@ -28,12 +28,12 @@ assert.equal(incompleteFacts.canonicalResult?.rawResult,pass);
 // TEST_05: result absence is explicit and has no invented failure reason.
 const absent=finalizeCanonicalResult(base('run-absent'));
 assert.equal(absent.canonicalResult,undefined);
-const absentProjection=projectRuntimeFeedback(absent as RuntimeRecord);
+const absentProjection=projectRuntimeFeedback(absent as RuntimeRecord,emptyContext);
 assert.deepEqual(absentProjection,{state:'RUNNING',title:'Codex Result',message:'NOT_AVAILABLE',code:'CODEX_RESULT_NOT_AVAILABLE',terminal:true});
 
 // TEST_06 / TEST_07 / TEST_08: feedback body stays exact and status cannot override it.
 assert.equal(buildGptReturnEnvelope(canary.canonicalResult!),pass);
-const resultDespiteFailure=projectRuntimeFeedback({...canary,phase:'FAILED',failure:'PROCESS_EXIT_NONZERO'} as RuntimeRecord);
+const resultDespiteFailure=projectRuntimeFeedback({...canary,phase:'FAILED',failure:'PROCESS_EXIT_NONZERO'} as RuntimeRecord,emptyContext);
 assert.deepEqual(resultDespiteFailure,{state:'RUNNING',title:'Codex Result',message:pass,code:'CODEX_RESULT_AVAILABLE',terminal:true});
 
 // TEST_09: raw process facts stay available as evidence.

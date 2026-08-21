@@ -6,15 +6,16 @@ import type {RuntimeRecord} from './model/entityTypes.ts';
 
 const app=readFileSync(new URL('../App.svelte',import.meta.url),'utf8');
 const island=readFileSync(new URL('../components/GlobalFeedbackIsland.svelte',import.meta.url),'utf8');
+const ctx={projectId:'aicc',repositoryIdentity:'aicc-repo',projectContextRevision:0} as const;
 const base=(runId:string,phase:string):RuntimeRecord=>({runId,projectId:'aicc',repositoryIdentity:'aicc-repo',workPackageId:null,authorizationId:'auth',authoritySha:'sha',branch:'branch',startingHeadSha:'sha',pid:1,threadId:'thread',phase,currentTask:'task',latestEvent:'event',startedAt:'2026-08-19T00:00:00.000Z',lastActivityAt:'2026-08-19T00:00:01.000Z'});
 const success={...base('run-a','COMPLETED'),canonicalResult:{version:'AICC_EXECUTION_RESULT_V1' as const,executionId:'run-a',projectId:'aicc',repositoryIdentity:'aicc-repo',aiccStatus:'RESULT_RECEIVED' as const,rawResult:'package-name',receivedAt:'now',resultId:'result-a',resultHash:'hash',returnState:'RESULT_READY' as const}};
 const failure={...base('run-a','FAILED'),failure:'PROCESS_EXIT_NONZERO'};
 
-assert.deepEqual(projectRuntimeFeedback(base('run-a','RUNNING')),{state:'RUNNING',title:'正在执行',message:'run-a',code:'CODEX_RUNNING',terminal:false});
-assert.deepEqual(projectRuntimeFeedback(success),{state:'SUCCESS',title:'运行成功',message:'run-a 已完成',code:'RESULT_RECEIVED',terminal:true});
-assert.deepEqual(projectRuntimeFeedback(failure),{state:'ERROR',title:'运行失败',message:'run-a · PROCESS_EXIT_NONZERO',code:'PROCESS_EXIT_NONZERO',terminal:true});
-assert.equal(feedbackPresentationKey(projectRuntimeFeedback(base('run-a','RUNNING'))),feedbackPresentationKey(projectRuntimeFeedback(base('run-a','STOPPING'))),'hidden internal code changes cannot spam duplicate Running feedback');
-assert.notEqual(feedbackPresentationKey(projectRuntimeFeedback(base('run-a','RUNNING'))),feedbackPresentationKey(projectRuntimeFeedback(success)),'completion replaces Running feedback');
+assert.deepEqual(projectRuntimeFeedback(base('run-a','RUNNING'),ctx),{state:'RUNNING',title:'正在执行',message:'run-a',code:'CODEX_RUNNING',terminal:false});
+assert.deepEqual(projectRuntimeFeedback(success,ctx),{state:'RUNNING',title:'Codex Result',message:'package-name',code:'CODEX_RESULT_AVAILABLE',terminal:true});
+assert.deepEqual(projectRuntimeFeedback(failure,ctx),{state:'RUNNING',title:'Codex Result',message:'NOT_AVAILABLE',code:'CODEX_RESULT_NOT_AVAILABLE',terminal:true});
+assert.equal(feedbackPresentationKey(projectRuntimeFeedback(base('run-a','RUNNING'),ctx)),feedbackPresentationKey(projectRuntimeFeedback(base('run-a','STOPPING'),ctx)),'hidden internal code changes cannot spam duplicate Running feedback');
+assert.notEqual(feedbackPresentationKey(projectRuntimeFeedback(base('run-a','RUNNING'),ctx)),feedbackPresentationKey(projectRuntimeFeedback(success,ctx)),'completion replaces Running feedback');
 
 assert.match(app,/composerSubmittedRunId=readComposerRunBinding/,'Composer owns one persisted exact Run identity');
 assert.match(app,/function beginRuntimeFeedbackBridge\(runId:string/,'accepted execution starts one exact-run feedback bridge');
