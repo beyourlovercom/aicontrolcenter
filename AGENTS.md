@@ -124,6 +124,9 @@ must never transfer analysis authority to Claude.
 `CLAUDE_SUBAGENTS = FORBIDDEN_BY_DEFAULT`
 `FULL_TEST_LOG_IN_CONTEXT = FORBIDDEN_BY_DEFAULT`
 `GITHUB_EXACT_SHA_REVIEW_BETWEEN_LOGICAL_CLOSURES = REQUIRED`
+`STALL_OR_BLOCKER_REASON_REPORTING = REQUIRED`
+`GPT_AUTONOMOUS_CONTINUATION_WITHIN_OWNER_AUTHORITY = ALLOWED`
+`STALL_REPORT_DOES_NOT_REQUIRE_OWNER_DECISION = TRUE`
 
 Required loop:
 
@@ -134,6 +137,9 @@ Required loop:
 → `GPT reads the result and exact GitHub commit`
 → `GPT analyzes, decomposes, and issues the next instruction`
 → repeat until Owner UAT or completion.
+
+
+A stall, blocker, timeout, executor interruption, or failed review must be reported to the Owner with the exact current cause and evidence. Reporting does not by itself require pausing: GPT should diagnose and continue autonomously when the next action is reversible and already inside existing Owner authority. Stop only for an explicit Owner gate, irreversible/privileged action, genuinely ambiguous product decision, or another governed stop condition. The three-substantive-failure Owner gate remains mandatory.
 
 Claude may perform only local reasoning necessary to execute the supplied
 instruction. Ambiguity, unexpected structure, new dependency, or material scope

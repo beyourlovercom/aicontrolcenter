@@ -62,32 +62,48 @@ Known historical telemetry before this experiment started:
 
 These samples are context only. They are incomplete telemetry and must not be mixed into the five-run promotion cycles.
 
-## Cycle C001 — ACTIVE
+## Cycle C001 — COMPLETE
 
-| # | Time | Logical concern | Model | Effort | Think | Session | Result | Min | Turns | Input | Cache write | Cache read | Output | Think tok | API-eq | Quota |
+| # | Time (UTC) | Logical concern | Model | Effort | Think | Session | GPT review | Min | Turns | Input | Cache write | Cache read | Output | Think tok | API-eq | Quota |
 |---|---|---|---|---|---|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---|
-| 1 |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |
+| 1 | 2026-08-21 15:18 | Batch3A R2 no-placeholder scope | Sonnet 5 | low | requested OFF / observed ON | fresh | FAIL — test coverage | 4.50 | 57 | 110 | 111079 | 4939221 | 25561 | 5291 | $2.5340 | NO |
+| 2 | 2026-08-21 15:25 | Batch3A R2 test coverage | Haiku 4.5 | omit | OFF | fresh | FAIL — test authority | 3.04 | 62 | 308 | 74138 | 3768520 | 12341 | 0 | $0.5886 | NO |
+| 3 | 2026-08-21 19:48 | Batch3A R2 Owner-approved test authority | Haiku 4.5 | low | OFF | fresh | PASS — Batch3A closed | 1.12 | 24 | 119 | 25759 | 716538 | 4461 | 0 | $0.1470 | NO |
+| 4 | 2026-08-21 20:00 | Batch3B1 runtime/result scope | Sonnet 5 | low | OFF | fresh | FAIL — storage identity collision | 4.86 | 28 | 56 | 37778 | 2465120 | 10824 | 0 | $2.7378 | NO |
+| 5 | 2026-08-21 20:08 | Batch3B1 scoped runtime storage | Sonnet 5 | low requested | OFF | fresh | FAIL — raw-ID ambiguity | 8.17 | 110 | 208 | 165869 | 10852331 | 41659 | 0 | $4.8780 | NO |
+
+### Cycle C001 summary
+
+- `EXECUTIONS_COMPLETED`: 5 / 5
+- `MODEL_DISTRIBUTION`: Sonnet 5 = 3; Haiku 4.5 = 2; Sonnet 4.6 = 0
+- `SUBSTANTIVE_FAILURES_IN_CYCLE`: 4
+- `FIRST_PASS_LOGICAL_CLOSURES`: 0
+- `REMEDIATION_ATTEMPTS`: 3
+- `TOTAL_ELAPSED`: 21.68 min
+- `TOTAL_INPUT_TOKENS`: 801
+- `TOTAL_CACHE_WRITE_TOKENS`: 414623
+- `TOTAL_CACHE_READ_TOKENS`: 22741730
+- `TOTAL_OUTPUT_TOKENS`: 94846
+- `TOTAL_THINKING_TOKENS`: 5291
+- `TOTAL_API_EQUIVALENT`: $10.8853
+- `QUOTA_LIMIT_TRIGGERED_IN_CYCLE`: NO
+- `CYCLE_CONCLUSION`: No 5-hour quota event occurred. Sonnet 5 remained reliable for complex implementation but the broadest remediation (execution 5) produced 110 turns and 10.85M cache reads; tighter GPT decomposition is required. Haiku was efficient for narrow mechanical test remediation. Thinking-disable launcher was corrected after execution 1.
+
+## Cycle C002 — ACTIVE
+
+| # | Time (UTC) | Logical concern | Model | Effort | Think | Session | GPT review | Min | Turns | Input | Cache write | Cache read | Output | Think tok | API-eq | Quota |
+|---|---|---|---|---|---|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---|
+| 1 | 2026-08-21 20:12 | Batch3B1 raw runtime ID fail-closed | Sonnet 5 | low | OFF | fresh | PASS — Batch3B1 closed | 2.94 | 40 | 80 | 117791 | 3380883 | 17839 | 0 | $1.3274 | NO |
 | 2 |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |
 | 3 |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |
 | 4 |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |
 | 5 |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |
 
-### Cycle C001 summary
+### Cycle C002 summary
 
-- `EXECUTIONS_COMPLETED`: 0 / 5
-- `MODEL_DISTRIBUTION`: pending
-- `SUBSTANTIVE_FAILURES`: 0
-- `FIRST_PASS_LOGICAL_CLOSURES`: 0
-- `REMEDIATION_ATTEMPTS`: 0
-- `TOTAL_ELAPSED`: pending
-- `TOTAL_INPUT_TOKENS`: pending
-- `TOTAL_CACHE_WRITE_TOKENS`: pending
-- `TOTAL_CACHE_READ_TOKENS`: pending
-- `TOTAL_OUTPUT_TOKENS`: pending
-- `TOTAL_THINKING_TOKENS`: pending
-- `TOTAL_API_EQUIVALENT`: pending
+- `EXECUTIONS_COMPLETED`: 1 / 5
 - `QUOTA_LIMIT_TRIGGERED_IN_CYCLE`: NO
-- `CYCLE_CONCLUSION`: pending
+- `CYCLE_CONCLUSION`: active
 
 ## Daily review log
 
@@ -95,12 +111,12 @@ For each day, append one review after reconciling completed executions from the 
 
 ### 2026-08-21
 
-- `EXECUTIONS_REVIEWED`: 0 new experiment executions
-- `ACTIVE_CYCLE`: C001
-- `QUOTA_LIMIT_EVENT_TODAY`: N/A — experiment has not started executing yet
-- `MODEL_EFFICIENCY_SIGNAL`: insufficient data
-- `FIRST_PASS_RELIABILITY_SIGNAL`: insufficient data
-- `GPT_RECOMMENDATION_FOR_NEXT_DAY`: begin C001 under temporary promo routing
+- `EXECUTIONS_REVIEWED`: C001 complete (5) + C002 execution 1
+- `ACTIVE_CYCLE`: C002
+- `QUOTA_LIMIT_EVENT_TODAY`: NO across recorded experiment executions
+- `MODEL_EFFICIENCY_SIGNAL`: Haiku is materially cheaper on narrow mechanical remediation; Sonnet 5 needs tighter GPT-scoped concerns to avoid high-turn/cache-read runs
+- `FIRST_PASS_RELIABILITY_SIGNAL`: insufficient for permanent model routing; C001 had multiple remediation rounds
+- `GPT_RECOMMENDATION_FOR_NEXT_DAY`: keep Sonnet 5 for contract-sensitive cross-module work, thinking OFF, subagents denied; continue splitting by independently reviewable logical concern
 
 ## 2026-09-01 final routing review template
 
