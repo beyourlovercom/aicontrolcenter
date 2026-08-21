@@ -50,10 +50,10 @@ export type Layer2ChangeNotifier=Readonly<{
   subscribe(listener:(change:Layer2ChangeNotification)=>void):()=>void;
 }>;
 
-const identityKey=(identity:CanonicalEntityIdentity)=>`${identity.kind}:${identity.id}`;
-const sourceKey=(source:SourceEntityIdentity)=>`${source.domain}:${source.id}`;
-const sameIdentity=(left:CanonicalEntityIdentity,right:CanonicalEntityIdentity)=>left.kind===right.kind&&left.id===right.id;
-const cloneIdentity=(identity:CanonicalEntityIdentity):CanonicalEntityIdentity=>({kind:identity.kind,id:identity.id}) as CanonicalEntityIdentity;
+const identityKey=(identity:CanonicalEntityIdentity)=>`${identity.projectId}:${identity.repositoryIdentity}:${identity.kind}:${identity.id}`;
+const sourceKey=(source:SourceEntityIdentity)=>`${source.projectId}:${source.repositoryIdentity}:${source.domain}:${source.id}`;
+const sameIdentity=(left:CanonicalEntityIdentity,right:CanonicalEntityIdentity)=>left.projectId===right.projectId&&left.repositoryIdentity===right.repositoryIdentity&&left.kind===right.kind&&left.id===right.id;
+const cloneIdentity=(identity:CanonicalEntityIdentity):CanonicalEntityIdentity=>({...identity});
 
 function assertCanonicalRevision(value:number):number{
   if(!Number.isSafeInteger(value)||value<0)throw new Error('CANONICAL_REVISION_INVALID');
@@ -82,7 +82,7 @@ export function planExactCanonicalPropagation(model:AiccGlobalStateReadModel,sou
  * increments requestedGeneration, so the loop always performs a later read.
  * The accepted Layer 1 revision is monotonic; a stale snapshot is ignored.
  */
-export function createGlobalStateConsistencyCoordinator(readCanonical:()=>Promise<CanonicalProjectionSnapshot>|CanonicalProjectionSnapshot,initial:AiccGlobalStateReadModel=createEmptyGlobalStateReadModel()):GlobalStateConsistencyCoordinator{
+export function createGlobalStateConsistencyCoordinator(readCanonical:()=>Promise<CanonicalProjectionSnapshot>|CanonicalProjectionSnapshot,initial:AiccGlobalStateReadModel):GlobalStateConsistencyCoordinator{
   let model=initial,acceptedCanonicalRevision=-1,requestedGeneration=0,completedGeneration=0;
   let inFlight:Promise<AiccGlobalStateReadModel>|null=null;
   const listeners=new Set<(change:Layer2ChangeNotification)=>void>();
