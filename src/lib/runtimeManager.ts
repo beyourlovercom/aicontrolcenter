@@ -25,7 +25,7 @@ import {revokeExecutionLease} from "./fastExecution.ts";
 import {getRuntimeExecutionProvider} from './runtimeProvider.ts';
 import type {CanonicalExecutionResult,ReturnState} from './model/entityTypes.ts';
 import {createProjectRegistryAuthority} from './projectRegistryAuthority.ts';
-import {belongsToProject,projectEntityScope,type ProjectEntityScope} from './projectEntityScope.ts';
+import {belongsToProject,projectEntityScope,scopedEntityKey,type ProjectEntityScope} from './projectEntityScope.ts';
 import {resolveCodexModel} from './codexModelCatalog.ts';
 import {DirectRemoteRunnerClient} from './directRemoteRunnerClient.ts';
 import {resolveAiccStateDir} from './stateDirectory.ts';
@@ -360,6 +360,22 @@ export function updateCanonicalResultReturn(executionId:string,update:Partial<Pi
 export function readCanonicalResult(executionId:string):RuntimeState|null{
   return readStoredRuntimes().find(item=>item.runId===executionId&&item.canonicalResult)||readRuntimeHistory().find(item=>item.runId===executionId&&item.canonicalResult)||null;
 }
+/** Same raw executionId can independently resolve per projectId+repositoryIdentity; a foreign scope never matches. */
+export function readRuntimeScoped(scope:Pick<ProjectEntityScope,'projectId'|'repositoryIdentity'>,runId:string):RuntimeState|null{
+  const matches=(item:RuntimeState)=>item.runId===runId&&runtimeBelongsToProject(item,scope);
+  return readStoredRuntimes().find(matches)||readRuntimeHistory().find(matches)||null;
+}
+export function readCanonicalResultScoped(scope:Pick<ProjectEntityScope,'projectId'|'repositoryIdentity'>,executionId:string):RuntimeState|null{
+  const matches=(item:RuntimeState)=>item.runId===executionId&&Boolean(item.canonicalResult)&&runtimeBelongsToProject(item,scope);
+  return readStoredRuntimes().find(matches)||readRuntimeHistory().find(matches)||null;
+}
+export function updateCanonicalResultReturnScoped(scope:Pick<ProjectEntityScope,'projectId'|'repositoryIdentity'>,executionId:string,update:Partial<Pick<CanonicalExecutionResult,'returnState'|'returnAttemptedAt'|'returnedAt'|'returnFailure'>>):RuntimeState|null{
+  const state=readCanonicalResultScoped(scope,executionId);
+  if(!state?.canonicalResult)return null;
+  state.canonicalResult={...state.canonicalResult,...update};
+  save(state);
+  return state;
+}
 export function readRuntimeHistoryReadOnly():RuntimeState[]{try{const stored=JSON.parse(readFileSync(HISTORY_FILE,'utf8')) as RuntimeState[];let registry:Map<string,FormalWorkPackageRegistration>;try{registry=readFormalWorkPackageRegistry()}catch{registry=new Map()}return stored.map(item=>reconcileRuntimeEntityBinding(item,registry))}catch{return[]}}
 function reconcileObservedRuntime(runtime:RuntimeState):RuntimeState{const before=JSON.stringify(runtime),reconciled=monitorRuntimeState(runtime);if(JSON.stringify(reconciled)!==before)save(reconciled);return reconciled}
 async function readRuntimeFileCached(file:string,registry:Map<string,FormalWorkPackageRegistration>):Promise<RuntimeState|null>{try{const metadata=await stat(file),cached=runtimeFileCache.get(file);if(cached&&cached.mtimeMs===metadata.mtimeMs&&cached.size===metadata.size)return cached.runtime;const parsed=JSON.parse(await readFile(file,'utf8')) as RuntimeState;if(!parsed||typeof parsed.runId!=='string')return null;const runtime=reconcileObservedRuntime(reconcileRuntimeEntityBinding(parsed,registry));runtimeFileCache.set(file,{mtimeMs:metadata.mtimeMs,size:metadata.size,runtime});return runtime}catch{runtimeFileCache.delete(file);return null}}
@@ -403,7 +419,7 @@ export function readRuntime(workPackageId?: string, entityType?: RuntimeState['e
 }
 function readStoredRuntimes():RuntimeState[]{
   const files=[RUN_FILE];
-  try{files.push(...readdirSync(STATE_DIR).filter(file=>/^runtime-[^/]+\.json$/.test(file)).map(file=>join(STATE_DIR,file)))}catch{}
+  try{files.push(...readdirSync(STATE_DIR).filter(file=>file!=='runtime-history.json'&&/^runtime-[^/]+\.json$/.test(file)).map(file=>join(STATE_DIR,file)))}catch{}
   let registry:Map<string,FormalWorkPackageRegistration>;try{registry=readFormalWorkPackageRegistry()}catch{registry=new Map()}
   return files.map(file=>{try{const stored=JSON.parse(readFileSync(file,"utf8")) as RuntimeState,next=reconcileRuntimeEntityBinding(stored,registry);if(JSON.stringify(stored)!==JSON.stringify(next)){const tmp=`${file}.${process.pid}.tmp`;writeFileSync(tmp,JSON.stringify(next,null,2),{mode:0o600});renameSync(tmp,file)}return next}catch{return null}}).filter((item):item is RuntimeState=>Boolean(item));
 }
@@ -426,6 +442,13 @@ export function readRuntimeHistory(): RuntimeState[] {
     return [];
   }
 }
+/** Canonical runtime storage identity is projectId+repositoryIdentity+runId; repositoryPath is never identity. */
+export function runtimeStorageKey(state:Pick<RuntimeState,'runId'|'projectId'|'repositoryIdentity'>):string{
+  return createHash('sha256').update(scopedEntityKey({projectId:state.projectId,repositoryIdentity:state.repositoryIdentity},'runtime',state.runId)).digest('hex');
+}
+function sameScopedRuntimeIdentity(a:Pick<RuntimeState,'runId'|'projectId'|'repositoryIdentity'>,b:Pick<RuntimeState,'runId'|'projectId'|'repositoryIdentity'>):boolean{
+  return a.runId===b.runId&&a.projectId===b.projectId&&a.repositoryIdentity===b.repositoryIdentity;
+}
 function persistTerminal(s: RuntimeState) {
   if (
     !["COMPLETED", "FAILED", "STOPPED", "RECOVERY_REQUIRED"].includes(s.phase)
@@ -433,7 +456,7 @@ function persistTerminal(s: RuntimeState) {
     return;
   const records = [
     s,
-    ...readRuntimeHistory().filter((item) => item.runId !== s.runId),
+    ...readRuntimeHistory().filter((item) => !sameScopedRuntimeIdentity(item, s)),
   ].slice(0, MAX_HISTORY);
   mkdirSync(STATE_DIR, { recursive: true });
   markLocalRuntimeProjectionWrite('runtime-history.json');
@@ -443,7 +466,7 @@ function persistTerminal(s: RuntimeState) {
 }
 function save(s: RuntimeState) {
   mkdirSync(STATE_DIR, { recursive: true });
-  const target=s.passThrough?join(STATE_DIR,`runtime-${s.runId}.json`):RUN_FILE;
+  const target=s.passThrough?join(STATE_DIR,`runtime-run-scoped-${runtimeStorageKey(s)}.json`):RUN_FILE;
   markLocalRuntimeProjectionWrite(target.slice(STATE_DIR.length+1));
   writeFileSync(target, JSON.stringify(s, null, 2), { mode: 0o600 });
   persistTerminal(s);
