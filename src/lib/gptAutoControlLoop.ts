@@ -264,12 +264,17 @@ function scopeCompatible(a: {projectId?: string; repositoryIdentity?: string}, b
   return sameProjectScope(a as ProjectIdentityScope, b as ProjectIdentityScope);
 }
 
-/** Resolves a raw control_loop_id to exactly one loop. With scope: exact match only. Without scope: fails closed (throws) if the raw id is ambiguous across distinct project scopes rather than choosing the first match. */
+/** Bucket key for raw-id ambiguity checks: LEGACY (unscoped) is its own bucket, distinct from every project scope bucket. */
+function scopeBucketKey(item: {projectId?: string; repositoryIdentity?: string}): string {
+  return item.projectId && item.repositoryIdentity ? `${item.projectId} ${item.repositoryIdentity}` : 'LEGACY';
+}
+
+/** Resolves a raw control_loop_id to exactly one loop. With scope: exact match only. Without scope: fails closed (throws) if the raw id is ambiguous across distinct scope buckets (including LEGACY) rather than choosing the first match. */
 function resolveLoopByRawId(loops: ControlLoopRecord[], control_loop_id: string, scope?: ProjectIdentityScope): ControlLoopRecord | null {
   const matches = loops.filter(loop => loop.control_loop_id === control_loop_id);
   if (scope) return matches.find(loop => loop.projectId && loop.repositoryIdentity && sameProjectScope(loop, scope)) ?? null;
-  const scopedKeys = new Set(matches.filter(l => l.projectId && l.repositoryIdentity).map(l => scopedControlLoopKey(l, l.control_loop_id)));
-  if (scopedKeys.size > 1) throw new Error('AMBIGUOUS_CONTROL_LOOP_ID');
+  const buckets = new Set(matches.map(scopeBucketKey));
+  if (buckets.size > 1) throw new Error('AMBIGUOUS_CONTROL_LOOP_ID');
   return matches[0] ?? null;
 }
 
@@ -282,8 +287,8 @@ function requireLoopByRawId(loops: ControlLoopRecord[], control_loop_id: string,
 /** Fails closed (throws) if a raw-id collection spans more than one project scope and no scope was supplied to disambiguate. */
 function scopeFilter<T extends {projectId?: string; repositoryIdentity?: string}>(items: T[], scope?: ProjectIdentityScope, ambiguousCode = 'AMBIGUOUS_PROJECT_SCOPE'): T[] {
   if (scope) return items.filter(item => item.projectId && item.repositoryIdentity && item.projectId === scope.projectId && item.repositoryIdentity === scope.repositoryIdentity);
-  const scopedKeys = new Set(items.filter(item => item.projectId && item.repositoryIdentity).map(item => `${item.projectId} ${item.repositoryIdentity}`));
-  if (scopedKeys.size > 1) throw new Error(ambiguousCode);
+  const buckets = new Set(items.map(scopeBucketKey));
+  if (buckets.size > 1) throw new Error(ambiguousCode);
   return items;
 }
 
@@ -475,8 +480,8 @@ export function readControlLoopByConversation(conversation_id: string, scope?: P
   const active = all.filter(loop => loop.binding_active);
   const pool = active.length ? active : all;
   if (!scope) {
-    const scopedKeys = new Set(pool.filter(loop => loop.projectId && loop.repositoryIdentity).map(loop => `${loop.projectId} ${loop.repositoryIdentity}`));
-    if (scopedKeys.size > 1) throw new Error('AMBIGUOUS_CONVERSATION_ID');
+    const buckets = new Set(pool.map(scopeBucketKey));
+    if (buckets.size > 1) throw new Error('AMBIGUOUS_CONVERSATION_ID');
   }
   return pool[0] ?? null;
 }
@@ -487,8 +492,8 @@ export function readExpectedControlTurn(input: string | {conversation_id: string
   if (query.expected_gpt_turn_id) {
     const matches = turns.filter(turn => turn.expected_gpt_turn_id === query.expected_gpt_turn_id && (!query.control_loop_id || turn.control_loop_id === query.control_loop_id) && (!query.binding_epoch || turn.binding_epoch === query.binding_epoch));
     if (!scope) {
-      const scopedKeys = new Set(matches.filter(turn => turn.projectId && turn.repositoryIdentity).map(turn => scopedExpectedTurnKey(turn, turn.expected_gpt_turn_id)));
-      if (scopedKeys.size > 1) throw new Error('AMBIGUOUS_EXPECTED_TURN');
+      const buckets = new Set(matches.map(scopeBucketKey));
+      if (buckets.size > 1) throw new Error('AMBIGUOUS_EXPECTED_TURN');
     }
     return matches[0] ?? null;
   }
@@ -602,8 +607,8 @@ function feedbackState(control_loop_id: string, feedback_key: string, scope?: Pr
   let record: FeedbackRecord | undefined;
   if (scope) record = candidates.find(item => item.projectId && item.repositoryIdentity && sameProjectScope(item, scope));
   else {
-    const scopedKeys = new Set(candidates.filter(item => item.projectId && item.repositoryIdentity).map(item => scopedFeedbackKey(item, item.feedback_id)));
-    if (scopedKeys.size > 1) throw new Error('AMBIGUOUS_FEEDBACK_IDENTITY');
+    const buckets = new Set(candidates.map(scopeBucketKey));
+    if (buckets.size > 1) throw new Error('AMBIGUOUS_FEEDBACK_IDENTITY');
     record = candidates[0];
   }
   if (!record) throw new Error('FEEDBACK_NOT_FOUND');
@@ -690,8 +695,8 @@ export function retryFeedbackDelivery(control_loop_id: string, feedback_key: str
   let record: FeedbackRecord | undefined;
   if (scope) record = candidates.find(item => item.projectId && item.repositoryIdentity && sameProjectScope(item, scope));
   else {
-    const scopedKeys = new Set(candidates.filter(item => item.projectId && item.repositoryIdentity).map(item => scopedFeedbackKey(item, item.feedback_id)));
-    if (scopedKeys.size > 1) throw new Error('AMBIGUOUS_FEEDBACK_IDENTITY');
+    const buckets = new Set(candidates.map(scopeBucketKey));
+    if (buckets.size > 1) throw new Error('AMBIGUOUS_FEEDBACK_IDENTITY');
     record = candidates[0];
   }
   const loop = record ? state.loops.find(item => item.control_loop_id === control_loop_id && scopeCompatible(item, record!)) : undefined;
@@ -758,7 +763,10 @@ export function completeFeedback(control_loop_id: string, feedback_key: string, 
   writeState(state); return record;
 }
 
-export function readFeedback(control_loop_id: string): FeedbackRecord[] { return readState().feedback.filter(item => item.control_loop_id === control_loop_id); }
+export function readFeedback(control_loop_id: string, scope?: ProjectIdentityScope): FeedbackRecord[] {
+  const candidates = readState().feedback.filter(item => item.control_loop_id === control_loop_id);
+  return scopeFilter(candidates, scope, 'AMBIGUOUS_FEEDBACK_IDENTITY');
+}
 
 function updateLoopFromContract(loop: ControlLoopRecord, claim: ControlClaim, contract: ParsedControlContract): void {
   loop.last_control_type = contract.type;
