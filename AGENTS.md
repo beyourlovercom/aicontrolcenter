@@ -179,6 +179,63 @@ Cost saving alone must not downgrade below the capability GPT judges necessary.
 Claude cannot promote or demote itself. A failed lower-tier implementation
 returns to GPT; only GPT may select a different tier for the next execution.
 
+### Temporary Sonnet 5 promotion window
+
+`CLAUDE_PROMO_ROUTING_WINDOW = 2026-08-21_THROUGH_2026-08-31`
+`CLAUDE_PROMO_ROUTING_REVIEW_DATE = 2026-09-01`
+`PROMO_ROUTING_REVIEW_BEFORE_CONTINUATION = REQUIRED`
+
+During this temporary window, GPT uses the following routing refinement:
+
+- Tier 1 — Haiku 4.5: audit, grep/search, classification, simple fixtures,
+  mechanical and repetitive low-complexity changes.
+- Tier 2A — Sonnet 4.6: narrow/localized ordinary implementation with a clear
+  plan, low integration risk, and low expected remediation risk.
+- Tier 2B Promo — Sonnet 5: medium-complexity or multi-file implementation,
+  contract-sensitive work, borderline Tier-2 work, or work where stronger
+  first-pass completion is expected to reduce retries.
+- Tier 3 — Sonnet 5: complex architecture implementation, difficult
+  remediation, cross-module migration, or hard-to-localize failures.
+
+For a substantive implementation failure caused by reasoning/integration rather
+than infrastructure, GPT should normally promote the next attempt to Sonnet 5
+with thinking still disabled. GPT may authorize one-run thinking when exact
+evidence justifies deeper local reasoning. The existing three-substantive-failure
+Owner gate remains mandatory and overrides promotion.
+
+This is a temporary routing experiment, not a permanent Sonnet 4.6 replacement.
+On 2026-09-01 GPT and Owner must review measured usage/reliability evidence
+before choosing the post-promotion routing baseline.
+
+### Executor usage telemetry and five-run cycles
+
+`EXECUTOR_USAGE_LOG = docs/10_Planning_Roadmap/05_AICC_EXECUTOR_USAGE_LOG.md`
+`EXECUTIONS_PER_USAGE_CYCLE = 5`
+`LOG_EACH_EXECUTION_TELEMETRY = REQUIRED`
+`CYCLE_SUMMARY_AFTER_5_EXECUTIONS = REQUIRED`
+`DAILY_USAGE_REVIEW = REQUIRED`
+`SEPTEMBER_1_ROUTING_REVIEW = REQUIRED`
+`ACTUAL_QUOTA_LIMIT_EVENT_ONLY = TRUE`
+
+For every Claude execution, capture model, effort, requested/actual thinking
+mode when observable, logical concern, session mode, base/result SHA, outcome,
+elapsed time, turns when observable, input/cache/output/thinking token telemetry
+when exposed, API-equivalent usage/cost when exposed, and whether an actual
+quota/session limit occurred. Unknown values must be recorded as `N/A`; do not
+infer missing telemetry.
+
+Five consecutive Claude executions form one usage cycle. Each cycle records all
+five executions plus totals, model distribution, substantive failures, first-pass
+closure rate, and `QUOTA_LIMIT_TRIGGERED_IN_CYCLE = YES|NO`. Infrastructure-only
+429/network/transport events are recorded as quota/infrastructure evidence but do
+not increment the substantive logical-failure counter.
+
+To preserve a clean implementation worktree, raw per-execution telemetry may be
+buffered in machine-local non-authoritative storage and flushed into the governed
+Markdown log after each five-run cycle or at the daily review, whichever comes
+first. The Markdown log is the human-auditable experiment record; raw runtime
+buffers are not code or planning authority.
+
 ### Thinking policy
 
 `CLAUDE_THINKING_DEFAULT = DISABLED`
