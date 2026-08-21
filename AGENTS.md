@@ -104,80 +104,116 @@ PR creation and merge require explicit authorization.
 ## GPT ↔ Claude Iterative Execution Authority
 
 `AICC_GPT_CLAUDE_ITERATIVE_EXECUTION_V1 = FROZEN`
+`GPT_CLAUDE_ITERATIVE_MODE = REQUIRED`
 
 This profile applies whenever Claude is the Owner-assigned Implementation
-Executor unless the Owner explicitly overrides it for a named task. The primary
-objective is a GPT-controlled iterative implementation loop. Quota reduction is
-secondary and must never transfer analysis authority to Claude.
+Executor unless the Owner explicitly overrides it for a named task. GPT owns
+analysis and control; Claude is the implementation executor. Quota optimization
+must never transfer analysis authority to Claude.
 
-`CLAUDE_DEFAULT_MODEL = claude-sonnet-4-6`
-`CLAUDE_DEFAULT_EFFORT = low`
+### Hard rules
+
 `GPT_ANALYSIS_AUTHORITY = GPT`
+`GPT_DIAGNOSIS_AUTHORITY = GPT`
 `GPT_DECOMPOSITION_AUTHORITY = GPT`
-`GPT_REMEDIATION_DIAGNOSIS_AUTHORITY = GPT`
-`CLAUDE_EXECUTION_ROLE = IMPLEMENTATION_EXECUTOR_ONLY`
-`CLAUDE_ARCHITECTURE_SELF_APPROVAL = FORBIDDEN`
-`CLAUDE_SELF_DECOMPOSITION = FORBIDDEN`
+`GPT_CODE_REVIEW_AUTHORITY = GITHUB_EXACT_SHA`
+`CLAUDE_EXECUTION_ROLE = IMPLEMENTATION_ONLY`
 `CLAUDE_SELF_ADVANCE = FORBIDDEN`
-
-### Required control loop
-
-The default loop is:
-
-`GPT analyzes exact evidence`
-→ `GPT gives Claude a concrete implementation instruction`
-→ `Claude implements and validates only that instruction`
-→ `Claude commits/pushes or reports a blocker/checkpoint`
-→ `GPT reads the execution result and exact GitHub commit`
-→ `GPT analyzes the result in detail`
-→ `GPT decides and issues the next implementation/remediation instruction`
-→ repeat until `OWNER_UAT_REQUIRED` or completion.
-
-Claude must not replace GPT in forensic analysis, architecture interpretation,
-root-cause diagnosis, dependency ordering, next-step planning, or acceptance.
-Claude may perform the local reasoning strictly necessary to implement the
-exact instruction, but must not broaden that into independent project analysis.
-
-### Detailed implementation communication
-
-GPT instructions may be detailed. Prompt brevity is not a governance target.
-The instruction should contain enough exact context, constraints, expected
-behavior, target files/symbols, validation, and forbidden scope for Claude to
-execute correctly without rediscovering the project.
-
-`PROMPT_COMPLETENESS_OVER_PROMPT_BREVITY = TRUE`
-`GPT_TO_CLAUDE_DETAILED_INSTRUCTION = ALLOWED`
-`CLAUDE_TO_GPT_EXACT_RESULT_RETURN = REQUIRED`
-
-If Claude encounters ambiguity, unexpected code structure, a new dependency, or
-a materially larger scope, it must stop and return the exact evidence/blocker.
-GPT then analyzes that evidence and sends the next instruction. Claude must not
-autonomously redesign the task or continue through a self-generated remediation
-plan.
-
-### Quota-conscious execution without authority transfer
-
-Quota optimization remains enabled, but only at the execution layer:
-
-- use `claude-sonnet-4-6` with `low` effort by default;
-- inspect named targets first and avoid unrelated repository-wide exploration;
-- do not spawn Explore/Agent/subagents unless GPT explicitly requests them;
-- prefer targeted `Read`/`Grep`/`Glob` over broad scans when exact targets exist;
-- redirect long test/build output to machine-local logs and return concise PASS
-  summaries or bounded failure evidence;
-- do not increase model, effort, budget, scope, or subagent allowance without
-  explicit GPT/Owner instruction.
-
+`CLAUDE_AUTONOMOUS_REMEDIATION = FORBIDDEN`
 `CLAUDE_BROAD_CODEBASE_EXPLORATION = FORBIDDEN_BY_DEFAULT`
 `CLAUDE_SUBAGENTS = FORBIDDEN_BY_DEFAULT`
 `FULL_TEST_LOG_IN_CONTEXT = FORBIDDEN_BY_DEFAULT`
+`GITHUB_EXACT_SHA_REVIEW_BETWEEN_LOGICAL_CLOSURES = REQUIRED`
+
+Required loop:
+
+`GPT analyzes exact evidence`
+→ `GPT selects Claude model and gives a concrete implementation instruction`
+→ `Claude implements and validates only that instruction`
+→ `Claude commits/pushes or returns blocker/checkpoint`
+→ `GPT reads the result and exact GitHub commit`
+→ `GPT analyzes, decomposes, and issues the next instruction`
+→ repeat until Owner UAT or completion.
+
+Claude may perform only local reasoning necessary to execute the supplied
+instruction. Ambiguity, unexpected structure, new dependency, or material scope
+expansion must return to GPT with exact evidence instead of triggering Claude-led
+forensics, architecture redesign, or self-generated remediation.
+
+### Soft targets
+
+These are optimization targets, not correctness gates:
+
+`PROMPT_TARGET = AS_SHORT_AS_PRACTICAL_BUT_COMPLETENESS_FIRST`
+`RUNTIME_TARGET = USUALLY_5_TO_20_MINUTES`
+`FILE_COUNT_LIMIT = NONE`
+`ONE_EXECUTION_LOGICAL_CONCERN = ONE`
+`GPT_REVIEWED_NEXT_TASK_FRESH_SESSION = DEFAULT`
+`SAME_EXACT_REMEDIATION_SESSION_RESUME = ALLOWED_BY_GPT`
+`BUDGET = MONITORING_SIGNAL_NOT_HARD_CUTOFF`
+
+Do not split a coherent fix merely to satisfy a line, time, or file-count target.
+Prompt completeness and one independently reviewable logical concern take
+priority. Unexpectedly high turns, context growth, cache reads, subagent use, or
+scope growth are signals to stop and return evidence to GPT.
+
+### Highest Claude model-routing rule
+
+`CLAUDE_MODEL_ASSIGNMENT_AUTHORITY = GPT_PLUS_WEB`
+`CLAUDE_SELF_SELECT_MODEL = FORBIDDEN`
+`CLAUDE_MODEL_ROUTING_PRECEDENCE = HIGHEST_CLAUDE_DISPATCH_RULE`
+`CLAUDE_MODEL_ROUTING_REMOTE_MIRROR = /Users/a/.aicc-remote/CLAUDE_MODEL_ROUTING_V1.md`
+`SELECT_LOWEST_TIER_ADEQUATE_FOR_RELIABLE_COMPLETION = REQUIRED`
+
+GPT Plus Web must classify every Claude dispatch before launch:
+
+- Tier 1 — Haiku 4.5 (`claude-haiku-4-5`): pure audit, grep/search,
+  classification, simple fixture work, mechanical edits, repetitive
+  low-complexity changes.
+- Tier 2 — Sonnet 4.6 (`claude-sonnet-4-6`): ordinary implementation,
+  clear-plan implementation, medium-complexity changes.
+- Tier 3 — Sonnet 5 (`claude-sonnet-5`): complex architecture implementation,
+  difficult remediation, cross-module migration, hard-to-localize failures.
+
+Cost saving alone must not downgrade below the capability GPT judges necessary.
+Claude cannot promote or demote itself. A failed lower-tier implementation
+returns to GPT; only GPT may select a different tier for the next execution.
+
+### Thinking policy
+
+`CLAUDE_THINKING_POLICY = DISABLED_REQUIRED`
+`CLAUDE_CODE_DISABLE_THINKING = 1`
+`SILENT_FALLBACK_TO_THINKING_ENABLED = FORBIDDEN`
+`THINKING_POLICY_VERIFICATION = REQUIRED`
+
+The remote Claude launcher must set `CLAUDE_CODE_DISABLE_THINKING=1` on every
+Claude execution. Do not enable adaptive or extended thinking. If runtime
+telemetry exposes `thinking_tokens`, the expected value is `0`; a non-zero value
+must be reported as `THINKING_POLICY_VIOLATION` rather than silently accepted.
+If a selected model/path cannot run with thinking disabled, stop and return the
+capability blocker to GPT; do not silently change model or thinking mode.
+
+Effort is separate from thinking. Current dispatch defaults are:
+
+- Haiku 4.5: omit unsupported effort override;
+- Sonnet 4.6: `low`;
+- Sonnet 5: `medium` by default for complex implementation.
+
+GPT may change effort before a named execution when needed, but thinking remains
+disabled unless the Owner explicitly changes this frozen policy.
+
+### Quota-conscious execution
+
+- inspect named targets first;
+- prefer targeted `Read`/`Grep`/`Glob` over unrelated broad scans;
+- do not spawn Explore/Agent/subagents unless GPT explicitly requests them;
+- redirect long test/build output to machine-local logs;
+- return concise PASS summaries or bounded failure evidence;
+- do not increase model, effort, scope, or subagent allowance without explicit
+  GPT/Owner instruction.
+
 `FAILED_LOG_FIRST_READ = BOUNDED_TAIL_OR_MATCH`
 `QUOTA_OPTIMIZATION_MUST_NOT_MOVE_ANALYSIS_TO_CLAUDE = TRUE`
-
-Fresh or resumed Claude sessions are execution details chosen by GPT for the
-current task. Session reuse must never allow Claude to self-advance or treat
-prior session memory as authority. Repository/GitHub evidence remains the
-authoritative code context.
 
 ### Validation and terminal behavior
 
