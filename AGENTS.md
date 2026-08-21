@@ -101,6 +101,95 @@ Git safety:
 
 PR creation and merge require explicit authorization.
 
+## Claude Low-Quota Execution Authority
+
+`AICC_CLAUDE_LOW_QUOTA_EXECUTION_V1 = FROZEN`
+
+Applies whenever Claude is the Owner-assigned Implementation Executor unless
+the Owner explicitly overrides it for a named task. Quota/context reduction
+must not weaken repository, review, validation, or safety governance.
+
+`CLAUDE_DEFAULT_MODEL = claude-sonnet-4-6`
+`CLAUDE_DEFAULT_EFFORT = low`
+`CLAUDE_EXECUTION_ROLE = ATOMIC_IMPLEMENTATION_ONLY`
+`GPT_ANALYSIS_AND_DECOMPOSITION_AUTHORITY = GPT`
+`CLAUDE_MODEL_OR_EFFORT_SELF_ESCALATION = FORBIDDEN`
+`CLAUDE_BROAD_CODEBASE_EXPLORATION = FORBIDDEN_BY_DEFAULT`
+`CLAUDE_SUBAGENTS = FORBIDDEN_BY_DEFAULT`
+`CLAUDE_AGENT_EXPLORE_TOOL = DISALLOWED_BY_DEFAULT`
+
+GPT owns forensic analysis, architecture interpretation, dependency ordering,
+exact GitHub review, remediation diagnosis, and task decomposition. Claude
+implements only the exact atomic task supplied. If exact evidence is
+insufficient, stop with a blocker instead of broadening discovery or design.
+
+### Atomic execution
+
+`ATOMIC_TASK_PRIMARY_CONCERN_COUNT = 1`
+`ATOMIC_PRODUCTION_FILE_TARGET = 1_TO_2`
+`ATOMIC_EXPECTED_RUNTIME_TARGET = 5_TO_10_MINUTES`
+`ATOMIC_PROMPT_TARGET = 15_TO_30_LINES`
+`ATOMIC_SCOPE_EXPANSION_REQUIRES_GPT = TRUE`
+
+An atomic prompt should contain only: exact repository/branch/base SHA, exact
+target files or symbols, exact change, forbidden scope, focused validation,
+commit message, and final result fields. Do not rediscover facts already
+supplied by GPT. If a materially larger production scope is required, stop with
+`SCOPE_EXPANSION_REQUIRED` and report the exact dependency.
+
+### Context and tools
+
+`CLAUDE_FRESH_SESSION_PER_ATOMIC_TASK = REQUIRED`
+`CLAUDE_SESSION_REUSE_ACROSS_ATOMIC_TASKS = FORBIDDEN_BY_DEFAULT`
+`CLAUDE_CONTINUE_OR_RESUME_PRIOR_TASK_SESSION = FORBIDDEN_BY_DEFAULT`
+`UNRELATED_FULL_REPOSITORY_SCAN = FORBIDDEN`
+`UNRELATED_GIT_HISTORY_SCAN = FORBIDDEN`
+`UNRELATED_GOVERNANCE_REREAD = FORBIDDEN`
+
+Read named targets first. Use targeted `Grep`/`Glob`/`Read` and bounded regions.
+Do not reread the whole repository, full Git history, large generated files, or
+unrelated governance to recreate GPT analysis. Do not spawn Explore/Agent/other
+subagents unless Owner or GPT explicitly authorizes them for the named task;
+the external controller should disallow the Agent/subagent tool when supported.
+
+### Validation and logs
+
+Required focused tests, TypeScript, build, and `git diff --check` remain
+mandatory. Redirect long output to machine-local temp logs. On success return a
+short PASS summary; on failure inspect the smallest useful tail or exact error
+region first. Full logs enter Claude context only if bounded evidence is
+insufficient.
+
+`FULL_TEST_LOG_IN_CONTEXT = FORBIDDEN_BY_DEFAULT`
+`FAILED_LOG_FIRST_READ = BOUNDED_TAIL_OR_MATCH`
+`MACHINE_LOCAL_VALIDATION_LOGS = NON_AUTHORITATIVE`
+
+### Budget, quota, and stop
+
+When supported by the controller, ordinary atomic runs use
+`CLAUDE_ATOMIC_MAX_BUDGET_USD_EQUIVALENT = 0.80` unless GPT sets a different
+ceiling before launch. Claude may not raise its own budget, model, effort,
+scope, or subagent allowance.
+
+HTTP 429/session-limit must stop the run. Automatic retry or escalation is
+forbidden. Preserve the worktree; if code changed, the controller creates and
+pushes a checkpoint before later remediation continues.
+
+`CLAUDE_429_AUTO_RETRY = FORBIDDEN`
+`CLAUDE_QUOTA_FAILURE_ESCALATION = FORBIDDEN`
+
+Atomic lifecycle:
+
+`IMPLEMENT -> FOCUSED_TEST -> TYPESCRIPT -> BUILD -> GIT_DIFF_CHECK -> COMMIT -> PUSH -> STOP`
+
+One atomic run produces at most one terminal implementation/checkpoint commit.
+No next micro-task or second remediation attempt before GPT reviews the exact
+GitHub commit.
+
+`CLAUDE_ONE_TERMINAL_COMMIT_PER_ATOMIC_RUN = TRUE`
+`CLAUDE_NEXT_ATOMIC_TASK_BEFORE_GPT_REVIEW = FORBIDDEN`
+`CLAUDE_LOW_QUOTA_MODE_RELAXES_GOVERNANCE = NO`
+
 ## AICC V2 Core Control Loop Authority
 
 Canonical baseline: `docs/00_Governance/AICC_V2_CORE_CONTROL_LOOP.md`
