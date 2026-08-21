@@ -1,11 +1,12 @@
-export const GLOBAL_STATE_READ_MODEL_SCHEMA='aicc.global-state-read-model.v1' as const;
+export const GLOBAL_STATE_READ_MODEL_SCHEMA='aicc.global-state-read-model.v2' as const;
 export const GLOBAL_STATE_READ_MODEL_FILE='global-state-read-model.json' as const;
 export const GLOBAL_STATE_READ_MODEL_AUTHORITY='READ_ONLY_PROJECTION' as const;
 export const GLOBAL_STATE_WRITE_AUTHORITY='NONE' as const;
 export const AICC_STATE_INFERENCE_AUTHORITY=0 as const;
 
 export type EntityKind='MILESTONE'|'WORK_PACKAGE'|'PULL_REQUEST'|'TASK'|'EXECUTION'|'RUN'|'RESULT'|'FEEDBACK'|'CONTROL_LOOP'|'HUMAN_UAT';
-export type EntityIdentity<K extends EntityKind=EntityKind>=Readonly<{kind:K;id:string}>;
+import type {ProjectIdentityScope} from './projectEntityScope.ts';
+export type EntityIdentity<K extends EntityKind=EntityKind>=ProjectIdentityScope&Readonly<{kind:K;id:string}>;
 export type CanonicalEntityIdentity=
   |EntityIdentity<'MILESTONE'>
   |EntityIdentity<'WORK_PACKAGE'>
@@ -42,7 +43,7 @@ export type DimensionValue<D extends LifecycleDimension=LifecycleDimension>=
   |Readonly<{state:'KNOWN';dimension:D;value:string}>;
 
 export type SourceDomain='ROADMAP'|'FORMAL_WORK_PACKAGE'|'LIFECYCLE_EVIDENCE'|'HUMAN_UAT'|'WORK_PACKAGE'|'PULL_REQUEST'|'TASK'|'EXECUTION'|'RUN'|'RESULT'|'FEEDBACK'|'CONTROL_LOOP';
-export type SourceEntityIdentity=Readonly<{domain:SourceDomain;id:string}>;
+export type SourceEntityIdentity=ProjectIdentityScope&Readonly<{domain:SourceDomain;id:string}>;
 export type SourceRevision=
   |Readonly<{availability:'AVAILABLE';value:string}>
   |Readonly<{availability:'UNAVAILABLE'}>;
@@ -227,10 +228,10 @@ function freeze<T>(value:T):Readonly<T>{
   return value;
 }
 
-function identityKey(identity:CanonicalEntityIdentity):string{return `${identity.kind}:${identity.id}`}
-function sourceKey(identity:SourceEntityIdentity):string{return `${identity.domain}:${identity.id}`}
-function sameIdentity(left:CanonicalEntityIdentity,right:CanonicalEntityIdentity):boolean{return left.kind===right.kind&&left.id===right.id}
-function sameSourceIdentity(left:SourceEntityIdentity,right:SourceEntityIdentity):boolean{return left.domain===right.domain&&left.id===right.id}
+function identityKey(identity:CanonicalEntityIdentity):string{return `${identity.projectId}:${identity.repositoryIdentity}:${identity.kind}:${identity.id}`}
+function sourceKey(identity:SourceEntityIdentity):string{return `${identity.projectId}:${identity.repositoryIdentity}:${identity.domain}:${identity.id}`}
+function sameIdentity(left:CanonicalEntityIdentity,right:CanonicalEntityIdentity):boolean{return left.projectId===right.projectId&&left.repositoryIdentity===right.repositoryIdentity&&left.kind===right.kind&&left.id===right.id}
+function sameSourceIdentity(left:SourceEntityIdentity,right:SourceEntityIdentity):boolean{return left.projectId===right.projectId&&left.repositoryIdentity===right.repositoryIdentity&&left.domain===right.domain&&left.id===right.id}
 function validateSource(source:ProjectionSourceEvidence):void{
   if(source.sourceDomain!==source.sourceEntity.domain)throw new Error('SOURCE_DOMAIN_MISMATCH');
   nonEmpty(source.sourceEntity.id,'SOURCE_ENTITY_ID');
@@ -238,18 +239,20 @@ function validateSource(source:ProjectionSourceEvidence):void{
 }
 function cloneSource(source:ProjectionSourceEvidence):ProjectionSourceEvidence{
   validateSource(source);
-  const sourceEntity=sourceEntityIdentity(source.sourceEntity.domain,source.sourceEntity.id);
+  const sourceEntity=sourceEntityIdentity({projectId:source.sourceEntity.projectId,repositoryIdentity:source.sourceEntity.repositoryIdentity},source.sourceEntity.domain,source.sourceEntity.id);
   const sourceRevision=source.sourceRevision.availability==='AVAILABLE'?availableSourceRevision(source.sourceRevision.value):unavailableSourceRevision();
   return freeze({sourceDomain:source.sourceDomain,sourceEntity,sourceRevision});
 }
 
-export function entityIdentity<K extends EntityKind>(kind:K,id:string):EntityIdentity<K>{
+export function entityIdentity<K extends EntityKind>(scope:ProjectIdentityScope,kind:K,id:string):EntityIdentity<K>{
   if(!ENTITY_KINDS.includes(kind))throw new Error('ENTITY_KIND_INVALID');
-  return freeze({kind,id:nonEmpty(id,'ENTITY_ID')});
+  if(!scope?.projectId||!scope?.repositoryIdentity)throw new Error('PROJECT_SCOPE_REQUIRED');
+  return freeze({projectId:scope.projectId,repositoryIdentity:scope.repositoryIdentity,kind,id:nonEmpty(id,'ENTITY_ID')});
 }
 
-export function sourceEntityIdentity(domain:SourceDomain,id:string):SourceEntityIdentity{
-  return freeze({domain,id:nonEmpty(id,'SOURCE_ENTITY_ID')});
+export function sourceEntityIdentity(scope:ProjectIdentityScope,domain:SourceDomain,id:string):SourceEntityIdentity{
+  if(!scope?.projectId||!scope?.repositoryIdentity)throw new Error('PROJECT_SCOPE_REQUIRED');
+  return freeze({projectId:scope.projectId,repositoryIdentity:scope.repositoryIdentity,domain,id:nonEmpty(id,'SOURCE_ENTITY_ID')});
 }
 
 export function availableSourceRevision(value:string):SourceRevision{
@@ -281,12 +284,14 @@ export function explicitBinding<K extends BindingKind>(kind:K,from:BindingEndpoi
   if(!expected||from.kind!==expected[0]||to.kind!==expected[1])throw new Error('BINDING_ENDPOINT_MISMATCH');
   nonEmpty(from.id,'BINDING_FROM_ID');
   nonEmpty(to.id,'BINDING_TO_ID');
-  return freeze({kind,from:entityIdentity(from.kind,from.id),to:entityIdentity(to.kind,to.id),source:cloneSource(source)}) as ExplicitBindingInput<K>;
+  if(from.projectId!==to.projectId||from.repositoryIdentity!==to.repositoryIdentity)throw new Error('CROSS_PROJECT_BINDING');
+  return freeze({kind,from:entityIdentity(from,from.kind,from.id),to:entityIdentity(to,to.kind,to.id),source:cloneSource(source)}) as ExplicitBindingInput<K>;
 }
 
 export type GlobalStateProjectContext=Readonly<{projectId:string;repositoryIdentity:string;projectContextRevision:number}>;
 
-export function createEmptyGlobalStateReadModel(context:GlobalStateProjectContext={projectId:'aicc',repositoryIdentity:'beyourlovercom/aicontrolcenter',projectContextRevision:0}):AiccGlobalStateReadModel{
+export function createEmptyGlobalStateReadModel(context?:GlobalStateProjectContext):AiccGlobalStateReadModel{
+  if(!context)return createEmptyGlobalStateReadModel({projectId:'NOT_AVAILABLE',repositoryIdentity:'NOT_AVAILABLE',projectContextRevision:0});
   if(!context.projectId||!context.repositoryIdentity||!Number.isSafeInteger(context.projectContextRevision)||context.projectContextRevision<0)throw new Error('PROJECT_CONTEXT_INVALID');
   return freeze({
     schema:GLOBAL_STATE_READ_MODEL_SCHEMA,
@@ -326,7 +331,7 @@ function bindingRecordSignature(binding:ProjectedBindingRecord):string{
 function normalizeCandidate(candidate:GlobalStateProjectionCandidate):GlobalStateProjectionCandidate{
   const entityKeys=new Set<string>();
   const entities=candidate.entities.map(entity=>{
-    const identity=entityIdentity(entity.identity.kind,entity.identity.id) as CanonicalEntityIdentity;
+    const identity=entityIdentity(entity.identity,entity.identity.kind,entity.identity.id) as CanonicalEntityIdentity;
     const key=identityKey(identity);
     if(entityKeys.has(key))throw new Error(`DUPLICATE_ENTITY:${key}`);
     entityKeys.add(key);
@@ -355,6 +360,8 @@ function incidentBindingSignatures(identity:CanonicalEntityIdentity,bindings:rea
 }
 
 export function projectGlobalStateReadModel(previous:AiccGlobalStateReadModel,candidate:GlobalStateProjectionCandidate,projectedAt=new Date().toISOString()):AiccGlobalStateReadModel{
+  for(const entity of candidate.entities)if(entity.identity.projectId!==previous.projectId||entity.identity.repositoryIdentity!==previous.repositoryIdentity)throw new Error('FOREIGN_PROJECT_ENTITY');
+  for(const binding of candidate.bindings)if(binding.from.projectId!==previous.projectId||binding.from.repositoryIdentity!==previous.repositoryIdentity||binding.to.projectId!==previous.projectId||binding.to.repositoryIdentity!==previous.repositoryIdentity)throw new Error('FOREIGN_PROJECT_BINDING');
   const normalized=normalizeCandidate(candidate);
   const previousEntities=new Map(previous.entities.map(entity=>[identityKey(entity.identity),entity]));
   const nextInputs=new Map(normalized.entities.map(entity=>[identityKey(entity.identity),entity]));
