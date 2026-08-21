@@ -101,94 +101,103 @@ Git safety:
 
 PR creation and merge require explicit authorization.
 
-## Claude Low-Quota Execution Authority
+## GPT ↔ Claude Iterative Execution Authority
 
-`AICC_CLAUDE_LOW_QUOTA_EXECUTION_V1 = FROZEN`
+`AICC_GPT_CLAUDE_ITERATIVE_EXECUTION_V1 = FROZEN`
 
-Applies whenever Claude is the Owner-assigned Implementation Executor unless
-the Owner explicitly overrides it for a named task. Quota/context reduction
-must not weaken repository, review, validation, or safety governance.
+This profile applies whenever Claude is the Owner-assigned Implementation
+Executor unless the Owner explicitly overrides it for a named task. The primary
+objective is a GPT-controlled iterative implementation loop. Quota reduction is
+secondary and must never transfer analysis authority to Claude.
 
 `CLAUDE_DEFAULT_MODEL = claude-sonnet-4-6`
 `CLAUDE_DEFAULT_EFFORT = low`
-`CLAUDE_EXECUTION_ROLE = ATOMIC_IMPLEMENTATION_ONLY`
-`GPT_ANALYSIS_AND_DECOMPOSITION_AUTHORITY = GPT`
-`CLAUDE_MODEL_OR_EFFORT_SELF_ESCALATION = FORBIDDEN`
+`GPT_ANALYSIS_AUTHORITY = GPT`
+`GPT_DECOMPOSITION_AUTHORITY = GPT`
+`GPT_REMEDIATION_DIAGNOSIS_AUTHORITY = GPT`
+`CLAUDE_EXECUTION_ROLE = IMPLEMENTATION_EXECUTOR_ONLY`
+`CLAUDE_ARCHITECTURE_SELF_APPROVAL = FORBIDDEN`
+`CLAUDE_SELF_DECOMPOSITION = FORBIDDEN`
+`CLAUDE_SELF_ADVANCE = FORBIDDEN`
+
+### Required control loop
+
+The default loop is:
+
+`GPT analyzes exact evidence`
+→ `GPT gives Claude a concrete implementation instruction`
+→ `Claude implements and validates only that instruction`
+→ `Claude commits/pushes or reports a blocker/checkpoint`
+→ `GPT reads the execution result and exact GitHub commit`
+→ `GPT analyzes the result in detail`
+→ `GPT decides and issues the next implementation/remediation instruction`
+→ repeat until `OWNER_UAT_REQUIRED` or completion.
+
+Claude must not replace GPT in forensic analysis, architecture interpretation,
+root-cause diagnosis, dependency ordering, next-step planning, or acceptance.
+Claude may perform the local reasoning strictly necessary to implement the
+exact instruction, but must not broaden that into independent project analysis.
+
+### Detailed implementation communication
+
+GPT instructions may be detailed. Prompt brevity is not a governance target.
+The instruction should contain enough exact context, constraints, expected
+behavior, target files/symbols, validation, and forbidden scope for Claude to
+execute correctly without rediscovering the project.
+
+`PROMPT_COMPLETENESS_OVER_PROMPT_BREVITY = TRUE`
+`GPT_TO_CLAUDE_DETAILED_INSTRUCTION = ALLOWED`
+`CLAUDE_TO_GPT_EXACT_RESULT_RETURN = REQUIRED`
+
+If Claude encounters ambiguity, unexpected code structure, a new dependency, or
+a materially larger scope, it must stop and return the exact evidence/blocker.
+GPT then analyzes that evidence and sends the next instruction. Claude must not
+autonomously redesign the task or continue through a self-generated remediation
+plan.
+
+### Quota-conscious execution without authority transfer
+
+Quota optimization remains enabled, but only at the execution layer:
+
+- use `claude-sonnet-4-6` with `low` effort by default;
+- inspect named targets first and avoid unrelated repository-wide exploration;
+- do not spawn Explore/Agent/subagents unless GPT explicitly requests them;
+- prefer targeted `Read`/`Grep`/`Glob` over broad scans when exact targets exist;
+- redirect long test/build output to machine-local logs and return concise PASS
+  summaries or bounded failure evidence;
+- do not increase model, effort, budget, scope, or subagent allowance without
+  explicit GPT/Owner instruction.
+
 `CLAUDE_BROAD_CODEBASE_EXPLORATION = FORBIDDEN_BY_DEFAULT`
 `CLAUDE_SUBAGENTS = FORBIDDEN_BY_DEFAULT`
-`CLAUDE_AGENT_EXPLORE_TOOL = DISALLOWED_BY_DEFAULT`
-
-GPT owns forensic analysis, architecture interpretation, dependency ordering,
-exact GitHub review, remediation diagnosis, and task decomposition. Claude
-implements only the exact atomic task supplied. If exact evidence is
-insufficient, stop with a blocker instead of broadening discovery or design.
-
-### Atomic execution
-
-`ATOMIC_TASK_PRIMARY_CONCERN_COUNT = 1`
-`ATOMIC_PRODUCTION_FILE_TARGET = 1_TO_2`
-`ATOMIC_EXPECTED_RUNTIME_TARGET = 5_TO_10_MINUTES`
-`ATOMIC_PROMPT_TARGET = 15_TO_30_LINES`
-`ATOMIC_SCOPE_EXPANSION_REQUIRES_GPT = TRUE`
-
-An atomic prompt should contain only: exact repository/branch/base SHA, exact
-target files or symbols, exact change, forbidden scope, focused validation,
-commit message, and final result fields. Do not rediscover facts already
-supplied by GPT. If a materially larger production scope is required, stop with
-`SCOPE_EXPANSION_REQUIRED` and report the exact dependency.
-
-### Context and tools
-
-`CLAUDE_FRESH_SESSION_PER_ATOMIC_TASK = REQUIRED`
-`CLAUDE_SESSION_REUSE_ACROSS_ATOMIC_TASKS = FORBIDDEN_BY_DEFAULT`
-`CLAUDE_CONTINUE_OR_RESUME_PRIOR_TASK_SESSION = FORBIDDEN_BY_DEFAULT`
-`UNRELATED_FULL_REPOSITORY_SCAN = FORBIDDEN`
-`UNRELATED_GIT_HISTORY_SCAN = FORBIDDEN`
-`UNRELATED_GOVERNANCE_REREAD = FORBIDDEN`
-
-Read named targets first. Use targeted `Grep`/`Glob`/`Read` and bounded regions.
-Do not reread the whole repository, full Git history, large generated files, or
-unrelated governance to recreate GPT analysis. Do not spawn Explore/Agent/other
-subagents unless Owner or GPT explicitly authorizes them for the named task;
-the external controller should disallow the Agent/subagent tool when supported.
-
-### Validation and logs
-
-Required focused tests, TypeScript, build, and `git diff --check` remain
-mandatory. Redirect long output to machine-local temp logs. On success return a
-short PASS summary; on failure inspect the smallest useful tail or exact error
-region first. Full logs enter Claude context only if bounded evidence is
-insufficient.
-
 `FULL_TEST_LOG_IN_CONTEXT = FORBIDDEN_BY_DEFAULT`
 `FAILED_LOG_FIRST_READ = BOUNDED_TAIL_OR_MATCH`
-`MACHINE_LOCAL_VALIDATION_LOGS = NON_AUTHORITATIVE`
+`QUOTA_OPTIMIZATION_MUST_NOT_MOVE_ANALYSIS_TO_CLAUDE = TRUE`
 
-### Budget, quota, and stop
+Fresh or resumed Claude sessions are execution details chosen by GPT for the
+current task. Session reuse must never allow Claude to self-advance or treat
+prior session memory as authority. Repository/GitHub evidence remains the
+authoritative code context.
 
-When supported by the controller, ordinary atomic runs use
-`CLAUDE_ATOMIC_MAX_BUDGET_USD_EQUIVALENT = 0.80` unless GPT sets a different
-ceiling before launch. Claude may not raise its own budget, model, effort,
-scope, or subagent allowance.
+### Validation and terminal behavior
 
-HTTP 429/session-limit must stop the run. Automatic retry or escalation is
-forbidden. Preserve the worktree; if code changed, the controller creates and
-pushes a checkpoint before later remediation continues.
-
-`CLAUDE_429_AUTO_RETRY = FORBIDDEN`
-`CLAUDE_QUOTA_FAILURE_ESCALATION = FORBIDDEN`
-
-Atomic lifecycle:
+Required focused tests, TypeScript, build, and `git diff --check` remain
+mandatory when applicable. One implementation attempt produces at most one
+terminal implementation/checkpoint commit before returning control to GPT.
 
 `IMPLEMENT -> FOCUSED_TEST -> TYPESCRIPT -> BUILD -> GIT_DIFF_CHECK -> COMMIT -> PUSH -> STOP`
 
-One atomic run produces at most one terminal implementation/checkpoint commit.
-No next micro-task or second remediation attempt before GPT reviews the exact
-GitHub commit.
+`CLAUDE_ONE_TERMINAL_COMMIT_PER_EXECUTION = TRUE`
+`CLAUDE_REMEDIATION_BEFORE_GPT_REVIEW = FORBIDDEN`
+`CLAUDE_NEXT_TASK_BEFORE_GPT_REVIEW = FORBIDDEN`
 
-`CLAUDE_ONE_TERMINAL_COMMIT_PER_ATOMIC_RUN = TRUE`
-`CLAUDE_NEXT_ATOMIC_TASK_BEFORE_GPT_REVIEW = FORBIDDEN`
-`CLAUDE_LOW_QUOTA_MODE_RELAXES_GOVERNANCE = NO`
+HTTP 429/session-limit must stop the run. Automatic retry, model escalation,
+effort escalation, or autonomous continuation is forbidden. If code changed,
+preserve it through the governed checkpoint flow and return control to GPT.
+
+`CLAUDE_429_AUTO_RETRY = FORBIDDEN`
+`CLAUDE_QUOTA_FAILURE_ESCALATION = FORBIDDEN`
+`ITERATIVE_EXECUTION_RELAXES_EXISTING_GOVERNANCE = NO`
 
 ## AICC V2 Core Control Loop Authority
 
