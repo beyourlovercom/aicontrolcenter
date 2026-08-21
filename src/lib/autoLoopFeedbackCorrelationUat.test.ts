@@ -4,9 +4,9 @@ import type {InboxItem} from './bridgeCore.ts';
 
 const suffix = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 const wp = 'AICC-V2-GPT-CODEX-BRIDGE-001';
-const submit = (instruction: any): InboxItem => ({id: `inbox-${instruction.instructionId}`, state: 'READY', instruction, gates: [], createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()} as InboxItem);
+const submit = (instruction: any): InboxItem => ({id: `inbox-${instruction.instructionId}`, state: 'READY', instruction, gates: [], createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()} as unknown as InboxItem);
 let launches = 0;
-const launch = (id: string): InboxItem => ({id, state: 'LAUNCHED', runId: `run-${++launches}-${suffix}`, executionId: `execution-${launches}-${suffix}`, gates: [], createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()} as InboxItem);
+const launch = (id: string): InboxItem => ({id, state: 'LAUNCHED', runId: `run-${++launches}-${suffix}`, executionId: `execution-${launches}-${suffix}`, gates: [], createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()} as unknown as InboxItem);
 
 function feedback(loopId: string, conversationId: string, round: string) {
   const loop = readControlLoop(loopId)!;

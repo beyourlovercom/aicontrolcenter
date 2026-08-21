@@ -6,7 +6,7 @@ import type {CanonicalTaskRecord} from './bridgeCore.ts';
 const quickList=readFileSync(new URL('../components/TaskQuickList.svelte',import.meta.url),'utf8');
 const app=readFileSync(new URL('../App.svelte',import.meta.url),'utf8');
 const center=readFileSync(new URL('../components/GlobalTaskView.svelte',import.meta.url),'utf8');
-const task=(overrides:Partial<CanonicalTaskRecord>):CanonicalTaskRecord=>({taskId:'task-alpha',inboxId:'inbox-alpha',instructionId:'instruction-alpha',entityScope:'WORK_PACKAGE',workPackageId:'WP-ALPHA',prId:null,repository:'repo',branch:'main',origin:'OWNER',status:'COMPLETED',createdAt:'2026-01-01',updatedAt:'2026-01-01',instruction:{} as any,rawInstruction:'',...overrides});
+const task=(overrides:Partial<CanonicalTaskRecord>):CanonicalTaskRecord=>({taskId:'task-alpha',inboxId:'inbox-alpha',instructionId:'instruction-alpha',entityScope:'WORK_PACKAGE',workPackageId:'WP-ALPHA',prId:null,repository:'repo',branch:'main',origin:'OWNER',status:'COMPLETED',createdAt:'2026-01-01',updatedAt:'2026-01-01',instruction:{} as any,rawInstruction:'',projectId:'aicc',repositoryIdentity:'beyourlovercom/aicontrolcenter',...overrides});
 const records=[task({taskId:'TASK-ALPHA',taskTitle:'Deploy Alpha'}),task({taskId:'TASK-BETA',taskTitle:'Review Beta',workPackageId:'WP-BETA'})];
 assert.match(quickList,/aria-label="搜索任务名称 \/ ID"/,'TASK_QUICK_LIST_SEARCH_PRESENT');
 assert.equal(filterTaskQuickList(records,'Deploy Alpha').length,1,'SEARCH_TASK_NAME');

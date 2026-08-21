@@ -33,8 +33,8 @@ assert.deepEqual({control_loop_id:expected.control_loop_id,binding_epoch:expecte
 
 const execution=`AICC_EXECUTION_V1\nINSTRUCTION_ID: canonical-turn-${suffix}\nENTITY_TYPE: WORK_PACKAGE\nENTITY_ID: ${wpId}\nEXECUTION_TYPE: READ_ONLY_AUDIT\nREPOSITORY: /Users/a/AI/007/AIcontrolcenter\nBRANCH: rebuild/aicc-v2\nSANDBOX: read-only\nREQUIRES_AUTHORIZATION: false\n\nINSTRUCTION_BEGIN\nVerify canonical expected turn identity.\nINSTRUCTION_END`;
 let submitCount=0,launchCount=0;
-const submit=(instruction:any):InboxItem=>{submitCount++;return {id:`inbox-${suffix}`,state:'READY',instruction,gates:[],createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()} as InboxItem};
-const launch=(id:string):InboxItem=>{launchCount++;return {id,state:'LAUNCHED',runId:`run-2-${suffix}`,executionId:`execution-2-${suffix}`,gates:[],createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()} as InboxItem};
+const submit=(instruction:any):InboxItem=>{submitCount++;return {id:`inbox-${suffix}`,state:'READY',instruction,gates:[],createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()} as unknown as InboxItem};
+const launch=(id:string):InboxItem=>{launchCount++;return {id,state:'LAUNCHED',runId:`run-2-${suffix}`,executionId:`execution-2-${suffix}`,gates:[],createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()} as unknown as InboxItem};
 const consumed=consumeGptControl({conversation_id:conversation,assistant_message_id:`assistant-${suffix}`,response:execution,expected_gpt_turn_id:expected.expected_gpt_turn_id},submit,launch);
 assert.equal(consumed.ok,true);
 assert.equal(consumed.claim?.control_loop_id,canonicalLoop,'stale panel/default loop can never override expected turn identity');

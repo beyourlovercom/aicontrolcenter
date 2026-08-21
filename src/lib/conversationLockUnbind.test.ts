@@ -36,8 +36,8 @@ assert.throws(()=>enableControlLoop(loopId,true),/CONTROL_LOOP_NOT_BOUND/,'unloc
 
 let launches=0;
 const control=`AICC_EXECUTION_V1\nINSTRUCTION_ID: unbound-control-${suffix}\nENTITY_TYPE: WORK_PACKAGE\nENTITY_ID: ${wpId}\nEXECUTION_TYPE: READ_ONLY_AUDIT\nREPOSITORY: /Users/a/AI/007/AIcontrolcenter\nBRANCH: rebuild/aicc-v2\nSANDBOX: read-only\nREQUIRES_AUTHORIZATION: false\n\nINSTRUCTION_BEGIN\nDo not execute while unlocked.\nINSTRUCTION_END`;
-const submit=(instruction:any):InboxItem=>({id:instruction.instructionId,state:'READY',instruction,gates:[],createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()} as InboxItem);
-const launch=(id:string):InboxItem=>{launches+=1;return {id,state:'LAUNCHED',runId:`launched-${suffix}`,executionId:`launched-${suffix}`,gates:[],createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()} as InboxItem;};
+const submit=(instruction:any):InboxItem=>({id:instruction.instructionId,state:'READY',instruction,gates:[],createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()} as unknown as InboxItem);
+const launch=(id:string):InboxItem=>{launches+=1;return {id,state:'LAUNCHED',runId:`launched-${suffix}`,executionId:`launched-${suffix}`,gates:[],createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()} as unknown as InboxItem;};
 const consumed=consumeGptControl({control_loop_id:loopId,conversation_id:conversationId,binding_epoch:before.binding_epoch,feedback_key:feedback.feedback_key,assistant_message_id:`assistant-${suffix}`,response:control},submit,launch);
 assert.equal(consumed.code,'CONTROL_LOOP_NOT_BOUND','unlocked loop cannot consume a GPT control');
 assert.equal(launches,0,'unlocked loop cannot launch Luna');

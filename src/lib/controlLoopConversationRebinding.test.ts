@@ -36,8 +36,8 @@ const feedback=claimFeedback(feedbackInput).record!;
 markFeedbackInserting(loopId,feedback.feedback_key);markFeedbackInserted(loopId,feedback.feedback_key);markFeedbackSubmitting(loopId,feedback.feedback_key);markFeedbackSubmitted(loopId,feedback.feedback_key);completeFeedback(loopId,feedback.feedback_key);
 
 let launches=0;
-const submit=(instruction:any):InboxItem=>({id:instruction.instructionId,state:'READY',instruction,gates:[],createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()} as InboxItem);
-const launch=(id:string):InboxItem=>{launches+=1;return {id,state:'LAUNCHED',runId:`run-${launches}`,executionId:`execution-${launches}`,gates:[],createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()} as InboxItem;};
+const submit=(instruction:any):InboxItem=>({id:instruction.instructionId,state:'READY',instruction,gates:[],createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()} as unknown as InboxItem);
+const launch=(id:string):InboxItem=>{launches+=1;return {id,state:'LAUNCHED',runId:`run-${launches}`,executionId:`execution-${launches}`,gates:[],createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()} as unknown as InboxItem;};
 const expectedTurn=readExpectedControlTurn({conversation_id:currentConversation,control_loop_id:loopId,binding_epoch:rebound.binding_epoch})!;
 const identity={control_loop_id:loopId,conversation_id:currentConversation,binding_epoch:rebound.binding_epoch,feedback_key:feedback.feedback_key,expected_gpt_turn_id:expectedTurn.expected_gpt_turn_id};
 assert.equal(consumeGptControl({...identity,assistant_message_id:'stale-message-id',response:staleControl},submit,launch).code,'STALE_PRE_BIND_CONTROL');
