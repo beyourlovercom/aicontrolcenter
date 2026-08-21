@@ -181,17 +181,24 @@ returns to GPT; only GPT may select a different tier for the next execution.
 
 ### Thinking policy
 
-`CLAUDE_THINKING_POLICY = DISABLED_REQUIRED`
-`CLAUDE_CODE_DISABLE_THINKING = 1`
-`SILENT_FALLBACK_TO_THINKING_ENABLED = FORBIDDEN`
+`CLAUDE_THINKING_DEFAULT = DISABLED`
+`CLAUDE_THINKING_EXCEPTION_AUTHORITY = GPT_PLUS_WEB`
+`CLAUDE_SELF_ENABLE_THINKING = FORBIDDEN`
+`THINKING_EXCEPTION_SCOPE = ONE_NAMED_EXECUTION`
+`SILENT_THINKING_MODE_CHANGE = FORBIDDEN`
 `THINKING_POLICY_VERIFICATION = REQUIRED`
 
-The remote Claude launcher must set `CLAUDE_CODE_DISABLE_THINKING=1` on every
-Claude execution. Do not enable adaptive or extended thinking. If runtime
-telemetry exposes `thinking_tokens`, the expected value is `0`; a non-zero value
-must be reported as `THINKING_POLICY_VIOLATION` rather than silently accepted.
-If a selected model/path cannot run with thinking disabled, stop and return the
-capability blocker to GPT; do not silently change model or thinking mode.
+Normal Claude dispatches must set `CLAUDE_CODE_DISABLE_THINKING=1`. GPT may
+explicitly authorize thinking for one named execution when the returned evidence
+shows that deeper local reasoning is justified, including repeated failure on
+the same logical concern, difficult remediation, or a hard-to-localize failure.
+That exception does not persist to the next execution.
+
+For a GPT-authorized thinking execution, the launcher must deliberately omit or
+disable the no-thinking environment control and report `THINKING=ENABLED` in
+the dispatch. Runtime telemetry must be reported when available. Claude may not
+enable thinking by itself, silently keep it enabled, or use thinking as authority
+to self-remediate or self-advance.
 
 Effort is separate from thinking. Current dispatch defaults are:
 
@@ -199,8 +206,36 @@ Effort is separate from thinking. Current dispatch defaults are:
 - Sonnet 4.6: `low`;
 - Sonnet 5: `medium` by default for complex implementation.
 
-GPT may change effort before a named execution when needed, but thinking remains
-disabled unless the Owner explicitly changes this frozen policy.
+GPT may change effort and may authorize thinking before a named execution. After
+that execution, thinking returns to disabled-by-default unless GPT explicitly
+authorizes another exception.
+
+### Repeated-failure escalation and Owner gate
+
+`SAME_LOGICAL_CONCERN_FAILURE_TRACKING = REQUIRED`
+`THINKING_ESCALATION_ON_REPEATED_FAILURE = GPT_DISCRETION`
+`OWNER_REVIEW_GATE_AFTER_FAILURE_COUNT = 3`
+`FOURTH_ATTEMPT_BEFORE_OWNER_REVIEW = FORBIDDEN`
+`FAILURE_COUNTER_RENAME_BYPASS = FORBIDDEN`
+
+GPT must track consecutive substantive failures for the same logical concern.
+After any failed Claude execution, control returns to GPT for exact evidence
+review. GPT may keep thinking disabled, enable thinking for the next named run,
+change model tier, change effort, or narrow/reframe the implementation based on
+the evidence. None of these escalations may be performed autonomously by Claude.
+
+When the same logical concern reaches three substantive failed implementation or
+remediation attempts, stop before a fourth attempt and notify the Owner for
+manual review. The Owner gate must include the three failure summaries, exact
+GitHub SHAs/checkpoints when present, current blocker, selected models/thinking
+modes, and GPT's recommended options.
+
+Count task-relevant implementation/review/test failures and recurring blockers.
+Do not increment this logical-failure counter for infrastructure-only events such
+as HTTP 429/session quota, network/transport failure, remote tool outage, or an
+unrelated known baseline failure. The counter resets only after GPT exact-SHA
+review passes the logical concern or GPT explicitly determines that a genuinely
+different logical concern has begun.
 
 ### Quota-conscious execution
 
