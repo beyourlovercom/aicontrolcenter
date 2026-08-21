@@ -119,7 +119,7 @@
   function persistWorkspaceNavigation(value:WorkspaceNavigation={entity:selectedEntity,activeTab,selectedInboxId,selectedRunId,selectedTaskId,activeGlobalTab}){try{localStorage.setItem(WORKSPACE_NAVIGATION_KEY,JSON.stringify(value))}catch{}}
   $: persistWorkspaceNavigation({entity:selectedEntity,activeTab,selectedInboxId,selectedRunId,selectedTaskId,activeGlobalTab});
   $: snapshot=createProjectSnapshot(raw);
-  const uiLifecycleText=(kind:any,id:string,dimension:any)=>uiLifecycleReadModel?uiLifecycleText(kind,id,dimension):'UNKNOWN';
+  const uiLifecycleText=(kind:any,id:string,dimension:any)=>uiLifecycleReadModel?projectedLifecycleText(uiLifecycleReadModel,kind,id,dimension):'UNKNOWN';
   $: wpProjection=rebuildWpLayer2(snapshot,taskRecords);
   const unavailableEntityContext=(selected:any)=>({entity:selected,type:selected.type,id:selected.id,title:'未绑定项目',displayTitle:'未绑定项目',status:'UNKNOWN',statusLabel:'UNKNOWN',progress:null,breadcrumb:'Control Center',evidence:['Project scope unavailable'],availableActions:[],children:[],roadmapGroups:[],parentWorkPackageId:null,record:null,prProjection:null,runtime:null,stages:[],currentStage:'UNAVAILABLE',tabs:['概览'],exactHeadValidation:null,lifecycleWorkspace:null});
   $: if(activeRoadmapProject&&prLayer2&&wpProjection){const empty=createEmptyGlobalStateReadModel(activeRoadmapProject);humanUatLayer2=projectHumanUatLayer2(empty,(snapshot.humanUat.value??[]).map((record:any)=>({entityType:record.entityType,entityId:record.entityId??record.workPackageId,status:record.status,updatedAt:record.updatedAt,record})));const taskModel=projectTaskLayer2ReadModel(empty,taskRecords,runtimeHistory);const phase5=projectPhase5Lifecycle(empty,{runs:runtimeHistory}).model;uiLifecycleReadModel=composeUiLifecycleReadModel(uiLifecycleReadModel??empty,[taskModel,prLayer2.model,wpProjection.model,phase5,humanUatLayer2.model],{tasks:taskRecords,runtimeHistory,results:taskRecords});}else{humanUatLayer2=null;uiLifecycleReadModel=null;}
@@ -154,9 +154,9 @@
   $: globalMilestones=wpProjection?projectWpRoadmapNodes(projectGlobalMilestones(snapshot),wpProjection):[];
   $: globalOwnerWaiting=globalTasks.filter((item:any)=>['READY','WAITING_OWNER'].includes(String(item.status??item.runtimeState??item.state??'').toUpperCase())).length;
   $: globalFocus=wpProjection?projectGlobalFocus(snapshot,wpProjection):null;
-  $: globalCurrentMilestone=globalFocus.milestone;
-  $: globalCurrentWorkPackage=globalFocus.workPackage;
-  $: globalCurrentPhase=globalFocus.phase;
+  $: globalCurrentMilestone=globalFocus?.milestone??null;
+  $: globalCurrentWorkPackage=globalFocus?.workPackage??null;
+  $: globalCurrentPhase=globalFocus?.phase??null;
   $: selectedTask=globalTasks.find(item=>item.taskId===selectedTaskId)??null;
   $: selectedTaskWorkPackageId=selectedTask?.formalWpId??selectedTask?.formal_wp_id??selectedTask?.workPackageId??selectedTask?.instruction?.formalWpId??selectedTask?.instruction?.workPackageId??(String(selectedTask?.instruction?.entityType??'').toLowerCase()==='work_package'?selectedTask?.instruction?.entityId:null)??null;
   $: selectedTaskWorkPackageContextCandidate=selectedTaskWorkPackageId&&activeRoadmapProject&&prLayer2&&wpProjection?resolveEntityContext(snapshot,{type:'work_package',id:selectedTaskWorkPackageId},prLayer2,wpProjection,activeRoadmapProject):null;

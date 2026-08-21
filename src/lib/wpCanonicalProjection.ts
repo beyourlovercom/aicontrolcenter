@@ -87,14 +87,14 @@ export function projectWpLayer2(previous:AiccGlobalStateReadModel,snapshot:AiccP
   });
   const candidate:GlobalStateProjectionCandidate={
     entities:[
-      ...milestones.map(milestone=>({identity:entityIdentity(scope,'MILESTONE',milestone.id),dimensions:[dimensionProjection('milestone.lifecycle',milestone.lifecycle?knownDimensionValue('milestone.lifecycle',milestone.lifecycle):unknownDimensionValue('milestone.lifecycle'),milestone.source)]})),
+      ...milestones.map(milestone=>({identity:entityIdentity(projectScope,'MILESTONE',milestone.id),dimensions:[dimensionProjection('milestone.lifecycle',milestone.lifecycle?knownDimensionValue('milestone.lifecycle',milestone.lifecycle):unknownDimensionValue('milestone.lifecycle'),milestone.source)]})),
       ...records.map(record=>{
-      const structureSource=projectionSource(sourceEntityIdentity(scope,'ROADMAP',`${snapshot.roadmapSource}:${record.identityKey}`),availableSourceRevision(signature(record.structure)));
-      const lifecycleSource=projectionSource(sourceEntityIdentity(scope,'WORK_PACKAGE',`${record.id}:lifecycle`),availableSourceRevision(signature({formal:record.formal?.fields??null,evidence:record.evidence,uat:record.uat,lifecycle:record.lifecycle})));
-      const formalSource=projectionSource(sourceEntityIdentity(scope,'FORMAL_WORK_PACKAGE',record.id),sourceRevision(record.formal?.fields));
-      const evidenceSource=projectionSource(sourceEntityIdentity(scope,'LIFECYCLE_EVIDENCE',record.id),sourceRevision(record.evidence));
-      const uatSource=projectionSource(sourceEntityIdentity(scope,'HUMAN_UAT',record.id),sourceRevision(record.humanUat));
-      return {identity:entityIdentity(scope,'WORK_PACKAGE',record.id),dimensions:[
+      const structureSource=projectionSource(sourceEntityIdentity(projectScope,'ROADMAP',`${snapshot.roadmapSource}:${record.id}`),availableSourceRevision(signature(record.structure)));
+      const lifecycleSource=projectionSource(sourceEntityIdentity(projectScope,'WORK_PACKAGE',`${record.id}:lifecycle`),availableSourceRevision(signature({formal:record.formal?.fields??null,evidence:record.evidence,uat:record.uat,lifecycle:record.lifecycle})));
+      const formalSource=projectionSource(sourceEntityIdentity(projectScope,'FORMAL_WORK_PACKAGE',record.id),sourceRevision(record.formal?.fields));
+      const evidenceSource=projectionSource(sourceEntityIdentity(projectScope,'LIFECYCLE_EVIDENCE',record.id),sourceRevision(record.evidence));
+      const uatSource=projectionSource(sourceEntityIdentity(projectScope,'HUMAN_UAT',record.id),sourceRevision(record.humanUat));
+      return {identity:entityIdentity(projectScope,'WORK_PACKAGE',record.id),dimensions:[
         dimensionProjection('wp.structure',knownDimensionValue('wp.structure',signature(record.structure)),structureSource),
         dimensionProjection('wp.lifecycle',knownDimensionValue('wp.lifecycle',record.lifecycle.effectiveStatus),lifecycleSource),
         dimensionProjection('wp.implementation',record.implementation,record.evidence?.implementation?evidenceSource:formalSource),
@@ -106,9 +106,9 @@ export function projectWpLayer2(previous:AiccGlobalStateReadModel,snapshot:AiccP
     })
     ],
     bindings:records.flatMap(record=>[
-      explicitBinding('MILESTONE_TO_WP',entityIdentity(scope,'MILESTONE',record.structure.milestoneId),entityIdentity(scope,'WORK_PACKAGE',record.id),projectionSource(sourceEntityIdentity(scope,'ROADMAP',`${snapshot.roadmapSource}:${record.structure.milestoneId}`),availableSourceRevision(record.structure.milestoneId))),
-      ...record.taskIds.map(taskId=>explicitBinding('WP_TO_TASK',entityIdentity(scope,'WORK_PACKAGE',record.id),entityIdentity(scope,'TASK',taskId),projectionSource(sourceEntityIdentity(scope,'TASK',taskId),availableSourceRevision(taskId)))),
-      ...record.prIds.map(prId=>explicitBinding('WP_TO_PR',entityIdentity(scope,'WORK_PACKAGE',record.id),entityIdentity(scope,'PULL_REQUEST',prId),projectionSource(sourceEntityIdentity(scope,'PULL_REQUEST',prId),availableSourceRevision(prId))))
+      explicitBinding('MILESTONE_TO_WP',entityIdentity(projectScope,'MILESTONE',record.structure.milestoneId),entityIdentity(projectScope,'WORK_PACKAGE',record.id),projectionSource(sourceEntityIdentity(projectScope,'ROADMAP',`${snapshot.roadmapSource}:${record.structure.milestoneId}`),availableSourceRevision(record.structure.milestoneId))),
+      ...record.taskIds.map(taskId=>explicitBinding('WP_TO_TASK',entityIdentity(projectScope,'WORK_PACKAGE',record.id),entityIdentity(projectScope,'TASK',taskId),projectionSource(sourceEntityIdentity(projectScope,'TASK',taskId),availableSourceRevision(taskId)))),
+      ...record.prIds.map(prId=>explicitBinding('WP_TO_PR',entityIdentity(projectScope,'WORK_PACKAGE',record.id),entityIdentity(projectScope,'PULL_REQUEST',prId),projectionSource(sourceEntityIdentity(projectScope,'PULL_REQUEST',prId),availableSourceRevision(prId))))
     ])
   };
   const model=projectGlobalStateReadModel(previous,candidate);
