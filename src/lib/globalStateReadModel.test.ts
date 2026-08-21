@@ -28,14 +28,16 @@ import {
 } from './globalStateReadModel.ts';
 import {globalStateReadModelDirectory} from './globalStateReadModelDirectory.ts';
 
-const wp=entityIdentity('WORK_PACKAGE','WP-1');
-const pr=entityIdentity('PULL_REQUEST','PR-1');
-const task=entityIdentity('TASK','TASK-1');
-const execution=entityIdentity('EXECUTION','EXEC-1');
-const run=entityIdentity('RUN','RUN-1');
-const result=entityIdentity('RESULT','RESULT-1');
-const feedback=entityIdentity('FEEDBACK','FEEDBACK-1');
-const controlLoop=entityIdentity('CONTROL_LOOP','LOOP-1');
+const scope={projectId:'aicc-fixture',repositoryIdentity:'fixture/global-state-read-model'} as const;
+const emptyContext={...scope,projectContextRevision:0} as const;
+const wp=entityIdentity(scope,'WORK_PACKAGE','WP-1');
+const pr=entityIdentity(scope,'PULL_REQUEST','PR-1');
+const task=entityIdentity(scope,'TASK','TASK-1');
+const execution=entityIdentity(scope,'EXECUTION','EXEC-1');
+const run=entityIdentity(scope,'RUN','RUN-1');
+const result=entityIdentity(scope,'RESULT','RESULT-1');
+const feedback=entityIdentity(scope,'FEEDBACK','FEEDBACK-1');
+const controlLoop=entityIdentity(scope,'CONTROL_LOOP','LOOP-1');
 
 assert.equal(new Set([wp.kind,pr.kind,task.kind,execution.kind,run.kind,result.kind,feedback.kind,controlLoop.kind]).size,8,'Layer 1 domain identities remain distinct');
 assert.notDeepEqual(task,execution);
@@ -44,14 +46,14 @@ assert.notDeepEqual(execution,run);
 const invalidRunIdentity:EntityIdentity<'RUN'>=task;
 void invalidRunIdentity;
 
-const wpSource=projectionSource(sourceEntityIdentity('WORK_PACKAGE','WP-1'),availableSourceRevision('wp-r1'));
-const prSource=projectionSource(sourceEntityIdentity('PULL_REQUEST','PR-1'),availableSourceRevision('pr-r1'));
-const taskSource=projectionSource(sourceEntityIdentity('TASK','TASK-1'),unavailableSourceRevision());
-const executionSource=projectionSource(sourceEntityIdentity('EXECUTION','EXEC-1'),availableSourceRevision('exec-r1'));
-const runSource=projectionSource(sourceEntityIdentity('RUN','RUN-1'),availableSourceRevision('run-r1'));
-const resultSource=projectionSource(sourceEntityIdentity('RESULT','RESULT-1'),availableSourceRevision('result-r1'));
-const feedbackSource=projectionSource(sourceEntityIdentity('FEEDBACK','FEEDBACK-1'),unavailableSourceRevision());
-const controlLoopSource=projectionSource(sourceEntityIdentity('CONTROL_LOOP','LOOP-1'),availableSourceRevision('loop-r1'));
+const wpSource=projectionSource(sourceEntityIdentity(scope,'WORK_PACKAGE','WP-1'),availableSourceRevision('wp-r1'));
+const prSource=projectionSource(sourceEntityIdentity(scope,'PULL_REQUEST','PR-1'),availableSourceRevision('pr-r1'));
+const taskSource=projectionSource(sourceEntityIdentity(scope,'TASK','TASK-1'),unavailableSourceRevision());
+const executionSource=projectionSource(sourceEntityIdentity(scope,'EXECUTION','EXEC-1'),availableSourceRevision('exec-r1'));
+const runSource=projectionSource(sourceEntityIdentity(scope,'RUN','RUN-1'),availableSourceRevision('run-r1'));
+const resultSource=projectionSource(sourceEntityIdentity(scope,'RESULT','RESULT-1'),availableSourceRevision('result-r1'));
+const feedbackSource=projectionSource(sourceEntityIdentity(scope,'FEEDBACK','FEEDBACK-1'),unavailableSourceRevision());
+const controlLoopSource=projectionSource(sourceEntityIdentity(scope,'CONTROL_LOOP','LOOP-1'),availableSourceRevision('loop-r1'));
 
 const taskUnknown=unknownDimensionValue('task.lifecycle');
 assert.deepEqual(taskUnknown,{state:'UNKNOWN',dimension:'task.lifecycle'},'UNKNOWN remains first-class and unnormalized');
@@ -95,16 +97,16 @@ function candidate(taskDimension:DimensionProjectionInput=dimensions.task):Globa
   };
 }
 
-const empty=createEmptyGlobalStateReadModel();
+const empty=createEmptyGlobalStateReadModel(emptyContext);
 assert.equal(empty.authority,GLOBAL_STATE_READ_MODEL_AUTHORITY);
 assert.equal(empty.writeAuthority,GLOBAL_STATE_WRITE_AUTHORITY);
 assert.equal(empty.inferenceAuthority,AICC_STATE_INFERENCE_AUTHORITY);
 assert.equal(empty.globalProjectionRevision,0);
 assert.ok(Object.isFrozen(empty),'read-model snapshots are immutable');
 
-const mutableLayer1Identity={kind:'TASK' as const,id:'TASK-MUTABLE'};
+const mutableLayer1Identity={...scope,kind:'TASK' as const,id:'TASK-MUTABLE'};
 const mutableLayer1Value={state:'KNOWN' as const,dimension:'task.lifecycle' as const,value:'QUEUED'};
-const mutableLayer1Source={sourceDomain:'TASK' as const,sourceEntity:{domain:'TASK' as const,id:'TASK-MUTABLE'},sourceRevision:{availability:'UNAVAILABLE' as const}};
+const mutableLayer1Source={sourceDomain:'TASK' as const,sourceEntity:{...scope,domain:'TASK' as const,id:'TASK-MUTABLE'},sourceRevision:{availability:'UNAVAILABLE' as const}};
 const isolatedProjection=projectGlobalStateReadModel(empty,{entities:[{identity:mutableLayer1Identity,dimensions:[{dimension:'task.lifecycle',projectedValue:mutableLayer1Value,source:mutableLayer1Source}]}],bindings:[]},'2026-08-19T23:00:00.000Z');
 assert.equal(Object.isFrozen(mutableLayer1Identity),false,'projection does not freeze caller-owned Layer 1 identities');
 assert.equal(Object.isFrozen(mutableLayer1Value),false,'projection does not freeze caller-owned Layer 1 values');
@@ -124,7 +126,7 @@ assert.equal(new Set(first.entities.flatMap(entity=>entity.dimensions.map(field=
 const exactBinding=resolveExplicitBindings(first,'TASK_TO_EXECUTION',task);
 assert.equal(exactBinding.state,'BOUND');
 if(exactBinding.state==='BOUND')assert.deepEqual(exactBinding.bindings.map(binding=>binding.to),[execution]);
-const missingTask=entityIdentity('TASK','TASK-UNBOUND');
+const missingTask=entityIdentity(scope,'TASK','TASK-UNBOUND');
 assert.deepEqual(resolveExplicitBindings(first,'TASK_TO_EXECUTION',missingTask),{state:'UNBOUND',bindings:[]},'missing binding remains UNBOUND without latest/selected fallback');
 
 const noOp=projectGlobalStateReadModel(first,candidate(),'2026-08-20T01:00:00.000Z');
@@ -132,7 +134,7 @@ assert.equal(noOp,first,'a no-op projection returns the accepted snapshot');
 assert.equal(noOp.globalProjectionRevision,1,'a no-op does not synthesize a global revision');
 assert.equal(noOp.projectedAt,'2026-08-20T00:00:00.000Z','a no-op does not synthesize a projection timestamp');
 
-const completedTask=dimensionProjection('task.lifecycle',knownDimensionValue('task.lifecycle','COMPLETE'),projectionSource(sourceEntityIdentity('TASK','TASK-1'),availableSourceRevision('task-r2')));
+const completedTask=dimensionProjection('task.lifecycle',knownDimensionValue('task.lifecycle','COMPLETE'),projectionSource(sourceEntityIdentity(scope,'TASK','TASK-1'),availableSourceRevision('task-r2')));
 const second=projectGlobalStateReadModel(first,candidate(completedTask),'2026-08-20T02:00:00.000Z');
 assert.equal(second.globalProjectionRevision,2,'global revision advances monotonically on a model change');
 assert.equal(second.entities.find(entity=>entity.identity.kind==='TASK')?.projectionRevision,2,'changed entity revision advances monotonically');
@@ -143,7 +145,7 @@ const bindingChangedCandidate=candidate(completedTask);
 const bindingRevisionChanged:GlobalStateProjectionCandidate={
   ...bindingChangedCandidate,
   bindings:bindingChangedCandidate.bindings.map(binding=>binding.kind==='TASK_TO_EXECUTION'
-    ?explicitBinding('TASK_TO_EXECUTION',task,execution,projectionSource(sourceEntityIdentity('TASK','TASK-1'),availableSourceRevision('task-binding-r3')))
+    ?explicitBinding('TASK_TO_EXECUTION',task,execution,projectionSource(sourceEntityIdentity(scope,'TASK','TASK-1'),availableSourceRevision('task-binding-r3')))
     :binding)
 };
 const third=projectGlobalStateReadModel(second,bindingRevisionChanged,'2026-08-20T02:30:00.000Z');
@@ -161,22 +163,22 @@ assert.equal(removed.entityRevisions.find(record=>record.identity.kind==='TASK')
 const reintroduced=projectGlobalStateReadModel(removed,bindingChangedCandidate,'2026-08-20T02:50:00.000Z');
 assert.equal(reintroduced.entities.find(entity=>entity.identity.kind==='TASK')?.projectionRevision,5,'reintroduced identities do not reset entity revision');
 
-const taskInvalidation=planExactProjectionInvalidation(third,sourceEntityIdentity('TASK','TASK-1'));
+const taskInvalidation=planExactProjectionInvalidation(third,sourceEntityIdentity(scope,'TASK','TASK-1'));
 assert.equal(taskInvalidation.requiresReprojection,true);
 assert.deepEqual(taskInvalidation.dependentProjections.map(target=>target.type).sort(),['BINDING','DIMENSION']);
-const unrelatedInvalidation=planExactProjectionInvalidation(third,sourceEntityIdentity('TASK','TASK-OTHER'));
-assert.deepEqual(unrelatedInvalidation,{sourceEntity:{domain:'TASK',id:'TASK-OTHER'},dependentProjections:[],requiresReprojection:false},'unrelated canonical changes do not mutate another entity');
+const unrelatedInvalidation=planExactProjectionInvalidation(third,sourceEntityIdentity(scope,'TASK','TASK-OTHER'));
+assert.deepEqual(unrelatedInvalidation,{sourceEntity:{...scope,domain:'TASK',id:'TASK-OTHER'},dependentProjections:[],requiresReprojection:false},'unrelated canonical changes do not mutate another entity');
 
 const taskAdapter:Layer1ProjectionAdapter={
   domain:'TASK',
-  readCanonicalProjection:()=>({entities:[{identity:task,dimensions:[completedTask]}],bindings:[explicitBinding('TASK_TO_EXECUTION',task,execution,projectionSource(sourceEntityIdentity('TASK','TASK-1'),availableSourceRevision('task-r2')))]})
+  readCanonicalProjection:()=>({entities:[{identity:task,dimensions:[completedTask]}],bindings:[explicitBinding('TASK_TO_EXECUTION',task,execution,projectionSource(sourceEntityIdentity(scope,'TASK','TASK-1'),availableSourceRevision('task-r2')))]})
 };
 const executionAdapter:Layer1ProjectionAdapter={
   domain:'EXECUTION',
   readCanonicalProjection:()=>({entities:[{identity:execution,dimensions:[dimensions.execution]}],bindings:[]})
 };
-const rebuiltForward=await rebuildGlobalStateReadModel(createEmptyGlobalStateReadModel(),[taskAdapter,executionAdapter],'2026-08-20T03:00:00.000Z');
-const rebuiltReverse=await rebuildGlobalStateReadModel(createEmptyGlobalStateReadModel(),[executionAdapter,taskAdapter],'2026-08-20T03:00:00.000Z');
+const rebuiltForward=await rebuildGlobalStateReadModel(createEmptyGlobalStateReadModel(emptyContext),[taskAdapter,executionAdapter],'2026-08-20T03:00:00.000Z');
+const rebuiltReverse=await rebuildGlobalStateReadModel(createEmptyGlobalStateReadModel(emptyContext),[executionAdapter,taskAdapter],'2026-08-20T03:00:00.000Z');
 assert.deepEqual(rebuiltForward,rebuiltReverse,'Layer 2 rebuild is deterministic regardless of adapter order');
 assert.equal(rebuiltForward.entities.length,2);
 assert.equal(rebuiltForward.bindings.length,1);

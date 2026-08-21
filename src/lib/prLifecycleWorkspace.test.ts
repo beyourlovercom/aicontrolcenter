@@ -6,7 +6,8 @@ import {projectPrLayer2} from './prCanonicalProjection.ts';
 
 const base:PullRequestRecord={id:'github#9',number:9,title:'M6.2 Real Delivery Canary Validation',repository:'beyourlovercom/aicontrolcenter',url:'https://github.com/beyourlovercom/aicontrolcenter/pull/9',status:'IN_PROGRESS',state:'OPEN',workPackageId:'AICC-M6.2-REAL-DELIVERY-CANARY-001',sourceBranch:'delivery/aicc-m6.2-real-delivery-canary-001',deliveryBranch:'delivery/aicc-m6.2-real-delivery-canary-001',headSha:'head-9',mergeability:'NOT_RUN',mergeResult:'NOT_RUN'};
 
-const projected=(record:PullRequestRecord)=>projectPrLayer2(createEmptyGlobalStateReadModel(),[record]).records[0]!;
+const emptyContext={projectId:'aicc-fixture',repositoryIdentity:base.repository!,projectContextRevision:0} as const;
+const projected=(record:PullRequestRecord)=>projectPrLayer2(createEmptyGlobalStateReadModel(emptyContext),[record]).records[0]!;
 const open=projectPrLifecycleWorkspace(base,null,null,projected(base));
 assert.equal(open.prState,'OPEN');
 assert.equal(open.lifecycleStatus,'IN_PROGRESS');

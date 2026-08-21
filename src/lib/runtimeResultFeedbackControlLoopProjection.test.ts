@@ -17,6 +17,8 @@ import {
 } from './runtimeResultFeedbackControlLoopProjection.ts';
 import {projectControlLoopFeedbackFromGlobalState,projectFeedbackDeliveryFromGlobalState} from './runtimeLiveProjection.ts';
 
+const emptyContext={projectId:'aicc-fixture',repositoryIdentity:'fixture/runtime-result-feedback-control-loop',projectContextRevision:0} as const;
+
 const result=(hash='hash-1'):CanonicalExecutionResult=>({version:'AICC_EXECUTION_RESULT_V1',executionId:'execution-1',aiccStatus:'RESULT_RECEIVED',codexResult:'PASS',rawResult:'phase 5 complete',receivedAt:'2026-08-20T05:02:00.000Z',resultId:'result-1',resultHash:hash});
 const runtime=(phase='COMPLETED'):RuntimeRecord=>({runId:'run-1',workPackageId:'WP-1',authorizationId:'auth-1',authoritySha:'head-1',branch:'rebuild/aicc-v2',startingHeadSha:'head-1',pid:101,pidAlive:false,processAlive:false,threadId:'thread-1',phase,currentTask:'done',latestEvent:'turn.completed',startedAt:'2026-08-20T05:00:00.000Z',lastActivityAt:'2026-08-20T05:02:00.000Z',completedAt:'2026-08-20T05:02:00.000Z',exitCode:0,processExitObserved:true,processCloseObserved:true});
 const baseInput=(overrides:Partial<Phase5ProjectionInput>={}):Phase5ProjectionInput=>({
@@ -29,7 +31,7 @@ const baseInput=(overrides:Partial<Phase5ProjectionInput>={}):Phase5ProjectionIn
   ...overrides
 });
 
-const projection=projectPhase5Lifecycle(createEmptyGlobalStateReadModel(),baseInput());
+const projection=projectPhase5Lifecycle(createEmptyGlobalStateReadModel(emptyContext),baseInput());
 assert.equal(projection.runs[0]?.lifecycle.state==='KNOWN'&&projection.runs[0].lifecycle.value,'COMPLETED');
 assert.equal(projection.executions[0]?.lifecycle.state==='KNOWN'&&projection.executions[0].lifecycle.value,'COMPLETED');
 assert.equal(projection.results[0]?.availability.state==='KNOWN'&&projection.results[0].availability.value,'AVAILABLE');
@@ -43,19 +45,19 @@ assert.equal(taskLifecycle?.state==='KNOWN'?taskLifecycle.value:null,'IN_PROGRES
 assert.equal(projection.runs[0]?.lifecycle.state==='KNOWN'&&projection.runs[0].lifecycle.value,'COMPLETED','feedback failure does not rewrite Run lifecycle');
 assert.equal(projection.executions[0]?.lifecycle.state==='KNOWN'&&projection.executions[0].lifecycle.value,'COMPLETED','feedback failure does not rewrite Execution lifecycle');
 
-const completedWithoutResult=projectPhase5Lifecycle(createEmptyGlobalStateReadModel(),{runs:[runtime()],tasks:baseInput().tasks,executions:baseInput().executions});
+const completedWithoutResult=projectPhase5Lifecycle(createEmptyGlobalStateReadModel(emptyContext),{runs:[runtime()],tasks:baseInput().tasks,executions:baseInput().executions});
 assert.equal(exactResultForRun(completedWithoutResult,'run-1'),null,'Run COMPLETED does not imply Result AVAILABLE');
-const availableWithoutFeedback=projectPhase5Lifecycle(createEmptyGlobalStateReadModel(),{runs:[runtime()],results:[{result:result(),runId:'run-1'}]});
+const availableWithoutFeedback=projectPhase5Lifecycle(createEmptyGlobalStateReadModel(emptyContext),{runs:[runtime()],results:[{result:result(),runId:'run-1'}]});
 assert.equal(availableWithoutFeedback.results[0]?.availability.state,'KNOWN');
 assert.equal(availableWithoutFeedback.feedback.length,0,'Result AVAILABLE does not imply Feedback DELIVERED');
 assert.equal(availableWithoutFeedback.controlLoops.length,0,'Run COMPLETED does not imply Control Loop COMPLETE');
 
-const unknownExecution=projectPhase5Lifecycle(createEmptyGlobalStateReadModel(),{tasks:[{taskId:'task-unknown',lifecycle:'IN_PROGRESS',executionId:'execution-unknown'}]});
+const unknownExecution=projectPhase5Lifecycle(createEmptyGlobalStateReadModel(emptyContext),{tasks:[{taskId:'task-unknown',lifecycle:'IN_PROGRESS',executionId:'execution-unknown'}]});
 assert.deepEqual(unknownExecution.executions[0]?.lifecycle,{state:'UNKNOWN',dimension:'execution.lifecycle'},'missing execution authority remains UNKNOWN');
 assert.equal(exactRunLayer2(projection,'run-missing'),null,'exact Run lookup has no latest or selected fallback');
 assert.equal(PHASE5_LATEST_RUN_FALLBACK,false);
 assert.equal(PHASE5_SELECTED_RUN_FALLBACK,false);
-const ambiguous=projectPhase5Lifecycle(createEmptyGlobalStateReadModel(),{runs:[runtime()],tasks:[{taskId:'task-a',executionId:'execution-a',runId:'run-1'},{taskId:'task-b',executionId:'execution-b',runId:'run-1'}],results:[{result:result(),runId:'run-1'},{result:{...result('hash-2'),resultId:'result-2'},runId:'run-1'}]});
+const ambiguous=projectPhase5Lifecycle(createEmptyGlobalStateReadModel(emptyContext),{runs:[runtime()],tasks:[{taskId:'task-a',executionId:'execution-a',runId:'run-1'},{taskId:'task-b',executionId:'execution-b',runId:'run-1'}],results:[{result:result(),runId:'run-1'},{result:{...result('hash-2'),resultId:'result-2'},runId:'run-1'}]});
 assert.equal(ambiguous.runs[0]?.executionId,null,'conflicting explicit bindings remain ambiguous instead of choosing latest/selected');
 assert.equal(exactResultForRun(ambiguous,'run-1'),null,'multiple explicit Results do not trigger an arbitrary fallback');
 

@@ -24,7 +24,7 @@ const scope={projectId:'aicc',repositoryIdentity:'beyourlovercom/aicontrolcenter
 const projection=projectWpLayer2(createEmptyGlobalStateReadModel(scope),snapshot,[],scope);
 assert.ok(projection.records.every(record=>record.milestoneId!=='M8.3'),'Layer 2 binds Work Packages directly to M8');
 assert.equal(projection.model.entities.some(entity=>entity.identity.id==='8.3'||entity.identity.id==='M8.3'),false,'no subsection enters the Global State Read Model');
-assert.equal(projectGlobalStateReadModel(createEmptyGlobalStateReadModel(),{entities:[],bindings:[]}).entities.length,0,'no hidden subsection lifecycle authority is synthesized');
+assert.equal(projectGlobalStateReadModel(createEmptyGlobalStateReadModel(scope),{entities:[],bindings:[]}).entities.length,0,'no hidden subsection lifecycle authority is synthesized');
 assert.ok(expandableRoadmapIds(nodes).includes(roadmapGroupKey('M8','8.4')),'display grouping may fold without becoming selectable');
 
 const agents=readFileSync(new URL('../../AGENTS.md',import.meta.url),'utf8');
