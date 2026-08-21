@@ -2,7 +2,7 @@ import {createHash} from 'node:crypto';
 import {mkdirSync, readFileSync, renameSync, writeFileSync} from 'node:fs';
 import {join} from 'node:path';
 import {resolveAiccStateDir} from './stateDirectory.ts';
-import {parseExecutionV1, type BridgeReport, type ExecutionInstruction, type InboxItem, type ExecutionSourceType} from './bridgeCore.ts';
+import {parseExecutionV1, type BridgeReport, type ParsedInstruction, type InboxItem, type ExecutionSourceType} from './bridgeCore.ts';
 
 export const GPT_AUTO_CONTROL_LOOP = 'GPT_AUTO_CONTROL_LOOP' as const;
 export const CONTROL_CONTRACT_TYPES = ['AICC_EXECUTION_V1', 'AICC_OWNER_UAT_V1', 'AICC_WP_COMPLETE_V1', 'AICC_BLOCKED_V1'] as const;
@@ -454,7 +454,7 @@ function firstContractMarker(text: string): ControlContractType | null {
   return CONTROL_CONTRACT_TYPES.find(marker => firstLine === marker) ?? null;
 }
 
-export type ParsedControlContract = {type: ControlContractType; class: ControlContractClass; raw: string; instruction?: ExecutionInstruction; fields: Record<string, string>};
+export type ParsedControlContract = {type: ControlContractType; class: ControlContractClass; raw: string; instruction?: ParsedInstruction; fields: Record<string, string>};
 
 export function classifyControlContract(type: ControlContractType): ControlContractClass {
   if (type === 'AICC_EXECUTION_V1') return 'EXECUTABLE_CONTROL';
@@ -681,7 +681,7 @@ function updateLoopFromContract(loop: ControlLoopRecord, claim: ControlClaim, co
   if (contract.type === 'AICC_BLOCKED_V1') { loop.status = 'BLOCKED'; loop.blocker_code = header(claim.response, 'BLOCKER_CODE') ?? 'AICC_BLOCKED_V1'; }
 }
 
-export function consumeGptControl(input: {conversation_id: string; assistant_message_id: string; response: string; control_loop_id?: string; binding_epoch?: number; feedback_key?: string; expected_gpt_turn_id?: string}, submit: (instruction: ExecutionInstruction, control_loop_id: string) => InboxItem, launch: (inboxId: string) => InboxItem): {ok: boolean; claimGranted: boolean; duplicate?: boolean; contract?: ParsedControlContract; claim?: ControlClaim; item?: InboxItem; expected_turn?: ExpectedControlTurn; code?: string; reason?: string} {
+export function consumeGptControl(input: {conversation_id: string; assistant_message_id: string; response: string; control_loop_id?: string; binding_epoch?: number; feedback_key?: string; expected_gpt_turn_id?: string}, submit: (instruction: ParsedInstruction, control_loop_id: string) => InboxItem, launch: (inboxId: string) => InboxItem): {ok: boolean; claimGranted: boolean; duplicate?: boolean; contract?: ParsedControlContract; claim?: ControlClaim; item?: InboxItem; expected_turn?: ExpectedControlTurn; code?: string; reason?: string} {
   const state = readState();
   const control_message_hash = hashControlMessage(input.response);
   const duplicate = state.controls.find(item => item.conversation_id === input.conversation_id && (item.assistant_message_id === input.assistant_message_id || item.control_message_hash === control_message_hash));

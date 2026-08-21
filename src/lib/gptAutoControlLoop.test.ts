@@ -73,4 +73,12 @@ assert.match(controlModePrompt(wpId), /Round 3 result → AICC_OWNER_UAT_V1 and 
 assert.equal(hashControlMessage('  x\r\n'), hashControlMessage('x\n'));
 assert.equal(projectAutoLoopStatus(readControlLoop(loopId)).label, 'AUTO LOOP · WAITING OWNER UAT');
 assert.equal(readControlLoop(loopId)?.owner_click_count_after_round_1, 0);
+// R2/R5: parseControlContract must yield a draft that never fabricates canonical project scope.
+const draftContract = parseControlContract('AICC_EXECUTION_V1\nENTITY_TYPE: WORK_PACKAGE\nENTITY_ID: WP-DRAFT-CONTROL\nEXECUTION_TYPE: READ_ONLY_AUDIT\nREPOSITORY: r\nBRANCH: b\nEXPECTED_HEAD: h\nSANDBOX: read-only\n\nINSTRUCTION_BEGIN\nfixture\nINSTRUCTION_END');
+assert.equal(draftContract.ok, true);
+if (draftContract.ok) {
+  assert.equal((draftContract.contract.instruction as any)?.projectId, undefined, 'control-loop parse must not backfill Active Project projectId onto the draft');
+  assert.equal((draftContract.contract.instruction as any)?.repositoryIdentity, undefined, 'control-loop parse must not backfill Active Project repositoryIdentity onto the draft');
+}
+
 console.log('GPT auto control loop contract tests passed');
