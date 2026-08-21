@@ -40,7 +40,7 @@ const evidence=readFileSync(new URL('../components/entity/EntityEvidencePanel.sv
 const milestone=readFileSync(new URL('../components/entity/MilestoneView.svelte',import.meta.url),'utf8');
 const milestoneProgress=readFileSync(new URL('../components/entity/MilestoneProgress.svelte',import.meta.url),'utf8');
 const feedbackIsland=readFileSync(new URL('../components/GlobalFeedbackIsland.svelte',import.meta.url),'utf8');
-assert.match(app,/composeUiLifecycleReadModel\(empty/,'App composes Layer 2 fragments before presenting state');
+assert.match(app,/composeUiLifecycleReadModel\(uiLifecycleReadModel\?\?empty/,'App composes Layer 2 fragments before presenting state');
 assert.match(app,/globalTasks=uiLifecycleReadModel\?\.scopedTasks/,'Task consumers receive scoped Layer 2 records');
 assert.doesNotMatch(app,/\$: schedulerQueue=/,'unused App scheduler derivation is removed rather than becoming a second authority');
 assert.match(app,/selectedTaskTabStatuses=\{运行:presentationStatus\(selectedTaskRunLifecycle\)/,'Tab state formats exact projected lifecycle values');
