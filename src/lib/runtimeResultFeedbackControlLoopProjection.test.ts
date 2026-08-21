@@ -19,8 +19,8 @@ import {projectControlLoopFeedbackFromGlobalState,projectFeedbackDeliveryFromGlo
 
 const emptyContext={projectId:'aicc-fixture',repositoryIdentity:'fixture/runtime-result-feedback-control-loop',projectContextRevision:0} as const;
 
-const result=(hash='hash-1'):CanonicalExecutionResult=>({version:'AICC_EXECUTION_RESULT_V1',executionId:'execution-1',aiccStatus:'RESULT_RECEIVED',codexResult:'PASS',rawResult:'phase 5 complete',receivedAt:'2026-08-20T05:02:00.000Z',resultId:'result-1',resultHash:hash});
-const runtime=(phase='COMPLETED'):RuntimeRecord=>({runId:'run-1',workPackageId:'WP-1',authorizationId:'auth-1',authoritySha:'head-1',branch:'rebuild/aicc-v2',startingHeadSha:'head-1',pid:101,pidAlive:false,processAlive:false,threadId:'thread-1',phase,currentTask:'done',latestEvent:'turn.completed',startedAt:'2026-08-20T05:00:00.000Z',lastActivityAt:'2026-08-20T05:02:00.000Z',completedAt:'2026-08-20T05:02:00.000Z',exitCode:0,processExitObserved:true,processCloseObserved:true});
+const result=(hash='hash-1'):CanonicalExecutionResult=>({version:'AICC_EXECUTION_RESULT_V1',executionId:'execution-1',projectId:'aicc-fixture',repositoryIdentity:'fixture/runtime-result-feedback-control-loop',aiccStatus:'RESULT_RECEIVED',codexResult:'PASS',rawResult:'phase 5 complete',receivedAt:'2026-08-20T05:02:00.000Z',resultId:'result-1',resultHash:hash});
+const runtime=(phase='COMPLETED'):RuntimeRecord=>({runId:'run-1',projectId:'aicc-fixture',repositoryIdentity:'fixture/runtime-result-feedback-control-loop',workPackageId:'WP-1',authorizationId:'auth-1',authoritySha:'head-1',branch:'rebuild/aicc-v2',startingHeadSha:'head-1',pid:101,pidAlive:false,processAlive:false,threadId:'thread-1',phase,currentTask:'done',latestEvent:'turn.completed',startedAt:'2026-08-20T05:00:00.000Z',lastActivityAt:'2026-08-20T05:02:00.000Z',completedAt:'2026-08-20T05:02:00.000Z',exitCode:0,processExitObserved:true,processCloseObserved:true});
 const baseInput=(overrides:Partial<Phase5ProjectionInput>={}):Phase5ProjectionInput=>({
   runs:[runtime()],
   tasks:[{taskId:'task-1',lifecycle:'IN_PROGRESS',executionId:'execution-1',runId:'run-1',updatedAt:'task-r1'}],

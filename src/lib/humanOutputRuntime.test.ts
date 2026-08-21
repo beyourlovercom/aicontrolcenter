@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import {finalizeCanonicalResult,parseEvent,reconcileProcessExit,type RuntimeState} from './runtimeManager.ts';
 import {readFileSync} from 'node:fs';
 
-const base=():RuntimeState=>({runId:'human-run',workPackageId:'AICC-X-001',authorizationId:'auth',authoritySha:'sha',branch:'feature/x',startingHeadSha:'head',pid:42,pidAlive:true,processAlive:true,ptySessionId:'pty-human-run',threadId:null,phase:'RUNNING',currentTask:'Codex 进程运行中',latestEvent:'process.spawned',startedAt:'2026-08-18T00:00:00.000Z',lastActivityAt:'2026-08-18T00:00:00.000Z',events:[],outputMode:'human',finalMessagePath:'/tmp/aicc-state/human-run/final-message.txt'});
+const base=():RuntimeState=>({runId:'human-run',projectId:'aicc',repositoryIdentity:'aicc-repo',workPackageId:'AICC-X-001',authorizationId:'auth',authoritySha:'sha',branch:'feature/x',startingHeadSha:'head',pid:42,pidAlive:true,processAlive:true,ptySessionId:'pty-human-run',threadId:null,phase:'RUNNING',currentTask:'Codex 进程运行中',latestEvent:'process.spawned',startedAt:'2026-08-18T00:00:00.000Z',lastActivityAt:'2026-08-18T00:00:00.000Z',events:[],outputMode:'human',finalMessagePath:'/tmp/aicc-state/human-run/final-message.txt'});
 const human=base();
 reconcileProcessExit(human,0);
 assert.equal(human.phase,'COMPLETED','a human-mode run completes from actual exit code without thread.started');

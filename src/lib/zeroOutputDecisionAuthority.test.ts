@@ -9,7 +9,7 @@ import {projectPhase5Lifecycle} from './runtimeResultFeedbackControlLoopProjecti
 import {projectTaskResult} from './taskResultProjection.ts';
 
 const emptyContext={projectId:'aicc-fixture',repositoryIdentity:'fixture/zero-output-decision-authority',projectContextRevision:0} as const;
-const base=(runId='run-1787219966167-3nte5k',phase:RuntimeState['phase']='FAILED'):RuntimeState=>({runId,workPackageId:'AICC_ZERO_OUTPUT_DECISION_AUTHORITY_V1',authorizationId:'owner-authorized',authoritySha:'NOT_APPLICABLE',branch:'rebuild/aicc-v2',startingHeadSha:'head',pid:null,threadId:null,phase,currentTask:'technical runtime state',latestEvent:'process.exit',startedAt:'2026-08-20T00:00:00.000Z',lastActivityAt:'2026-08-20T00:01:00.000Z',events:[]});
+const base=(runId='run-1787219966167-3nte5k',phase:RuntimeState['phase']='FAILED'):RuntimeState=>({runId,projectId:'aicc-fixture',repositoryIdentity:'fixture/zero-output-decision-authority',workPackageId:'AICC_ZERO_OUTPUT_DECISION_AUTHORITY_V1',authorizationId:'owner-authorized',authoritySha:'NOT_APPLICABLE',branch:'rebuild/aicc-v2',startingHeadSha:'head',pid:null,threadId:null,phase,currentTask:'technical runtime state',latestEvent:'process.exit',startedAt:'2026-08-20T00:00:00.000Z',lastActivityAt:'2026-08-20T00:01:00.000Z',events:[]});
 const pass='PHASE_RESULT = PASS\nexact Codex evidence';
 const fail='PHASE_RESULT = FAIL\nexact Codex evidence';
 

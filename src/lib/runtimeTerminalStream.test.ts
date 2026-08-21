@@ -7,7 +7,7 @@ import { CodexTerminalClient } from './codexTerminalClient.ts';
 import { createRuntimeTerminalStreamHandler, terminalStreamEvents } from './runtimeTerminalStream.ts';
 import type { RuntimeState } from './runtimeManager.ts';
 
-const runtime=(overrides:Partial<RuntimeState>={}):RuntimeState=>({runId:'run-a',workPackageId:null,authorizationId:'authorization',authoritySha:'sha',branch:'branch',startingHeadSha:'head',pid:42,ptySessionId:'pty-run-a',terminalSequence:3,terminalFirstSequence:1,terminalChunks:['one','two','three'],terminalUpdatedAt:'2026-08-18T00:00:00.000Z',threadId:null,phase:'RUNNING',currentTask:'running',latestEvent:'runtime',startedAt:'2026-08-18T00:00:00.000Z',lastActivityAt:'2026-08-18T00:00:00.000Z',events:[],...overrides});
+const runtime=(overrides:Partial<RuntimeState>={}):RuntimeState=>({runId:'run-a',projectId:'aicc',repositoryIdentity:'aicc-repo',workPackageId:null,authorizationId:'authorization',authoritySha:'sha',branch:'branch',startingHeadSha:'head',pid:42,ptySessionId:'pty-run-a',terminalSequence:3,terminalFirstSequence:1,terminalChunks:['one','two','three'],terminalUpdatedAt:'2026-08-18T00:00:00.000Z',threadId:null,phase:'RUNNING',currentTask:'running',latestEvent:'runtime',startedAt:'2026-08-18T00:00:00.000Z',lastActivityAt:'2026-08-18T00:00:00.000Z',events:[],...overrides});
 
 const all=terminalStreamEvents(runtime());
 assert.deepEqual(all.filter(event=>event.event==='chunk').map(event=>event.event==='chunk'?event.id:0),[1,2,3]);

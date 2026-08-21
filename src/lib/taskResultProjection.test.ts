@@ -3,8 +3,8 @@ import {readFileSync} from 'node:fs';
 import {projectTaskResult,taskResultNeedsReconciliation} from './taskResultProjection.ts';
 import type {CanonicalExecutionResult,RuntimeRecord} from './model/entityTypes.ts';
 
-const result=(runId:string,text=`result for ${runId}`):CanonicalExecutionResult=>({version:'AICC_EXECUTION_RESULT_V1',executionId:runId,aiccStatus:'RESULT_RECEIVED',rawResult:text,receivedAt:'2026-08-16T02:15:45.361Z',resultId:`result-${runId}`,resultHash:`hash-${runId}`,returnState:'RESULT_READY'});
-const runtime=(runId:string,phase='COMPLETED',canonicalResult?:CanonicalExecutionResult):RuntimeRecord=>({runId,workPackageId:'AICC-V2-GPT-CODEX-BRIDGE-001',authorizationId:'pass-through',authoritySha:'NOT_APPLICABLE',branch:'rebuild/aicc-v2',startingHeadSha:'head',pid:null,threadId:'thread',phase,currentTask:'done',latestEvent:'turn.completed',startedAt:'2026-08-16T02:00:00.000Z',lastActivityAt:'2026-08-16T02:15:45.361Z',canonicalResult});
+const result=(runId:string,text=`result for ${runId}`):CanonicalExecutionResult=>({version:'AICC_EXECUTION_RESULT_V1',executionId:runId,projectId:'aicc',repositoryIdentity:'aicc-repo',aiccStatus:'RESULT_RECEIVED',rawResult:text,receivedAt:'2026-08-16T02:15:45.361Z',resultId:`result-${runId}`,resultHash:`hash-${runId}`,returnState:'RESULT_READY'});
+const runtime=(runId:string,phase='COMPLETED',canonicalResult?:CanonicalExecutionResult):RuntimeRecord=>({runId,projectId:'aicc',repositoryIdentity:'aicc-repo',workPackageId:'AICC-V2-GPT-CODEX-BRIDGE-001',authorizationId:'pass-through',authoritySha:'NOT_APPLICABLE',branch:'rebuild/aicc-v2',startingHeadSha:'head',pid:null,threadId:'thread',phase,currentTask:'done',latestEvent:'turn.completed',startedAt:'2026-08-16T02:00:00.000Z',lastActivityAt:'2026-08-16T02:15:45.361Z',canonicalResult});
 const task=(runId:string,origin:string,status='COMPLETED')=>({taskId:`task-${origin}`,executionId:runId,runId,status,origin,provider:'codex'});
 const outbox=(runId:string,canonicalResult:CanonicalExecutionResult)=>({executionId:runId,runId,report:{executionId:runId,runId,canonicalResult}});
 

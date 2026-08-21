@@ -6,8 +6,8 @@ import type {RuntimeRecord} from './model/entityTypes.ts';
 
 const app=readFileSync(new URL('../App.svelte',import.meta.url),'utf8');
 const island=readFileSync(new URL('../components/GlobalFeedbackIsland.svelte',import.meta.url),'utf8');
-const base=(runId:string,phase:string):RuntimeRecord=>({runId,workPackageId:null,authorizationId:'auth',authoritySha:'sha',branch:'branch',startingHeadSha:'sha',pid:1,threadId:'thread',phase,currentTask:'task',latestEvent:'event',startedAt:'2026-08-19T00:00:00.000Z',lastActivityAt:'2026-08-19T00:00:01.000Z'});
-const success={...base('run-a','COMPLETED'),canonicalResult:{version:'AICC_EXECUTION_RESULT_V1' as const,executionId:'run-a',aiccStatus:'RESULT_RECEIVED' as const,rawResult:'package-name',receivedAt:'now',resultId:'result-a',resultHash:'hash',returnState:'RESULT_READY' as const}};
+const base=(runId:string,phase:string):RuntimeRecord=>({runId,projectId:'aicc',repositoryIdentity:'aicc-repo',workPackageId:null,authorizationId:'auth',authoritySha:'sha',branch:'branch',startingHeadSha:'sha',pid:1,threadId:'thread',phase,currentTask:'task',latestEvent:'event',startedAt:'2026-08-19T00:00:00.000Z',lastActivityAt:'2026-08-19T00:00:01.000Z'});
+const success={...base('run-a','COMPLETED'),canonicalResult:{version:'AICC_EXECUTION_RESULT_V1' as const,executionId:'run-a',projectId:'aicc',repositoryIdentity:'aicc-repo',aiccStatus:'RESULT_RECEIVED' as const,rawResult:'package-name',receivedAt:'now',resultId:'result-a',resultHash:'hash',returnState:'RESULT_READY' as const}};
 const failure={...base('run-a','FAILED'),failure:'PROCESS_EXIT_NONZERO'};
 
 assert.deepEqual(projectRuntimeFeedback(base('run-a','RUNNING')),{state:'RUNNING',title:'正在执行',message:'run-a',code:'CODEX_RUNNING',terminal:false});

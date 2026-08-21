@@ -36,6 +36,6 @@ const blocked=projectPrLifecycleWorkspace(blockedRecord,null,null,projected(bloc
 assert.equal(blocked.lifecycleStatus,'IN_PROGRESS','gate evidence cannot overwrite the canonical PR lifecycle dimension');
 assert.equal(blocked.gates.find(gate=>gate.id==='READY_TO_MERGE')?.state,'BLOCKED');
 const evidenceBlockedRecord={...base,mergeability:'NOT_RUN'};
-const evidenceBlocked=projectPrLifecycleWorkspace(evidenceBlockedRecord,null,{runId:'run',workPackageId:null,entityType:'pull_request',entityId:base.id,authorizationId:'a',authoritySha:'h',branch:'b',startingHeadSha:'h',pid:null,threadId:null,phase:'FAILED',currentTask:'failed',latestEvent:'failed',startedAt:'now',lastActivityAt:'now'},projected(evidenceBlockedRecord));
+const evidenceBlocked=projectPrLifecycleWorkspace(evidenceBlockedRecord,null,{runId:'run',projectId:'aicc',repositoryIdentity:'aicc-repo',workPackageId:null,entityType:'pull_request',entityId:base.id,authorizationId:'a',authoritySha:'h',branch:'b',startingHeadSha:'h',pid:null,threadId:null,phase:'FAILED',currentTask:'failed',latestEvent:'failed',startedAt:'now',lastActivityAt:'now'},projected(evidenceBlockedRecord));
 assert.equal(evidenceBlocked.lifecycleStatus,'IN_PROGRESS','a Run failure cannot fabricate a PR lifecycle transition');
 console.log('PR detail lifecycle workspace matrix passed');

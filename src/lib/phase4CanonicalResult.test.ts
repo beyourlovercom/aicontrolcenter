@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {finalizeCanonicalResult,type RuntimeState} from './runtimeManager.ts';
 
-const base:RuntimeState={runId:'run-phase4-1',workPackageId:'AICC-V2-GPT-AICC-CODEX-CLOSED-LOOP-001',authorizationId:'pass-through',authoritySha:'NOT_APPLICABLE',branch:'rebuild/aicc-v2',startingHeadSha:'head',pid:null,threadId:'thread-1',phase:'COMPLETED',currentTask:'done',latestEvent:'turn.completed',startedAt:'2026-08-14T00:00:00.000Z',lastActivityAt:'2026-08-14T00:01:00.000Z',instructionId:'instruction-phase4',originConversationId:'conversation-1',originMessageId:'message-1',originBlockId:'block-1',events:[]};
+const base:RuntimeState={runId:'run-phase4-1',projectId:'aicc',repositoryIdentity:'aicc-repo',workPackageId:'AICC-V2-GPT-AICC-CODEX-CLOSED-LOOP-001',authorizationId:'pass-through',authoritySha:'NOT_APPLICABLE',branch:'rebuild/aicc-v2',startingHeadSha:'head',pid:null,threadId:'thread-1',phase:'COMPLETED',currentTask:'done',latestEvent:'turn.completed',startedAt:'2026-08-14T00:00:00.000Z',lastActivityAt:'2026-08-14T00:01:00.000Z',instructionId:'instruction-phase4',originConversationId:'conversation-1',originMessageId:'message-1',originBlockId:'block-1',events:[]};
 const raw='Codex final output is preserved exactly.\nCODEX_RESULT: PASS\nCODEX_REASON: explicit completion';
 const completed=finalizeCanonicalResult({...base,finalAgentMessage:raw});
 assert.ok(completed.canonicalResult,'terminal final message creates one canonical result');

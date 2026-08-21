@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import {buildRuntimeObserver,normalizeRuntimeEvent,resolveCurrentActivity} from './runtimeObserver.ts';
-const base={runId:'run-test',workPackageId:'AICC-V2-RUNTIME-OBSERVER-001',authorizationId:'auth',authoritySha:'sha',branch:'rebuild/aicc-v2',startingHeadSha:'head',pid:42,pidAlive:true,threadId:'thread',phase:'RUNNING',currentTask:'正在执行命令',latestEvent:'item.started',startedAt:'2026-01-01T00:00:00.000Z',lastActivityAt:'2026-01-01T00:00:01.000Z',events:['item.started:command_execution'],commandExecutionCount:2};
+const base={runId:'run-test',projectId:'aicc',repositoryIdentity:'aicc-repo',workPackageId:'AICC-V2-RUNTIME-OBSERVER-001',authorizationId:'auth',authoritySha:'sha',branch:'rebuild/aicc-v2',startingHeadSha:'head',pid:42,pidAlive:true,threadId:'thread',phase:'RUNNING',currentTask:'正在执行命令',latestEvent:'item.started',startedAt:'2026-01-01T00:00:00.000Z',lastActivityAt:'2026-01-01T00:00:01.000Z',events:['item.started:command_execution'],commandExecutionCount:2};
 assert.equal(resolveCurrentActivity(base),'执行');
 assert.equal(normalizeRuntimeEvent('item.completed:file_change').label,'修改');
 assert.equal(normalizeRuntimeEvent('vendor.future_signal').kind,'unknown');assert.equal(normalizeRuntimeEvent('vendor.future_signal').label,'技术事件');

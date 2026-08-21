@@ -25,7 +25,7 @@ import {revokeExecutionLease} from "./fastExecution.ts";
 import {getRuntimeExecutionProvider} from './runtimeProvider.ts';
 import type {CanonicalExecutionResult,ReturnState} from './model/entityTypes.ts';
 import {createProjectRegistryAuthority} from './projectRegistryAuthority.ts';
-import {backfillProjectScope,belongsToProject,projectEntityScope,type ProjectEntityScope} from './projectEntityScope.ts';
+import {belongsToProject,projectEntityScope,type ProjectEntityScope} from './projectEntityScope.ts';
 import {resolveCodexModel} from './codexModelCatalog.ts';
 import {DirectRemoteRunnerClient} from './directRemoteRunnerClient.ts';
 import {resolveAiccStateDir} from './stateDirectory.ts';
@@ -51,8 +51,8 @@ export type RuntimeState = {
   remoteRunnerUrl?: string;
   remoteRepositoryRoot?: string;
   remoteInstruction?: string;
-  projectId?: string;
-  repositoryIdentity?: string;
+  projectId: string;
+  repositoryIdentity: string;
   repositoryPath?: string;
   workPackageId: string | null;
   entityType?: 'global_task'|'work_package'|'pull_request';
@@ -413,9 +413,7 @@ export function reconcileRuntimeEntityBinding<T extends RuntimeState>(state:T,re
   const raw=state.instructionText??'';
   const declaredTaskId=readProtocolField(raw,'TASK_ID')??readProtocolField(raw,'INSTRUCTION_ID')??state.instructionId;
   const binding=resolveTaskEntityBinding({instructionId:declaredTaskId,declaredTaskId,entityType:state.entityType,entityId:state.entityId,formalWpId:state.formalWpId,workPackageId:state.workPackageId,phaseId:state.phaseId,legacyEntityReference:state.legacyEntityReference},effectiveRegistry);
-  const projects=createProjectRegistryAuthority().getProjectRegistry().projects;
-  const scope=state.projectId&&state.repositoryIdentity&&state.repositoryPath?{projectId:state.projectId,repositoryIdentity:state.repositoryIdentity,repositoryPath:state.repositoryPath}:backfillProjectScope({repositoryPath:state.repositoryPath??state.worktreePath??state.spawnCwd,repositoryIdentity:(state as any).repositoryIdentity},projects);
-  return {...state,...(scope??{}),entityClass:binding.entityClass,formalWpId:binding.formalWpId,phaseId:binding.phaseId,milestoneId:binding.milestoneId,legacyEntityReference:binding.legacyEntityReference};
+  return {...state,entityClass:binding.entityClass,formalWpId:binding.formalWpId,phaseId:binding.phaseId,milestoneId:binding.milestoneId,legacyEntityReference:binding.legacyEntityReference};
 }
 export function runtimeBelongsToProject(state:RuntimeState,scope:Pick<ProjectEntityScope,'projectId'|'repositoryIdentity'>):boolean{return belongsToProject(reconcileRuntimeEntityBinding(state),scope)}
 export function readRuntimeHistoryForProject(scope:Pick<ProjectEntityScope,'projectId'|'repositoryIdentity'>):RuntimeState[]{return readRuntimeHistory().filter(item=>runtimeBelongsToProject(item,scope))}
