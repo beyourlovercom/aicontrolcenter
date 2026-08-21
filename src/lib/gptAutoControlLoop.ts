@@ -255,6 +255,38 @@ function requireProjectScope(input: {projectId?: unknown; repositoryIdentity?: u
   return {projectId: requireText(input.projectId, 'PROJECT_ID_REQUIRED'), repositoryIdentity: requireText(input.repositoryIdentity, 'REPOSITORY_IDENTITY_REQUIRED')};
 }
 
+/** Strict scope equivalence: scoped records only match identical scope; unscoped legacy records only match other unscoped legacy records. Never bridges legacy to Active Project. */
+function scopeCompatible(a: {projectId?: string; repositoryIdentity?: string}, b: {projectId?: string; repositoryIdentity?: string}): boolean {
+  const aScoped = Boolean(a.projectId && a.repositoryIdentity);
+  const bScoped = Boolean(b.projectId && b.repositoryIdentity);
+  if (aScoped !== bScoped) return false;
+  if (!aScoped) return true;
+  return sameProjectScope(a as ProjectIdentityScope, b as ProjectIdentityScope);
+}
+
+/** Resolves a raw control_loop_id to exactly one loop. With scope: exact match only. Without scope: fails closed (throws) if the raw id is ambiguous across distinct project scopes rather than choosing the first match. */
+function resolveLoopByRawId(loops: ControlLoopRecord[], control_loop_id: string, scope?: ProjectIdentityScope): ControlLoopRecord | null {
+  const matches = loops.filter(loop => loop.control_loop_id === control_loop_id);
+  if (scope) return matches.find(loop => loop.projectId && loop.repositoryIdentity && sameProjectScope(loop, scope)) ?? null;
+  const scopedKeys = new Set(matches.filter(l => l.projectId && l.repositoryIdentity).map(l => scopedControlLoopKey(l, l.control_loop_id)));
+  if (scopedKeys.size > 1) throw new Error('AMBIGUOUS_CONTROL_LOOP_ID');
+  return matches[0] ?? null;
+}
+
+function requireLoopByRawId(loops: ControlLoopRecord[], control_loop_id: string, scope: ProjectIdentityScope | undefined, notFoundCode: string): ControlLoopRecord {
+  const loop = resolveLoopByRawId(loops, control_loop_id, scope);
+  if (!loop) throw new Error(notFoundCode);
+  return loop;
+}
+
+/** Fails closed (throws) if a raw-id collection spans more than one project scope and no scope was supplied to disambiguate. */
+function scopeFilter<T extends {projectId?: string; repositoryIdentity?: string}>(items: T[], scope?: ProjectIdentityScope, ambiguousCode = 'AMBIGUOUS_PROJECT_SCOPE'): T[] {
+  if (scope) return items.filter(item => item.projectId && item.repositoryIdentity && item.projectId === scope.projectId && item.repositoryIdentity === scope.repositoryIdentity);
+  const scopedKeys = new Set(items.filter(item => item.projectId && item.repositoryIdentity).map(item => `${item.projectId} ${item.repositoryIdentity}`));
+  if (scopedKeys.size > 1) throw new Error(ambiguousCode);
+  return items;
+}
+
 export function hashControlMessage(value: string): string {
   return createHash('sha256').update(String(value).replace(/\r\n?/g, '\n').trim()).digest('hex');
 }
@@ -307,7 +339,7 @@ export function rebindControlLoop(input: {control_loop_id: string; projectId: st
   loop.binding_assistant_message_ids = boundary.ids;
   loop.binding_control_message_hashes = boundary.hashes;
   for (const turn of state.expected_turns) {
-    if (turn.control_loop_id === loop.control_loop_id && turn.state !== 'CONSUMED' && turn.state !== 'FAILED') {
+    if (turn.control_loop_id === loop.control_loop_id && scopeCompatible(turn, loop) && turn.state !== 'CONSUMED' && turn.state !== 'FAILED') {
       turn.state = 'FAILED';
       turn.failure_code = 'STALE_BINDING_EPOCH';
       turn.updated_at = timestamp;
@@ -333,10 +365,9 @@ export function rebindControlLoop(input: {control_loop_id: string; projectId: st
   return loop;
 }
 
-export function unlockControlLoop(control_loop_id: string): ControlLoopRecord {
+export function unlockControlLoop(control_loop_id: string, scope?: ProjectIdentityScope): ControlLoopRecord {
   const state = readState();
-  const loop = state.loops.find(item => item.control_loop_id === requireText(control_loop_id, 'CONTROL_LOOP_ID_REQUIRED'));
-  if (!loop) throw new Error('CONTROL_LOOP_UNBIND_FAILED');
+  const loop = requireLoopByRawId(state.loops, requireText(control_loop_id, 'CONTROL_LOOP_ID_REQUIRED'), scope, 'CONTROL_LOOP_UNBIND_FAILED');
   loop.binding_active = false;
   loop.updated_at = now();
   writeState(state);
@@ -345,12 +376,12 @@ export function unlockControlLoop(control_loop_id: string): ControlLoopRecord {
 
 export function enableControlLoop(control_loop_id: string, enabled: boolean, scope?: ProjectIdentityScope): ControlLoopRecord {
   const state = readState();
-  const loop = state.loops.find(item => item.control_loop_id === control_loop_id && (!scope || (item.projectId && item.repositoryIdentity && sameProjectScope(item, scope))));
-  if (!loop) throw new Error('CONTROL_LOOP_NOT_FOUND');
+  const loop = requireLoopByRawId(state.loops, control_loop_id, scope, 'CONTROL_LOOP_NOT_FOUND');
   if (enabled && !loop.binding_active) throw new Error('CONTROL_LOOP_NOT_BOUND');
   if (enabled) {
     for (const other of state.loops) {
-      if (other.control_loop_id === control_loop_id && (!other.projectId || !other.repositoryIdentity || sameProjectScope(other, loop))) continue;
+      if (!scopeCompatible(other, loop)) continue;
+      if (other.control_loop_id === control_loop_id) continue;
       if (other.conversation_id !== loop.conversation_id || !other.enabled) continue;
       other.enabled = false;
       other.mode = 'OFF';
@@ -367,10 +398,9 @@ export function enableControlLoop(control_loop_id: string, enabled: boolean, sco
   return loop;
 }
 
-export function stopControlLoopByOwner(control_loop_id: string): ControlLoopRecord {
+export function stopControlLoopByOwner(control_loop_id: string, scope?: ProjectIdentityScope): ControlLoopRecord {
   const state = readState();
-  const loop = state.loops.find(item => item.control_loop_id === control_loop_id);
-  if (!loop) throw new Error('CONTROL_LOOP_NOT_FOUND');
+  const loop = requireLoopByRawId(state.loops, control_loop_id, scope, 'CONTROL_LOOP_NOT_FOUND');
   loop.enabled = false;
   loop.mode = 'OFF';
   loop.status = 'STOPPED_BY_OWNER';
@@ -382,10 +412,9 @@ export function stopControlLoopByOwner(control_loop_id: string): ControlLoopReco
   return loop;
 }
 
-export function resumeControlLoopByOwner(input: {control_loop_id: string; run_id: string; instruction_text: string; submit: (instruction_text: string, loop: ControlLoopRecord) => InboxItem}): {loop: ControlLoopRecord; item: InboxItem} {
+export function resumeControlLoopByOwner(input: {control_loop_id: string; run_id: string; instruction_text: string; scope?: ProjectIdentityScope; submit: (instruction_text: string, loop: ControlLoopRecord) => InboxItem}): {loop: ControlLoopRecord; item: InboxItem} {
   const state = readState();
-  const loop = state.loops.find(item => item.control_loop_id === input.control_loop_id);
-  if (!loop) throw new Error('CONTROL_LOOP_NOT_FOUND');
+  const loop = requireLoopByRawId(state.loops, input.control_loop_id, input.scope, 'CONTROL_LOOP_NOT_FOUND');
   if (!loop.binding_active || loop.conversation_id.length === 0) throw new Error('CONTROL_LOOP_NOT_BOUND');
   if (loop.status !== 'STOPPED_BY_OWNER' || loop.enabled || loop.mode !== 'OFF') throw new Error('RESUME_NOT_OWNER_STOPPED');
   if (loop.run_id !== input.run_id) throw new Error('RESUME_RUN_BINDING_MISMATCH');
@@ -402,7 +431,7 @@ export function resumeControlLoopByOwner(input: {control_loop_id: string; run_id
     const item = input.submit(input.instruction_text, loop);
     if (!item.runId || item.runId === input.run_id) throw new Error('RESUME_NEW_RUN_NOT_CREATED');
     const latest = readState();
-    const persisted = latest.loops.find(candidate => candidate.control_loop_id === loop.control_loop_id);
+    const persisted = latest.loops.find(candidate => candidate.control_loop_id === loop.control_loop_id && scopeCompatible(candidate, loop));
     if (!persisted) throw new Error('CONTROL_LOOP_NOT_FOUND');
     persisted.enabled = true;
     persisted.mode = 'ON';
@@ -424,7 +453,7 @@ export function resumeControlLoopByOwner(input: {control_loop_id: string; run_id
     return {loop: persisted, item};
   } catch (error) {
     const latest = readState();
-    const persisted = latest.loops.find(candidate => candidate.control_loop_id === loop.control_loop_id);
+    const persisted = latest.loops.find(candidate => candidate.control_loop_id === loop.control_loop_id && scopeCompatible(candidate, loop));
     if (persisted) {
       persisted.enabled = false;
       persisted.mode = 'OFF';
@@ -440,18 +469,31 @@ export function resumeControlLoopByOwner(input: {control_loop_id: string; run_id
 }
 
 export function readControlLoops(): ControlLoopRecord[] { return readState().loops; }
-export function readControlLoop(control_loop_id: string): ControlLoopRecord | null { return readState().loops.find(loop => loop.control_loop_id === control_loop_id) ?? null; }
-export function readControlLoopByConversation(conversation_id: string): ControlLoopRecord | null {
-  const matches = readState().loops.filter(loop => loop.conversation_id === conversation_id);
-  return matches.find(loop => loop.binding_active) ?? matches[0] ?? null;
+export function readControlLoop(control_loop_id: string, scope?: ProjectIdentityScope): ControlLoopRecord | null { return resolveLoopByRawId(readState().loops, control_loop_id, scope); }
+export function readControlLoopByConversation(conversation_id: string, scope?: ProjectIdentityScope): ControlLoopRecord | null {
+  const all = readState().loops.filter(loop => loop.conversation_id === conversation_id && (!scope || (loop.projectId && loop.repositoryIdentity && sameProjectScope(loop, scope))));
+  const active = all.filter(loop => loop.binding_active);
+  const pool = active.length ? active : all;
+  if (!scope) {
+    const scopedKeys = new Set(pool.filter(loop => loop.projectId && loop.repositoryIdentity).map(loop => `${loop.projectId} ${loop.repositoryIdentity}`));
+    if (scopedKeys.size > 1) throw new Error('AMBIGUOUS_CONVERSATION_ID');
+  }
+  return pool[0] ?? null;
 }
-export function readExpectedControlTurn(input: string | {conversation_id: string; expected_gpt_turn_id?: string; control_loop_id?: string; binding_epoch?: number}): ExpectedControlTurn | null {
+export function readExpectedControlTurn(input: string | {conversation_id: string; expected_gpt_turn_id?: string; control_loop_id?: string; binding_epoch?: number}, scope?: ProjectIdentityScope): ExpectedControlTurn | null {
   const query = typeof input === 'string' ? {conversation_id: input} : input;
   const state = readState();
-  const turns = state.expected_turns.filter(turn => turn.conversation_id === query.conversation_id && ['PENDING', 'GPT_CONTROL_RECEIVED', 'SUBMITTING_AICC'].includes(turn.state));
-  if (query.expected_gpt_turn_id) return turns.find(turn => turn.expected_gpt_turn_id === query.expected_gpt_turn_id && (!query.control_loop_id || turn.control_loop_id === query.control_loop_id) && (!query.binding_epoch || turn.binding_epoch === query.binding_epoch)) ?? null;
+  const turns = state.expected_turns.filter(turn => turn.conversation_id === query.conversation_id && ['PENDING', 'GPT_CONTROL_RECEIVED', 'SUBMITTING_AICC'].includes(turn.state) && (!scope || (turn.projectId && turn.repositoryIdentity && sameProjectScope(turn, scope))));
+  if (query.expected_gpt_turn_id) {
+    const matches = turns.filter(turn => turn.expected_gpt_turn_id === query.expected_gpt_turn_id && (!query.control_loop_id || turn.control_loop_id === query.control_loop_id) && (!query.binding_epoch || turn.binding_epoch === query.binding_epoch));
+    if (!scope) {
+      const scopedKeys = new Set(matches.filter(turn => turn.projectId && turn.repositoryIdentity).map(turn => scopedExpectedTurnKey(turn, turn.expected_gpt_turn_id)));
+      if (scopedKeys.size > 1) throw new Error('AMBIGUOUS_EXPECTED_TURN');
+    }
+    return matches[0] ?? null;
+  }
   const active = turns.filter(turn => {
-    const loop = state.loops.find(candidate => candidate.control_loop_id === turn.control_loop_id);
+    const loop = state.loops.find(candidate => candidate.control_loop_id === turn.control_loop_id && scopeCompatible(candidate, turn));
     return loop?.binding_active === true && loop.binding_epoch === turn.binding_epoch && (!query.control_loop_id || turn.control_loop_id === query.control_loop_id) && (!query.binding_epoch || turn.binding_epoch === query.binding_epoch);
   });
   return active.length === 1 ? active[0] : null;
@@ -554,11 +596,18 @@ export function claimFeedback(input: FeedbackEnvelopeInput & {conversation_id: s
   return {ok: true, claimGranted: true, record: candidate};
 }
 
-function feedbackState(control_loop_id: string, feedback_key: string): {state: PersistedState; record: FeedbackRecord; loop?: ControlLoopRecord} {
+function feedbackState(control_loop_id: string, feedback_key: string, scope?: ProjectIdentityScope): {state: PersistedState; record: FeedbackRecord; loop?: ControlLoopRecord} {
   const state = readState();
-  const record = state.feedback.find(item => item.control_loop_id === control_loop_id && item.feedback_key === feedback_key);
+  const candidates = state.feedback.filter(item => item.control_loop_id === control_loop_id && item.feedback_key === feedback_key);
+  let record: FeedbackRecord | undefined;
+  if (scope) record = candidates.find(item => item.projectId && item.repositoryIdentity && sameProjectScope(item, scope));
+  else {
+    const scopedKeys = new Set(candidates.filter(item => item.projectId && item.repositoryIdentity).map(item => scopedFeedbackKey(item, item.feedback_id)));
+    if (scopedKeys.size > 1) throw new Error('AMBIGUOUS_FEEDBACK_IDENTITY');
+    record = candidates[0];
+  }
   if (!record) throw new Error('FEEDBACK_NOT_FOUND');
-  const loop = state.loops.find(item => item.control_loop_id === control_loop_id && (!record.projectId || !record.repositoryIdentity || !item.projectId || !item.repositoryIdentity || sameProjectScope(item, record)));
+  const loop = state.loops.find(item => item.control_loop_id === control_loop_id && scopeCompatible(item, record!));
   if (!loop?.binding_active) throw new Error('CONTROL_LOOP_NOT_BOUND');
   if (record.conversation_id !== loop.conversation_id || record.binding_epoch !== loop.binding_epoch) throw new Error('STALE_FEEDBACK_BINDING');
   return {state, record, loop};
@@ -573,8 +622,8 @@ function updateFeedbackLoop(loop: ControlLoopRecord | undefined, record: Feedbac
   loop.updated_at = record.updated_at;
 }
 
-export function markFeedbackInserting(control_loop_id: string, feedback_key: string): {record: FeedbackRecord; attemptGranted: boolean} {
-  const {state, record, loop} = feedbackState(control_loop_id, feedback_key);
+export function markFeedbackInserting(control_loop_id: string, feedback_key: string, scope?: ProjectIdentityScope): {record: FeedbackRecord; attemptGranted: boolean} {
+  const {state, record, loop} = feedbackState(control_loop_id, feedback_key, scope);
   if (record.submission_claimed_at || ['FEEDBACK_SUBMITTING', 'FEEDBACK_SUBMITTED', 'FEEDBACK_CONSUMED', 'FEEDBACK_DELIVERY_FAILED'].includes(record.lifecycle)) return {record, attemptGranted: false};
   const attempts = record.delivery_attempts ?? 0;
   if (attempts >= 1) return {record, attemptGranted: false};
@@ -587,8 +636,8 @@ export function markFeedbackInserting(control_loop_id: string, feedback_key: str
   return {record, attemptGranted: true};
 }
 
-export function markFeedbackInserted(control_loop_id: string, feedback_key: string): FeedbackRecord {
-  const {state, record, loop} = feedbackState(control_loop_id, feedback_key);
+export function markFeedbackInserted(control_loop_id: string, feedback_key: string, scope?: ProjectIdentityScope): FeedbackRecord {
+  const {state, record, loop} = feedbackState(control_loop_id, feedback_key, scope);
   if (record.submission_claimed_at || ['FEEDBACK_SUBMITTING', 'FEEDBACK_SUBMITTED', 'FEEDBACK_CONSUMED'].includes(record.lifecycle)) return record;
   if (record.lifecycle !== 'FEEDBACK_INSERTING') throw new Error('FEEDBACK_INSERTION_NOT_CLAIMED');
   record.lifecycle = 'FEEDBACK_INSERTED';
@@ -598,8 +647,8 @@ export function markFeedbackInserted(control_loop_id: string, feedback_key: stri
   return record;
 }
 
-export function markFeedbackSubmitting(control_loop_id: string, feedback_key: string): {record: FeedbackRecord; sendGranted: boolean} {
-  const {state, record, loop} = feedbackState(control_loop_id, feedback_key);
+export function markFeedbackSubmitting(control_loop_id: string, feedback_key: string, scope?: ProjectIdentityScope): {record: FeedbackRecord; sendGranted: boolean} {
+  const {state, record, loop} = feedbackState(control_loop_id, feedback_key, scope);
   if (record.submission_claimed_at || ['FEEDBACK_SUBMITTING', 'FEEDBACK_SUBMITTED', 'FEEDBACK_CONSUMED'].includes(record.lifecycle)) return {record, sendGranted: false};
   if (record.lifecycle !== 'FEEDBACK_INSERTED') throw new Error('FEEDBACK_INSERTION_NOT_VERIFIED');
   record.lifecycle = 'FEEDBACK_SUBMITTING';
@@ -610,8 +659,8 @@ export function markFeedbackSubmitting(control_loop_id: string, feedback_key: st
   return {record, sendGranted: true};
 }
 
-export function markFeedbackSubmitted(control_loop_id: string, feedback_key: string): FeedbackRecord {
-  const {state, record, loop} = feedbackState(control_loop_id, feedback_key);
+export function markFeedbackSubmitted(control_loop_id: string, feedback_key: string, scope?: ProjectIdentityScope): FeedbackRecord {
+  const {state, record, loop} = feedbackState(control_loop_id, feedback_key, scope);
   if (['FEEDBACK_SUBMITTED', 'FEEDBACK_CONSUMED'].includes(record.lifecycle)) return record;
   if (!record.submission_claimed_at) throw new Error('FEEDBACK_SUBMISSION_NOT_CLAIMED');
   record.lifecycle = 'FEEDBACK_SUBMITTED';
@@ -623,8 +672,8 @@ export function markFeedbackSubmitted(control_loop_id: string, feedback_key: str
   return record;
 }
 
-export function failFeedbackDelivery(control_loop_id: string, feedback_key: string, reason: string): FeedbackRecord {
-  const {state, record, loop} = feedbackState(control_loop_id, feedback_key);
+export function failFeedbackDelivery(control_loop_id: string, feedback_key: string, reason: string, scope?: ProjectIdentityScope): FeedbackRecord {
+  const {state, record, loop} = feedbackState(control_loop_id, feedback_key, scope);
   if (['FEEDBACK_SUBMITTED', 'FEEDBACK_CONSUMED'].includes(record.lifecycle)) return record;
   record.lifecycle = 'FEEDBACK_DELIVERY_FAILED';
   record.failure_reason = requireText(reason, 'FEEDBACK_FAILURE_REASON_REQUIRED');
@@ -635,10 +684,17 @@ export function failFeedbackDelivery(control_loop_id: string, feedback_key: stri
   return record;
 }
 
-export function retryFeedbackDelivery(control_loop_id: string, feedback_key: string): {record: FeedbackRecord; retryGranted: boolean} {
+export function retryFeedbackDelivery(control_loop_id: string, feedback_key: string, scope?: ProjectIdentityScope): {record: FeedbackRecord; retryGranted: boolean} {
   const state = readState();
-  const record = state.feedback.find(item => item.control_loop_id === control_loop_id && item.feedback_key === feedback_key);
-  const loop = state.loops.find(item => item.control_loop_id === control_loop_id);
+  const candidates = state.feedback.filter(item => item.control_loop_id === control_loop_id && item.feedback_key === feedback_key);
+  let record: FeedbackRecord | undefined;
+  if (scope) record = candidates.find(item => item.projectId && item.repositoryIdentity && sameProjectScope(item, scope));
+  else {
+    const scopedKeys = new Set(candidates.filter(item => item.projectId && item.repositoryIdentity).map(item => scopedFeedbackKey(item, item.feedback_id)));
+    if (scopedKeys.size > 1) throw new Error('AMBIGUOUS_FEEDBACK_IDENTITY');
+    record = candidates[0];
+  }
+  const loop = record ? state.loops.find(item => item.control_loop_id === control_loop_id && scopeCompatible(item, record!)) : undefined;
   if (!record || !loop) throw new Error('FEEDBACK_NOT_FOUND');
   if (record.conversation_id !== loop.conversation_id || record.binding_epoch !== loop.binding_epoch) throw new Error('STALE_FEEDBACK_BINDING');
   if (record.lifecycle !== 'FEEDBACK_DELIVERY_FAILED' || (loop.delivery_retry_attempts ?? 0) >= 1) return {record, retryGranted: false};
@@ -657,14 +713,16 @@ export function retryFeedbackDelivery(control_loop_id: string, feedback_key: str
   return {record, retryGranted: true};
 }
 
-export function recoverFeedbackCorrelation(control_loop_id: string, expected_gpt_turn_id: string): {ok: boolean; recoveryGranted: boolean; code?: string; loop?: ControlLoopRecord} {
+export function recoverFeedbackCorrelation(control_loop_id: string, expected_gpt_turn_id: string, scope?: ProjectIdentityScope): {ok: boolean; recoveryGranted: boolean; code?: string; loop?: ControlLoopRecord} {
   const state = readState();
-  const loop = state.loops.find(item => item.control_loop_id === control_loop_id);
+  let loop: ControlLoopRecord | null;
+  try { loop = resolveLoopByRawId(state.loops, control_loop_id, scope); }
+  catch { return {ok: false, recoveryGranted: false, code: 'AMBIGUOUS_CONTROL_LOOP_ID'}; }
   if (!loop) return {ok: false, recoveryGranted: false, code: 'CONTROL_LOOP_NOT_FOUND'};
-  const expected = state.expected_turns.find(turn => turn.control_loop_id === control_loop_id && turn.binding_epoch === loop.binding_epoch && turn.expected_gpt_turn_id === expected_gpt_turn_id && turn.state === 'PENDING');
+  const expected = state.expected_turns.find(turn => turn.control_loop_id === control_loop_id && scopeCompatible(turn, loop!) && turn.binding_epoch === loop!.binding_epoch && turn.expected_gpt_turn_id === expected_gpt_turn_id && turn.state === 'PENDING');
   if (!expected) return {ok: false, recoveryGranted: false, code: 'EXPECTED_FEEDBACK_TURN_CORRELATION_FAILED', loop};
   if ((loop.correlation_recovery_attempts ?? 0) >= 1) return {ok: false, recoveryGranted: false, code: 'CORRELATION_RECOVERY_EXHAUSTED', loop};
-  const feedback = state.feedback.find(record => record.control_loop_id === control_loop_id && record.binding_epoch === loop.binding_epoch && record.feedback_id === expected.feedback_id && record.expected_gpt_turn_id === expected_gpt_turn_id);
+  const feedback = state.feedback.find(record => record.control_loop_id === control_loop_id && scopeCompatible(record, loop!) && record.binding_epoch === loop!.binding_epoch && record.feedback_id === expected.feedback_id && record.expected_gpt_turn_id === expected_gpt_turn_id);
   if (!feedback) return {ok: false, recoveryGranted: false, code: 'FEEDBACK_RECORD_NOT_FOUND', loop};
   loop.correlation_recovery_attempts = (loop.correlation_recovery_attempts ?? 0) + 1;
   feedback.lifecycle = 'FEEDBACK_CONSUMED';
@@ -681,17 +739,17 @@ export function recoverFeedbackCorrelation(control_loop_id: string, expected_gpt
   return {ok: true, recoveryGranted: true, loop};
 }
 
-export function completeFeedback(control_loop_id: string, feedback_key: string, feedback_message_id = `feedback:${feedback_key}`): FeedbackRecord {
-  const {state, record, loop} = feedbackState(control_loop_id, feedback_key);
+export function completeFeedback(control_loop_id: string, feedback_key: string, feedback_message_id = `feedback:${feedback_key}`, scope?: ProjectIdentityScope): FeedbackRecord {
+  const {state, record, loop} = feedbackState(control_loop_id, feedback_key, scope);
   if (record.lifecycle !== 'FEEDBACK_SUBMITTED' && record.lifecycle !== 'FEEDBACK_CONSUMED') throw new Error('FEEDBACK_SUBMISSION_NOT_CONFIRMED');
   if (record.lifecycle !== 'FEEDBACK_CONSUMED') record.lifecycle = 'FEEDBACK_CONSUMED';
   record.updated_at = now();
-  const existing = state.expected_turns.find(turn => turn.feedback_key === feedback_key && turn.control_loop_id === record.control_loop_id && turn.binding_epoch === record.binding_epoch && turn.expected_gpt_turn_id === record.expected_gpt_turn_id);
+  const existing = state.expected_turns.find(turn => turn.feedback_key === feedback_key && turn.control_loop_id === record.control_loop_id && scopeCompatible(turn, record) && turn.binding_epoch === record.binding_epoch && turn.expected_gpt_turn_id === record.expected_gpt_turn_id);
   if (!existing) {
     const binding_epoch = record.binding_epoch ?? loop?.binding_epoch ?? 1;
     const expected_gpt_turn_id = requireText(record.expected_gpt_turn_id, 'EXPECTED_GPT_TURN_ID_REQUIRED');
     for (const turn of state.expected_turns) {
-      if (turn.control_loop_id === record.control_loop_id && turn.binding_epoch === binding_epoch && turn.state === 'PENDING') { turn.state = 'FAILED'; turn.failure_code = 'SUPERSEDED_EXPECTED_TURN'; turn.updated_at = record.updated_at; }
+      if (turn.control_loop_id === record.control_loop_id && scopeCompatible(turn, record) && turn.binding_epoch === binding_epoch && turn.state === 'PENDING') { turn.state = 'FAILED'; turn.failure_code = 'SUPERSEDED_EXPECTED_TURN'; turn.updated_at = record.updated_at; }
     }
     state.expected_turns.unshift({control_loop_id: record.control_loop_id, projectId: record.projectId, repositoryIdentity: record.repositoryIdentity, binding_epoch, conversation_id: record.conversation_id, feedback_key: record.feedback_key, feedback_id: record.feedback_id, expected_gpt_turn_id, next_control_contract_id: nextControlContractId(expected_gpt_turn_id), feedback_message_id: requireText(feedback_message_id, 'FEEDBACK_MESSAGE_ID_REQUIRED'), result_id: record.result_id, result_hash: record.result_hash, created_at: record.updated_at, updated_at: record.updated_at, state: 'PENDING'});
   }
@@ -713,25 +771,29 @@ function updateLoopFromContract(loop: ControlLoopRecord, claim: ControlClaim, co
   if (contract.type === 'AICC_BLOCKED_V1') { loop.status = 'BLOCKED'; loop.blocker_code = header(claim.response, 'BLOCKER_CODE') ?? 'AICC_BLOCKED_V1'; }
 }
 
-export function consumeGptControl(input: {conversation_id: string; assistant_message_id: string; response: string; control_loop_id?: string; binding_epoch?: number; feedback_key?: string; expected_gpt_turn_id?: string}, submit: (instruction: ParsedInstruction, control_loop_id: string) => InboxItem, launch: (inboxId: string) => InboxItem): {ok: boolean; claimGranted: boolean; duplicate?: boolean; contract?: ParsedControlContract; claim?: ControlClaim; item?: InboxItem; expected_turn?: ExpectedControlTurn; code?: string; reason?: string} {
+export function consumeGptControl(input: {conversation_id: string; assistant_message_id: string; response: string; control_loop_id?: string; binding_epoch?: number; feedback_key?: string; expected_gpt_turn_id?: string; projectId?: string; repositoryIdentity?: string}, submit: (instruction: ParsedInstruction, control_loop_id: string) => InboxItem, launch: (inboxId: string) => InboxItem): {ok: boolean; claimGranted: boolean; duplicate?: boolean; contract?: ParsedControlContract; claim?: ControlClaim; item?: InboxItem; expected_turn?: ExpectedControlTurn; code?: string; reason?: string} {
   const state = readState();
+  const scope: ProjectIdentityScope | undefined = input.projectId && input.repositoryIdentity ? {projectId: input.projectId, repositoryIdentity: input.repositoryIdentity} : undefined;
   const control_message_hash = hashControlMessage(input.response);
-  const duplicate = state.controls.find(item => item.conversation_id === input.conversation_id && (item.assistant_message_id === input.assistant_message_id || item.control_message_hash === control_message_hash));
+  const duplicateCandidates = state.controls.filter(item => item.conversation_id === input.conversation_id && (item.assistant_message_id === input.assistant_message_id || item.control_message_hash === control_message_hash));
+  const duplicate = scopeFilter(duplicateCandidates, scope, 'AMBIGUOUS_CONTROL_CLAIM')[0];
   if (duplicate) {
     const parsedDuplicate = parseControlContract(duplicate.response);
     return {ok: true, claimGranted: false, duplicate: true, claim: duplicate, contract: parsedDuplicate.ok ? parsedDuplicate.contract : undefined};
   }
-  const activeLoop = state.loops.find(item => item.conversation_id === input.conversation_id && item.binding_active && item.enabled);
+  const activeLoopCandidates = state.loops.filter(item => item.conversation_id === input.conversation_id && item.binding_active && item.enabled);
+  const activeLoop = scopeFilter(activeLoopCandidates, scope, 'AMBIGUOUS_ACTIVE_CONTROL_LOOP')[0];
   if (activeLoop && ['WAITING_OWNER_UAT', 'BLOCKED', 'COMPLETE', 'PAUSED'].includes(activeLoop.status)) return {ok: false, claimGranted: false, code: 'AUTO_LOOP_STOPPED', reason: `Automatic progression is stopped in ${activeLoop.status}.`};
-  const consumedFeedbackTurn = input.feedback_key ? state.controls.find(item => item.conversation_id === input.conversation_id && item.feedback_key === input.feedback_key && (!input.control_loop_id || item.control_loop_id === input.control_loop_id) && (!input.binding_epoch || item.binding_epoch === input.binding_epoch) && (!input.expected_gpt_turn_id || item.expected_gpt_turn_id === input.expected_gpt_turn_id)) : undefined;
+  const consumedFeedbackTurnCandidates = input.feedback_key ? state.controls.filter(item => item.conversation_id === input.conversation_id && item.feedback_key === input.feedback_key && (!input.control_loop_id || item.control_loop_id === input.control_loop_id) && (!input.binding_epoch || item.binding_epoch === input.binding_epoch) && (!input.expected_gpt_turn_id || item.expected_gpt_turn_id === input.expected_gpt_turn_id)) : [];
+  const consumedFeedbackTurn = scopeFilter(consumedFeedbackTurnCandidates, scope, 'AMBIGUOUS_FEEDBACK_TURN')[0];
   if (consumedFeedbackTurn) return {ok: true, claimGranted: false, duplicate: true, claim: consumedFeedbackTurn};
-  if (input.control_loop_id) { const suppliedLoop = state.loops.find(item => item.control_loop_id === input.control_loop_id); if (suppliedLoop && suppliedLoop.conversation_id !== input.conversation_id) return {ok: false, claimGranted: false, code: 'CROSS_CONVERSATION_ISOLATION', reason: 'The Assistant response belongs to another conversation.'}; }
-  const candidates = state.expected_turns.filter(turn => turn.conversation_id === input.conversation_id && ['PENDING', 'GPT_CONTROL_RECEIVED', 'SUBMITTING_AICC'].includes(turn.state));
+  if (input.control_loop_id) { const suppliedLoopCandidates = state.loops.filter(item => item.control_loop_id === input.control_loop_id); const suppliedLoop = scopeFilter(suppliedLoopCandidates, scope, 'AMBIGUOUS_CONTROL_LOOP_ID')[0]; if (suppliedLoop && suppliedLoop.conversation_id !== input.conversation_id) return {ok: false, claimGranted: false, code: 'CROSS_CONVERSATION_ISOLATION', reason: 'The Assistant response belongs to another conversation.'}; }
+  const candidates = scopeFilter(state.expected_turns.filter(turn => turn.conversation_id === input.conversation_id && ['PENDING', 'GPT_CONTROL_RECEIVED', 'SUBMITTING_AICC'].includes(turn.state)), scope, 'AMBIGUOUS_EXPECTED_TURN');
   const expectedTurn = input.expected_gpt_turn_id ? candidates.find(turn => turn.expected_gpt_turn_id === input.expected_gpt_turn_id && (!input.control_loop_id || turn.control_loop_id === input.control_loop_id) && (!input.binding_epoch || turn.binding_epoch === input.binding_epoch)) : undefined;
   if (!expectedTurn) {
     if (activeLoop) {
-      const currentExpected = candidates.find(turn => turn.control_loop_id === activeLoop.control_loop_id && turn.binding_epoch === activeLoop.binding_epoch);
-      const currentFeedback = currentExpected ? state.feedback.find(record => record.feedback_id === currentExpected.feedback_id && record.control_loop_id === activeLoop.control_loop_id && record.binding_epoch === activeLoop.binding_epoch) : undefined;
+      const currentExpected = candidates.find(turn => turn.control_loop_id === activeLoop.control_loop_id && scopeCompatible(turn, activeLoop) && turn.binding_epoch === activeLoop.binding_epoch);
+      const currentFeedback = currentExpected ? state.feedback.find(record => record.feedback_id === currentExpected.feedback_id && record.control_loop_id === activeLoop.control_loop_id && scopeCompatible(record, activeLoop) && record.binding_epoch === activeLoop.binding_epoch) : undefined;
       if (currentFeedback) {
         currentFeedback.lifecycle = 'FEEDBACK_CORRELATION_FAILED';
         currentFeedback.failure_reason = input.expected_gpt_turn_id ? 'EXPECTED_FEEDBACK_TURN_CORRELATION_FAILED' : 'EXPECTED_FEEDBACK_TURN_REQUIRED';
@@ -742,18 +804,18 @@ export function consumeGptControl(input: {conversation_id: string; assistant_mes
     }
     return {ok: false, claimGranted: false, code: input.expected_gpt_turn_id ? 'EXPECTED_FEEDBACK_TURN_CORRELATION_FAILED' : 'EXPECTED_FEEDBACK_TURN_REQUIRED', reason: 'No exact pending canonical feedback turn exists for this conversation and binding.'};
   }
-  const loop = state.loops.find(item => item.control_loop_id === expectedTurn.control_loop_id && item.conversation_id === expectedTurn.conversation_id && item.binding_epoch === expectedTurn.binding_epoch);
+  const loop = state.loops.find(item => item.control_loop_id === expectedTurn.control_loop_id && item.conversation_id === expectedTurn.conversation_id && item.binding_epoch === expectedTurn.binding_epoch && scopeCompatible(item, expectedTurn));
   if (!loop) { expectedTurn.state = 'FAILED'; expectedTurn.failure_code = 'EXPECTED_CONTROL_LOOP_UNAVAILABLE'; expectedTurn.updated_at = now(); writeState(state); return {ok: false, claimGranted: false, expected_turn: expectedTurn, code: 'EXPECTED_CONTROL_LOOP_UNAVAILABLE', reason: 'The expected control turn no longer resolves to its canonical loop.'}; }
   if (!loop.binding_active) return {ok: false, claimGranted: false, expected_turn: expectedTurn, code: 'CONTROL_LOOP_NOT_BOUND', reason: 'Automatic control is disabled until the Conversation is explicitly locked again.'};
-  if (activeLoop?.control_loop_id !== loop.control_loop_id) { expectedTurn.state = 'FAILED'; expectedTurn.failure_code = 'CANONICAL_LOOP_INACTIVE'; expectedTurn.updated_at = now(); loop.status = 'PAUSED'; loop.blocker_code = expectedTurn.failure_code; loop.updated_at = expectedTurn.updated_at; writeState(state); return {ok: false, claimGranted: false, expected_turn: expectedTurn, code: 'CANONICAL_LOOP_INACTIVE', reason: 'The expected turn loop is not the active canonical loop for this conversation.'}; }
+  if (!activeLoop || activeLoop.control_loop_id !== loop.control_loop_id || !scopeCompatible(activeLoop, loop)) { expectedTurn.state = 'FAILED'; expectedTurn.failure_code = 'CANONICAL_LOOP_INACTIVE'; expectedTurn.updated_at = now(); loop.status = 'PAUSED'; loop.blocker_code = expectedTurn.failure_code; loop.updated_at = expectedTurn.updated_at; writeState(state); return {ok: false, claimGranted: false, expected_turn: expectedTurn, code: 'CANONICAL_LOOP_INACTIVE', reason: 'The expected turn loop is not the active canonical loop for this conversation.'}; }
   if (!loop.enabled) return {ok: false, claimGranted: false, code: 'GPT_AUTO_CONTROL_LOOP_OFF', reason: 'Automatic control loop mode is OFF.'};
   if (['WAITING_OWNER_UAT', 'BLOCKED', 'COMPLETE', 'PAUSED'].includes(loop.status)) return {ok: false, claimGranted: false, code: 'AUTO_LOOP_STOPPED', reason: `Automatic progression is stopped in ${loop.status}.`};
   if (loop.binding_assistant_message_ids.includes(input.assistant_message_id) || loop.binding_control_message_hashes.includes(control_message_hash)) return {ok: false, claimGranted: false, code: 'STALE_PRE_BIND_CONTROL', reason: 'The Assistant response predates the current explicit conversation binding.'};
-  const feedback = state.feedback.find(item => item.feedback_key === expectedTurn.feedback_key && item.control_loop_id === expectedTurn.control_loop_id && item.conversation_id === expectedTurn.conversation_id && item.binding_epoch === expectedTurn.binding_epoch && item.lifecycle === 'FEEDBACK_CONSUMED');
+  const feedback = state.feedback.find(item => item.feedback_key === expectedTurn.feedback_key && item.control_loop_id === expectedTurn.control_loop_id && scopeCompatible(item, expectedTurn) && item.conversation_id === expectedTurn.conversation_id && item.binding_epoch === expectedTurn.binding_epoch && item.lifecycle === 'FEEDBACK_CONSUMED');
   if (!feedback) { expectedTurn.state = 'FAILED'; expectedTurn.failure_code = 'EXPECTED_FEEDBACK_TURN_REQUIRED'; expectedTurn.updated_at = now(); loop.status = 'PAUSED'; loop.blocker_code = expectedTurn.failure_code; loop.updated_at = expectedTurn.updated_at; writeState(state); return {ok: false, claimGranted: false, expected_turn: expectedTurn, code: 'EXPECTED_FEEDBACK_TURN_REQUIRED', reason: 'The control response is not linked to a consumed feedback turn in the current binding epoch.'}; }
-  const feedbackControl = state.controls.find(item => item.control_loop_id === expectedTurn.control_loop_id && item.binding_epoch === expectedTurn.binding_epoch && item.feedback_key === expectedTurn.feedback_key);
+  const feedbackControl = state.controls.find(item => item.control_loop_id === expectedTurn.control_loop_id && scopeCompatible(item, expectedTurn) && item.binding_epoch === expectedTurn.binding_epoch && item.feedback_key === expectedTurn.feedback_key);
   if (feedbackControl) return {ok: true, claimGranted: false, duplicate: true, claim: feedbackControl};
-  const existing = state.controls.find(item => item.control_loop_id === expectedTurn.control_loop_id && item.conversation_id === expectedTurn.conversation_id && item.binding_epoch === expectedTurn.binding_epoch && item.control_message_hash === control_message_hash);
+  const existing = state.controls.find(item => item.control_loop_id === expectedTurn.control_loop_id && scopeCompatible(item, expectedTurn) && item.conversation_id === expectedTurn.conversation_id && item.binding_epoch === expectedTurn.binding_epoch && item.control_message_hash === control_message_hash);
   if (existing) return {ok: true, claimGranted: false, duplicate: true, claim: existing};
   const parsed = parseControlContract(input.response);
   const claim: ControlClaim = {control_loop_id: expectedTurn.control_loop_id, projectId: expectedTurn.projectId, repositoryIdentity: expectedTurn.repositoryIdentity, conversation_id: expectedTurn.conversation_id, binding_epoch: expectedTurn.binding_epoch, feedback_key: expectedTurn.feedback_key, expected_gpt_turn_id: expectedTurn.expected_gpt_turn_id, next_control_contract_id: expectedTurn.next_control_contract_id, assistant_message_id: input.assistant_message_id, control_message_hash, contract_type: parsed.ok ? parsed.contract.type : 'AICC_BLOCKED_V1', contract_class: parsed.ok ? parsed.contract.class : 'TERMINAL_BLOCKED', lifecycle: parsed.ok ? 'GPT_CONTROL_DETECTED' : 'CONTROL_CONTRACT_INVALID', response: input.response, created_at: now(), updated_at: now(), invalid_code: parsed.ok ? undefined : parsed.code};
@@ -763,12 +825,12 @@ export function consumeGptControl(input: {conversation_id: string; assistant_mes
   claim.lifecycle = 'CONTROL_CLAIMED'; loop.status = 'GPT_CONTROL_RECEIVED'; updateLoopFromContract(loop, claim, parsed.contract);
   expectedTurn.instruction_id = parsed.contract.instruction?.instructionId ?? null;
   if (parsed.contract.class !== 'EXECUTABLE_CONTROL') { claim.lifecycle = 'CONTROL_CONSUMED'; claim.updated_at = now(); expectedTurn.state = 'CONSUMED'; expectedTurn.updated_at = claim.updated_at; loop.control_loop_status = parsed.contract.type === 'AICC_OWNER_UAT_V1' ? 'WAITING_OWNER_UAT' : parsed.contract.type === 'AICC_WP_COMPLETE_V1' ? 'COMPLETE' : 'BLOCKED'; writeState(state); return {ok: true, claimGranted: true, contract: parsed.contract, claim, expected_turn: expectedTurn}; }
-  const executions = state.controls.filter(item => item.control_loop_id === loop.control_loop_id && item.binding_epoch === loop.binding_epoch && item.contract_type === 'AICC_EXECUTION_V1' && ['SUBMITTED_TO_AICC', 'EXECUTION_STARTED', 'CONTROL_CONSUMED'].includes(item.lifecycle));
+  const executions = state.controls.filter(item => item.control_loop_id === loop.control_loop_id && scopeCompatible(item, loop) && item.binding_epoch === loop.binding_epoch && item.contract_type === 'AICC_EXECUTION_V1' && ['SUBMITTED_TO_AICC', 'EXECUTION_STARTED', 'CONTROL_CONSUMED'].includes(item.lifecycle));
   if (executions.length >= 3) { loop.status = 'PAUSED'; loop.blocker_code = 'MAX_EXECUTION_COUNT'; claim.lifecycle = 'CONTROL_CONTRACT_INVALID'; claim.invalid_code = 'MAX_EXECUTION_COUNT'; claim.updated_at = now(); loop.updated_at = claim.updated_at; expectedTurn.state = 'FAILED'; expectedTurn.failure_code = 'MAX_EXECUTION_COUNT'; expectedTurn.updated_at = claim.updated_at; writeState(state); return {ok: false, claimGranted: true, contract: parsed.contract, claim, expected_turn: expectedTurn, code: 'MAX_EXECUTION_COUNT', reason: 'Automatic control loop execution limit reached.'}; }
   expectedTurn.state = 'SUBMITTING_AICC'; expectedTurn.updated_at = now(); loop.status = 'SUBMITTING_AICC'; loop.execution_status = 'SUBMITTING'; loop.control_loop_status = 'CONTINUING'; loop.updated_at = expectedTurn.updated_at; writeState(state);
   let item: InboxItem; let launched: InboxItem;
   try { item = submit(parsed.contract.instruction!, loop.control_loop_id); launched = item.state === 'READY' ? launch(item.id) : item; }
-  catch (error) { const failedState = readState(); const failedTurn = failedState.expected_turns.find(turn => turn.feedback_key === expectedTurn.feedback_key); const failedLoop = failedState.loops.find(item => item.control_loop_id === loop.control_loop_id); if (failedTurn) { failedTurn.state = 'FAILED'; failedTurn.failure_code = error instanceof Error ? error.message : 'CONTROL_SUBMIT_FAILED'; failedTurn.updated_at = now(); } if (failedLoop) { failedLoop.status = 'PAUSED'; failedLoop.blocker_code = failedTurn?.failure_code; failedLoop.updated_at = now(); } writeState(failedState); return {ok: false, claimGranted: true, claim, expected_turn: failedTurn, code: failedTurn?.failure_code || 'CONTROL_SUBMIT_FAILED', reason: 'The canonical control could not be submitted to AICC.'}; }
+  catch (error) { const failedState = readState(); const failedTurn = failedState.expected_turns.find(turn => turn.feedback_key === expectedTurn.feedback_key && scopeCompatible(turn, expectedTurn)); const failedLoop = failedState.loops.find(item => item.control_loop_id === loop.control_loop_id && scopeCompatible(item, loop)); if (failedTurn) { failedTurn.state = 'FAILED'; failedTurn.failure_code = error instanceof Error ? error.message : 'CONTROL_SUBMIT_FAILED'; failedTurn.updated_at = now(); } if (failedLoop) { failedLoop.status = 'PAUSED'; failedLoop.blocker_code = failedTurn?.failure_code; failedLoop.updated_at = now(); } writeState(failedState); return {ok: false, claimGranted: true, claim, expected_turn: failedTurn, code: failedTurn?.failure_code || 'CONTROL_SUBMIT_FAILED', reason: 'The canonical control could not be submitted to AICC.'}; }
   claim.lifecycle = 'SUBMITTED_TO_AICC'; claim.inbox_id = item.id; claim.instruction_id = item.instruction?.instructionId; claim.updated_at = now();
   claim.lifecycle = launched.runId ? 'EXECUTION_STARTED' : 'SUBMITTED_TO_AICC'; claim.execution_id = launched.executionId; claim.run_id = launched.runId;
   loop.status = launched.runId ? 'RUNNING_LUNA' : 'GPT_CONTROL_RECEIVED'; loop.execution_status = launched.runId ? 'RUNNING' : 'STARTING'; loop.control_loop_status = 'RUNNING'; loop.run_id = launched.runId; loop.execution_id = launched.executionId; loop.executor = 'LUNA'; loop.runtime = 'CODEX_CLI'; loop.model = launched.model ?? loop.model; loop.reasoning_effort = launched.reasoning_effort ?? loop.reasoning_effort; loop.model_source = launched.model_source ?? 'CODEX_DEFAULT'; loop.current_task = parsed.contract.instruction?.declaredTaskId ?? parsed.contract.instruction?.instructionId; loop.updated_at = claim.updated_at;
@@ -778,11 +840,16 @@ export function consumeGptControl(input: {conversation_id: string; assistant_mes
 }
 
 export function recordExecutionResult(control_loop_id: string, report: BridgeReport): FeedbackRecord | null {
-  const loop = readControlLoop(control_loop_id);
   const result = report.canonicalResult;
-  if (!loop || !result || !report.runId || !result.resultId || !result.resultHash) return null;
+  if (!result || !report.runId || !result.resultId || !result.resultHash) return null;
   if (!result.projectId || !result.repositoryIdentity) return null;
-  if (!loop.projectId || !loop.repositoryIdentity || !sameProjectScope(loop, result)) throw new Error('FOREIGN_EXECUTION_RESULT_PROJECT_SCOPE');
+  const loop = readControlLoop(control_loop_id, {projectId: result.projectId, repositoryIdentity: result.repositoryIdentity});
+  if (!loop) {
+    let existsElsewhere = false;
+    try { existsElsewhere = Boolean(readControlLoop(control_loop_id)); } catch { existsElsewhere = true; }
+    if (existsElsewhere) throw new Error('FOREIGN_EXECUTION_RESULT_PROJECT_SCOPE');
+    return null;
+  }
   return buildFeedbackRecord({control_loop_id, projectId: result.projectId, repositoryIdentity: result.repositoryIdentity, formal_wp_id: loop.formal_wp_id, binding_epoch: loop.binding_epoch, current_pr_id: report.entityType === 'PULL_REQUEST' ? report.entityId : null, task_id: report.inboxId, instruction_id: result.instructionId, execution_id: result.executionId, run_id: report.runId, source: GPT_AUTO_CONTROL_LOOP, runtime: 'CODEX_CLI', model: report.model, result_id: result.resultId, result_hash: result.resultHash, execution_result: result.rawResult, conversation_id: loop.conversation_id});
 }
 
