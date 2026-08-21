@@ -8,10 +8,11 @@ const suffix=`${Date.now()}-${Math.random().toString(36).slice(2,8)}`;
 const loopId=`unbind-loop-${suffix}`;
 const conversationId=`unbind-conversation-${suffix}`;
 const wpId='AICC-V2-GPT-CODEX-BRIDGE-001';
-const loop=bindControlLoop({control_loop_id:loopId,formal_wp_id:wpId,conversation_id:conversationId});
+const projectId='project-conversation-lock-unbind',repositoryIdentity='repo-conversation-lock-unbind';
+const loop=bindControlLoop({control_loop_id:loopId,projectId,repositoryIdentity,formal_wp_id:wpId,conversation_id:conversationId});
 enableControlLoop(loopId,true);
 
-const feedbackInput={control_loop_id:loopId,formal_wp_id:wpId,conversation_id:conversationId,binding_epoch:loop.binding_epoch,execution_id:`execution-${suffix}`,run_id:`run-${suffix}`,result_id:`result-${suffix}`,result_hash:`hash-${suffix}`,execution_result:'UNLOCK_HISTORY = PASS'};
+const feedbackInput={control_loop_id:loopId,projectId,repositoryIdentity,formal_wp_id:wpId,conversation_id:conversationId,binding_epoch:loop.binding_epoch,execution_id:`execution-${suffix}`,run_id:`run-${suffix}`,result_id:`result-${suffix}`,result_hash:`hash-${suffix}`,execution_result:'UNLOCK_HISTORY = PASS'};
 const feedback=claimFeedback(feedbackInput).record!;
 markFeedbackInserting(loopId,feedback.feedback_key);
 markFeedbackInserted(loopId,feedback.feedback_key);
@@ -42,7 +43,7 @@ const consumed=consumeGptControl({control_loop_id:loopId,conversation_id:convers
 assert.equal(consumed.code,'CONTROL_LOOP_NOT_BOUND','unlocked loop cannot consume a GPT control');
 assert.equal(launches,0,'unlocked loop cannot launch Luna');
 
-const relocked=rebindControlLoop({control_loop_id:loopId,formal_wp_id:wpId,conversation_id:conversationId});
+const relocked=rebindControlLoop({control_loop_id:loopId,projectId,repositoryIdentity,formal_wp_id:wpId,conversation_id:conversationId});
 assert.equal(relocked.control_loop_id,loopId,'relock reuses the system-managed durable loop identity');
 assert.equal(relocked.conversation_id,conversationId,'relock targets the current canonical Conversation');
 assert.equal(relocked.binding_active,true,'relock restores active binding authority');

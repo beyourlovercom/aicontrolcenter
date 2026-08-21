@@ -9,20 +9,22 @@ const conversation=`canonical-turn-${suffix}`;
 const canonicalLoop=`loop-A-${suffix}`;
 const historicalLoop=`loop-B-${suffix}`;
 const wpId='AICC-V2-GPT-CODEX-BRIDGE-001';
-bindControlLoop({control_loop_id:historicalLoop,formal_wp_id:wpId,conversation_id:conversation});
+const projectId='project-canonical-control-turn-identity';
+const repositoryIdentity='repo-canonical-control-turn-identity';
+bindControlLoop({control_loop_id:historicalLoop,projectId,repositoryIdentity,formal_wp_id:wpId,conversation_id:conversation});
 enableControlLoop(historicalLoop,true);
 for(let epoch=1;epoch<23;epoch++){
   const loop=readControlLoop(historicalLoop)!;
   loop.binding_epoch;
 }
-bindControlLoop({control_loop_id:canonicalLoop,formal_wp_id:wpId,conversation_id:conversation});
+bindControlLoop({control_loop_id:canonicalLoop,projectId,repositoryIdentity,formal_wp_id:wpId,conversation_id:conversation});
 enableControlLoop(canonicalLoop,true);
 assert.equal(readControlLoop(historicalLoop)?.enabled,false,'historical loop evidence remains durable but inert');
 assert.equal(readControlLoopByConversation(conversation)?.control_loop_id,canonicalLoop,'one active canonical loop resolves per conversation');
 assert.equal(readControlLoops().filter(loop=>loop.conversation_id===conversation).length,2,'historical loop record remains preserved');
 
 const canonical=readControlLoop(canonicalLoop)!;
-const feedback=claimFeedback({control_loop_id:canonicalLoop,formal_wp_id:wpId,conversation_id:conversation,binding_epoch:canonical.binding_epoch,execution_id:`execution-${suffix}`,run_id:`run-${suffix}`,result_id:`result-${suffix}`,result_hash:`hash-${suffix}`,execution_result:'ROUND_1 = PASS'}).record!;
+const feedback=claimFeedback({control_loop_id:canonicalLoop,projectId,repositoryIdentity,formal_wp_id:wpId,conversation_id:conversation,binding_epoch:canonical.binding_epoch,execution_id:`execution-${suffix}`,run_id:`run-${suffix}`,result_id:`result-${suffix}`,result_hash:`hash-${suffix}`,execution_result:'ROUND_1 = PASS'}).record!;
 markFeedbackInserting(canonicalLoop,feedback.feedback_key);
 markFeedbackInserted(canonicalLoop,feedback.feedback_key);
 markFeedbackSubmitting(canonicalLoop,feedback.feedback_key);
@@ -48,7 +50,7 @@ assert.equal(submitCount,1);assert.equal(launchCount,1);
 
 const rejectedConversation=`rejected-${suffix}`;
 const rejectedLoop=`rejected-loop-${suffix}`;
-bindControlLoop({control_loop_id:rejectedLoop,formal_wp_id:wpId,conversation_id:rejectedConversation});enableControlLoop(rejectedLoop,true);
+bindControlLoop({control_loop_id:rejectedLoop,projectId,repositoryIdentity,formal_wp_id:wpId,conversation_id:rejectedConversation});enableControlLoop(rejectedLoop,true);
 const rejected=consumeGptControl({conversation_id:rejectedConversation,assistant_message_id:`rejected-assistant-${suffix}`,response:execution},submit,launch);
 assert.equal(rejected.code,'EXPECTED_FEEDBACK_TURN_REQUIRED');
 assert.equal(readControlLoop(rejectedLoop)?.status,'PAUSED','terminal identity conflict remains monotonic under polling');

@@ -4,7 +4,7 @@ import { authorizationState, readAuthorization, readRoadmapProjection, readCanon
 import { codexInfoAsync, initializeRuntimeProjectionSnapshot, readRuntimeByRunIdReadOnly, readRuntimeReadOnly, readRuntimeHistoryAsync, startRuntime, startRuntimeProjectionMonitoring, stopRuntimeWithGrace } from './src/lib/runtimeManager';
 import { createRuntimeTerminalStreamHandler } from './src/lib/runtimeTerminalStream.ts';
 import { readRepositoryAsync } from './src/lib/controlService';
-import {submitExecution,readInbox,readInboxAsync,readTaskRegistryProjection,readTaskProjectionReadOnly,readOutbox,readOutboxAsync,readNotificationsAsync,acknowledgeOutbox,launchInboxItem,resumeStoppedExecution,canonicalExecutionV1Example,initializeTaskProjectionSnapshot,reconcileBridgeProjectionOnRuntimeChange,startTaskProjectionMonitoring} from './src/lib/bridgeCore';
+import {submitExecution,readInbox,readInboxAsync,readTaskRegistryProjection,readTaskProjectionReadOnly,readOutbox,readOutboxAsync,readNotificationsAsync,acknowledgeOutbox,launchInboxItem,resumeStoppedExecution,canonicalExecutionV1Example,initializeTaskProjectionSnapshot,reconcileBridgeProjectionOnRuntimeChange,startTaskProjectionMonitoring,activeTaskProjectContext} from './src/lib/bridgeCore';
 import {readCodexModelCapabilitiesAsync,readCodexDefaultsAsync,resolveCodexModel} from './src/lib/codexModelCatalog.ts';
 import {readGlobalExecutionProfile,setGlobalExecutionProfile} from './src/lib/globalExecutionProfile.ts';
 import type { Plugin } from 'vite';
@@ -94,7 +94,8 @@ function localControlPlugin(): Plugin { return { name: 'aicc-local-control', con
           if(typeof payload.formal_wp_id!=='string'||typeof payload.conversation_id!=='string')return json(res,{error:'CONTROL_LOOP_BINDING_REQUIRED'},400);
           const visible=Array.isArray(payload.visible_assistant_controls)?payload.visible_assistant_controls.filter((item):item is {assistant_message_id:string;response:string}=>Boolean(item&&typeof item==='object'&&typeof (item as Record<string,unknown>).assistant_message_id==='string'&&typeof (item as Record<string,unknown>).response==='string')):[];
           const controlLoopId=systemManagedControlLoopId(payload.conversation_id);
-          const loop=rebindControlLoop({control_loop_id:controlLoopId,formal_wp_id:payload.formal_wp_id,conversation_id:payload.conversation_id,visible_assistant_controls:visible});
+          const activeProject=activeTaskProjectContext();
+          const loop=rebindControlLoop({control_loop_id:controlLoopId,projectId:activeProject.projectId,repositoryIdentity:activeProject.repositoryIdentity,formal_wp_id:payload.formal_wp_id,conversation_id:payload.conversation_id,visible_assistant_controls:visible});
           const verified=readControlLoop(controlLoopId);
           if(!verified||verified.binding_active!==true||verified.conversation_id!==payload.conversation_id||verified.binding_epoch!==loop.binding_epoch)return json(res,{error:'CONTROL_LOOP_BINDING_VERIFY_FAILED'},409);
           return json(res,{loop:verified,verified:true});
@@ -116,7 +117,8 @@ function localControlPlugin(): Plugin { return { name: 'aicc-local-control', con
         if(operation==='feedback/claim') {
           const required=['control_loop_id','formal_wp_id','execution_id','run_id','result_id','result_hash','execution_result','conversation_id'];
           if(required.some(key=>typeof payload[key]!=='string'))return json(res,{error:'FEEDBACK_IDENTITY_REQUIRED'},400);
-          return json(res,claimFeedback(payload as any));
+          const activeProject=activeTaskProjectContext();
+          return json(res,claimFeedback({...payload,projectId:activeProject.projectId,repositoryIdentity:activeProject.repositoryIdentity} as any));
         }
         if(operation==='feedback/inserting') {
           if(typeof payload.control_loop_id!=='string'||typeof payload.feedback_key!=='string')return json(res,{error:'FEEDBACK_KEY_REQUIRED'},400);

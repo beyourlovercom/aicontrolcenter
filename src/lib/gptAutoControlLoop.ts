@@ -3,6 +3,7 @@ import {mkdirSync, readFileSync, renameSync, writeFileSync} from 'node:fs';
 import {join} from 'node:path';
 import {resolveAiccStateDir} from './stateDirectory.ts';
 import {parseExecutionV1, type BridgeReport, type ParsedInstruction, type InboxItem, type ExecutionSourceType} from './bridgeCore.ts';
+import {type ProjectIdentityScope, sameProjectScope} from './projectEntityScope.ts';
 
 export const GPT_AUTO_CONTROL_LOOP = 'GPT_AUTO_CONTROL_LOOP' as const;
 export const CONTROL_CONTRACT_TYPES = ['AICC_EXECUTION_V1', 'AICC_OWNER_UAT_V1', 'AICC_WP_COMPLETE_V1', 'AICC_BLOCKED_V1'] as const;
@@ -21,6 +22,8 @@ export type ControlLifecycle = 'GPT_CONTROL_DETECTED' | 'CONTROL_CLAIMED' | 'SUB
 
 export type ControlLoopRecord = {
   control_loop_id: string;
+  projectId: string;
+  repositoryIdentity: string;
   formal_wp_id: string;
   conversation_id: string;
   binding_epoch: number;
@@ -58,6 +61,8 @@ export type ControlLoopRecord = {
 
 export type FeedbackEnvelopeInput = {
   control_loop_id: string;
+  projectId: string;
+  repositoryIdentity: string;
   formal_wp_id: string;
   current_pr_id?: string | null;
   task_id?: string | null;
@@ -94,6 +99,8 @@ export type FeedbackRecord = FeedbackEnvelopeInput & {
 
 export type ControlClaim = {
   control_loop_id: string;
+  projectId: string;
+  repositoryIdentity: string;
   conversation_id: string;
   binding_epoch: number;
   feedback_key?: string;
@@ -116,6 +123,8 @@ export type ControlClaim = {
 
 export type ExpectedControlTurn = {
   control_loop_id: string;
+  projectId: string;
+  repositoryIdentity: string;
   binding_epoch: number;
   conversation_id: string;
   feedback_key: string;
@@ -230,6 +239,22 @@ function requireText(value: unknown, code: string): string {
   return text;
 }
 
+export function scopedControlLoopKey(scope: ProjectIdentityScope, control_loop_id: string): string {
+  return [scope.projectId, scope.repositoryIdentity, requireText(control_loop_id, 'CONTROL_LOOP_ID_REQUIRED')].join(' ');
+}
+
+export function scopedFeedbackKey(scope: ProjectIdentityScope, feedback_id: string): string {
+  return [scope.projectId, scope.repositoryIdentity, requireText(feedback_id, 'FEEDBACK_ID_REQUIRED')].join(' ');
+}
+
+export function scopedExpectedTurnKey(scope: ProjectIdentityScope, expected_gpt_turn_id: string): string {
+  return [scope.projectId, scope.repositoryIdentity, requireText(expected_gpt_turn_id, 'EXPECTED_GPT_TURN_ID_REQUIRED')].join(' ');
+}
+
+function requireProjectScope(input: {projectId?: unknown; repositoryIdentity?: unknown}): ProjectIdentityScope {
+  return {projectId: requireText(input.projectId, 'PROJECT_ID_REQUIRED'), repositoryIdentity: requireText(input.repositoryIdentity, 'REPOSITORY_IDENTITY_REQUIRED')};
+}
+
 export function hashControlMessage(value: string): string {
   return createHash('sha256').update(String(value).replace(/\r\n?/g, '\n').trim()).digest('hex');
 }
@@ -245,28 +270,32 @@ function bindingBoundary(controls: VisibleAssistantControl[] | undefined): {ids:
   return {ids: [...new Set(valid.map(item => String(item.assistant_message_id).trim()))], hashes: [...new Set(valid.map(item => hashControlMessage(item.response)))]};
 }
 
-export function bindControlLoop(input: {control_loop_id: string; formal_wp_id: string; conversation_id: string; current_task?: string; visible_assistant_controls?: VisibleAssistantControl[]}): ControlLoopRecord {
+export function bindControlLoop(input: {control_loop_id: string; projectId: string; repositoryIdentity: string; formal_wp_id: string; conversation_id: string; current_task?: string; visible_assistant_controls?: VisibleAssistantControl[]}): ControlLoopRecord {
   const control_loop_id = requireText(input.control_loop_id, 'CONTROL_LOOP_ID_REQUIRED');
+  const scope = requireProjectScope(input);
   const formal_wp_id = requireText(input.formal_wp_id, 'FORMAL_WP_ID_REQUIRED');
   const conversation_id = requireText(input.conversation_id, 'CONVERSATION_ID_REQUIRED');
   const state = readState();
-  const existing = state.loops.find(loop => loop.control_loop_id === control_loop_id);
+  const scopedKey = scopedControlLoopKey(scope, control_loop_id);
+  const existing = state.loops.find(loop => loop.control_loop_id === control_loop_id && loop.projectId && loop.repositoryIdentity && scopedControlLoopKey(loop, loop.control_loop_id) === scopedKey);
   if (existing && (existing.formal_wp_id !== formal_wp_id || existing.conversation_id !== conversation_id)) throw new Error('CONTROL_LOOP_BINDING_IMMUTABLE');
   if (existing) return existing;
   const timestamp = now();
   const boundary = bindingBoundary(input.visible_assistant_controls);
-  const loop: ControlLoopRecord = {control_loop_id, formal_wp_id, conversation_id, binding_epoch: 1, bound_at: timestamp, binding_active: true, binding_assistant_message_ids: boundary.ids, binding_control_message_hashes: boundary.hashes, enabled: false, mode: 'OFF', status: 'OFF', execution_status: 'STARTING', feedback_delivery_status: 'NOT_READY', control_loop_status: 'PAUSED', created_at: timestamp, updated_at: timestamp, current_task: input.current_task, executor: 'LUNA', owner_click_count_after_round_1: 0, correlation_recovery_attempts: 0, delivery_retry_attempts: 0};
+  const loop: ControlLoopRecord = {control_loop_id, projectId: scope.projectId, repositoryIdentity: scope.repositoryIdentity, formal_wp_id, conversation_id, binding_epoch: 1, bound_at: timestamp, binding_active: true, binding_assistant_message_ids: boundary.ids, binding_control_message_hashes: boundary.hashes, enabled: false, mode: 'OFF', status: 'OFF', execution_status: 'STARTING', feedback_delivery_status: 'NOT_READY', control_loop_status: 'PAUSED', created_at: timestamp, updated_at: timestamp, current_task: input.current_task, executor: 'LUNA', owner_click_count_after_round_1: 0, correlation_recovery_attempts: 0, delivery_retry_attempts: 0};
   state.loops.unshift(loop);
   writeState(state);
   return loop;
 }
 
-export function rebindControlLoop(input: {control_loop_id: string; formal_wp_id: string; conversation_id: string; visible_assistant_controls?: VisibleAssistantControl[]}): ControlLoopRecord {
+export function rebindControlLoop(input: {control_loop_id: string; projectId: string; repositoryIdentity: string; formal_wp_id: string; conversation_id: string; visible_assistant_controls?: VisibleAssistantControl[]}): ControlLoopRecord {
   const control_loop_id = requireText(input.control_loop_id, 'CONTROL_LOOP_ID_REQUIRED');
+  const scope = requireProjectScope(input);
   const formal_wp_id = requireText(input.formal_wp_id, 'FORMAL_WP_ID_REQUIRED');
   const conversation_id = requireText(input.conversation_id, 'CONVERSATION_ID_REQUIRED');
   const state = readState();
-  const loop = state.loops.find(item => item.control_loop_id === control_loop_id);
+  const scopedKey = scopedControlLoopKey(scope, control_loop_id);
+  const loop = state.loops.find(item => item.control_loop_id === control_loop_id && item.projectId && item.repositoryIdentity && scopedControlLoopKey(item, item.control_loop_id) === scopedKey);
   if (!loop) return bindControlLoop(input);
   if (loop.formal_wp_id !== formal_wp_id) throw new Error('CONTROL_LOOP_FORMAL_WP_IMMUTABLE');
   const timestamp = now();
@@ -314,14 +343,15 @@ export function unlockControlLoop(control_loop_id: string): ControlLoopRecord {
   return loop;
 }
 
-export function enableControlLoop(control_loop_id: string, enabled: boolean): ControlLoopRecord {
+export function enableControlLoop(control_loop_id: string, enabled: boolean, scope?: ProjectIdentityScope): ControlLoopRecord {
   const state = readState();
-  const loop = state.loops.find(item => item.control_loop_id === control_loop_id);
+  const loop = state.loops.find(item => item.control_loop_id === control_loop_id && (!scope || (item.projectId && item.repositoryIdentity && sameProjectScope(item, scope))));
   if (!loop) throw new Error('CONTROL_LOOP_NOT_FOUND');
   if (enabled && !loop.binding_active) throw new Error('CONTROL_LOOP_NOT_BOUND');
   if (enabled) {
     for (const other of state.loops) {
-      if (other.control_loop_id === control_loop_id || other.conversation_id !== loop.conversation_id || !other.enabled) continue;
+      if (other.control_loop_id === control_loop_id && (!other.projectId || !other.repositoryIdentity || sameProjectScope(other, loop))) continue;
+      if (other.conversation_id !== loop.conversation_id || !other.enabled) continue;
       other.enabled = false;
       other.mode = 'OFF';
       if (!['WAITING_OWNER_UAT', 'BLOCKED', 'COMPLETE', 'PAUSED'].includes(other.status)) other.status = 'OFF';
@@ -481,6 +511,7 @@ export function parseControlContract(text: string): {ok: true; contract: ParsedC
 }
 
 export function buildFeedbackRecord(input: FeedbackEnvelopeInput & {conversation_id: string}): FeedbackRecord {
+  requireProjectScope(input);
   const binding_epoch = input.binding_epoch ?? 1;
   const feedback_id = input.feedback_id ?? stableId('feedback', [input.control_loop_id, String(binding_epoch), input.execution_id, input.result_id, input.result_hash]);
   const canonical_expected_gpt_turn_id = expectedGptTurnId(input.control_loop_id, binding_epoch, feedback_id);
@@ -496,8 +527,9 @@ export function buildFeedbackRecord(input: FeedbackEnvelopeInput & {conversation
 }
 
 export function claimFeedback(input: FeedbackEnvelopeInput & {conversation_id: string}): {ok: boolean; claimGranted: boolean; alreadyClaimed?: boolean; deliveryInProgress?: boolean; record?: FeedbackRecord; code?: string; reason?: string} {
+  const scope = requireProjectScope(input);
   const state = readState();
-  const loop = state.loops.find(item => item.control_loop_id === input.control_loop_id);
+  const loop = state.loops.find(item => item.control_loop_id === input.control_loop_id && item.projectId && item.repositoryIdentity && sameProjectScope(item, scope));
   if (!loop) return {ok: false, claimGranted: false, code: 'CONTROL_LOOP_NOT_FOUND', reason: 'The requested control loop is not bound.'};
   if (!loop.binding_active) return {ok: false, claimGranted: false, code: 'CONTROL_LOOP_NOT_BOUND', reason: 'The historical control loop has no active Conversation binding.'};
   if (loop.conversation_id !== input.conversation_id) return {ok: false, claimGranted: false, code: 'CROSS_CONVERSATION_ISOLATION', reason: 'The feedback conversation is not the bound conversation.'};
@@ -506,7 +538,7 @@ export function claimFeedback(input: FeedbackEnvelopeInput & {conversation_id: s
   let candidate: FeedbackRecord;
   try { candidate = buildFeedbackRecord({...input, binding_epoch: loop.binding_epoch}); }
   catch (error) { return {ok: false, claimGranted: false, code: error instanceof Error ? error.message : 'FEEDBACK_CORRELATION_IDENTITY_INVALID', reason: 'The feedback correlation identity does not match the canonical loop authority.'}; }
-  const existing = state.feedback.find(item => item.feedback_id === candidate.feedback_id || item.feedback_key === candidate.feedback_key);
+  const existing = state.feedback.find(item => item.projectId && item.repositoryIdentity && sameProjectScope(item, scope) && (item.feedback_id === candidate.feedback_id || item.feedback_key === candidate.feedback_key));
   if (existing && (existing.control_loop_id !== candidate.control_loop_id || existing.binding_epoch !== candidate.binding_epoch || existing.expected_gpt_turn_id !== candidate.expected_gpt_turn_id)) return {ok: false, claimGranted: false, code: 'FEEDBACK_ID_COLLISION', reason: 'The feedback identity is already bound to another control loop authority.'};
   if (existing) return {ok: true, claimGranted: false, alreadyClaimed: true, deliveryInProgress: existing.lifecycle !== 'FEEDBACK_CONSUMED', record: existing};
   candidate.lifecycle = 'FEEDBACK_CLAIMED';
@@ -526,7 +558,7 @@ function feedbackState(control_loop_id: string, feedback_key: string): {state: P
   const state = readState();
   const record = state.feedback.find(item => item.control_loop_id === control_loop_id && item.feedback_key === feedback_key);
   if (!record) throw new Error('FEEDBACK_NOT_FOUND');
-  const loop = state.loops.find(item => item.control_loop_id === control_loop_id);
+  const loop = state.loops.find(item => item.control_loop_id === control_loop_id && (!record.projectId || !record.repositoryIdentity || !item.projectId || !item.repositoryIdentity || sameProjectScope(item, record)));
   if (!loop?.binding_active) throw new Error('CONTROL_LOOP_NOT_BOUND');
   if (record.conversation_id !== loop.conversation_id || record.binding_epoch !== loop.binding_epoch) throw new Error('STALE_FEEDBACK_BINDING');
   return {state, record, loop};
@@ -661,7 +693,7 @@ export function completeFeedback(control_loop_id: string, feedback_key: string, 
     for (const turn of state.expected_turns) {
       if (turn.control_loop_id === record.control_loop_id && turn.binding_epoch === binding_epoch && turn.state === 'PENDING') { turn.state = 'FAILED'; turn.failure_code = 'SUPERSEDED_EXPECTED_TURN'; turn.updated_at = record.updated_at; }
     }
-    state.expected_turns.unshift({control_loop_id: record.control_loop_id, binding_epoch, conversation_id: record.conversation_id, feedback_key: record.feedback_key, feedback_id: record.feedback_id, expected_gpt_turn_id, next_control_contract_id: nextControlContractId(expected_gpt_turn_id), feedback_message_id: requireText(feedback_message_id, 'FEEDBACK_MESSAGE_ID_REQUIRED'), result_id: record.result_id, result_hash: record.result_hash, created_at: record.updated_at, updated_at: record.updated_at, state: 'PENDING'});
+    state.expected_turns.unshift({control_loop_id: record.control_loop_id, projectId: record.projectId, repositoryIdentity: record.repositoryIdentity, binding_epoch, conversation_id: record.conversation_id, feedback_key: record.feedback_key, feedback_id: record.feedback_id, expected_gpt_turn_id, next_control_contract_id: nextControlContractId(expected_gpt_turn_id), feedback_message_id: requireText(feedback_message_id, 'FEEDBACK_MESSAGE_ID_REQUIRED'), result_id: record.result_id, result_hash: record.result_hash, created_at: record.updated_at, updated_at: record.updated_at, state: 'PENDING'});
   }
   updateFeedbackLoop(loop, record, 'WAITING_GPT');
   if (loop) { loop.feedback_delivery_status = 'DELIVERED'; loop.control_loop_status = 'WAITING_NEXT_CONTROL'; }
@@ -724,7 +756,7 @@ export function consumeGptControl(input: {conversation_id: string; assistant_mes
   const existing = state.controls.find(item => item.control_loop_id === expectedTurn.control_loop_id && item.conversation_id === expectedTurn.conversation_id && item.binding_epoch === expectedTurn.binding_epoch && item.control_message_hash === control_message_hash);
   if (existing) return {ok: true, claimGranted: false, duplicate: true, claim: existing};
   const parsed = parseControlContract(input.response);
-  const claim: ControlClaim = {control_loop_id: expectedTurn.control_loop_id, conversation_id: expectedTurn.conversation_id, binding_epoch: expectedTurn.binding_epoch, feedback_key: expectedTurn.feedback_key, expected_gpt_turn_id: expectedTurn.expected_gpt_turn_id, next_control_contract_id: expectedTurn.next_control_contract_id, assistant_message_id: input.assistant_message_id, control_message_hash, contract_type: parsed.ok ? parsed.contract.type : 'AICC_BLOCKED_V1', contract_class: parsed.ok ? parsed.contract.class : 'TERMINAL_BLOCKED', lifecycle: parsed.ok ? 'GPT_CONTROL_DETECTED' : 'CONTROL_CONTRACT_INVALID', response: input.response, created_at: now(), updated_at: now(), invalid_code: parsed.ok ? undefined : parsed.code};
+  const claim: ControlClaim = {control_loop_id: expectedTurn.control_loop_id, projectId: expectedTurn.projectId, repositoryIdentity: expectedTurn.repositoryIdentity, conversation_id: expectedTurn.conversation_id, binding_epoch: expectedTurn.binding_epoch, feedback_key: expectedTurn.feedback_key, expected_gpt_turn_id: expectedTurn.expected_gpt_turn_id, next_control_contract_id: expectedTurn.next_control_contract_id, assistant_message_id: input.assistant_message_id, control_message_hash, contract_type: parsed.ok ? parsed.contract.type : 'AICC_BLOCKED_V1', contract_class: parsed.ok ? parsed.contract.class : 'TERMINAL_BLOCKED', lifecycle: parsed.ok ? 'GPT_CONTROL_DETECTED' : 'CONTROL_CONTRACT_INVALID', response: input.response, created_at: now(), updated_at: now(), invalid_code: parsed.ok ? undefined : parsed.code};
   state.controls.unshift(claim);
   expectedTurn.state = parsed.ok ? 'GPT_CONTROL_RECEIVED' : 'FAILED'; expectedTurn.assistant_message_id = input.assistant_message_id; expectedTurn.control_message_hash = control_message_hash; expectedTurn.updated_at = claim.updated_at;
   if (!parsed.ok) { expectedTurn.failure_code = parsed.code; loop.status = 'PAUSED'; loop.blocker_code = parsed.code; loop.last_response_evidence = input.response; loop.updated_at = claim.updated_at; writeState(state); return {ok: false, claimGranted: true, claim, expected_turn: expectedTurn, code: parsed.code, reason: parsed.reason}; }
@@ -749,7 +781,9 @@ export function recordExecutionResult(control_loop_id: string, report: BridgeRep
   const loop = readControlLoop(control_loop_id);
   const result = report.canonicalResult;
   if (!loop || !result || !report.runId || !result.resultId || !result.resultHash) return null;
-  return buildFeedbackRecord({control_loop_id, formal_wp_id: loop.formal_wp_id, binding_epoch: loop.binding_epoch, current_pr_id: report.entityType === 'PULL_REQUEST' ? report.entityId : null, task_id: report.inboxId, instruction_id: result.instructionId, execution_id: result.executionId, run_id: report.runId, source: GPT_AUTO_CONTROL_LOOP, runtime: 'CODEX_CLI', model: report.model, result_id: result.resultId, result_hash: result.resultHash, execution_result: result.rawResult, conversation_id: loop.conversation_id});
+  if (!result.projectId || !result.repositoryIdentity) return null;
+  if (!loop.projectId || !loop.repositoryIdentity || !sameProjectScope(loop, result)) throw new Error('FOREIGN_EXECUTION_RESULT_PROJECT_SCOPE');
+  return buildFeedbackRecord({control_loop_id, projectId: result.projectId, repositoryIdentity: result.repositoryIdentity, formal_wp_id: loop.formal_wp_id, binding_epoch: loop.binding_epoch, current_pr_id: report.entityType === 'PULL_REQUEST' ? report.entityId : null, task_id: report.inboxId, instruction_id: result.instructionId, execution_id: result.executionId, run_id: report.runId, source: GPT_AUTO_CONTROL_LOOP, runtime: 'CODEX_CLI', model: report.model, result_id: result.resultId, result_hash: result.resultHash, execution_result: result.rawResult, conversation_id: loop.conversation_id});
 }
 
 export type CanonicalControlLoopReadModel = {

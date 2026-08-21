@@ -6,8 +6,10 @@ import {bindControlLoop,buildFeedbackEnvelope,claimFeedback,completeFeedback,ena
 
 const loopId=`feedback-loop-${Date.now()}`;
 const conversationId='feedback-bound-conversation';
-const input={control_loop_id:loopId,formal_wp_id:'AICC-V2-GPT-CODEX-BRIDGE-001',conversation_id:conversationId,current_pr_id:null,task_id:'task-round-1',instruction_id:'instruction-round-1',execution_id:'execution-round-1',run_id:'run-round-1',source:'GPT_AUTO_CONTROL_LOOP',runtime:'CODEX_CLI',model:'luna',result_id:'result-run-round-1',result_hash:'exact-result-hash',execution_result:'ROUND_1 = PASS\nEXACT_RESULT = preserved'};
-bindControlLoop({control_loop_id:loopId,formal_wp_id:input.formal_wp_id,conversation_id:conversationId});
+const projectId='project-feedback-auto-insert-submit';
+const repositoryIdentity='repo-feedback-auto-insert-submit';
+const input={control_loop_id:loopId,projectId,repositoryIdentity,formal_wp_id:'AICC-V2-GPT-CODEX-BRIDGE-001',conversation_id:conversationId,current_pr_id:null,task_id:'task-round-1',instruction_id:'instruction-round-1',execution_id:'execution-round-1',run_id:'run-round-1',source:'GPT_AUTO_CONTROL_LOOP',runtime:'CODEX_CLI',model:'luna',result_id:'result-run-round-1',result_hash:'exact-result-hash',execution_result:'ROUND_1 = PASS\nEXACT_RESULT = preserved'};
+bindControlLoop({control_loop_id:loopId,projectId,repositoryIdentity,formal_wp_id:input.formal_wp_id,conversation_id:conversationId});
 enableControlLoop(loopId,true);
 const claimed=claimFeedback(input);
 assert.equal(claimed.claimGranted,true,'completed exact Run creates one durable feedback');
@@ -35,7 +37,7 @@ assert.equal(claimFeedback(input).record?.lifecycle,'FEEDBACK_CONSUMED','reload 
 
 const failureLoopId=`feedback-failure-${Date.now()}`;
 const failureInput={...input,control_loop_id:failureLoopId,conversation_id:'feedback-failure-conversation',execution_id:'execution-failure',run_id:'run-failure',result_id:'result-failure',result_hash:'hash-failure'};
-bindControlLoop({control_loop_id:failureLoopId,formal_wp_id:input.formal_wp_id,conversation_id:failureInput.conversation_id});
+bindControlLoop({control_loop_id:failureLoopId,projectId,repositoryIdentity,formal_wp_id:input.formal_wp_id,conversation_id:failureInput.conversation_id});
 enableControlLoop(failureLoopId,true);
 const failureClaim=claimFeedback(failureInput).record!;
 assert.equal(markFeedbackInserting(failureLoopId,failureClaim.feedback_key).attemptGranted,true);
@@ -45,7 +47,7 @@ assert.equal(readControlLoop(failureLoopId)?.status,'FEEDBACK_DELIVERY_FAILED');
 
 const sendFailureLoopId=`feedback-send-failure-${Date.now()}`;
 const sendFailureInput={...input,control_loop_id:sendFailureLoopId,conversation_id:'feedback-send-failure-conversation',execution_id:'execution-send-failure',run_id:'run-send-failure',result_id:'result-send-failure',result_hash:'hash-send-failure'};
-bindControlLoop({control_loop_id:sendFailureLoopId,formal_wp_id:input.formal_wp_id,conversation_id:sendFailureInput.conversation_id});
+bindControlLoop({control_loop_id:sendFailureLoopId,projectId,repositoryIdentity,formal_wp_id:input.formal_wp_id,conversation_id:sendFailureInput.conversation_id});
 enableControlLoop(sendFailureLoopId,true);
 const sendFailureClaim=claimFeedback(sendFailureInput).record!;
 assert.equal(markFeedbackInserting(sendFailureLoopId,sendFailureClaim.feedback_key).attemptGranted,true);

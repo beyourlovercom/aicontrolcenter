@@ -12,12 +12,13 @@ assert.equal(dom.resolveConversationId({href:'https://chatgpt.com/c/6a812852-ea4
 assert.equal(dom.resolveConversationId({href:'https://chatgpt.com/',pathname:'/'}),null,'non-conversation pages never fabricate identity');
 
 const loopId=`rebind-loop-${Date.now()}`,wpId='AICC-V2-GPT-CODEX-BRIDGE-001',oldConversation='old-conversation',currentConversation='current-conversation';
+const projectId='project-control-loop-conversation-rebinding',repositoryIdentity='repo-control-loop-conversation-rebinding';
 const staleControl='AICC_EXECUTION_V1\nINSTRUCTION_ID: stale-round-2\nENTITY_TYPE: WORK_PACKAGE\nENTITY_ID: AICC-V2-GPT-CODEX-BRIDGE-001\nEXECUTION_TYPE: READ_ONLY_AUDIT\nREPOSITORY: /Users/a/AI/007/AIcontrolcenter\nBRANCH: rebuild/aicc-v2\nSANDBOX: read-only\nREQUIRES_AUTHORIZATION: false\n\nINSTRUCTION_BEGIN\nHistorical response.\nINSTRUCTION_END';
-bindControlLoop({control_loop_id:loopId,formal_wp_id:wpId,conversation_id:oldConversation});
+bindControlLoop({control_loop_id:loopId,projectId,repositoryIdentity,formal_wp_id:wpId,conversation_id:oldConversation});
 enableControlLoop(loopId,true);
 const before=readControlLoop(loopId)!;
 assert.equal(before.conversation_id,oldConversation);
-const rebound=rebindControlLoop({control_loop_id:loopId,formal_wp_id:wpId,conversation_id:currentConversation,visible_assistant_controls:[{assistant_message_id:'stale-message-id',response:staleControl}]});
+const rebound=rebindControlLoop({control_loop_id:loopId,projectId,repositoryIdentity,formal_wp_id:wpId,conversation_id:currentConversation,visible_assistant_controls:[{assistant_message_id:'stale-message-id',response:staleControl}]});
 assert.equal(rebound.conversation_id,currentConversation,'explicit Owner rebind persists current Conversation');
 assert.equal(rebound.binding_epoch,before.binding_epoch+1,'explicit rebind advances durable epoch');
 assert.ok(rebound.bound_at);
@@ -29,7 +30,7 @@ assert.equal(bindingChecked('navigated-conversation'),false,'navigation projects
 assert.equal(bindingChecked(currentConversation),true,'returning to bound Conversation restores usability');
 assert.equal(readControlLoop(loopId)?.binding_epoch,rebound.binding_epoch,'navigation and return do not create another epoch');
 
-const feedbackInput={control_loop_id:loopId,formal_wp_id:wpId,conversation_id:currentConversation,binding_epoch:rebound.binding_epoch,current_pr_id:null,task_id:'round-1',instruction_id:'round-1',execution_id:'execution-round-1',run_id:'run-round-1',source:'GPT_AUTO_CONTROL_LOOP',runtime:'CODEX_CLI',model:'luna',result_id:'result-round-1',result_hash:'hash-round-1',execution_result:'ROUND_1 = PASS'};
+const feedbackInput={control_loop_id:loopId,projectId,repositoryIdentity,formal_wp_id:wpId,conversation_id:currentConversation,binding_epoch:rebound.binding_epoch,current_pr_id:null,task_id:'round-1',instruction_id:'round-1',execution_id:'execution-round-1',run_id:'run-round-1',source:'GPT_AUTO_CONTROL_LOOP',runtime:'CODEX_CLI',model:'luna',result_id:'result-round-1',result_hash:'hash-round-1',execution_result:'ROUND_1 = PASS'};
 assert.equal(claimFeedback({...feedbackInput,binding_epoch:before.binding_epoch}).code,'STALE_BINDING_EPOCH','old feedback cannot migrate into new epoch');
 assert.equal(claimFeedback({...feedbackInput,conversation_id:oldConversation}).code,'CROSS_CONVERSATION_ISOLATION','old-conversation feedback cannot leak');
 const feedback=claimFeedback(feedbackInput).record!;

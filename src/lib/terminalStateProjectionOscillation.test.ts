@@ -10,14 +10,16 @@ vm.runInNewContext(readFileSync(join(process.cwd(),'web-adapter/chatgpt-dom.js')
 const dom=context.AICCChatGPTDom!;
 const suffix=`${Date.now()}-${Math.random().toString(36).slice(2,8)}`;
 const wpId='AICC-V2-GPT-CODEX-BRIDGE-001';
+const projectId='project-terminal-state-projection-oscillation';
+const repositoryIdentity='repo-terminal-state-projection-oscillation';
 let submitCount=0,launchCount=0;
 const submit=():InboxItem=>{submitCount+=1;throw new Error('TERMINAL_POLLING_MUST_NOT_SUBMIT');};
 const launch=():InboxItem=>{launchCount+=1;throw new Error('TERMINAL_POLLING_MUST_NOT_LAUNCH');};
 
 function terminalProjection(kind:string,response:string,expectedState:'WAITING_OWNER_UAT'|'COMPLETE'|'BLOCKED') {
   const conversationId=`terminal-projection-${kind}-${suffix}`,controlLoopId=`terminal-projection-loop-${kind}-${suffix}`;
-  const loop=bindControlLoop({control_loop_id:controlLoopId,formal_wp_id:wpId,conversation_id:conversationId});enableControlLoop(controlLoopId,true);
-  const feedback=claimFeedback({control_loop_id:controlLoopId,formal_wp_id:wpId,conversation_id:conversationId,binding_epoch:loop.binding_epoch,execution_id:`execution-round-3-${kind}-${suffix}`,run_id:`run-round-3-${kind}-${suffix}`,result_id:`result-round-3-${kind}-${suffix}`,result_hash:`hash-round-3-${kind}-${suffix}`,execution_result:'ROUND_3 = PASS'}).record!;
+  const loop=bindControlLoop({control_loop_id:controlLoopId,projectId,repositoryIdentity,formal_wp_id:wpId,conversation_id:conversationId});enableControlLoop(controlLoopId,true);
+  const feedback=claimFeedback({control_loop_id:controlLoopId,projectId,repositoryIdentity,formal_wp_id:wpId,conversation_id:conversationId,binding_epoch:loop.binding_epoch,execution_id:`execution-round-3-${kind}-${suffix}`,run_id:`run-round-3-${kind}-${suffix}`,result_id:`result-round-3-${kind}-${suffix}`,result_hash:`hash-round-3-${kind}-${suffix}`,execution_result:'ROUND_3 = PASS'}).record!;
   markFeedbackInserting(controlLoopId,feedback.feedback_key);markFeedbackInserted(controlLoopId,feedback.feedback_key);markFeedbackSubmitting(controlLoopId,feedback.feedback_key);markFeedbackSubmitted(controlLoopId,feedback.feedback_key);completeFeedback(controlLoopId,feedback.feedback_key,`feedback-message-${kind}-${suffix}`);
   assert.equal(consumeGptControl({conversation_id:conversationId,assistant_message_id:`assistant-${kind}-${suffix}`,response},submit,launch).ok,true);
   const durable=readControlLoop(controlLoopId)!;assert.equal(durable.status,expectedState);

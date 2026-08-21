@@ -6,6 +6,8 @@ import type {InboxItem} from './bridgeCore.ts';
 
 const suffix = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 const wpId = 'AICC-V2-GPT-CODEX-BRIDGE-001';
+const projectId = 'project-terminal-owner-uat-stop-remediation';
+const repositoryIdentity = 'repo-terminal-owner-uat-stop-remediation';
 let submitCount = 0;
 let launchCount = 0;
 const submit = (): InboxItem => { submitCount += 1; throw new Error('TERMINAL_CONTROL_MUST_NOT_SUBMIT'); };
@@ -14,9 +16,9 @@ const launch = (): InboxItem => { launchCount += 1; throw new Error('TERMINAL_CO
 function expectedRoundThreeTurn(kind: string) {
   const conversationId = `terminal-${kind}-${suffix}`;
   const controlLoopId = `terminal-loop-${kind}-${suffix}`;
-  bindControlLoop({control_loop_id: controlLoopId, formal_wp_id: wpId, conversation_id: conversationId});
+  bindControlLoop({control_loop_id: controlLoopId, projectId, repositoryIdentity, formal_wp_id: wpId, conversation_id: conversationId});
   enableControlLoop(controlLoopId, true);
-  const feedback = claimFeedback({control_loop_id: controlLoopId, formal_wp_id: wpId, conversation_id: conversationId, execution_id: `execution-round-3-${kind}-${suffix}`, run_id: `run-round-3-${kind}-${suffix}`, result_id: `result-round-3-${kind}-${suffix}`, result_hash: `hash-round-3-${kind}-${suffix}`, execution_result: 'ROUND_3 = PASS'}).record!;
+  const feedback = claimFeedback({control_loop_id: controlLoopId, projectId, repositoryIdentity, formal_wp_id: wpId, conversation_id: conversationId, execution_id: `execution-round-3-${kind}-${suffix}`, run_id: `run-round-3-${kind}-${suffix}`, result_id: `result-round-3-${kind}-${suffix}`, result_hash: `hash-round-3-${kind}-${suffix}`, execution_result: 'ROUND_3 = PASS'}).record!;
   markFeedbackInserting(controlLoopId, feedback.feedback_key);
   markFeedbackInserted(controlLoopId, feedback.feedback_key);
   markFeedbackSubmitting(controlLoopId, feedback.feedback_key);
