@@ -1,5 +1,10 @@
 # AICC-V2-GPT-BRIDGE-001: GPT Plus Web ↔ AICC ↔ Codex
 
+Web Bridge and Chrome Extension UI requirements are governed by the specialized
+`AICC-WEB-BRIDGE-UI-STANDARD-001` v1.0 (`FROZEN / APPROVED_BASELINE`, effective
+`2026-08-14`). This Work Package references that authority and does not
+duplicate its UI contract.
+
 Status: CLOSED
 Parent Status: CLOSED
 001A Status: COMPLETE / SEALED

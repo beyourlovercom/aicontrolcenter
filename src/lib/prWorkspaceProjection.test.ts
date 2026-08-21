@@ -1,0 +1,30 @@
+import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
+import {createProjectSnapshot,LOCAL_DEMO_PR} from './model/projectModel.ts';
+import {resolveEntityContext} from './context/entityContext.ts';
+import {resolvePrTabView} from './context/prTabContent.ts';
+import type {CiEvidence,ReviewEvidence} from './exactHeadEvidence.ts';
+const component=readFileSync(new URL('../components/entity/PrEvidencePanel.svelte',import.meta.url),'utf8');
+assert.match(component,/pr-current-head/);
+assert.match(component,/No current-head Review evidence/);
+assert.match(component,/No current-head CI evidence/);
+assert.match(component,/STALE/);
+assert.match(component,/Historical Review/);
+assert.match(component,/Historical CI/);
+const review:ReviewEvidence={review_id:'review-1',repository:'org/repo',pr_number:3,head_sha:'new',reviewer:'bot',review_provider:'Review Provider',review_status:'PASS',review_summary:'ok',reviewed_at:'2026-08-14T01:00:00Z'};
+const staleReview={...review,review_id:'review-old',head_sha:'old'};
+const ci:CiEvidence={ci_run_id:'ci-1',repository:'org/repo',pr_number:3,head_sha:'new',provider:'GitHub Actions',workflow:'build',status:'COMPLETED',conclusion:'SUCCESS',started_at:'2026-08-14T00:00:00Z',completed_at:'2026-08-14T01:00:00Z'};
+const staleCi={...ci,ci_run_id:'ci-old',head_sha:'old'};
+const pr={...LOCAL_DEMO_PR,id:'pr-projection',fixture:false,number:3,repository:'org/repo',headSha:'new',title:'Projection',workPackageId:'WP'};
+const context=resolveEntityContext(createProjectSnapshot({pullRequests:[pr],reviewEvidence:[review,staleReview],ciEvidence:[ci,staleCi]}),{type:'pull_request',id:pr.id});
+assert.equal(context.type,'pull_request');
+if(context.type==='pull_request'){
+ assert.equal(context.exactHeadValidation?.current_head_sha,'new');
+ assert.equal(context.exactHeadValidation?.review.current_for_head,true);
+ assert.equal(context.exactHeadValidation?.ci.current_for_head,true);
+ assert.equal(context.exactHeadValidation?.review.history.length,2);
+ assert.equal(context.exactHeadValidation?.ci.history.length,2);
+ assert.equal(resolvePrTabView(context,'Review').rows.find(row=>row[0]==='Head match')?.[1],'CURRENT_FOR_HEAD');
+ assert.equal(resolvePrTabView(context,'CI').rows.find(row=>row[0]==='Head match')?.[1],'CURRENT_FOR_HEAD');
+}
+console.log('M5 Phase 5 PR workspace projection matrix passed');

@@ -1,0 +1,36 @@
+import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
+
+const app=readFileSync(new URL('../App.svelte',import.meta.url),'utf8');
+const island=readFileSync(new URL('../components/GlobalFeedbackIsland.svelte',import.meta.url),'utf8');
+const agents=readFileSync(new URL('../../AGENTS.md',import.meta.url),'utf8');
+
+assert.match(agents,/AICC_GLOBAL_SHORT_FEEDBACK_RULE_V1/);
+assert.match(agents,/GLOBAL_FEEDBACK_RENDERER_COUNT = 1/);
+assert.match(agents,/MODULE_LOCAL_TOAST = FORBIDDEN/);
+assert.match(agents,/MODULE_LOCAL_SNACKBAR = FORBIDDEN/);
+assert.match(agents,/MODULE_LOCAL_SHORT_NOTICE = FORBIDDEN/);
+assert.match(agents,/EXPLICIT_BUTTON_ACTION_FEEDBACK = REQUIRED/);
+assert.match(app,/function setFeedback\(value:Feedback,source:'GENERAL'\|'EXACT_RUN'='GENERAL'\)/,'one global publish authority supports exact-run priority without a second store');
+assert.match(app,/context\.lifecycle\.currentStage/,'stage comes from canonical lifecycle context');
+assert.match(app,/lastCurrentStageFeedbackKey/,'stage feedback is deduplicated');
+assert.match(app,/title:`当前阶段：\$\{context\.lifecycle\.currentStage\}`/,'stage is not hardcoded');
+assert.match(app,/state:'INFO'.*code:'WP_CURRENT_STAGE'/,'current stage uses INFO feedback');
+assert.doesNotMatch(app,/class="current-stage"|service-recovery-toast|owner-action-feedback|pr-action-feedback/,'duplicate short notices are removed');
+assert.equal((app.match(/<GlobalFeedbackIsland/g)??[]).length,1,'one root renderer');
+assert.match(island,/<button type="button"[\s\S]*aria-label=\{copyable\?'复制完整提醒内容':undefined\}[\s\S]*disabled=\{!copyable\}/,'copyable feedback is keyboard-actionable and non-copyable feedback is inert');
+assert.match(island,/role="status"/,'non-copyable feedback remains status-only');
+assert.match(island,/type IslandState='IDLE'\|'COMPACT'\|'EXPANDED'/,'presentation contract has exactly three states');
+assert.match(island,/window\.setTimeout\(\(\)=>\{presentation='COMPACT';retractTimer=undefined\},3000\)/,'new feedback retracts to compact after three seconds');
+assert.match(island,/if\(presentation!==\'EXPANDED\'\)expand\(\)/,'manual compact click expands the island');
+assert.match(island,/class="global-feedback-island-shell state-\{presentation\.toLowerCase\(\)\}"/,'all presentation states share one visual shell');
+assert.match(island,/\.global-feedback-island-shell\{position:fixed;top:8px;left:50%;z-index:60;transform:translateX\(-50%\)/,'all states share the fixed viewport-top-center positioning authority');
+assert.match(island,/background:rgba\(248, 249, 251, 0\.30\)/,'glass background alpha is 0.30');
+assert.match(island,/backdrop-filter:blur\(5px\) saturate\(115%\)/,'glass blur and saturation are approved');
+assert.match(island,/-webkit-backdrop-filter:blur\(5px\) saturate\(115%\)/,'webkit glass blur and saturation are approved');
+assert.match(island,/border:1px solid rgba\(255, 255, 255, 0\.45\)/,'glass border is approved');
+assert.match(island,/box-shadow:0 4px 18px rgba\(15, 23, 42, 0\.07\),inset 0 1px 0 rgba\(255, 255, 255, 0\.28\)/,'glass shadow is approved');
+assert.match(island,/opacity:1/,'shell opacity remains fully opaque');
+assert.match(island,/\.feedback-copy\{[^}]*background:transparent/,'inner content background is transparent');
+assert.doesNotMatch(island,/opacity:0\.30/,'element-level opacity is not used');
+console.log('global feedback island contract passed');

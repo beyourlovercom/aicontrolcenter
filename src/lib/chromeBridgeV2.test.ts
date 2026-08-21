@@ -1,10 +1,10 @@
 import {readFileSync} from 'node:fs';
 import {join} from 'node:path';
 const root = process.cwd();
-const dom = readFileSync(join(root,'web-adapter/chrome-extension-v2/chatgpt-dom.js'),'utf8');
-const content = readFileSync(join(root,'web-adapter/chrome-extension-v2/content.js'),'utf8');
-const worker = readFileSync(join(root,'web-adapter/chrome-extension-v2/service-worker.js'),'utf8');
-const manifest = readFileSync(join(root,'web-adapter/chrome-extension-v2/manifest.json'),'utf8');
+const dom = readFileSync(join(root,'web-adapter/归档/chrome-extension-v2/chatgpt-dom.js'),'utf8');
+const content = readFileSync(join(root,'web-adapter/归档/chrome-extension-v2/content.js'),'utf8');
+const worker = readFileSync(join(root,'web-adapter/归档/chrome-extension-v2/service-worker.js'),'utf8');
+const manifest = readFileSync(join(root,'web-adapter/归档/chrome-extension-v2/manifest.json'),'utf8');
 const instruction = 'AICC_EXECUTION_V1\nINSTRUCTION_ID: current\n\nINSTRUCTION_BEGIN\n检查当前仓库\nINSTRUCTION_END';
 function complete(value:string) { const blocks=value.match(/AICC_EXECUTION_V1[ \t]*\n[\s\S]*?\nINSTRUCTION_END(?=\n|$)/g)||[]; return blocks.length===1?blocks[0]:null; }
 const assistant = `prose\n${instruction}\nprose`;
@@ -16,7 +16,7 @@ if (!content.includes("root: '#aicc-bridge-v2-root'")||!content.includes('functi
 if (!content.includes('document.body || document.documentElement')||!content.includes('aiccBridgeV2Root')) throw new Error('panel mount must not depend on ChatGPT application selectors');
 if (JSON.parse(manifest).content_scripts[0].matches.length !== 2 || !JSON.parse(manifest).content_scripts[0].matches.includes('https://chatgpt.com/*')) throw new Error('normal ChatGPT host coverage is incomplete');
 if ((content.match(/id = 'aicc-bridge-v2-root'/g)||[]).length !== 1) throw new Error('V2 panel root creation is not unique');
-if (!content.includes("report?.state === 'READY'")||!content.includes('button.disabled')) throw new Error('report button state is READY-bound');
+if (!content.includes("item?.state === 'READY'")||!content.includes('function isInsertableReport')||!content.includes('isInsertableReport(report)')||!content.includes('button.disabled')) throw new Error('report button state is READY-bound');
 if (!content.includes('width:240px')||!content.includes('width:200px')||!content.includes('height:32px')||!content.includes('height:28px')) throw new Error('panel dimensions do not match the frozen UI baseline');
 if (!content.includes('COLLAPSE_KEY')||!content.includes('chrome.storage.local.get')||!content.includes('chrome.storage.local.set')) throw new Error('collapse state is not persisted');
 if (!content.includes('data-aicc-v2-toggle')||!content.includes('data-aicc-v2-pill')) throw new Error('collapse/expand controls are missing');

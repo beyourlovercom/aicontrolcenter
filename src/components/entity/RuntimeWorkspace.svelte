@@ -2,22 +2,39 @@
   import RuntimeMonitor from '../RuntimeMonitor.svelte';
   import type {FormalWorkPackage,RuntimeRecord,WriterLockState} from '../../lib/model/entityTypes.ts';
   import {selectCanonicalCurrentRuntime} from '../../lib/runtimeSelection.ts';
-  import {onMount} from 'svelte';
+  import {getContext,onMount} from 'svelte';
   import {recordWorkspaceMount} from '../../lib/runtimeLifecycleInstrumentation.ts';
   import {formatOwnerLocalTime} from '../../lib/ownerTime.ts';
+  import ExecutionProviderPanel from './ExecutionProviderPanel.svelte';
+  import CanonicalTaskFeed from '../CanonicalTaskFeed.svelte';
+  import TaskTitleTrigger from '../TaskTitleTrigger.svelte';
+  import CodexCliLive from '../CodexCliLive.svelte';
+  import RuntimeDiagnostics from '../RuntimeDiagnostics.svelte';
+  const EXECUTION_PROVIDER_STORAGE_KEY='aicc-selected-execution-provider';
+  const readExecutionProvider=(): 'LOCAL_CODEX'|'REMOTE_CLAUDE' => {const value=typeof localStorage==='undefined'?null:localStorage.getItem(EXECUTION_PROVIDER_STORAGE_KEY);return value==='REMOTE_CLAUDE'?'REMOTE_CLAUDE':'LOCAL_CODEX'};
+  import {buildRuntimeDiagnostic} from '../../lib/runtimeDiagnostics.ts';
+  import AiccWorkspaceDrawer from '../AiccWorkspaceDrawer.svelte';
+  import {createEmptyGlobalStateReadModel} from '../../lib/globalStateReadModel.ts';
+  import {exactResultForRun,exactRunLayer2,projectPhase5Lifecycle} from '../../lib/runtimeResultFeedbackControlLoopProjection.ts';
 
   export let runtime:RuntimeRecord|null=null;
   export let history:RuntimeRecord[]=[];
+  export let entityType:'global_task'|'work_package'|'pull_request'='work_package';
+  export let entityId='';
   export let selectedRunId:string|null=null;
   export let selectedInboxId:string|null=null;
   export let workPackage:FormalWorkPackage|null=null;
   export let writerLock:WriterLockState={status:'UNAVAILABLE',scope:'repository'};
   export let bridgeInbox:any[]=[];
   export let bridgeOutbox:any[]=[];
+  export let tasks:any[]=[];
+  export let selectedTaskId:string|null=null;
+  export let onSelectTask:(taskId:string)=>void=()=>{};
+  export let showCanonicalTaskFeed=true;
   export let bridgePayload='';
-  export let autoExecute=false;
-  export let instructionState:'TEXT_READY'|'IMPORTED_PENDING'|'RUN_STARTED'='TEXT_READY';
+  export let instructionState:'TEXT_READY'|'IMPORTED_PENDING'|'RUN_STARTED'|'RESULT_RECEIVED'='TEXT_READY';
   export let showInbox=true;
+  export let showComposer=true;
   export let emptyTitle='暂无运行记录';
   export let emptyCapability='不可用';
   export let emptyReason='';
@@ -25,58 +42,83 @@
   export let onPasteInstruction:()=>void=()=>{};
   export let onImportInstruction:()=>void=()=>{};
   export let onManualExecute:()=>void=()=>{};
+  export let onComposerSend:()=>Promise<unknown>|unknown=async()=>{await onImportInstruction()};
+  const appStopExactRuntime=getContext<(runId:string)=>Promise<unknown>|unknown>('aicc-stop-exact-runtime');
+  const appResumeExactRuntime=getContext<(runId:string)=>Promise<unknown>|unknown>('aicc-resume-exact-runtime');
+  export let onStop:(runId:string)=>Promise<unknown>|unknown=appStopExactRuntime??(()=>{throw new Error('APP_STOP_EXACT_RUNTIME_REQUIRED')});
+  export let onResume:(runId:string)=>Promise<unknown>|unknown=appResumeExactRuntime??(()=>{throw new Error('APP_RESUME_EXACT_RUNTIME_REQUIRED')});
+  export let onImportAndRun:()=>void=()=>{};
+  export let onCopyResult:(runId?:string)=>void=()=>{};
   export let onCopyExample:()=>void=()=>{};
   export let onLaunch:(id:string)=>void=()=>{};
   export let onCopyReport:(report:unknown)=>void=()=>{};
   export let onSelectRun:(id:string)=>void=()=>{};
-  $: scopedBridgeOutbox=workPackage?.id?bridgeOutbox.filter(item=>item.report?.workPackageId===workPackage.id):[];
-
-  let inspectedInboxId:string|null=null,instructionExpandedId:string|null=null,resultExpandedId:string|null=null,copiedRunId:string|null=null,copyTimer:number|undefined;
-  onMount(()=>{recordWorkspaceMount();return ()=>{if(copyTimer)clearTimeout(copyTimer)}});
+  export let providerId:'LOCAL_CODEX'|'REMOTE_CLAUDE'=readExecutionProvider();
+  export let onProviderChange:(provider:'LOCAL_CODEX'|'REMOTE_CLAUDE')=>void=(provider)=>{try{localStorage.setItem(EXECUTION_PROVIDER_STORAGE_KEY,provider)}catch{}};
+  let modelOptions:{value:string;label:string;model:string;reasoning:string}[]=[],selectedModel='',selectedReasoning='',composerSubmitting=false,imeComposing=false;
+  let resultExpandedId:string|null=null,copiedRunId:string|null=null,copyTimer:number|undefined;
+  let phase5Layer2=projectPhase5Lifecycle(createEmptyGlobalStateReadModel(),{});
+  $: currentSubmittedRun=instructionState==='RUN_STARTED'&&runtime&&selectedRunId===runtime.runId&&!['COMPLETED','FAILED','STOPPED','RECOVERY_REQUIRED'].includes(runtime.phase)?runtime:null;
+  $: liveComposerRun=runtime&&runtime.pidAlive===true&&['STARTING','RUNNING','STOPPING'].includes(runtime.phase)?runtime:null;
+  $: cancellableComposerRun=currentSubmittedRun??liveComposerRun;
+  $: activeComposerState=composerSubmitting?'SUBMITTING':cancellableComposerRun?.phase==='STARTING'?'STARTING':cancellableComposerRun?.phase==='RUNNING'?'RUNNING':cancellableComposerRun?.phase==='STOPPING'?'STOPPING':bridgePayload.trim()?'TEXT_READY':'EMPTY';
+  onMount(async()=>{recordWorkspaceMount();try{const response=await fetch('/api/providers/codex');const payload=await response.json();modelOptions=(payload.models??[]).flatMap((item:any)=>(item.reasoningLevels??[]).map((reasoning:string)=>({value:`${item.model}:${reasoning}`,label:`${item.displayName} · ${reasoning}`,model:item.model,reasoning})));const savedModel=localStorage.getItem('aicc-selected-model')??payload.defaultModel,savedReasoning=localStorage.getItem('aicc-selected-reasoning')??payload.defaultReasoning;const saved=modelOptions.find(item=>item.model===savedModel&&item.reasoning===savedReasoning)??modelOptions[0];if(saved){selectedModel=saved.model;selectedReasoning=saved.reasoning}}catch{modelOptions=[]}return ()=>{if(copyTimer)clearTimeout(copyTimer)}});
+  function persistSelection(value:string){const selected=modelOptions.find(item=>item.value===value);if(!selected)return;selectedModel=selected.model;selectedReasoning=selected.reasoning;if(typeof localStorage!=='undefined'){localStorage.setItem('aicc-selected-model',selected.model);localStorage.setItem('aicc-selected-reasoning',selected.reasoning)}}
+  async function submitComposer(){if(activeComposerState!=='TEXT_READY'||composerSubmitting)return;composerSubmitting=true;try{await Promise.resolve(onComposerSend())}finally{composerSubmitting=false}}
+  function onComposerKeydown(event:KeyboardEvent){if(event.key!=='Enter'||event.shiftKey||event.isComposing||imeComposing)return;if(activeComposerState!=='TEXT_READY')return;event.preventDefault();void submitComposer()}
   $: focused=selectCanonicalCurrentRuntime(runtime,history,selectedRunId);
-  $: runRecords=[runtime,...history].filter((item):item is RuntimeRecord=>Boolean(item)).filter((item,index,all)=>all.findIndex(candidate=>candidate.runId===item.runId)===index);
-  $: runRecords.sort((a,b)=>Date.parse(b.lastActivityAt??b.startedAt)-Date.parse(a.lastActivityAt??a.startedAt));
-  $: executionRows=[...bridgeInbox.filter(item=>Boolean(item.runId)).map(item=>({key:`run:${item.runId}`,runId:item.runId,run:runRecords.find(candidate=>candidate.runId===item.runId)??null,inbox:item})),...runRecords.filter(item=>!bridgeInbox.some(inbox=>inbox.runId===item.runId)).map(item=>({key:`run:${item.runId}`,runId:item.runId,run:item,inbox:null}))];
-  $: executionRows.sort((a,b)=>Date.parse(b.run?.lastActivityAt??b.run?.startedAt??b.inbox?.updatedAt??b.inbox?.createdAt??'')-Date.parse(a.run?.lastActivityAt??a.run?.startedAt??a.inbox?.updatedAt??a.inbox?.createdAt??''));
-  $: inspectedInbox=bridgeInbox.find(item=>item.id===inspectedInboxId)??null;
-  $: if(selectedInboxId&&selectedInboxId!==inspectedInboxId&&bridgeInbox.some(item=>item.id===selectedInboxId))inspectedInboxId=selectedInboxId;
-  function gateReason(item:any){return item?.error??item?.parseErrors?.[0]??item?.gates?.find((gate:any)=>gate.state!=='PASS')?.reason??'所有 Gate 已通过。'}
-  function rawInstruction(item:any){if(item?.rawInstruction)return item.rawInstruction;const instruction=item?.instruction;if(!instruction)return '原始指令不可用（旧记录未保存原文）。';return [`AICC_EXECUTION_V1`,`INSTRUCTION_ID: ${instruction.instructionId}`,`ENTITY_TYPE: ${instruction.entityType}`,`ENTITY_ID: ${instruction.entityId}`,`EXECUTION_TYPE: ${instruction.executionType}`,`REPOSITORY: ${instruction.repository}`,`BRANCH: ${instruction.branch}`,`EXPECTED_HEAD: ${instruction.expectedHead}`,`SANDBOX: ${instruction.sandbox}`,`REQUIRES_AUTHORIZATION: ${instruction.requiresAuthorization}`,'',`INSTRUCTION_BEGIN`,instruction.instructionBody,`INSTRUCTION_END`].join('\n')}
-  function runtimeForRun(runId:string|null){return runId?runRecords.find(item=>item.runId===runId)??null:null}
-  function inboxForRun(runId:string){return bridgeInbox.find(item=>item.runId===runId)??null}
-  function instructionForRun(row:any){return row.run?.instructionText??row.inbox?.rawInstruction??'原始指令不可用（旧记录未保存原文）。'}
-  function resultForRun(run:RuntimeRecord|null){return run&&['COMPLETED','FAILED','STOPPED'].includes(run.phase)?run.finalAgentMessage??null:null}
+  function rebuildPhase5Projection(current:RuntimeRecord|null,taskRecords:any[]){phase5Layer2=projectPhase5Lifecycle(phase5Layer2.model,{runs:current?[current]:[],tasks:taskRecords.map(task=>({taskId:task.taskId,lifecycle:task.status,executionId:task.executionId,runId:task.runId,updatedAt:task.updatedAt}))});return phase5Layer2}
+  $: lifecycleProjection=rebuildPhase5Projection(focused,tasks);
+  $: focusedRunLayer2=focused?exactRunLayer2(lifecycleProjection,focused.runId):null;
+  $: focusedRunLifecycle=focusedRunLayer2?.lifecycle.state==='KNOWN'?focusedRunLayer2.lifecycle.value:'UNKNOWN';
+  $: focusedExecutionLayer2=focusedRunLayer2?.executionId?lifecycleProjection.executions.find(record=>record.executionId===focusedRunLayer2?.executionId)??null:null;
+  $: focusedExecutionLifecycle=focusedExecutionLayer2?.lifecycle.state==='KNOWN'?focusedExecutionLayer2.lifecycle.value:'UNKNOWN';
+  let stopPending=false,resumePending=false;
+  async function stopFocusedRuntime(runId:string){if(!focused?.runId||focused.runId!==runId||stopPending)return;stopPending=true;try{await Promise.resolve(onStop(runId))}finally{stopPending=false}}
+  async function resumeFocusedRuntime(runId:string){if(!focused?.runId||focused.runId!==runId||resumePending)return;resumePending=true;try{await Promise.resolve(onResume(runId))}finally{resumePending=false}}
+  $: focusedResult=focused?exactResultForRun(lifecycleProjection,focused.runId)?.canonical?.rawResult??null:null;
+  $: focusedTask=focused?tasks.find(task=>task?.runId===focused.runId||task?.executionId===focused.runId)??null:null;
+  $: diagnostic=buildRuntimeDiagnostic(focusedTask??tasks.find(task=>task?.taskId===selectedTaskId)??null,focused);
+  $: if(resultExpandedId&&resultExpandedId!==focused?.runId)resultExpandedId=null;
+  function runtimeForRun(runId:string|null){return runId?[runtime,...history].find(item=>item?.runId===runId)??null:null}
+  function resultForRun(run:RuntimeRecord|null){return run&&['COMPLETED','FAILED','STOPPED'].includes(run.phase)?run.canonicalResult?.rawResult??null:null}
+  async function copyResult(runId=focused?.runId){if(!runId||!resultForRun(runtimeForRun(runId)))return;await onCopyResult(runId);copiedRunId=runId;if(copyTimer)clearTimeout(copyTimer);copyTimer=window.setTimeout(()=>copiedRunId=null,1600)}
   function formatDuration(start?:string,end?:string){if(!start)return '不可用';const from=Date.parse(start),to=end?Date.parse(end):Date.now();if(!Number.isFinite(from)||!Number.isFinite(to))return '不可用';const seconds=Math.max(0,Math.floor((to-from)/1000));return `${Math.floor(seconds/60)}分${String(seconds%60).padStart(2,'0')}秒`}
-  function toggleInstruction(id:string){instructionExpandedId=instructionExpandedId===id?null:id}
-  async function copyRunResult(runId:string){const run=runtimeForRun(runId),result=resultForRun(run);if(!result)return;resultExpandedId=runId;try{if(!navigator.clipboard?.writeText)throw new Error('CLIPBOARD_UNAVAILABLE');await navigator.clipboard.writeText(result);copiedRunId=runId;if(copyTimer)clearTimeout(copyTimer);copyTimer=window.setTimeout(()=>copiedRunId=null,1800)}catch{copiedRunId=null}}
-  async function copySelectedOrLatestResult(){const candidate=(focused&&resultForRun(focused))?focused:runRecords.find(run=>Boolean(resultForRun(run)));if(candidate)await copyRunResult(candidate.runId)}
 </script>
 
 <section class="runtime-workspace" data-testid="runtime-tab-workspace">
-  {#if showInbox}
+  {#if showInbox && showComposer}
     <section class="runtime-command-panel" data-testid="runtime-execution-inbox">
-      <div class="runtime-top-action-bar" data-testid="runtime-top-action-bar"><div><button class="service-action" onclick={onPasteInstruction}>粘贴指令</button><button class="service-action" onclick={onImportInstruction}>导入指令</button><button class="service-action" disabled={autoExecute||instructionState!=='IMPORTED_PENDING'} aria-disabled={autoExecute||instructionState!=='IMPORTED_PENDING'} onclick={onManualExecute}>执行指令</button></div><div><button class="service-action" onclick={copySelectedOrLatestResult}>复制结果</button><button class="service-action" onclick={onCopyExample}>复制有效示例</button></div></div>
-      <textarea value={bridgePayload} oninput={(event)=>onPayloadChange((event.currentTarget as HTMLTextAreaElement).value)} placeholder="粘贴 AICC_EXECUTION_V1，或复制有效示例…"></textarea>
-      <div class="runtime-instruction-state" data-testid="runtime-instruction-state">{instructionState}</div>
-      {#each bridgeInbox.filter(item=>!item.runId).slice(0,5) as item, index}
-        <article class="bridge-item bridge-inbox-item" class:latest={index===0} data-testid="inbox-item-{item.id}"><div class="bridge-inbox-summary"><div class="bridge-inbox-heading"><strong>{item.instruction?.sourceType==='WEB_BRIDGE'?'WEB_BRIDGE':item.instruction?.sourceType??'UNKNOWN'} · {item.state}</strong>{#if index===0}<span class="bridge-latest">最新</span>{/if}<time>{formatOwnerLocalTime(item.createdAt??item.updatedAt)}</time></div><b>{item.id}</b><span>{item.instruction?.entityId??item.error??'目标不可用'} · {item.instruction?.executionType??'类型不可用'}</span><small class="bridge-reason">原因：{gateReason(item)}</small></div><div class="bridge-inbox-actions">{#if item.state==='READY'}<button class="service-action" onclick={()=>onLaunch(item.id)}>启动执行</button>{/if}<button class="service-action" onclick={()=>toggleInstruction(`inbox:${item.id}`)}>查看指令</button><button class="service-action" disabled>运行结果</button></div>{#if inspectedInboxId===item.id||instructionExpandedId===`inbox:${item.id}`}<div class="bridge-inbox-detail" data-testid="inbox-detail"><dl><div><dt>来源</dt><dd>{item.instruction?.sourceType??'UNKNOWN'}</dd></div><div><dt>Inbox ID</dt><dd>{item.id}</dd></div><div><dt>Instruction ID</dt><dd>{item.instruction?.instructionId??'—'}</dd></div><div><dt>Entity ID</dt><dd>{item.instruction?.entityId??'—'}</dd></div><div><dt>Inbox State</dt><dd>{item.state}</dd></div><div><dt>Bound Run ID</dt><dd>— · 未启动执行</dd></div></dl><h4>原始指令</h4><pre>{rawInstruction(item)}</pre></div>{/if}</article>
-      {/each}
+      <div class="runtime-top-action-bar" data-testid="runtime-top-action-bar"><div><button class="service-action" onclick={onPasteInstruction}>粘贴指令</button><button class="service-action" onclick={onImportInstruction}>发送到 AICC 执行</button></div><div><button class="service-action" onclick={onCopyResult}>复制结果</button><button class="service-action" onclick={onCopyExample}>复制有效示例</button></div></div>
+      <textarea value={bridgePayload} oninput={(event)=>onPayloadChange((event.currentTarget as HTMLTextAreaElement).value)} onkeydown={onComposerKeydown} oncompositionstart={()=>imeComposing=true} oncompositionend={()=>imeComposing=false} placeholder="粘贴 AICC_EXECUTION_V1，或复制有效示例…"></textarea>
+      <div class="runtime-composer-controls" data-testid="runtime-composer-controls"><span class="runtime-composer-state" data-testid="runtime-composer-state">{activeComposerState}</span><select class="runtime-model-selector" aria-label="模型与推理" value={`${selectedModel}:${selectedReasoning}`} onchange={(event)=>persistSelection((event.currentTarget as HTMLSelectElement).value)} disabled={!modelOptions.length}>{#each modelOptions as option}<option value={option.value}>{option.label}</option>{/each}</select><button class:stop-action={activeComposerState==='STARTING'||activeComposerState==='RUNNING'||activeComposerState==='STOPPING'} class:send-action={activeComposerState==='TEXT_READY'} class="runtime-primary-action" data-testid="runtime-primary-action" disabled={activeComposerState==='EMPTY'||activeComposerState==='SUBMITTING'||activeComposerState==='STOPPING'} aria-label={activeComposerState==='STARTING'||activeComposerState==='RUNNING'||activeComposerState==='STOPPING'?'停止回答':'发送'} onclick={activeComposerState==='STARTING'||activeComposerState==='RUNNING'?onStop:submitComposer}>{activeComposerState==='STARTING'||activeComposerState==='RUNNING'||activeComposerState==='STOPPING'?'■':'↑'}</button></div>
     </section>
   {/if}
 
-  <section class="runtime-current-card" data-testid="runtime-current-execution">
-    <div class="section-label"><span>当前执行</span><small>{focused?.runId??'暂无匹配运行'}</small></div>
-    {#if focused}<div class="runtime-current-grid"><div><small>状态</small><strong>{focused.phase}</strong></div><div><small>当前活动</small><strong>{focused.currentTask||focused.latestEvent||'UNAVAILABLE'}</strong></div><div><small>Run ID</small><strong class="mono">{focused.runId}</strong></div><div><small>耗时</small><strong>{formatDuration(focused.startedAt,focused.completedAt??(['COMPLETED','FAILED','STOPPED'].includes(focused.phase)?focused.lastActivityAt:undefined))}</strong></div><div><small>PID</small><strong>{focused.pid??'不可用'}</strong></div>{#if ['COMPLETED','FAILED','STOPPED'].includes(focused.phase)}<div><small>退出码</small><strong>{focused.exitCode??'不可用'}</strong></div>{/if}</div><div class="runtime-run-times"><span>开始：{formatOwnerLocalTime(focused.startedAt)}</span>{#if focused.completedAt}<span>结束：{formatOwnerLocalTime(focused.completedAt)}</span>{/if}</div>{:else}<p class="runtime-empty-copy">当前没有绑定到所选实体的运行。</p>{/if}
-  </section>
+  {#if showCanonicalTaskFeed}<AiccWorkspaceDrawer title="统一任务列表" subtitle="Canonical Task Feed" defaultExpanded={true}><CanonicalTaskFeed {tasks} {selectedTaskId} {onSelectTask}/></AiccWorkspaceDrawer>{/if}
 
-  <section class="runtime-live-section" data-testid="runtime-live-activity">
-    <div class="section-label"><span>运行监控 / 实时活动</span><small>Runtime Monitor</small></div>
-    <RuntimeMonitor runtime={focused} {workPackage} {writerLock} {emptyTitle} {emptyCapability} {emptyReason}/>
-  </section>
+  <AiccWorkspaceDrawer title="Codex CLI Live" subtitle="Runtime Terminal" defaultExpanded={true}><div class="runtime-terminal-pane" data-testid="runtime-terminal-pane"><CodexCliLive runtime={focused} lifecycle={focusedRunLifecycle} onStop={stopFocusedRuntime} onResume={resumeFocusedRuntime} {stopPending} {resumePending}/></div></AiccWorkspaceDrawer>
 
-  <section class="runtime-history-card" data-testid="runtime-history">
-    <div class="section-label"><span>运行记录</span><small>{runRecords.length} 条</small></div>
-    {#if executionRows.length}{#each executionRows as row}<article class="runtime-history-item" class:active={row.runId===focused?.runId} data-testid="runtime-run-row-{row.runId}"><button class="runtime-history-select" onclick={()=>row.runId&&onSelectRun(row.runId)}><span><strong>{row.run?.phase??row.inbox?.state??'UNAVAILABLE'}</strong><small>{row.run?.workPackageId??row.inbox?.instruction?.workPackageId??'目标不可用'} · {formatOwnerLocalTime(row.run?.startedAt??row.inbox?.createdAt)}</small></span><code>{row.runId??'—'}</code></button><div class="runtime-run-actions"><button class="service-action" onclick={()=>toggleInstruction(row.runId?`run:${row.runId}`:`inbox:${row.inbox.id}`)}>查看指令</button><button class="service-action" disabled={!resultForRun(row.run)} aria-disabled={!resultForRun(row.run)} onclick={()=>row.runId&&copyRunResult(row.runId)}>运行结果</button>{#if row.runId&&copiedRunId===row.runId}<span class="runtime-copy-feedback" role="status">已复制</span>{/if}</div>{#if instructionExpandedId===`run:${row.runId}`||(!row.runId&&instructionExpandedId===`inbox:${row.inbox.id}`)}<pre class="runtime-instruction-detail" data-testid="runtime-instruction-view-{row.runId??row.inbox.id}">{instructionForRun(row)}</pre>{/if}{#if row.runId&&resultExpandedId===row.runId&&resultForRun(row.run)}<pre class="runtime-result-detail" data-testid="runtime-result-view-{row.runId}">{resultForRun(row.run)}</pre>{/if}</article>{/each}{:else}<p class="runtime-empty-copy">暂无运行记录。</p>{/if}
-    {#if showInbox}<div class="runtime-outbox"><div class="section-label"><span>结果发件箱</span><small>AICC_RUN_REPORT_V1</small></div>{#each scopedBridgeOutbox.slice(0,3) as item}<div class="bridge-item"><strong>{item.state}</strong><span>{item.report?.runId??'无 Run ID'}</span><button class="service-action" onclick={()=>onCopyReport(item.report)}>复制报告</button></div>{/each}</div>{/if}
-  </section>
+  <AiccWorkspaceDrawer title="运行摘要" subtitle="Runtime Monitor" defaultExpanded={false}><section class="runtime-live-section" data-testid="runtime-live-activity"><RuntimeMonitor runtime={focused} runLayer2={focusedRunLayer2} {workPackage} {writerLock} {emptyTitle} {emptyCapability} {emptyReason} resultText={focusedResult} resultExpanded={resultExpandedId===focused?.runId} copied={copiedRunId===focused?.runId} onToggleResult={(expanded)=>{if(focused?.runId)resultExpandedId=expanded?focused.runId:null}} onCopyResult={()=>copyResult(focused?.runId)}/></section></AiccWorkspaceDrawer>
+
+  <AiccWorkspaceDrawer title="故障诊断" subtitle="Runtime Diagnostics" defaultExpanded={false}><RuntimeDiagnostics diagnostic={diagnostic}/></AiccWorkspaceDrawer>
+
+  <AiccWorkspaceDrawer title="当前执行" subtitle={focused?.runId??'暂无匹配运行'} defaultExpanded={false}><section class="runtime-current-card" data-testid="runtime-current-execution">
+    {#if focused}<dl class="aicc-info-list runtime-current-info"><div class="aicc-info-row"><dt class="aicc-info-label">实体绑定</dt><dd class="aicc-info-value" title={entityType==='global_task'?'GLOBAL / UNMAPPED':`${entityType.toUpperCase()} · ${entityId||workPackage?.id||'UNBOUND'}`}>{entityType==='global_task'?'GLOBAL / UNMAPPED':`${entityType.toUpperCase()} · ${entityId||workPackage?.id||'UNBOUND'}`}</dd></div><div class="aicc-info-row"><dt class="aicc-info-label">Execution 状态</dt><dd class="aicc-info-value">{focusedExecutionLifecycle}</dd></div><div class="aicc-info-row"><dt class="aicc-info-label">Run 状态</dt><dd class="aicc-info-value">{focusedRunLifecycle}</dd></div>{#if focusedTask}<div class="aicc-info-row"><dt class="aicc-info-label">Canonical Task</dt><dd class="aicc-info-value"><TaskTitleTrigger taskId={focusedTask.taskId} label={focusedTask.taskTitle??focusedTask.taskCode??focusedTask.instructionId??focusedTask.taskId} selected={selectedTaskId===focusedTask.taskId} onSelect={onSelectTask}/></dd></div>{/if}<div class="aicc-info-row"><dt class="aicc-info-label">当前活动</dt><dd class="aicc-info-value" title={focused.currentTask||focused.latestEvent||'UNAVAILABLE'}>{focused.currentTask||focused.latestEvent||'UNAVAILABLE'}</dd></div><div class="aicc-info-row"><dt class="aicc-info-label">Run ID</dt><dd class="aicc-info-value" title={focused.runId}>{focused.runId}</dd></div><div class="aicc-info-row"><dt class="aicc-info-label">耗时</dt><dd class="aicc-info-value">{formatDuration(focused.startedAt,focused.completedAt??(['COMPLETED','FAILED','STOPPED'].includes(focusedRunLifecycle)?focused.lastActivityAt:undefined))}</dd></div><div class="aicc-info-row"><dt class="aicc-info-label">PID</dt><dd class="aicc-info-value">{focused.pid??'不可用'}</dd></div>{#if ['COMPLETED','FAILED','STOPPED'].includes(focusedRunLifecycle)}<div class="aicc-info-row"><dt class="aicc-info-label">退出码</dt><dd class="aicc-info-value">{focused.exitCode??'不可用'}</dd></div>{/if}<div class="aicc-info-row"><dt class="aicc-info-label">开始时间</dt><dd class="aicc-info-value">{formatOwnerLocalTime(focused.startedAt)}</dd></div>{#if focused.completedAt}<div class="aicc-info-row"><dt class="aicc-info-label">结束时间</dt><dd class="aicc-info-value">{formatOwnerLocalTime(focused.completedAt)}</dd></div>{/if}</dl>{:else}<p class="runtime-empty-copy">{entityType==='global_task'?'当前没有未绑定的全局运行。':'当前没有绑定到所选实体的运行。'}</p>{/if}
+  </section></AiccWorkspaceDrawer>
+
+  {#if focused}
+    <AiccWorkspaceDrawer title="执行证据" subtitle="RUN-SCOPED" defaultExpanded={false}><section class="runtime-evidence-card" data-testid="runtime-execution-evidence">
+      <dl class="aicc-info-list runtime-evidence-info"><div class="aicc-info-row"><dt class="aicc-info-label">Provider</dt><dd class="aicc-info-value">{focused.provider??'codex'}</dd></div><div class="aicc-info-row"><dt class="aicc-info-label">Requested model</dt><dd class="aicc-info-value">{focused.requestedModel??focused.model??'UNAVAILABLE'}</dd></div><div class="aicc-info-row"><dt class="aicc-info-label">Resolved model</dt><dd class="aicc-info-value">{focused.resolvedModel??'UNAVAILABLE'}</dd></div><div class="aicc-info-row"><dt class="aicc-info-label">Reasoning</dt><dd class="aicc-info-value">{focused.reasoningLevel??'UNAVAILABLE'}</dd></div><div class="aicc-info-row"><dt class="aicc-info-label">Spawn</dt><dd class="aicc-info-value" title={focused.spawnExecutable??'UNAVAILABLE'}>{focused.spawnExecutable??'UNAVAILABLE'} · {focused.spawnedAt??'PENDING'}</dd></div><div class="aicc-info-row"><dt class="aicc-info-label">PID</dt><dd class="aicc-info-value">{focused.pid??'UNAVAILABLE'} · {focused.pidAlive===true?'ALIVE':'DEAD'}</dd></div><div class="aicc-info-row"><dt class="aicc-info-label">工作目录</dt><dd class="aicc-info-value" title={focused.spawnCwd??focused.worktreePath??'UNAVAILABLE'}>{focused.spawnCwd??focused.worktreePath??'UNAVAILABLE'}</dd></div><div class="aicc-info-row"><dt class="aicc-info-label">启动状态</dt><dd class="aicc-info-value" title={focused.startupTransitions?.join(' → ')??'UNAVAILABLE'}>{focused.startupTransitions?.join(' → ')??'UNAVAILABLE'}</dd></div><div class="aicc-info-row"><dt class="aicc-info-label">退出</dt><dd class="aicc-info-value">{focused.exitCode??'—'} {focused.processSignal??''}</dd></div><div class="aicc-info-row"><dt class="aicc-info-label">Failure</dt><dd class="aicc-info-value">{focused.failure??'—'}</dd></div><div class="aicc-info-row"><dt class="aicc-info-label">Codex thread</dt><dd class="aicc-info-value">{focused.threadId??'—'}</dd></div><div class="aicc-info-row"><dt class="aicc-info-label">Process exit / close</dt><dd class="aicc-info-value">{focused.processExitObserved?'EXITED':'—'} · {focused.processCloseObserved?'CLOSED':'—'}</dd></div><div class="aicc-info-row"><dt class="aicc-info-label">Writer Lock</dt><dd class="aicc-info-value">{focused.writerLockReleased?'RELEASED':'ACTIVE / UNKNOWN'}</dd></div><div class="aicc-info-row"><dt class="aicc-info-label">Timeout</dt><dd class="aicc-info-value">{focused.timeoutAt??'—'}</dd></div><div class="aicc-info-row"><dt class="aicc-info-label">Startup decision</dt><dd class="aicc-info-value">{focused.startupDetectorDecision??'PENDING'} · {focused.readyEvent??'—'}</dd></div></dl>
+      {#if focused.stdout}<details><summary>stdout</summary><pre>{focused.stdout}</pre></details>{/if}
+      {#if focused.stderr}<details><summary>stderr</summary><pre>{focused.stderr}</pre></details>{/if}
+      {#if focused.rawFirstStdoutEvents?.length}<details><summary>first protocol events</summary><pre>{focused.rawFirstStdoutEvents.join('\n')}</pre></details>{/if}
+    </section></AiccWorkspaceDrawer>
+  {/if}
+
+  <AiccWorkspaceDrawer title="Execution Provider" subtitle="Provider Registry" defaultExpanded={false}><ExecutionProviderPanel {providerId} status={focused?focusedRunLifecycle:'IDLE'} executionType={focused?.executionType??'IMPLEMENTATION'} {onProviderChange}/></AiccWorkspaceDrawer>
 </section>
+<style>
+  .runtime-evidence-card pre{max-height:180px;overflow:auto;white-space:pre-wrap;font:11px var(--font-tech)}
+  .runtime-composer-controls{display:flex;justify-content:flex-end;align-items:center;gap:10px;margin-top:8px}.runtime-composer-state{margin-right:auto;color:var(--text-3);font:11px var(--font-tech)}.runtime-model-selector{max-width:190px;border:1px solid var(--border-soft);border-radius:6px;background:var(--surface);color:var(--text);padding:5px 8px;font-size:11px}.runtime-primary-action{width:34px;height:34px;border:0;border-radius:50%;font-size:17px;line-height:1;background:#94a3b8;color:white;cursor:pointer}.runtime-primary-action.send-action,.runtime-primary-action.stop-action{background:#2563eb}.runtime-primary-action:disabled{background:#cbd5e1;color:#64748b;cursor:not-allowed}
+</style>

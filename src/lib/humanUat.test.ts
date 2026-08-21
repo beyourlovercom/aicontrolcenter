@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {canPassHumanUat,parseOwnerHumanUatPlan,resolveHumanUatStatus} from './humanUat.ts';
+const app=readFileSync(new URL('../App.svelte',import.meta.url),'utf8');
+const controlService=readFileSync(new URL('./controlService.ts',import.meta.url),'utf8');
 const workspace=readFileSync(new URL('../components/entity/HumanUatWorkspace.svelte',import.meta.url),'utf8');
 const styles=readFileSync(new URL('../app.css',import.meta.url),'utf8');
 const pass=[{id:'1',title:'a',description:'a',state:'PASS' as const},{id:'2',title:'b',description:'b',state:'N_A' as const}];
@@ -11,7 +13,8 @@ const override={repository:'r',workPackageId:'w',entityType:'work_package' as co
 assert.equal(resolveHumanUatStatus(override,override.items),'PASS');
 assert.equal(override.items[0].state,'PENDING');
 assert.match(workspace,/lifecycleUatStatus/,'UAT workspace reads canonical lifecycle stage');
-assert.match(workspace,/record\?\.status==='PASS'\|\|lifecycleUatStatus==='PASS'/,'closed canonical UAT PASS is preserved without a record');
+assert.match(workspace,/lifecycleUatStatus==='PASS'\?'PASS'/,'closed UAT PASS is read from the independent projected Human UAT dimension');
+assert.match(workspace,/humanUatStatus\(context\.type,context\.id\)/,'the UI reads the Global State Read Model rather than inferring UAT from surrounding lifecycle');
 assert.equal(workspace.includes('暂无可解析的 Owner Human UAT 计划。'),false,'missing checklist does not use long fallback prose');
 assert.match(workspace,/currentStatus==='PASS'\?'已通过'/,'closed UAT renders completed state');
 assert.match(workspace,/currentStatus==='NEEDS_REMEDIATION'\?'未通过'/,'failed UAT renders failed state');
@@ -56,9 +59,17 @@ assert.match(workspace,/Owner 备注（历史）/,'closed Owner note history is 
 assert.equal(parseOwnerHumanUatPlan('- HUA-R1 | Runtime | 查看运行结果 | Runtime 完成').map(item=>item.id)[0],'HUA-R1');
 assert.equal(parseOwnerHumanUatPlan('- HUA-W1 | Workspace | 查看任务上下文 | Workspace 上下文正确').map(item=>item.id)[0],'HUA-W1');
 assert.equal(parseOwnerHumanUatPlan('- HUA-E1 | Evidence | 查看验收证据 | Evidence 可追溯').map(item=>item.id)[0],'HUA-E1');
-assert.match(workspace,/editable=context\.lifecycle\.currentStage==='HUMAN_UAT'/,'pre-UAT remains preview-only');
+assert.match(workspace,/editable=isPullRequest\?context\.record\?\.state!==['"]MERGED['"]&&context\.record\?\.state!==['"]CLOSED['"]:/,'pre-UAT WP remains preview-only while PR uses its own entity state');
 assert.match(styles,/\.uat-action-bar \.uat-action-mutate\{margin-left:auto\}/,'mutation actions align to the right');
 assert.match(styles,/\.uat-summary\{margin:var\(--space-3\) 0;grid-template-columns:repeat\(3/,'summary row uses equal compact columns');
 assert.match(styles,/\.uat-summary>div\{min-height:68px;padding:var\(--space-3\)\}/,'summary blocks share height and padding');
 assert.match(styles,/\.uat-checklist\{margin-top:var\(--space-3\)\}/,'summary to checklist spacing is compact');
+assert.match(app,/activeTab==='UAT'.*HumanUatWorkspace context=\{context\}/,'PR uses the shared UAT workspace');
+assert.equal(app.includes('PrHumanUatWorkspace'),false,'second PR-specific UAT system is not rendered');
+assert.match(app,/entityType==='pull_request'.*item\.entityId===context\.id/,'PR UAT reads the selected PR identity');
+assert.match(app,/record\.entityType.*record\.entityId/,'UAT writes include entity-scoped identity');
+assert.match(controlService,/item\.entityType===record\.entityType/,'UAT persistence separates entity types');
+assert.match(workspace,/isPullRequest\?context\.record\?\.state/,'PR UAT editability follows the selected PR state');
+assert.match(workspace,/prIdentity:context\.type==='pull_request'/,'PR identity is automatically bound');
+assert.match(workspace,/关联运行/,'UAT displays only the selected entity execution when available');
 console.log('human UAT contract tests passed');

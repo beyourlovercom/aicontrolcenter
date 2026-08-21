@@ -1,0 +1,35 @@
+import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
+
+const app=readFileSync(new URL('../App.svelte',import.meta.url),'utf8');
+const workspace=readFileSync(new URL('../components/entity/RuntimeWorkspace.svelte',import.meta.url),'utf8');
+const feed=readFileSync(new URL('../components/CanonicalTaskFeed.svelte',import.meta.url),'utf8');
+const row=readFileSync(new URL('../components/CanonicalTaskFeedRow.svelte',import.meta.url),'utf8');
+const projection=readFileSync(new URL('./canonicalTaskFeed.ts',import.meta.url),'utf8');
+
+assert.equal((workspace.match(/<CanonicalTaskFeed /g)??[]).length,1,'shared workspace owns one canonical Feed mount');
+assert.ok(workspace.indexOf('<CanonicalTaskFeed')>workspace.indexOf('runtime-command-panel'),'Feed follows command input');
+assert.ok(workspace.indexOf('title="统一任务列表"')<workspace.indexOf('title="Codex CLI Live"'),'Canonical Task Feed is the first shared drawer before the terminal drawer');
+assert.ok(workspace.indexOf('runtime-live-activity')<workspace.indexOf('runtime-current-execution'),'Runtime Monitor precedes Current Execution');
+assert.ok(workspace.indexOf('runtime-live-activity')<workspace.indexOf('<ExecutionProviderPanel'),'Runtime Monitor precedes Execution Provider');
+assert.match(feed,/<CanonicalTaskFeedRow /,'Feed delegates every row to one shared component');
+assert.match(row,/import TaskTitleTrigger/);
+assert.match(row,/taskId=\{row\.taskId\}[\s\S]*onSelect=\{onSelectTask\}/,'row delegates canonical task_id to the shared trigger');
+assert.doesNotMatch(row,/查看指令|运行结果|查看详情/,'row has no redundant detail actions');
+assert.match(feed,/canonical-task-feed-empty/,'one compact truthful empty state exists');
+assert.match(projection,/new Map<string,CanonicalTaskFeedRow>/,'deduplication uses canonical task_id');
+assert.doesNotMatch(projection,/runRecords|bridgeOutbox|result/i,'projection cannot recreate Tasks from Run, Result, or Outbox');
+assert.match(projection,/task\.updatedAt,task\.completedAt,task\.startedAt,task\.createdAt/,'newest activity ordering is explicit');
+assert.doesNotMatch(app,/entity-task-projection|wp-task-projection/,'external WP Task projection is removed');
+assert.match(app,/tasks=\{scopedTaskRecords\} \{selectedTaskId\} onSelectTask=\{selectCanonicalTask\}/,'WP passes only scoped canonical Task records');
+assert.doesNotMatch(workspace,/runtime-history-card|runtime-outbox|bridge-inbox-item/,'duplicate Inbox, Run, and Outbox primary lists are removed');
+assert.match(workspace,/bridgeInbox:any\[\]=\[\]/,'Inbox data contract remains available to runtime integration');
+assert.match(workspace,/bridgeOutbox:any\[\]=\[\]/,'Outbox data contract remains available to runtime integration');
+assert.match(workspace,/RuntimeMonitor runtime={focused}/,'canonical Result remains projected through Runtime Monitor');
+assert.match(workspace,/focusedTask=focused\?tasks\.find\(task=>task\?\.runId===focused\.runId\|\|task\?\.executionId===focused\.runId\)/,'Current Execution links only an exact Task correlation');
+assert.match(workspace,/Canonical Task[\s\S]*<TaskTitleTrigger taskId={focusedTask\.taskId}/,'Current Execution reuses the shared trigger');
+assert.match(row,/min-height:36px/,'rows have stable compact height');
+assert.match(row,/text-overflow:ellipsis/,'row fields are overflow safe');
+assert.match(feed,/overflow-x:hidden/,'Feed prevents horizontal page overflow');
+assert.match(feed,/@media\(max-width:720px\)/,'Feed has a responsive compact mode');
+console.log('canonical Task feed UI architecture tests passed');

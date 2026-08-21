@@ -11,7 +11,7 @@ export type AdapterCorrelation = {
   inboxId: string;
   runId?: string;
   sourceReference?: string;
-  originContext?: { conversationId?: string; conversationUrl?: string; messageId?: string };
+  originContext?: { conversationId?: string; conversationUrl?: string; messageId?: string; blockId?: string };
   sentAt: string;
 };
 
@@ -24,16 +24,13 @@ export type AdapterInboxItem = {
 };
 
 export type AdapterReport = {
-  version?: string;
   inboxId?: string;
   executionId?: string;
   runId?: string;
   entityId?: string;
   workPackageId?: string;
   executionType?: string;
-  runtimeResult?: string;
-  gateResult?: string;
-  summary?: string;
+  canonicalResult?: { version?: string; executionId?: string; instructionId?: string; originConversationId?: string; originMessageId?: string; originBlockId?: string; aiccStatus?: string; codexResult?: string; codexReason?: string; rawResult?: string; receivedAt?: string; resultId?: string; resultHash?: string; returnState?: string };
   [key: string]: unknown;
 };
 
@@ -96,7 +93,6 @@ export class WebBridgeClient {
   }
 
   async sendInstruction(text: string, sourceReference?: string, originContext?: AdapterCorrelation['originContext']): Promise<{ item: AdapterInboxItem; correlation: AdapterCorrelation }> {
-    if (!text.trim()) throw failureFrom('INSTRUCTION_TEXT_REQUIRED', '没有找到可发送的任务内容。', '在 ChatGPT 编辑框中输入任务后重试。');
     let response: Response;
     try {
       response = await this.fetchImpl(`${this.baseUrl}/api/gpt-bridge/inbox`, {
@@ -110,7 +106,6 @@ export class WebBridgeClient {
     if (!response.ok) throw httpFailure(response.status);
     const item = body.item as AdapterInboxItem | undefined;
     if (!item?.id) throw failureFrom('INBOX_RESPONSE_INVALID', 'AICC 返回了无法识别的 Inbox 结果。', '检查本地服务日志后重试。');
-    if (item.state === 'INVALID') throw failureFrom('INVALID_EXECUTION_INSTRUCTION', item.parseErrors?.[0] ?? item.error ?? 'AICC_EXECUTION_V1 指令无效。', '修正指令格式后重新发送。', 'BLOCKED');
     const correlation: AdapterCorrelation = {
       inboxId: item.id,
       instructionId: item.instruction?.instructionId,
@@ -137,19 +132,7 @@ export class WebBridgeClient {
 }
 
 export function reportForComposer(item: AdapterOutboxItem): string {
-  const report = item.report ?? {};
-  return [
-    'AICC_RUN_REPORT_V1',
-    `Run ID: ${report.runId ?? item.runId ?? 'ABSENT'}`,
-    `Entity: ${report.entityId ?? 'ABSENT'}`,
-    `Execution type: ${report.executionType ?? 'UNAVAILABLE'}`,
-    '',
-    `Runtime Result: ${report.runtimeResult ?? 'UNAVAILABLE'}`,
-    `Gate Result: ${report.gateResult ?? 'UNAVAILABLE'}`,
-    '',
-    'Summary:',
-    `${report.summary ?? 'UNAVAILABLE'}`
-  ].join('\n');
+  return typeof item.report?.canonicalResult?.rawResult === 'string' ? item.report.canonicalResult.rawResult : '';
 }
 
 export type ComposerElement = {
@@ -178,7 +161,6 @@ export function insertIntoComposer(text: string, root: ComposerRoot, eventFactor
 
 export const WEB_ADAPTER_CONTRACT = {
   transport: 'TEXT_ONLY',
-  autoExecuteOnReceive: false,
   autoSendChatGptMessage: false,
   conversationMetadataAuthority: true,
   localService: 'http://127.0.0.1:1420',

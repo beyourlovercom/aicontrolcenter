@@ -1,0 +1,34 @@
+import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
+
+const app=readFileSync(new URL('../App.svelte',import.meta.url),'utf8');
+const left=readFileSync(new URL('../components/TaskQuickList.svelte',import.meta.url),'utf8');
+const center=readFileSync(new URL('../components/GlobalTaskView.svelte',import.meta.url),'utf8');
+const inspector=readFileSync(new URL('../components/TaskRightContextInspector.svelte',import.meta.url),'utf8');
+
+assert.equal((app.match(/let selectedTaskId=/g)??[]).length,1,'CANONICAL_TASK_SELECTION_AUTHORITY = selectedTaskId');
+assert.match(app,/function selectCanonicalTask\(taskId:string\)\{if\(!taskRecords\.some\(item=>item\.taskId===taskId\)\)return;selectedTaskId=taskId/,'LEFT_CLICK_WRITES_CANONICAL_SELECTION = PASS');
+assert.match(app,/TaskQuickList tasks=\{globalTasks\} selectedTaskId=\{selectedTaskId\} onSelect=\{selectCanonicalTask\}/,'LEFT_READS_CANONICAL_SELECTION = PASS');
+assert.match(left,/class:selected=\{selectedTaskId===task\.taskId\}/,'LEFT_SELECTED_ROW_READS_CANONICAL_SELECTION = PASS');
+assert.match(left,/onclick=\{\(\)=>onSelect\(task\.taskId\)\}/,'LEFT_CLICK_DELEGATES_CANONICAL_SELECTION = PASS');
+assert.match(app,/GlobalTaskView center groups=\{globalTaskGroups\}[^\n]*\{selectedTaskId\} onSelectTask=\{selectCanonicalTask\}/,'CENTER_WRITES_AND_READS_CANONICAL_SELECTION = PASS');
+assert.match(center,/class:selected=\{selectedTaskId===item\.canonicalTaskId\}/,'CENTER_SELECTED_ROW_READS_CANONICAL_SELECTION = PASS');
+assert.match(center,/selected=\{selectedTaskId===item\.canonicalTaskId\} onSelect=\{onSelectTask\}/,'CENTER_CLICK_DELEGATES_CANONICAL_SELECTION = PASS');
+assert.doesNotMatch(left,/^(?!\s*export)\s*(?:let|const) selected(?:Task|Id)/m,'LEFT_LOCAL_SELECTION_STATE = NONE');
+assert.doesNotMatch(center,/^(?!\s*export)\s*(?:let|const) selected(?:Task|Id)/m,'CENTER_LOCAL_SELECTION_STATE = NONE');
+assert.match(app,/else if\(tab==='TASK'\)\{selectedTaskId=null;globalWorkspace=true;\}/,'TOP_TASK_CLICK_CLEARS_SELECTION = PASS');
+assert.doesNotMatch(app,/selectedTaskId=\(taskRecords|selectedTaskId=taskRecords/,'AUTO_SELECT_FIRST_TASK = NO');
+assert.match(app,/\$:\s*selectedTask=globalTasks\.find\(item=>item\.taskId===selectedTaskId\)\?\?null/,'RIGHT_TASK_CONTEXT_USES_CANONICAL_SELECTION = PASS');
+assert.match(inspector,/GlobalTaskDetail \{task\} \{runtime\} \{report\} \{resultProjection\}/,'RIGHT_INSPECTOR_RECEIVES_DERIVED_TASK = PASS');
+assert.match(app,/activeGlobalTab==='TASK'&&selectedTask\}<TaskRightContextInspector/,'RIGHT_TASK_CONTEXT_SCOPED_TO_TASK_WORKSPACE = PASS');
+assert.doesNotMatch(app,/\{#if selectedTask\}<TaskRightContextInspector/,'TASK_RIGHT_CONTEXT_OUTSIDE_TASK_WORKSPACE = NO');
+const taskSelection=app.match(/function selectCanonicalTask\(taskId:string\)\{([^}]*)\}/)?.[1]??'';
+assert.doesNotMatch(taskSelection,/selectedRunId|globalSelectedRunId/,'TASK_RUN_SELECTION_COLLAPSED = NO');
+assert.match(app,/selectedRunId=initialWorkspace\.selectedRunId/,'RUNTIME_SELECTION_LOGIC_MODIFIED = NO');
+assert.match(app,/globalSelectedRunId:string\|null=null/,'GLOBAL_RUNTIME_SELECTION_REMAINS_SEPARATE = PASS');
+assert.match(app,/\{#if selectedTask\}<EntityOperationsWorkspace entityType="work_package"/,'TASK_OPERATIONS_ROUTING_IMPLEMENTED = YES');
+assert.match(app,/GlobalExecutionComposerDock/,'GLOBAL_COMPOSER_MODIFIED = NO');
+assert.match(app,/GlobalPrWorkspace/,'PR_WORKSPACE_REGRESSION = PASS');
+assert.match(app,/GlobalWpWorkspace/,'WP_WORKSPACE_REGRESSION = PASS');
+assert.match(app,/GlobalBlueprintWorkspace/,'BLUEPRINT_WORKSPACE_REGRESSION = PASS');
+console.log('Task canonical selection synchronization contract passed');

@@ -1,0 +1,11 @@
+import assert from 'node:assert/strict';
+import {completeAutomaticReview,createAutomaticReviewExecution,projectAutomaticReview,type ReviewRequestStore} from './automaticReview.ts';
+const store:ReviewRequestStore={executions:[],reviews:[]};
+assert.equal(createAutomaticReviewExecution({deliveryContextId:'dc-1',repository:'org/repo',provider:'reviewer',status:'READY_FOR_REVIEW'},store),null);
+const first=createAutomaticReviewExecution({deliveryContextId:'dc-1',repository:'org/repo',prNumber:10,headSha:'A',provider:'reviewer',status:'READY_FOR_REVIEW'},store)!;
+const same=createAutomaticReviewExecution({deliveryContextId:'dc-1',repository:'org/repo',prNumber:10,headSha:'A',provider:'reviewer',status:'READY_FOR_REVIEW'},store)!;
+assert.equal(same.review_execution_id,first.review_execution_id);assert.equal(store.executions.length,1);
+completeAutomaticReview(first,store,{reviewer:'bot',review_status:'PASS',review_summary:'ok'});assert.equal(projectAutomaticReview(first,'A',store)?.current_for_head,true);assert.equal(projectAutomaticReview(first,'B',store)?.status,'STALE_FOR_CURRENT_HEAD');
+const next=createAutomaticReviewExecution({deliveryContextId:'dc-1',repository:'org/repo',prNumber:10,headSha:'B',provider:'reviewer',status:'READY_FOR_REVIEW'},store)!;assert.notEqual(next.review_execution_id,first.review_execution_id);
+const failed=createAutomaticReviewExecution({deliveryContextId:'dc-2',repository:'org/repo',prNumber:11,headSha:'C',provider:'reviewer',status:'READY_FOR_REVIEW'},store)!;completeAutomaticReview(failed,store,{reviewer:'bot',review_status:'ERROR',review_summary:'provider unavailable'});assert.equal(failed.status,'FAILED');assert.equal(store.reviews.at(-1)?.review_status,'ERROR');
+console.log('automatic review integration matrix passed');

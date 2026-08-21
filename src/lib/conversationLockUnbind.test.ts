@@ -1,0 +1,71 @@
+import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
+import {join} from 'node:path';
+import {bindControlLoop,claimFeedback,completeFeedback,consumeGptControl,enableControlLoop,markFeedbackInserted,markFeedbackInserting,markFeedbackSubmitted,markFeedbackSubmitting,projectAutoLoopStatus,readControlLoop,readExpectedControlTurns,readFeedback,rebindControlLoop,unlockControlLoop} from './gptAutoControlLoop.ts';
+import type {InboxItem} from './bridgeCore.ts';
+
+const suffix=`${Date.now()}-${Math.random().toString(36).slice(2,8)}`;
+const loopId=`unbind-loop-${suffix}`;
+const conversationId=`unbind-conversation-${suffix}`;
+const wpId='AICC-V2-GPT-CODEX-BRIDGE-001';
+const loop=bindControlLoop({control_loop_id:loopId,formal_wp_id:wpId,conversation_id:conversationId});
+enableControlLoop(loopId,true);
+
+const feedbackInput={control_loop_id:loopId,formal_wp_id:wpId,conversation_id:conversationId,binding_epoch:loop.binding_epoch,execution_id:`execution-${suffix}`,run_id:`run-${suffix}`,result_id:`result-${suffix}`,result_hash:`hash-${suffix}`,execution_result:'UNLOCK_HISTORY = PASS'};
+const feedback=claimFeedback(feedbackInput).record!;
+markFeedbackInserting(loopId,feedback.feedback_key);
+markFeedbackInserted(loopId,feedback.feedback_key);
+markFeedbackSubmitting(loopId,feedback.feedback_key);
+markFeedbackSubmitted(loopId,feedback.feedback_key);
+completeFeedback(loopId,feedback.feedback_key,`feedback-message-${suffix}`);
+
+const before=readControlLoop(loopId)!;
+const historyBefore={feedback:readFeedback(loopId).length,expected:readExpectedControlTurns().filter(turn=>turn.control_loop_id===loopId).length};
+const unlocked=unlockControlLoop(loopId);
+const durable=readControlLoop(loopId)!;
+assert.equal(unlocked.binding_active,false,'unlock persists inactive binding authority');
+assert.equal(durable.binding_active,false,'read-after-write verifies inactive binding without conversation equality');
+assert.equal(durable.control_loop_id,before.control_loop_id,'historical control-loop identity remains durable');
+assert.equal(durable.conversation_id,before.conversation_id,'historical Conversation identity remains durable');
+assert.equal(durable.binding_epoch,before.binding_epoch,'unlock does not create or destroy a binding epoch');
+assert.equal(durable.enabled,true,'Owner auto-loop preference remains stored while execution authority is inactive');
+assert.deepEqual({feedback:readFeedback(loopId).length,expected:readExpectedControlTurns().filter(turn=>turn.control_loop_id===loopId).length},historyBefore,'feedback and expected-turn history remain durable');
+assert.equal(projectAutoLoopStatus(durable).label,'AUTO LOOP · NOT BOUND','inactive binding projects canonical NOT BOUND status');
+assert.equal(claimFeedback({...feedbackInput,execution_id:`execution-after-${suffix}`,run_id:`run-after-${suffix}`,result_id:`result-after-${suffix}`}).code,'CONTROL_LOOP_NOT_BOUND','unlocked loop cannot claim automatic feedback');
+assert.throws(()=>enableControlLoop(loopId,true),/CONTROL_LOOP_NOT_BOUND/,'unlocked loop cannot reacquire execution authority through mode preference');
+
+let launches=0;
+const control=`AICC_EXECUTION_V1\nINSTRUCTION_ID: unbound-control-${suffix}\nENTITY_TYPE: WORK_PACKAGE\nENTITY_ID: ${wpId}\nEXECUTION_TYPE: READ_ONLY_AUDIT\nREPOSITORY: /Users/a/AI/007/AIcontrolcenter\nBRANCH: rebuild/aicc-v2\nSANDBOX: read-only\nREQUIRES_AUTHORIZATION: false\n\nINSTRUCTION_BEGIN\nDo not execute while unlocked.\nINSTRUCTION_END`;
+const submit=(instruction:any):InboxItem=>({id:instruction.instructionId,state:'READY',instruction,gates:[],createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()} as InboxItem);
+const launch=(id:string):InboxItem=>{launches+=1;return {id,state:'LAUNCHED',runId:`launched-${suffix}`,executionId:`launched-${suffix}`,gates:[],createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()} as InboxItem;};
+const consumed=consumeGptControl({control_loop_id:loopId,conversation_id:conversationId,binding_epoch:before.binding_epoch,feedback_key:feedback.feedback_key,assistant_message_id:`assistant-${suffix}`,response:control},submit,launch);
+assert.equal(consumed.code,'CONTROL_LOOP_NOT_BOUND','unlocked loop cannot consume a GPT control');
+assert.equal(launches,0,'unlocked loop cannot launch Luna');
+
+const relocked=rebindControlLoop({control_loop_id:loopId,formal_wp_id:wpId,conversation_id:conversationId});
+assert.equal(relocked.control_loop_id,loopId,'relock reuses the system-managed durable loop identity');
+assert.equal(relocked.conversation_id,conversationId,'relock targets the current canonical Conversation');
+assert.equal(relocked.binding_active,true,'relock restores active binding authority');
+assert.equal(relocked.binding_epoch,before.binding_epoch+1,'relock creates one fresh binding epoch');
+assert.deepEqual({feedback:readFeedback(loopId).length,expected:readExpectedControlTurns().filter(turn=>turn.control_loop_id===loopId).length},historyBefore,'relock preserves historical feedback and expected-turn evidence');
+
+const content=readFileSync(join(process.cwd(),'web-adapter/chrome-extension-current/content.js'),'utf8');
+const worker=readFileSync(join(process.cwd(),'web-adapter/chrome-extension-current/service-worker.js'),'utf8');
+const vite=readFileSync(join(process.cwd(),'vite.config.ts'),'utf8');
+const template=content.match(/panel\.innerHTML = '([^']+)'/)?.[1]??'';
+const unlockUi=content.match(/async function unlockCurrentConversation\(\)[\s\S]*?(?=\n  function handleConversationLockChange)/)?.[0]??'';
+const unlockWorker=worker.match(/async function autoLoopUnbind\(message\)[\s\S]*?(?=\nasync function autoLoopMode)/)?.[0]??'';
+assert.match(content,/function handleConversationLockChange\(event\)[\s\S]*bindCurrentConversation\(\)[\s\S]*unlockCurrentConversation\(\)/,'checked and unchecked states use explicit symmetric operations');
+assert.match(content,/binding_active === true && autoLoop\.loop\?\.conversation_id === currentConversationId\(\)/,'checkbox projects active current-Conversation ownership only');
+assert.match(unlockUi,/AUTO_LOOP_UNBIND/);
+assert.match(unlockUi,/binding_active !== false/,'unlock verifies inactive state only');
+assert.doesNotMatch(unlockUi,/conversation_id !==|CONTROL_LOOP_BINDING_VERIFY_FAILED/,'unlock does not use bind verification semantics');
+assert.match(unlockWorker,/\/api\/gpt-bridge\/auto-loop\/unbind/);
+assert.match(unlockWorker,/CONTROL_LOOP_UNBIND_FAILED/);
+assert.doesNotMatch(unlockWorker,/CONTROL_LOOP_BINDING_VERIFY_FAILED|conversation_id !==/);
+assert.match(vite,/operation==='unbind'[\s\S]*binding_active!==false[\s\S]*CONTROL_LOOP_UNBIND_FAILED/,'HTTP unbind performs inactive read-after-write verification');
+assert.equal((template.match(/type="checkbox"/g)??[]).length,2,'approved auto-control UI still contains exactly two toggles');
+assert.equal((template.match(/data-aicc-action-button/g)??[]).length,6,'frozen primary action UI still contains six buttons');
+assert.doesNotMatch(template,/Control Loop ID|data-aicc-auto-loop-id/,'editable Control Loop ID does not return');
+assert.match(content,/status\?\.loop\?\.binding_active !== true \|\| !status\.loop\.enabled/,'page observer fails closed while unlocked');
+console.log('M8.2.1.8.8B Conversation lock unbind remediation matrix passed');

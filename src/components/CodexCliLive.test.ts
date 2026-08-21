@@ -1,0 +1,35 @@
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+
+const component=readFileSync(new URL('./CodexCliLive.svelte',import.meta.url),'utf8');
+const workspace=readFileSync(new URL('./entity/RuntimeWorkspace.svelte',import.meta.url),'utf8');
+const monitor=readFileSync(new URL('./RuntimeMonitor.svelte',import.meta.url),'utf8');
+const appCss=readFileSync(new URL('../app.css',import.meta.url),'utf8');
+
+assert.match(component,/@xterm\/xterm/,'uses a real ANSI terminal renderer');
+assert.match(component,/new CodexTerminalClient/,'uses the existing Phase 3 exact-run stream client');
+assert.match(component,/client\.connect\(next\.runId/,'connects only with the selected runtime run ID');
+assert.match(component,/client\?\.disconnect/,'disconnects browser consumption on task/run changes');
+assert.match(component,/terminal\.write\(chunk\.data\)/,'writes raw PTY bytes without simulated output');
+assert.match(component,/terminal\?\.reset\(\)/,'clear resets only the browser terminal surface');
+assert.match(component,/fullscreen/,'fullscreen is presentation-local');
+assert.match(component,/自动滚动/,'provides auto-scroll control');
+assert.match(component,/ptySessionId/,'presents real PTY session evidence');
+assert.match(component,/spawnExecutable/,'presents actual spawn executable evidence');
+assert.match(component,/spawnCwd/,'presents actual working-directory evidence');
+assert.match(component,/class="codex-cli-live-body"/,'uses the full-width terminal layout body');
+assert.match(component,/class="codex-cli-info"/,'keeps header and metadata in the left info pane');
+assert.match(component,/class="codex-cli-terminal-pane"/,'keeps terminal and controls in the right terminal pane');
+assert.match(component,/grid-template-columns:minmax\(220px,\.3fr\) minmax\(0,\.7fr\)/,'terminal receives the dominant desktop width');
+assert.match(component,/container-type:inline-size/,'uses available workspace width for responsive layout');
+assert.match(component,/@container\(max-width:760px\)/,'stacks before terminal width becomes unusable');
+assert.match(component,/class="codex-cli-metadata-row"/,'renders each metadata field as one row');
+assert.match(component,/grid-template-columns:max-content minmax\(0,1fr\)/,'metadata uses a horizontal label/value row');
+assert.match(component,/text-align:right/,'metadata values align right');
+assert.doesNotMatch(component,/codex-cli-metadata\{display:grid;grid-template-columns:repeat\(2/,'metadata has no two-field grid');
+assert.match(workspace,/<CodexCliLive runtime=\{focused\}/,'binds the UI to the same exact focused runtime as the summary');
+assert.match(monitor,/<section class="runtime-monitor runtime-summary-pane"/,'preserves the summary as its own pane');
+assert.match(workspace,/<AiccWorkspaceDrawer title="Codex CLI Live"[\s\S]*?<CodexCliLive runtime=\{focused\}[^>]*\/>[\s\S]*?<AiccWorkspaceDrawer title="运行摘要"/,'places the terminal drawer before the summary drawer');
+assert.match(appCss,/\.runtime-terminal-pane,\.runtime-summary-pane\{min-width:0\}/,'both sibling panes retain their existing minimum-width protection');
+assert.doesNotMatch(component,/fetch\('\/api\/codex\/stop|startRuntime|spawn\(/,'terminal UI never controls process lifecycle');
+console.log('Codex CLI Live component contract passed');

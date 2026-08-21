@@ -1,0 +1,10 @@
+import assert from 'node:assert/strict';
+import {mkdtempSync,readFileSync,writeFileSync} from 'node:fs';
+import {join} from 'node:path';
+import {tmpdir} from 'node:os';
+import {CANONICAL_BRANCH,CANONICAL_REGISTRY_PATH,CANONICAL_REPOSITORY,parseBugRegistryLocalSyncV1,syncBugRegistryLocal} from './bugRegistryLocalSync.ts';
+const temp=mkdtempSync(join(tmpdir(),'aicc-registry-sync-')),registry=join(temp,'registry.md'),state=join(temp,'state.json'),remote='# AICC Bug Record\n\n## AICC-BUG-001\n\n## AICC-BUG-002\n\n## AICC-BUG-003\n\n## AICC-BUG-004\n\n## AICC-BUG-005\n';
+const sha='dc1ae5b453173c66ab468d1e3aaaa141ea05033e';const payload=`AICC_BUG_REGISTRY_LOCAL_SYNC_V1\nREPOSITORY: ${CANONICAL_REPOSITORY}\nBRANCH: ${CANONICAL_BRANCH}\nREGISTRY_PATH: ${CANONICAL_REGISTRY_PATH}\nSOURCE_COMMIT_SHA: ${sha}\nACTION: SYNC\nEND_AICC_BUG_REGISTRY_LOCAL_SYNC_V1`;
+assert.equal(parseBugRegistryLocalSyncV1(payload).sourceCommitSha,sha);assert.throws(()=>parseBugRegistryLocalSyncV1('ordinary bug failure error'),/LOCAL_SYNC_PROTOCOL_REQUIRED/);assert.throws(()=>parseBugRegistryLocalSyncV1(payload.replace('ACTION: SYNC','ACTION: NO')),/FIXED_SYNC_ACTION_REQUIRED/);
+let head='a'.repeat(40);const git=(args:string[])=>args[0]==='fetch'?'':args[0]==='merge-base'?'':args[0]==='show'?remote:args[1]?.includes(':')?'b'.repeat(40):head;
+const options={registryAbsolutePath:registry,provenancePath:state,runGit:git,now:()=>new Date(0).toISOString()};writeFileSync(registry,remote);const first=syncBugRegistryLocal(parseBugRegistryLocalSyncV1(payload),options);assert.equal(first.result,'SYNCED');assert.equal(readFileSync(registry,'utf8'),remote);assert.equal(syncBugRegistryLocal(parseBugRegistryLocalSyncV1(payload),options).result,'ALREADY_SYNCED');writeFileSync(registry,`${remote}\nlocal-only`);assert.equal(syncBugRegistryLocal(parseBugRegistryLocalSyncV1(payload),options).result,'DIVERGED');

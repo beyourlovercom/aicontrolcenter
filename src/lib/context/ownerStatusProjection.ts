@@ -15,5 +15,6 @@ export function resolveOwnerWorkflowStages(context:ResolvedEntityContext,reports
 }
 
 export function projectOwnerRoadmapNodes(nodes:RoadmapNode[],selected:SelectedEntityRef,projection:{status:AiccStatus}) :RoadmapNode[]{
-  return nodes.map(node=>({...node,status:node.id===selected.id&&node.type===selected.type?projection.status:node.status,children:projectOwnerRoadmapNodes(node.children,selected,projection)}));
+  void selected;void projection;
+  return nodes;
 }

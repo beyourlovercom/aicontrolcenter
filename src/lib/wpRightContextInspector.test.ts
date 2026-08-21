@@ -1,0 +1,12 @@
+import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
+const app=readFileSync(new URL('../App.svelte',import.meta.url),'utf8');
+const inspector=readFileSync(new URL('../components/entity/WpRightContextInspector.svelte',import.meta.url),'utf8');
+assert.match(app,/milestoneOverviewId&&context\.type==='work_package'/,'selected WP from a Milestone keeps the context inspector across center modes');
+assert.match(inspector,/AICC_UI_LIFECYCLE_READ_MODEL/,'inspector consumes the global state read-model context');
+for(const card of ['Current Status','Lifecycle','Current Execution','Blockers &amp; Next Action','Evidence Summary'])assert.ok(inspector.includes(card),`${card} card is visible`);
+assert.match(inspector,/NOT_AVAILABLE/,'unavailable canonical fields are preserved');
+assert.doesNotMatch(inspector,/overallStatus|latestRun|latestResult/i,'inspector does not synthesize an overall status or fallback to latest data');
+assert.match(inspector,/Open WP Workspace/,'workspace capability remains visible');
+assert.match(inspector,/text-overflow:ellipsis/,'long exact IDs are ellipsized');
+console.log('WP right context inspector tests passed');

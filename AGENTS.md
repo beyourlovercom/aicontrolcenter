@@ -23,6 +23,24 @@ All V2 Codex and Agent execution must preserve:
 The canonical baseline wins over conflicting current or historical runtime
 wording unless explicitly changed by Owner.
 
+## Zero Output Decision Authority
+
+`AICC_ZERO_OUTPUT_DECISION_AUTHORITY_V1 = FROZEN`
+
+`AICC_INPUT_DECISION_AUTHORITY = 0`
+`AICC_OUTPUT_DECISION_AUTHORITY = 0`
+`AICC_DECISION_AUTHORITY = 0`
+`CODEX_RESULT_AUTHORITY = CODEX`
+`CANONICAL_RESULT_SOURCE = EXACT_CODEX_RESULT_PAYLOAD`
+`IF_CODEX_RESULT_ABSENT = NOT_AVAILABLE`
+`RUNTIME_FACTS_TO_SEMANTIC_STATUS_INFERENCE = FORBIDDEN`
+`CANONICAL_RESULT_GATED_BY_AICC_RUN_STATUS = FORBIDDEN`
+
+AICC may bind, persist, display, and relay exact Codex result payloads, but
+must not parse them into semantic outcomes, rewrite them, or suppress them
+because of Run state, process exit, exit code, timeout, or close observation.
+Runtime facts remain technical evidence only.
+
 ## Canonical Task Interaction Authority
 
 Canonical baseline: `docs/00_Governance/AICC_CANONICAL_TASK_INTERACTION_CONTRACT.md`
@@ -507,3 +525,149 @@ JSON is a local, read-only UI projection and has no Git or write-back authority.
 `LEGACY_ROADMAP_PROJECTION_PATH = ~/.aicc-v2/roadmap-projection.json`
 
 `LEGACY_ROADMAP_PROJECTION_AUTHORITY = NONE`
+
+### Frozen Roadmap Hierarchy Semantics V2
+
+`AICC_ROADMAP_HIERARCHY_SEMANTICS_V2 = FROZEN`
+
+The only canonical Roadmap entity hierarchy is:
+
+`MILESTONE -> WORK_PACKAGE -> PR -> TASK -> RUN`
+
+`M# = MILESTONE`
+
+`#.# = ROADMAP_SUBSECTION`
+
+Roadmap subsections are presentation-only display groupings. They are not
+business entities, canonical entities, Global State entities, Read Model
+entities, lifecycle owners, execution owners, authorization owners, or write
+authorities.
+
+`ROADMAP_SUBSECTION_IS_DISPLAY_GROUPING_ONLY = TRUE`
+`ROADMAP_SUBSECTION_IS_ENTITY = FALSE`
+`ROADMAP_SUBSECTION_IS_CANONICAL_ENTITY = FALSE`
+`ROADMAP_SUBSECTION_IS_GLOBAL_STATE_ENTITY = FALSE`
+`ROADMAP_SUBSECTION_IS_READ_MODEL_ENTITY = FALSE`
+`ROADMAP_SUBSECTION_LIFECYCLE_AUTHORITY = NONE`
+`ROADMAP_SUBSECTION_EXECUTION_AUTHORITY = NONE`
+`ROADMAP_SUBSECTION_AUTHORIZATION_AUTHORITY = NONE`
+`ROADMAP_SUBSECTION_WRITE_AUTHORITY = NONE`
+`ROADMAP_SUBSECTION_PHASE_AUTHORITY = NONE`
+
+Read models project `milestones[] -> work_packages[]`; an optional
+`roadmap_group_number` / `roadmap_group_title` is presentation metadata only.
+No Track entity is used.
+
+`TRACK_ENTITY = NOT_USED`
+
+## Permanent AICC Planning Data Persistence
+
+All independent persistent lists, read models, registries, indexes, summaries,
+and statistical files created and maintained by AICC for long-term planning,
+state inspection, reconciliation, reporting, or human audit must live under
+`docs/10_Planning_Roadmap/`. This is the single governed directory for
+AICC-created persistent planning data files.
+
+`AICC_PERSISTED_PLANNING_DATA_DIRECTORY = docs/10_Planning_Roadmap/`
+`SCATTERED_PERSISTED_AICC_LIST_FILES = FORBIDDEN`
+`SCATTERED_PERSISTED_AICC_STAT_FILES = FORBIDDEN`
+
+### File scope
+
+This rule applies to independently persisted AICC-created entity Read Models,
+persistent entity lists, planning/state-projection registries and indexes,
+aggregate summaries, statistics, reconciliation snapshots intended for
+long-term inspection, and other human-auditable persistent planning datasets.
+
+Examples include `*_READ_MODEL.json`, `*_SUMMARY.json`, `*_REGISTRY.json`,
+`*_INDEX.json`, and `*_STATISTICS.json`. These files must not be scattered
+across `.aicc-v2/`, `src/`, temporary runtime folders, component folders, or
+arbitrary documentation folders.
+
+### Runtime-state exception
+
+`.aicc-v2/` remains reserved for transient or operational technical state:
+process state, locks, temporary runtime state, ephemeral caches, runtime
+transport state, and technical coordination state. It must not become the
+permanent home of independent AICC planning lists or statistical datasets.
+
+`RUNTIME_TRANSIENT_STATE_DIRECTORY = .aicc-v2/`
+`RUNTIME_DIRECTORY_AS_PLANNING_DATA_DIRECTORY = FORBIDDEN`
+
+Moving a persistent Read Model into `docs/10_Planning_Roadmap/` does not make
+it Layer 1 canonical authority. Existing Layer 1 / Layer 2 authority rules
+remain unchanged.
+
+### Numbering and naming contract
+
+Persistent planning-data files use a stable two-digit numeric prefix:
+`NN_FILE_NAME.ext`, such as `01_LIVING_ROADMAP.md` and
+`03_AICC_PR_READ_MODEL.json`.
+
+1. Existing formal file numbers retain their identity.
+2. New independent files use the next appropriate available governed number.
+3. A file is not renumbered merely because implementation is refactored.
+4. Numbers are not reused for a different file identity.
+5. Do not create placeholder files merely to reserve future numbers.
+6. Do not mechanically create future files before their model exists.
+
+`AICC_PLANNING_DATA_NUMBERING = STABLE_TWO_DIGIT_PREFIX`
+`AICC_PLANNING_DATA_FILE_IDENTITY_STABLE = TRUE`
+`PLANNING_DATA_PLACEHOLDER_FILES = FORBIDDEN`
+`PLANNING_DATA_NUMBER_REUSE = FORBIDDEN`
+
+Use semantic suffixes consistently: `*_READ_MODEL.json` for independently
+persisted rebuildable Read Models, `*_SUMMARY.json` for aggregate summaries or
+statistics, `*_REGISTRY.json` for governed registries, and `*_INDEX.json` for
+persistent lookup/indexes. Markdown remains appropriate for Roadmap,
+governance, definitions, and human-readable planning documents.
+
+### Single persistence path and authority preservation
+
+An independently persisted AICC dataset has exactly one active governed
+persistence path. Migration must not leave two active copies that can both be
+interpreted as current truth; historical files may remain only as explicitly
+non-active evidence and must not participate in reads, writes, reconciliation,
+or authority resolution.
+
+`AICC_PERSISTED_DATASET_ACTIVE_PATH_COUNT = 1`
+`DUAL_ACTIVE_READ_MODEL_PERSISTENCE = FORBIDDEN`
+`FALLBACK_TO_OBSOLETE_PERSISTENCE_PATH = FORBIDDEN`
+`PERSISTENCE_LOCATION_IMPLIES_CANONICAL_AUTHORITY = FALSE`
+
+A rebuildable Read Model remains rebuildable from its actual canonical source;
+a stale persisted Read Model must never override newer canonical truth.
+
+### PR Read Model frozen path
+
+The governed persistent local PR Read Model path is
+`docs/10_Planning_Roadmap/03_AICC_PR_READ_MODEL.json`.
+
+`PR_CANONICAL_SOURCE = GITHUB`
+`PR_LOCAL_READ_MODEL_FILE = docs/10_Planning_Roadmap/03_AICC_PR_READ_MODEL.json`
+`PR_LOCAL_READ_MODEL_AUTHORITY = PERSISTED_READ_MODEL_ONLY`
+`OLD_PR_NAVIGATION_SNAPSHOT_ACTIVE = NO`
+
+The obsolete `.aicc-v2/pr-navigation-snapshot.json` path must not be an active
+PR persistence source, and dual active PR persistence is forbidden.
+
+### Future-file rule
+
+Before AICC creates a new independent persistent list, Read Model, or
+statistics file: inspect `docs/10_Planning_Roadmap/`; determine whether an
+existing governed file owns the dataset; reuse it when identity is the same;
+otherwise allocate the next appropriate stable number; define its semantic type
+and canonical source; define whether it is canonical, derived, or rebuildable;
+and prevent duplicate active persistence elsewhere.
+
+`NEW_AICC_PERSISTED_DATA_FILE_PRECHECK = REQUIRED`
+`DUPLICATE_PERSISTED_DATASET = FORBIDDEN`
+
+## AICC_BRIDGE_ACTION_REGISTRY_V1
+
+- Bridge primary actions use one canonical registry.
+- Rendering, identity, enabled state, disabled reason, and handler derive from the same registry.
+- A visible action without a handler is forbidden.
+- Action binding by display text or ordinal is forbidden.
+- Capability remains visible when unavailable and is disabled with a truthful reason.
+- The AICC action registry has zero semantic decision authority.

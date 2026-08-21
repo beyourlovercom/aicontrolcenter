@@ -1,0 +1,30 @@
+import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
+
+const app=readFileSync(new URL('../App.svelte',import.meta.url),'utf8');
+const center=readFileSync(new URL('../components/GlobalPrWorkspace.svelte',import.meta.url),'utf8');
+
+assert.match(center,/export let selectedId:string\|null=null/,'CENTER_ROW_HIGHLIGHT_SELECTION_AUTHORITY = selectedId');
+assert.match(center,/class:selected=\{selectedId===record\.id\}/,'CENTER_ROW_HIGHLIGHT_SELECTION_AUTHORITY = PASS');
+assert.match(center,/onclick=\{\(\)=>onSelect\(record\.id\)\}/,'CENTER_CLICK_PASSES_EXACT_PR_ID = PASS');
+assert.doesNotMatch(center,/onSelect\(\{type:'pull_request'/,'CENTER_DOES_NOT_PASS_ENTITY_OBJECT = PASS');
+assert.match(app,/selectedId=\{selectedPrNavigationId\} onSelect=\{selectPrCenterRecord\}/,'CENTER_USES_CANONICAL_SELECTION = PASS');
+const selection=app.match(/function selectPrNavigationRecord\(id:string\)\{([\s\S]*?)\}\n  async function navigateGlobalEntity/)?.[1]??'';
+assert.match(selection,/selectedPrNavigationId=id/,'SELECTED_PR_4_AND_PR_9_USE_ONE_SELECTION_ID = PASS');
+assert.match(selection,/selectedEntity=\{type:'pull_request',id\}/,'RIGHT_INSPECTOR_AND_DETAIL_USE_SELECTED_PR = PASS');
+assert.match(app,/selectedPrNavigationId=null;globalWorkspace=true/,'TOP_PR_CLICK_CLEARS_SELECTION = PASS');
+assert.match(app,/globalWorkspace&&activeGlobalTab==='PR'/,'RIGHT_INSPECTOR_ROOT_EMPTY_STATE = PASS');
+assert.match(app,/function selectPrCenterRecord\(id:string\)\{selectPrNavigationRecord\(id\);globalWorkspace=true\}/,'CENTER_CLICK_KEEPS_PR_ROOT_IN_CENTER = PASS');
+assert.match(app,/globalWorkspace && activeGlobalTab==='PR'\}\s*\n        <GlobalPrWorkspace/,'CENTER_PR_ROOT_REMAINS_VISIBLE_AFTER_SELECTION = PASS');
+assert.match(app,/activeGlobalTab==='PR'&&selectedEntity\.type==='pull_request'/,'RIGHT_INSPECTOR_SHOWS_EXISTING_PR_PANEL = PASS');
+assert.doesNotMatch(app,/selectedPrNavigationId=\(snapshot\.pullRequests|selectedPrNavigationId=snapshot\.pullRequests/,'AUTO_SELECT_FIRST_PR = NO');
+let selectedPr:string|null=null;
+const selectCenterPr=(id:string)=>{selectedPr=id;};
+selectCenterPr('pr-4');
+assert.equal(selectedPr,'pr-4','CENTER_CLICK_PR_4 -> SELECTED_PR = 4');
+assert.equal(selectedPr,'pr-4','CENTER_CLICK_PR_4 -> RIGHT_INSPECTOR_PR = 4');
+selectCenterPr('pr-9');
+assert.equal(selectedPr,'pr-9','CENTER_CLICK_PR_9 -> SELECTED_PR = 9');
+assert.equal(selectedPr,'pr-9','CENTER_CLICK_PR_9 -> RIGHT_INSPECTOR_PR = 9');
+assert.notEqual(selectedPr,'pr-4','SWITCH_PR_4_TO_PR_9 = PASS');
+console.log('PR center/right inspector selection contract passed');

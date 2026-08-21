@@ -1,0 +1,36 @@
+import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
+
+const app=readFileSync(new URL('../App.svelte',import.meta.url),'utf8');
+const dock=readFileSync(new URL('../components/GlobalExecutionComposerDock.svelte',import.meta.url),'utf8');
+const workspace=readFileSync(new URL('../components/entity/RuntimeWorkspace.svelte',import.meta.url),'utf8');
+const css=readFileSync(new URL('../app.css',import.meta.url),'utf8');
+const governance=readFileSync(new URL('../../docs/00_Governance/AICC-GLOBAL-EXECUTION-COMPOSER-DOCK-V1.md',import.meta.url),'utf8');
+
+assert.match(governance,/AICC_DECISION_AUTHORITY = 0/,'the governance baseline preserves zero decision authority');
+assert.equal((app.match(/<GlobalExecutionComposerDock/g)??[]).length,1,'the composer is an App Shell singleton');
+assert.match(app,/class="center-workspace-shell center panel"><div class="center-workspace-scroll" data-testid="center-workspace-scroll-viewport">[\s\S]*<div class="global-composer-dock-lane" data-testid="global-composer-dock-lane"><GlobalExecutionComposerDock payload=\{bridgePayload\}/,'the dock is mounted as a center-scoped overlay sibling');
+assert.match(app,/copyResultAvailable=\{Boolean\(composerCopyResult\)\}/,'the dock receives Composer-scoped copy availability');
+assert.match(app,/onPayloadChange=\{updateBridgePayload\}[\s\S]*onPaste=\{pasteInstruction\}[\s\S]*onImport=\{importInstruction\}[\s\S]*onCopyResult=\{copyComposerResult\}[\s\S]*onHeightChange=\{updateComposerHeight\}/,'the dock delegates to canonical execution callbacks, Composer-scoped copy authority, and its tail reserve height');
+assert.match(app,/async function importBridge[\s\S]*executionContext:executionTarget/,'execution context is resolved when importing the current draft');
+assert.equal((app.match(/showComposer=\{false\}/g)??[]).length,3,'Global Task, WP, and PR retain read-only runtime views without duplicate composers');
+assert.doesNotMatch(app,/Global Execution Workspace/,'the obsolete large execution card is absent');
+assert.match(workspace,/\{#if showInbox && showComposer\}/,'the shared runtime workspace can suppress its old input surface');
+assert.doesNotMatch(dock,/position:sticky|position:fixed/,'the dock itself does not use sticky or fixed positioning');
+assert.match(dock,/48rem/,'the dock is bounded to 48rem');
+assert.match(dock,/min-height:52px/,'the idle composer is compact');
+assert.match(dock,/border-radius:28px/,'the composer retains the pill radius');
+assert.match(dock,/max-height:208px/,'multiline input remains bounded');
+assert.match(dock,/Math\.min\(Math\.max\(target\.scrollHeight,IDLE_INPUT_HEIGHT\),MAX_INPUT_HEIGHT\)/,'multiline growth is bounded upward within the dock');
+assert.match(dock,/\$: if\(input\)\{payload;void tick\(\)\.then\(\(\)=>resizeInput\(\)\);\}/,'pasted or imported drafts resize the composer after parent state updates');
+assert.match(dock,/aicc-selected-model/,'model choice persists through the existing runtime key');
+assert.match(dock,/aicc-selected-reasoning/,'reasoning choice persists through the existing runtime key');
+assert.match(dock,/onPaste\(\)/,'paste remains available');
+assert.match(dock,/onImport\(\)/,'import remains available');
+assert.match(dock,/async function submit\(\)/,'execution remains available through the canonical submit path');
+assert.match(dock,/async function submit\(\)\{if\(!canSubmit\)return;submitting=true;onSubmitStart\(\);try\{await Promise\.resolve\(onImport\(\{model:selectedModel\|\|undefined,reasoning:selectedReasoning\|\|undefined\}\)\);/,'one Composer submission forwards once without a second manual execution action');
+assert.doesNotMatch(dock,/&& !autoExecute/,'Auto Execute does not gate the current explicit submission');
+assert.match(css,/\.center-workspace-scroll\{height:100%;min-height:0;overflow-x:hidden;overflow-y:auto\}/,'center content owns the sole vertical scroll region');
+assert.match(css,/\.global-composer-dock-lane\{position:absolute;inset:auto 0 16px;width:100%;max-width:none;z-index:50;background:transparent;pointer-events:none\}/,'the center-scoped lane is a transparent absolute overlay');
+assert.match(app,/data-testid="composer-overlay-tail-spacer"/,'an end-only transparent reserve keeps final content reachable');
+console.log('global execution composer dock tests passed');

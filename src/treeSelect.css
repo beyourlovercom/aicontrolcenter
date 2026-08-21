@@ -1,2 +1,1 @@
-/* Hierarchy is owned by the row's disclosure and structural marker slots. */
-.tree-select{grid-column:3!important;display:grid!important;grid-template-columns:minmax(0,1fr) max-content!important;min-width:0;padding:0!important;gap:0!important}.tree-select strong{grid-column:1!important;min-width:0}.tree-select .tree-meta{grid-column:2!important;min-width:0}
+/* RoadmapTree owns the four-column row layout. */

@@ -1,0 +1,44 @@
+import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
+import {join} from 'node:path';
+import vm from 'node:vm';
+
+const root = process.cwd();
+const registrySource = readFileSync(join(root, 'web-adapter/chrome-extension-current/bridge-action-registry.js'), 'utf8');
+const contentSource = readFileSync(join(root, 'web-adapter/chrome-extension-current/content.js'), 'utf8');
+const context: any = { window: {} };
+vm.runInNewContext(registrySource, context);
+const api = context.window.AICCBridgeActionRegistry;
+const labels = ['US-Claude', '剪贴板发送到 Codex 执行', '发送到 Codex 并执行', '插入 Codex 结果', '发送到 AICC', '执行下一步'];
+const keys = ['us-claude', 'clipboard-codex-execute', 'codex-execute', 'codex-result', 'aicc-send', 'next-step'];
+const handlers = Object.fromEntries(keys.map(key => [key, () => undefined]));
+const registry = api.createBridgeActionRegistry({handlers, capabilityResolver: (key: string) => key === 'next-step' ? {enabled: false, disabledReason: 'COMPOSER_SEND_NOT_READY'} : {enabled: true, disabledReason: ''}});
+const actions = Object.values(registry) as any[];
+
+assert.equal(actions.length, 6);
+assert.deepEqual(actions.map(action => action.displayOrdinal), [0, 1, 2, 3, 4, 5]);
+assert.deepEqual(actions.map(action => action.label), labels);
+assert.deepEqual(actions.map(action => action.actionKey), keys);
+assert.equal(actions.filter(action => action.visible).length, 6);
+assert.equal(new Set(actions.map(action => action.actionKey)).size, 6);
+assert.equal(new Set(actions.filter(action => action.visible).map(action => action.displayOrdinal)).size, 6);
+assert.equal(actions[0].actionKey, 'us-claude');
+assert.equal(actions[0].label, 'US-Claude');
+assert.equal(actions[0].displayOrdinal, 0);
+assert.equal(registry['next-step'].actionKey, 'next-step');
+assert.equal(typeof registry['next-step'].handler, 'function');
+assert.equal(registry['next-step'].enabled, false);
+assert.equal(registry['next-step'].disabledReason, 'COMPOSER_SEND_NOT_READY');
+assert.doesNotMatch(registrySource, /插入 AICC 结果|aicc-result/);
+assert.match(registrySource, /data-aicc-action-key/);
+assert.match(contentSource, /currentActionRegistry\(\)\[button\.dataset\.aiccActionKey\]/);
+assert.doesNotMatch(contentSource, /button\.textContent\s*===|button\.innerText\s*===/);
+assert.doesNotMatch(contentSource, /ordinal.*querySelector|querySelector.*ordinal/i);
+assert.match(contentSource, /const visibleActions = Object\.values\(registry\)\.filter\(action => action\.visible\)/);
+assert.match(contentSource, /stack\.innerHTML = visibleActions\.map\(window\.AICCBridgeActionRegistry\.renderBridgeAction\)\.join\(''\)/);
+assert.match(contentSource, /AICCBridgeActionRegistry\.renderBridgeAction/);
+assert.match(contentSource, /typeof action\.handler !== 'function'/);
+
+assert.throws(() => api.createBridgeActionRegistry({handlers: {...handlers, 'next-step': undefined}, capabilityResolver: () => ({enabled: true, disabledReason: ''})}), /VISIBLE_ACTION_WITHOUT_HANDLER/);
+assert.throws(() => api.createBridgeActionRegistry({handlers, capabilityResolver: (key: string) => key === 'next-step' ? {enabled: false, disabledReason: ''} : {enabled: true, disabledReason: ''}}), /DISABLED_WITHOUT_REASON/);
+console.log('AICC Bridge action registry structural guard passed');

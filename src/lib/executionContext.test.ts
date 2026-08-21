@@ -8,4 +8,5 @@ assert.deepEqual(resolveExecutionContext(wpB,locked),wpB,'explicit entity overri
 assert.deepEqual(resolveExecutionContext(null,unlockExecutionContext()),null,'unlock does not bind current view');
 assert.deepEqual(lockExecutionContext({type:'pull_request',id:'PR-A'}).entity,{type:'pull_request',id:'PR-A'});
 assert.deepEqual(lockExecutionContext({type:'milestone',id:'M4'}).entity,{type:'milestone',id:'M4'});
+assert.deepEqual(lockExecutionContext({type:'task',id:'task-1',workPackageId:'WP-A'}).entity,{type:'task',id:'task-1',workPackageId:'WP-A'});
 console.log('execution context lock matrix passed');

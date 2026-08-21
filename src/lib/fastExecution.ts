@@ -1,7 +1,8 @@
 import {existsSync,readFileSync,renameSync,writeFileSync,mkdirSync} from 'node:fs';
-import {homedir} from 'node:os'; import {join} from 'node:path';
+import {join} from 'node:path';
 import {execFileSync} from 'node:child_process';
 import type {RepositoryModel,WorkPackage} from './controlService.ts';
+import {resolveAiccStateDir} from './stateDirectory.ts';
 export type GateSeverity='AUTO_REMEDIATE'|'WARN'|'HARD_BLOCK';
 export type WorktreeProvenance='CLEAN'|'KNOWN_IN_SCOPE_DIRTY'|'KNOWN_NON_CONFLICTING_DIRTY'|'UNKNOWN_OR_CONFLICTING_DIRTY';
 export type ExecutionLease={leaseId:string;repository:string;branch:string;workPackageId:string;scope:string[];allowedOperationClasses:string[];owner:string;startedAt:string;expiresAt:string;status:'VALID'|'REVOKED'|'EXPIRED';baselineHead:string;baselineFiles:string[];provenance?:WorktreeProvenance;stoppedAt?:string};
@@ -9,9 +10,9 @@ export type WorktreeFileProvenance={file:string;provenance:'KNOWN_IN_SCOPE_DIRTY
 export type ExecutionPreflight={lease:ExecutionLease|null;provenance:WorktreeProvenance;severity:GateSeverity;canContinue:boolean;files:WorktreeFileProvenance[];decision?:'CONTINUE'|'CONTINUE_WITH_WARNINGS'|'OWNER_DECISION_REQUIRED'|'HARD_BLOCK';reasonCode?:string;reasonMessage?:string;nextAction?:string};
 export type CanonicalDecisionOptions={humanUatHardStop?:boolean;requireAuthorization?:boolean;authorization?:{workPackageId:string;branch:string;repositoryRoot:string;authoritySha:string};expectedBranch?:string;expectedHead?:string;entityValid?:boolean;formalWpValid?:boolean;runtimeConflict?:boolean;writerLockHeld?:boolean};
 export type CanonicalExecutionDecision=ExecutionPreflight & {decision:'CONTINUE'|'CONTINUE_WITH_WARNINGS'|'OWNER_DECISION_REQUIRED'|'HARD_BLOCK';reasonZh:string;protocol:{entityValid:boolean;formalWpValid:boolean;branchMatch:boolean;headMatch:boolean;authorizationValid:boolean;runtimeConflict:boolean;writerLockHeld:boolean}};
-const file=join(homedir(),'.aicc-v2','execution-leases.json');
+const file=join(resolveAiccStateDir(),'execution-leases.json');
 function readLeases():ExecutionLease[]{try{return JSON.parse(readFileSync(file,'utf8')) as ExecutionLease[]}catch{return []}}
-function saveLeases(items:ExecutionLease[]){mkdirSync(join(homedir(),'.aicc-v2'),{recursive:true});const tmp=`${file}.${process.pid}.tmp`;writeFileSync(tmp,JSON.stringify(items,null,2),{mode:0o600});renameSync(tmp,file)}
+function saveLeases(items:ExecutionLease[]){mkdirSync(resolveAiccStateDir(),{recursive:true});const tmp=`${file}.${process.pid}.tmp`;writeFileSync(tmp,JSON.stringify(items,null,2),{mode:0o600});renameSync(tmp,file)}
 function updateLeaseScope(lease:ExecutionLease,scope:string[],provenance:WorktreeProvenance){const updated={...lease,scope:[...new Set(scope)],provenance};saveLeases([updated,...readLeases().filter(x=>x.leaseId!==lease.leaseId)]);return updated}
 export function readWorktreeFiles(repository:string):string[]{try{const output=execFileSync('git',['status','--porcelain'],{cwd:repository,encoding:'utf8'}).trimEnd();return output?output.split('\n').map(line=>line.slice(3).trim()):[]}catch{return []}}
 function sectionPaths(value:string):string[]{return value.split('\n').map(line=>line.match(/`([^`]+)`/)?.[1]).filter((value):value is string=>Boolean(value))}

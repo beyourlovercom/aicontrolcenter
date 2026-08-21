@@ -1,0 +1,44 @@
+import assert from 'node:assert/strict';
+import {chmodSync,cpSync,mkdtempSync,readFileSync,rmSync,writeFileSync} from 'node:fs';
+import {tmpdir} from 'node:os';
+import {join} from 'node:path';
+import {createProjectRegistryAuthority,ACTIVE_PROJECT_AUTHORITY,PROJECT_REGISTRY_AUTHORITY} from './projectRegistryAuthority.ts';
+
+const directory=mkdtempSync(join(tmpdir(),'aicc-project-registry-'));
+const registryFile=join(directory,'registry.json');
+let fakeBin='';
+cpSync(join(process.cwd(),'docs/10_Planning_Roadmap/04_AICC_PROJECT_REGISTRY.json'),registryFile);
+try{
+  const authority=createProjectRegistryAuthority(registryFile);
+  const initial=authority.getProjectRegistry();
+  const asyncInitial=await authority.getProjectRegistryAsync();
+  assert.equal(PROJECT_REGISTRY_AUTHORITY,ACTIVE_PROJECT_AUTHORITY);
+  assert.equal(initial.projects.filter(project=>project.projectId==='aicc').length,1);
+  assert.equal(initial.projects.filter(project=>project.projectId==='erpbeyourlovercom').length,1);
+  assert.equal(authority.getActiveProject().projectId,'aicc');
+  assert.equal(initial.projectContextRevision,0);
+  assert.deepEqual(asyncInitial,initial,'bounded async validation preserves the registered project facts');
+  const toErp=authority.setActiveProject('erpbeyourlovercom');
+  assert.equal(toErp.projectContextRevision,1);
+  assert.equal(authority.getActiveProject().projectId,'erpbeyourlovercom');
+  const sameErp=authority.setActiveProject('erpbeyourlovercom');
+  assert.equal(sameErp.projectContextRevision,1);
+  const toAicc=authority.setActiveProject('aicc');
+  assert.equal(toAicc.projectContextRevision,2);
+  assert.equal(JSON.parse(readFileSync(registryFile,'utf8')).activeProjectId,'aicc');
+  assert.throws(()=>authority.setActiveProject('unknown'),/PROJECT_NOT_REGISTERED/);
+  assert.equal(authority.getProject('erpbeyourlovercom')?.roadmapPath,'NOT_CONFIGURED');
+  const source=readFileSync(new URL('./projectRegistryAuthority.ts',import.meta.url),'utf8');
+  assert.doesNotMatch(source,/startRuntime|submitExecution|launchInboxItem|readFileSync\(.*erpbeyourlovercom/,'project context does not execute, route runtime, or load ERP planning data');
+  assert.match(source,/execFileAsync\('git',[\s\S]*timeout:PROJECT_REGISTRY_GIT_TIMEOUT_MS[\s\S]*maxBuffer:64\*1024/,'async git validation has an explicit bounded timeout and output');
+  assert.match(source,/for\(const project of state\.projects\)projects\.push\(await validateAsync\(project\)\)/,'async project validation is sequentially bounded');
+  fakeBin=mkdtempSync(join(tmpdir(),'aicc-project-registry-bin-'));
+  const fakeGit=join(fakeBin,'git');
+  writeFileSync(fakeGit,'#!/bin/sh\n/bin/sleep 2\n');chmodSync(fakeGit,0o755);
+  const originalPath=process.env.PATH;process.env.PATH=fakeBin;
+  let immediateRan=false;const immediate=new Promise<void>(resolve=>setImmediate(()=>{immediateRan=true;resolve()}));
+  await Promise.all([immediate,assert.rejects(()=>authority.getProjectRegistryAsync(),/PROJECT_REPOSITORY_INVALID/)]);
+  process.env.PATH=originalPath;
+  assert.equal(immediateRan,true,'a timed-out async git diagnostic does not block the Node event loop');
+  console.log('Phase 1 project registry authority matrix passed');
+}finally{rmSync(directory,{recursive:true,force:true});if(fakeBin)rmSync(fakeBin,{recursive:true,force:true})}

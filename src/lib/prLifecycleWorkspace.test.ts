@@ -1,0 +1,40 @@
+import assert from 'node:assert/strict';
+import {projectPrLifecycleWorkspace} from './prLifecycleWorkspace.ts';
+import type {PullRequestRecord} from './model/entityTypes.ts';
+import {createEmptyGlobalStateReadModel} from './globalStateReadModel.ts';
+import {projectPrLayer2} from './prCanonicalProjection.ts';
+
+const base:PullRequestRecord={id:'github#9',number:9,title:'M6.2 Real Delivery Canary Validation',repository:'beyourlovercom/aicontrolcenter',url:'https://github.com/beyourlovercom/aicontrolcenter/pull/9',status:'IN_PROGRESS',state:'OPEN',workPackageId:'AICC-M6.2-REAL-DELIVERY-CANARY-001',sourceBranch:'delivery/aicc-m6.2-real-delivery-canary-001',deliveryBranch:'delivery/aicc-m6.2-real-delivery-canary-001',headSha:'head-9',mergeability:'NOT_RUN',mergeResult:'NOT_RUN'};
+
+const projected=(record:PullRequestRecord)=>projectPrLayer2(createEmptyGlobalStateReadModel(),[record]).records[0]!;
+const open=projectPrLifecycleWorkspace(base,null,null,projected(base));
+assert.equal(open.prState,'OPEN');
+assert.equal(open.lifecycleStatus,'IN_PROGRESS');
+assert.equal(open.gates.find(gate=>gate.id==='COMMIT')?.state,'UNPROVEN');
+assert.equal(open.gates.find(gate=>gate.id==='PUSH')?.state,'COMPLETE','factual remote PR HEAD proves the pushed head');
+assert.notEqual(open.gates.find(gate=>gate.id==='COMMIT')?.state,'NOT_APPLICABLE');
+assert.equal(open.currentAction,'当前操作 = 执行中');
+assert.equal(open.remoteIdentityConfirmed,true);
+
+const explicitNaRecord={...base,lifecycleGateStates:{READY_TO_MERGE:'NOT_APPLICABLE'}};
+const explicitNa=projectPrLifecycleWorkspace(explicitNaRecord,null,null,projected(explicitNaRecord));
+assert.equal(explicitNa.gates.find(gate=>gate.id==='READY_TO_MERGE')?.state,'NOT_APPLICABLE');
+const noEvidenceRecord={...base,mergeability:'NOT_RUN'};
+const noEvidence=projectPrLifecycleWorkspace(noEvidenceRecord,null,null,projected(noEvidenceRecord));
+assert.equal(noEvidence.gates.find(gate=>gate.id==='READY_TO_MERGE')?.state,'UNPROVEN','missing CI evidence is not inferred as not applicable');
+const pendingRecord={...base,lifecycleGateStates:{EXACT_HEAD_CI:'PENDING'}};
+const pending=projectPrLifecycleWorkspace(pendingRecord,null,null,projected(pendingRecord));
+assert.equal(pending.gates.find(gate=>gate.id==='EXACT_HEAD_CI')?.state,'PENDING');
+const mergedRecord:PullRequestRecord={...base,state:'MERGED',status:'COMPLETE',mergeResult:'MERGED',latestCommit:'head-9'};
+const merged=projectPrLifecycleWorkspace(mergedRecord,null,null,projected(mergedRecord));
+assert.equal(merged.lifecycleStatus,'COMPLETE');
+assert.equal(merged.gates.find(gate=>gate.id==='MERGE_AND_VERIFY')?.state,'COMPLETE');
+assert.equal(merged.currentAction,'当前操作 = 已完成');
+const blockedRecord={...base,mergeability:'BLOCKED'};
+const blocked=projectPrLifecycleWorkspace(blockedRecord,null,null,projected(blockedRecord));
+assert.equal(blocked.lifecycleStatus,'IN_PROGRESS','gate evidence cannot overwrite the canonical PR lifecycle dimension');
+assert.equal(blocked.gates.find(gate=>gate.id==='READY_TO_MERGE')?.state,'BLOCKED');
+const evidenceBlockedRecord={...base,mergeability:'NOT_RUN'};
+const evidenceBlocked=projectPrLifecycleWorkspace(evidenceBlockedRecord,null,{runId:'run',workPackageId:null,entityType:'pull_request',entityId:base.id,authorizationId:'a',authoritySha:'h',branch:'b',startingHeadSha:'h',pid:null,threadId:null,phase:'FAILED',currentTask:'failed',latestEvent:'failed',startedAt:'now',lastActivityAt:'now'},projected(evidenceBlockedRecord));
+assert.equal(evidenceBlocked.lifecycleStatus,'IN_PROGRESS','a Run failure cannot fabricate a PR lifecycle transition');
+console.log('PR detail lifecycle workspace matrix passed');

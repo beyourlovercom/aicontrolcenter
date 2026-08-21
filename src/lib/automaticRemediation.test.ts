@@ -1,0 +1,6 @@
+import assert from 'node:assert/strict';
+import {bindRemediationExecution,createRemediation,requiresHeadRevalidation,type RemediationStore} from './automaticRemediation.ts';
+const store:RemediationStore={items:[]};const input={deliveryContextId:'dc-1',sourceExecutionId:'ci-1',sourceType:'CI' as const,sourceHeadSha:'A',sourceStatus:'FAILED',worktreePath:'/tmp/wp',deliveryBranch:'delivery/wp-1'};
+assert.equal(createRemediation({...input,sourceStatus:'STALE_FOR_CURRENT_HEAD'},store),null);const first=createRemediation(input,store)!;assert.equal(first.attempt_number,1);assert.equal(createRemediation(input,store)?.remediation_id,first.remediation_id);assert.equal(store.items.length,1);
+assert.equal(bindRemediationExecution(first).delivery_context_id,'dc-1');const second=createRemediation({...input,sourceExecutionId:'review-1',sourceType:'REVIEW'},store)!;assert.equal(second.attempt_number,2);assert.equal(second.worktree_path,first.worktree_path);assert.equal(requiresHeadRevalidation({repository:'org/repo',pr_number:1,head_sha:'B'},'A'),true);assert.equal(requiresHeadRevalidation({repository:'org/repo',pr_number:1,head_sha:'A'},'A'),false);
+console.log('automatic remediation matrix passed');

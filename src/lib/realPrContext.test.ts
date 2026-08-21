@@ -1,0 +1,8 @@
+import assert from 'node:assert/strict';
+import {createRealPrContext,projectRealPrHead,transitionRealPrState,updateRealPrHead} from './realPrContext.ts';
+import type {DeliveryContext} from './deliveryWorkspace.ts';
+const delivery:DeliveryContext={deliveryContextId:'delivery-wp-sha',workPackageId:'AICC-M6-REAL-WP-001',repository:'org/repo',baseBranch:'main',baseSha:'base',worktreePath:'/tmp/delivery',deliveryBranch:'delivery/aicc-m6-real-wp-001',prNumber:null,prHeadSha:null,status:'READY_FOR_EXECUTION',createdAt:'now',updatedAt:'now'};
+const values=new Map<string,any>();const store={get:(id:string)=>values.get(id)??null,put:(v:any)=>values.set(v.delivery_context_id,v)};
+const first=createRealPrContext(delivery,{sha:'sha-1'},store,'now');assert.equal(first.state,'CREATED');assert.equal(first.commit.delivery_context_id,delivery.deliveryContextId);assert.equal(first.commit.branch,delivery.deliveryBranch);assert.equal(createRealPrContext(delivery,{sha:'sha-other'},store,'later'),first);
+transitionRealPrState(first,'OPEN');transitionRealPrState(first,'UPDATED');assert.equal(first.state,'UPDATED');updateRealPrHead(first,'sha-2');assert.equal(first.head_sha,'sha-2');assert.equal(first.state,'UPDATED');transitionRealPrState(first,'READY_FOR_REVIEW');assert.equal(first.state,'READY_FOR_REVIEW');
+const review={review_id:'r',repository:'org/repo',pr_number:0,head_sha:'sha-1',reviewer:'bot',review_provider:'bot',review_status:'PASS' as const,review_summary:'ok',reviewed_at:'now'};assert.equal(projectRealPrHead(first,[review],[]).review.status,'STALE_FOR_CURRENT_HEAD');assert.equal(projectRealPrHead(first,[],[]).current_head_sha,'sha-2');console.log('real PR context matrix passed');

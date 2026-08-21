@@ -7,10 +7,10 @@
   $: create=context.availableActions.find(item=>item.id==='PR_CREATE_DRAFT');
   $: open=context.availableActions.find(item=>item.id==='PR_OPEN');
   $: currentAction=open?.enabled
-    ? {label:'PR 信息',detail:'当前 PR 已绑定真实远端身份',tab:'概览',action:'PR_OPEN' as ActionId,enabled:true}
+    ? {label:'查看 PR',detail:context.lifecycleWorkspace.currentAction,tab:'概览',action:'PR_OPEN' as ActionId,enabled:true}
     : create?.enabled
-      ? {label:'创建 Draft PR',detail:'Owner 可显式请求 Codex 创建 Draft PR',tab:'概览',action:'PR_CREATE_DRAFT' as ActionId,enabled:true}
-      : {label:'等待 PR 身份',detail:create?.reasonLabel??'PR 创建执行不可用',tab:'概览',action:null as ActionId|null,enabled:false};
+      ? {label:'创建 Draft PR',detail:context.lifecycleWorkspace.currentAction,tab:'概览',action:'PR_CREATE_DRAFT' as ActionId,enabled:true}
+    : {label:'查看概览',detail:context.lifecycleWorkspace.currentAction,tab:'概览',action:null as ActionId|null,enabled:false};
   function activate(){if(currentAction.action)onAction(currentAction.action);else onNavigate(currentAction.tab)}
 </script>
 

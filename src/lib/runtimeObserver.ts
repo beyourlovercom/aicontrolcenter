@@ -35,19 +35,21 @@ export function normalizeRuntimeEvent(value:string,timestamp=new Date().toISOStr
 export function normalizeRuntimeEvents(runtime:RuntimeRecord):NormalizedRuntimeEvent[]{const events=Array.isArray(runtime.events)?runtime.events.filter((event):event is string=>typeof event==='string'):[];return events.slice(-MAX_EVENTS).map((event)=>normalizeRuntimeEvent(event,typeof runtime.lastActivityAt==='string'?runtime.lastActivityAt:new Date().toISOString()));}
 export function resolveRuntimeMetric(value:number|undefined){return typeof value==='number'?value:null}
 export function ownerAcceptanceLabel(label:string):string{return label.replace(/Runtime Monitor/gi,'运行监控').replace(/persistent center surface/gi,'中心区固定显示').replace(/not a tab replacement/gi,'不作为标签页替代').replace(/implementation/gi,'实施').replace(/validation/gi,'验证').replace(/owner/gi,'Owner').replace(/Codex/gi,'Codex')}
-function acceptance(wp:FormalWorkPackage|null,runtime:RuntimeRecord|null){
+function acceptance(wp:FormalWorkPackage|null,runtime:RuntimeRecord|null,projectedLifecycle?:string|null){
   if(!wp)return {progress:null,items:[]};
   const raw=wp.sections['Acceptance Criteria']??'';const lines=raw.split(/\n|(?<=\.)\s+(?=-\s)/).map(v=>v.replace(/^\s*[-*]\s*/,'').trim()).filter(Boolean);
   if(!lines.length)return {progress:null,items:[]};
-  const active=runtime?['STARTING','RUNNING','STOPPING'].includes(runtime.phase):false;
-  const done=runtime?.phase==='COMPLETED'&&runtime.codeChangePresent===true;
+  const lifecycle=projectedLifecycle??runtime?.phase??null;
+  const active=runtime?['STARTING','RUNNING','STOPPING'].includes(lifecycle??''):false;
+  const done=lifecycle==='COMPLETED'&&runtime?.codeChangePresent===true;
   const items=lines.map(label=>({label,state:done?'PASS':active?'PENDING':'UNAVAILABLE',evidence:done?'runtime completed with code-change evidence':active?'等待可观测 Runtime 证据':'当前没有可验证的实施验收证据'} as AcceptanceEvidence));
   return {progress:done?100:0,items};
 }
-export function buildRuntimeObserver(runtime:RuntimeRecord|null,wp:FormalWorkPackage|null,lock:WriterLockState,now=Date.now()):RuntimeObserverModel{
-  if(!runtime)return {status:'ABSENT',summary:'暂无运行记录',elapsedMs:null,activity:'不可用',events:[],process:'UNKNOWN',metrics:{agentMessages:null,commands:null,fileChanges:null,toolCalls:null,errors:null},health:'UNAVAILABLE',writerLock:lock,acceptance:acceptance(wp,null),terminal:null};
-  const active=['STARTING','RUNNING','STOPPING'].includes(runtime.phase);const status=active?'ACTIVE':runtime.phase==='COMPLETED'?'COMPLETED':runtime.phase==='STOPPED'?'STOPPED':'FAILED';
-  const end=runtime.completedAt?Date.parse(runtime.completedAt):now;const elapsed=Date.parse(runtime.startedAt);const age=Date.parse(runtime.lastActivityAt);const health=runtime.phase==='STARTING'&&now-elapsed>15000?'STARTUP_TIMEOUT':status==='FAILED'?'FAILED':active&&now-age>30000?'SILENT':'HEALTHY';
+export function buildRuntimeObserver(runtime:RuntimeRecord|null,wp:FormalWorkPackage|null,lock:WriterLockState,now=Date.now(),projectedLifecycle?:string|null):RuntimeObserverModel{
+  if(!runtime)return {status:'ABSENT',summary:'暂无运行记录',elapsedMs:null,activity:'不可用',events:[],process:'UNKNOWN',metrics:{agentMessages:null,commands:null,fileChanges:null,toolCalls:null,errors:null},health:'UNAVAILABLE',writerLock:lock,acceptance:acceptance(wp,null,projectedLifecycle),terminal:null};
+  const lifecycle=projectedLifecycle===undefined?runtime.phase:projectedLifecycle;
+  const active=['STARTING','RUNNING','STOPPING'].includes(lifecycle??'');const status=active?'ACTIVE':lifecycle==='COMPLETED'?'COMPLETED':lifecycle==='STOPPED'?'STOPPED':'FAILED';
+  const end=runtime.completedAt?Date.parse(runtime.completedAt):now;const elapsed=Date.parse(runtime.startedAt);const age=Date.parse(runtime.lastActivityAt);const health=lifecycle==='STARTING'&&now-elapsed>15000?'STARTUP_TIMEOUT':status==='FAILED'?'FAILED':active&&now-age>30000?'SILENT':'HEALTHY';
   const terminal=[runtime.failure,runtime.implementationResult,runtime.stderr,runtime.finalAgentMessage].filter(Boolean).join('\n')||null;
-  return {status,summary:status==='ACTIVE'?'Codex 正在运行':status==='COMPLETED'?'Codex 已完成':status==='FAILED'?'Codex 运行失败':status==='STOPPED'?'Codex 已停止':'Codex Runtime',elapsedMs:Number.isFinite(elapsed)?Math.max(0,end-elapsed):null,activity:resolveCurrentActivity(runtime),events:normalizeRuntimeEvents(runtime),process:runtime.pidAlive===true&&active?'ALIVE':runtime.pidAlive===false||!active?'DEAD':'UNKNOWN',metrics:{agentMessages:resolveRuntimeMetric(runtime.agentMessageCount),commands:resolveRuntimeMetric(runtime.commandExecutionCount),fileChanges:resolveRuntimeMetric(runtime.fileChangeEventCount),toolCalls:resolveRuntimeMetric(runtime.toolCallCount),errors:resolveRuntimeMetric(runtime.errorEventCount)},health,writerLock:lock,acceptance:acceptance(wp,runtime),terminal};
+  return {status,summary:status==='ACTIVE'?'Codex 正在运行':status==='COMPLETED'?'Codex 已完成':status==='FAILED'?'Codex 运行失败':status==='STOPPED'?'Codex 已停止':'Codex Runtime',elapsedMs:Number.isFinite(elapsed)?Math.max(0,end-elapsed):null,activity:resolveCurrentActivity(runtime),events:normalizeRuntimeEvents(runtime),process:runtime.pidAlive===true&&active?'ALIVE':runtime.pidAlive===false||!active?'DEAD':'UNKNOWN',metrics:{agentMessages:resolveRuntimeMetric(runtime.agentMessageCount),commands:resolveRuntimeMetric(runtime.commandExecutionCount),fileChanges:resolveRuntimeMetric(runtime.fileChangeEventCount),toolCalls:resolveRuntimeMetric(runtime.toolCallCount),errors:resolveRuntimeMetric(runtime.errorEventCount)},health,writerLock:lock,acceptance:acceptance(wp,runtime,lifecycle),terminal};
 }

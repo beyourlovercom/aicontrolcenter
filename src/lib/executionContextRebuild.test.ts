@@ -1,0 +1,12 @@
+import assert from 'node:assert/strict';
+import {createMemoryDeliveryContextRecordStore,deliveryContextRecordFromGit} from './deliveryContextPersistence.ts';
+import {createMemoryExecutionContextStore,rebuildExecutionBinding} from './executionContextRebuild.ts';
+import {ExecutionProviderRegistry} from './executionProviderRegistry.ts';
+import type {ExecutionProvider} from './executionProvider.ts';
+const provider:ExecutionProvider={providerId:'codex',capabilities:{streaming:true,cancellation:true,structuredResults:true},validateExecution:()=>null,startExecution:context=>({execution_id:context.execution_id,provider_id:'codex',status:'STARTING',process_id:null}),getExecutionStatus:()=> 'ACCEPTED',cancelExecution:()=>null,collectResult:context=>({execution_id:context.execution_id,provider_id:'codex',status:'ACCEPTED',stdout:'',stderr:'',result_payload:null,completed_at:null})};
+const registry=new ExecutionProviderRegistry('codex');registry.register(provider,{provider_id:'codex',display_name:'Codex',capabilities:['implementation'],status:'active',version:'1'});
+const delivery=deliveryContextRecordFromGit({deliveryContextId:'delivery-aicc-m6.2-real-delivery-canary-001-2f9cc9405c77',workPackageId:'AICC-M6.2-REAL-DELIVERY-CANARY-001',repository:'beyourlovercom/aicontrolcenter',baseBranch:'rebuild/aicc-v2',deliveryBranch:'delivery/aicc-m6.2-real-delivery-canary-001',worktreePath:'/private/tmp/aicc-m6.2-canary.Uf8wc7',commitSha:'2f9cc9405c77809d49982ecfc9cbcdb4b822268f',providerId:'codex',now:'2026-08-15T00:00:00.000Z'});
+const store=createMemoryExecutionContextStore();const first=rebuildExecutionBinding({delivery,executionId:'exec-rebuilt-1',executionType:'IMPLEMENTATION',sandbox:'workspace-write',providerRegistry:registry,store,now:'2026-08-15T00:01:00.000Z'});assert.equal(first.reused,false);assert.equal(first.context.provider_id,'codex');assert.equal(first.context.head_sha,delivery.head_sha);assert.equal(first.context.status,'ACCEPTED');
+const second=rebuildExecutionBinding({delivery,executionId:'exec-rebuilt-2',executionType:'IMPLEMENTATION',sandbox:'workspace-write',providerRegistry:registry,store,now:'later'});assert.equal(second.reused,true);assert.equal(second.context.execution_id,'exec-rebuilt-1');
+const deliveryStore=createMemoryDeliveryContextRecordStore([delivery]);assert.equal(deliveryStore.get(delivery.delivery_context_id)?.head_sha,'2f9cc9405c77809d49982ecfc9cbcdb4b822268f');
+console.log('execution context rebuild matrix passed');

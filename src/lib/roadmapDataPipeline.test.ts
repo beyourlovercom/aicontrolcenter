@@ -1,0 +1,25 @@
+import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
+import {compileRoadmapProjection,deserializeRoadmapProjection,serializeRoadmapProjection,selectRoadmapProjection} from './roadmapProjection.ts';
+
+const body=(revision:number,extra='')=>`Roadmap-Revision: ${revision}\nUpdated-At: 2026-08-17T00:00:00.000Z\n## Active V2 Milestones\n### M1 — Pipeline\nStatus: ACTIVE\nProgress: 10%\nWork Packages: \`AICC-PIPELINE-001\`\n${extra}`;
+const local={source:'LOCAL' as const,content:body(3)};
+const github={source:'GITHUB' as const,content:body(2)};
+assert.equal(selectRoadmapProjection(local,github).projection?.source,'LOCAL');
+assert.equal(selectRoadmapProjection(local,{source:'GITHUB',content:body(3,'changed')}).status,'CONFLICT');
+assert.equal(selectRoadmapProjection(local,null).status,'NO_VALID_REVISION');
+const projection=compileRoadmapProjection(local);
+const persisted=serializeRoadmapProjection(projection,'2026-08-17T01:00:00.000Z');
+assert.equal(persisted.schema_version,'aicc.roadmap.projection.v1');
+assert.equal(persisted.roadmap_revision,3);
+assert.equal(persisted.source_hash,projection.contentHash);
+assert.equal(deserializeRoadmapProjection(persisted)?.nodes[0]?.id,'M1');
+assert.equal(deserializeRoadmapProjection({...persisted,source_hash:'wrong'})?.contentHash,'wrong','stored source hash remains explicit projection metadata');
+const app=readFileSync(new URL('../App.svelte',import.meta.url),'utf8');
+assert.doesNotMatch(app,/aicc\.roadmap\.snapshot\.v1|ROADMAP_CACHE_KEY/,'browser cache is not a Roadmap authority');
+assert.match(app,/loadAcceptedRoadmapProjection/);
+assert.match(app,/method:'POST'/,'Owner refresh uses the explicit sync request');
+assert.doesNotMatch(app,/compileRoadmapProjection/,'startup does not rebuild the projection');
+assert.match(app,/loadAcceptedRoadmapProjection\(\)/,'startup loads only the accepted Layer 2 projection path');
+assert.match(app,/async function syncRoadmap\(\)[\s\S]*method:'POST'/,'Owner sync uses the explicit POST request');
+console.log('Roadmap three-stage data pipeline tests passed');

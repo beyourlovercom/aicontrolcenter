@@ -1,63 +1,17 @@
-# AICC-V2-TERMINAL-HANDOFF-001: Terminal Handoff
+# AICC-V2-TERMINAL-HANDOFF-001
 
-Status: IMPLEMENTED / MACHINE_VALIDATED / HUMAN_UAT_PENDING
+Status: PLANNED
 Type: SELF_DEVELOPMENT_AUTOMATION
 Prerequisite: `AICC-V2-GPT-BRIDGE-001` CLOSED
 
 ## Purpose
 
-After a real Codex Run reaches `COMPLETED`, `FAILED`, or `STOPPED`, provide
-one canonical terminal handoff: generate the Run Report, notify the Owner,
-and insert the report into the exact originating ChatGPT conversation. The
-final native ChatGPT Send remains under Owner control.
+After a real Codex Run reaches `COMPLETED`, `FAILED`, or `STOPPED`, AICC
+generates the canonical Run Report, sends exactly one formal system
+notification, and inserts the report into the exact originating ChatGPT
+Composer. ChatGPT native Send remains under Owner control.
 
-The implementation is bounded to terminal handoff projection. It does not
-change lifecycle, authorization, execution eligibility, or terminal result
-semantics.
-
-Implementation evidence: the existing durable terminal reconciliation now
-persists one terminal notification per Run, exposes it through the local
-service, and preserves the originating ChatGPT source reference through the
-Web Bridge correlation so the adapter can insert the matching report once.
-Automated contract validation passes; real Owner Human UAT remains pending.
-
-## Frozen contract
-
-- `TERMINAL_EVENT_SOURCE_COUNT = 1`; reuse the existing durable terminal event.
-- Emit exactly one formal notification per terminal Run:
-  - `AICC · Codex 执行完成`
-  - `AICC · Codex 执行失败`
-  - `AICC · Codex 执行已停止`
-- Do not notify during `STARTING`, `RUNNING`, polling, Inbox `READY`, or report
-  preparation.
-- When the Run Report is `READY`, insert it once into the exact originating
-  ChatGPT conversation.
-- Persist advisory correlation for Instruction ID, Run ID, and available
-  ChatGPT tab/conversation identity. Never select the latest tab by guess.
-- If the originating conversation is unavailable, retain `PENDING_INSERT` and
-  insert once when that correlated conversation returns.
-- Preserve an existing Owner Composer draft with a safe separator.
-- `AUTO_SEND_CHATGPT_MESSAGE = 0`; native Send remains an Owner action.
-- Terminal Handoff does not auto-pass UAT, close a WP, approve authorization,
-  start remediation, create eligibility, or alter the Runtime result.
-- `SECOND_EXECUTION_AUTHORITY = 0`; `SECOND_TERMINAL_AUTHORITY = 0`.
-
-## Human UAT plan
-
-One round, five items maximum:
-
-1. A `COMPLETED` Run produces exactly one system notification.
-2. The same Run Report appears automatically in the originating ChatGPT
-   Composer.
-3. The inserted report contains the exact Run ID.
-4. Refresh, reconnect, and service restart do not duplicate notification or
-   insertion.
-5. ChatGPT does not auto-send; Owner retains the native Send action.
-
-Each item is Owner-verified against the visible result and persisted Run
-evidence. No UAT result is preselected by this plan.
-
-## Acceptance gates
+## Frozen scope
 
 - `TERMINAL_EVENT_SOURCE_COUNT = 1`
 - `NOTIFICATION_PER_TERMINAL_RUN = 1`
@@ -69,11 +23,23 @@ evidence. No UAT result is preselected by this plan.
 - `PAGE_REFRESH_REINSERT = 0`
 - `SERVICE_RESTART_REINSERT = 0`
 - `REPORT_RETURN_TO_ORIGINATING_CHAT = PASS`
-- `REPORT_NOT_LOST_WHEN_CHAT_CLOSED = PASS`
 - `OWNER_DRAFT_PRESERVED = PASS`
+- `AUTO_SEND_CHATGPT_MESSAGE = 0`
 - `OWNER_NATIVE_SEND_REQUIRED = PASS`
+- `SECOND_EXECUTION_AUTHORITY = 0`
+- `SECOND_TERMINAL_AUTHORITY = 0`
 
-## Non-goals
+No lifecycle, authorization, execution eligibility, terminal authority,
+Autopilot, or automatic Owner action is included.
 
-No Auto Execute, Autopilot, notifications framework, second runtime, second
-terminal authority, automatic Owner action, or remote delivery is included.
+## Human UAT plan
+
+Maximum five items: verify one notification, one insertion in the originating
+Composer, refresh/restart idempotency, preservation of the Owner draft, and
+that native Send remains Owner-controlled.
+
+## Delivery discipline
+
+Apply the current approved Constitution. P0 is a core-path blocker; P1 and P2
+ remain Backlog by default. Do not architecture-expand this WP or start
+ Autopilot.

@@ -1,0 +1,34 @@
+import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
+
+const root=new URL('../../',import.meta.url);
+const server=readFileSync(new URL('vite.config.ts',root),'utf8');
+const control=readFileSync(new URL('./controlService.ts',import.meta.url),'utf8');
+const runtime=readFileSync(new URL('./runtimeManager.ts',import.meta.url),'utf8');
+const bridge=readFileSync(new URL('./bridgeCore.ts',import.meta.url),'utf8');
+
+const healthRoute=server.match(/server\.middlewares\.use\('\/api\/health',[\s\S]*?\n  server\.middlewares\.use\('\/api\/service\/status'/)?.[0]??'';
+assert.match(healthRoute,/readLocalServiceHealthStatusAsync\(\)\.then/);
+assert.doesNotMatch(healthRoute,/readLocalServiceHealthStatus\(\)/);
+assert.doesNotMatch(healthRoute,/gh|git|codex|lsof|ps|detectPortOwner|readRuntime|readTask|readCodex/i);
+const statusRoute=server.match(/server\.middlewares\.use\('\/api\/service\/status',[\s\S]*?\n  server\.middlewares\.use\('\/api\/service\/logs'/)?.[0]??'';
+assert.match(statusRoute,/readLocalServiceStatusAsync\(\)\.then/);
+assert.doesNotMatch(statusRoute,/readLocalServiceStatus\(|detectPortOwner/);
+const healthStatus=control.slice(control.indexOf('export async function readLocalServiceStatusAsync'),control.indexOf('export function readLocalServiceSupervisorState'));
+assert.match(healthStatus,/boundedHealthDiagnostic/);
+assert.doesNotMatch(healthStatus,/execFileSync|execSync|spawnSync/);
+assert.match(control,/HEALTH_CHILD_PROCESS_TIMEOUT_MS=500/);
+const asyncPortOwner=control.slice(control.indexOf('export async function detectPortOwnerAsync'),control.indexOf('function repositoryAvailableForService'));
+assert.equal((asyncPortOwner.match(/timeout:HEALTH_CHILD_PROCESS_TIMEOUT_MS/g)??[]).length,2);
+assert.match(server,/readPullRequestsAsync\(\)\.then/);
+assert.match(server,/readCiEvidenceAsync\(\)\.then/);
+assert.match(server,/readCodexModelCapabilitiesAsync\(\),readCodexDefaultsAsync\(\)/);
+assert.match(server,/readRuntimeHistoryAsync\(\)/);
+assert.match(server,/readTaskProjectionReadOnly\(\)/);
+assert.match(control,/export async function readCiEvidenceAsync/);
+assert.match(control,/export async function refreshPrNavigationSnapshotAsync/);
+assert.match(runtime,/export async function readRuntimeHistoryAsync/);
+assert.match(bridge,/export async function readTaskProjectionReadOnly/);
+assert.match(bridge,/readTaskRunBranchEvidenceReadOnly/);
+
+console.log('Local Service health latency invariants passed');

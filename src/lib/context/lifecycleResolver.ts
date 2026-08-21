@@ -1,5 +1,6 @@
 import {wpStages,type AiccStatus} from '../workflow.ts';
 import type {AiccProjectSnapshot,FormalizationState,LifecycleStage,ResolvedAuthorization,WorkPackageLifecycle} from '../model/entityTypes.ts';
+import {scopedEntityKey} from '../projectEntityScope.ts';
 
 const stage=(id:string,label:string,status:AiccStatus,evidence:string[]=[],reasonCode?:string):LifecycleStage=>({id,label,status,evidence,...(reasonCode?{reasonCode}:{})});
 const complete=(value?:string)=>Boolean(value&&/^(PASS|COMPLETE|CLOSED|APPROVED_BASELINE)$/i.test(value.trim()));
@@ -11,11 +12,13 @@ const contractFields=(fields:Record<string,string>)=>Object.fromEntries(Object.e
  * Contract text describes applicability; persisted evidence and terminal runtime
  * facts establish completion. Presentation components must not infer stages.
  */
-export function resolveWorkPackageLifecycle(id:string,formalization:FormalizationState,authorization:ResolvedAuthorization,snapshot:AiccProjectSnapshot):WorkPackageLifecycle{
+export function resolveWorkPackageLifecycle(wp:Readonly<{id:string;identityKey:string}>,scope:Readonly<{projectId:string;repositoryIdentity:string}>,formalization:FormalizationState,authorization:ResolvedAuthorization,snapshot:AiccProjectSnapshot):WorkPackageLifecycle{
+  if(!scope?.projectId||!scope.repositoryIdentity||wp.identityKey!==scopedEntityKey(scope,'WORK_PACKAGE',wp.id))throw new Error('WP_PROJECT_SCOPE_REQUIRED');
+  const id=wp.id;
   const formal=snapshot.formalWorkPackages.value?.[id];
-  const uat=snapshot.humanUat.value?.find(record=>record.workPackageId===id)??null;
-  const evidence=snapshot.lifecycleEvidence.value?.find(item=>item.workPackageId===id)??null;
-  const runtime=snapshot.runtime.value?.workPackageId===id?snapshot.runtime.value:null;
+  const uat=snapshot.humanUat.value?.find(record=>record.repository===scope.repositoryIdentity&&record.workPackageId===id)??null;
+  const evidence=snapshot.lifecycleEvidence.value?.find(item=>item.repository===scope.repositoryIdentity&&item.workPackageId===id)??null;
+  const runtime=(()=>{const candidate=snapshot.runtime.value as any;return candidate?.projectId===scope.projectId&&candidate?.repositoryIdentity===scope.repositoryIdentity&&candidate.workPackageId===id?candidate:null})();
   const fields=contractFields(formal?.fields??{});
   const statuses:Record<string,AiccStatus>={PLANNED:'NOT_STARTED',READY:'NOT_STARTED',OWNER_AUTHORIZATION:'NOT_STARTED',IMPLEMENTATION:'NOT_STARTED',VALIDATION:'NOT_STARTED',REVIEW:'N_A',DELIVERY:'N_A',HUMAN_UAT:'NOT_STARTED',CLOSED:'NOT_STARTED'};
   const evidenceByStage:Record<string,string[]>={};

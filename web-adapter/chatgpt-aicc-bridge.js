@@ -9,6 +9,7 @@
   var lockPrefix = 'aicc-gpt-bridge-report-lock-';
   var panel;
   var reportItem = null;
+  var localSyncKeys = {};
 
   function composer() { return window.AICCChatGPTDom && document.querySelector(window.AICCChatGPTDom.SELECTORS.composer.join(',')); }
   function textOf(element) { return element && ('value' in element ? element.value : element.innerText || element.textContent || ''); }
@@ -49,7 +50,23 @@
       }).catch(visibleError);
   }
   function send() { var resolved = window.AICCChatGPTDom.resolveTaskSource(document, window.getSelection && window.getSelection().toString().trim()); sendText(resolved.text, window.AICCChatGPTDom.originContext(document, resolved.message), resolved.source); }
-  function mountNativeActions() { window.AICCChatGPTDom.mountAssistantAiccActions(document, sendText); window.AICCChatGPTDom.mountComposerAiccAction(document, sendText); }
+  function mountNativeActions() { window.AICCChatGPTDom.removeChatContentFloatingButtons(document); window.AICCChatGPTDom.mountComposerAiccAction(document, sendText); }
+  function scanLocalSync() {
+    if (!window.AICCChatGPTDom || !window.AICCChatGPTDom.assistantMessages) return;
+    var messages = window.AICCChatGPTDom.assistantMessages(document);
+    messages.forEach(function (assistant, index) {
+      var text = window.AICCChatGPTDom.textOf(assistant) || '';
+      var matches = text.match(/(?:^|\n)(AICC_BUG_REGISTRY_LOCAL_SYNC_V1\n[\s\S]*?\nEND_AICC_BUG_REGISTRY_LOCAL_SYNC_V1)(?=\n|$)/g) || [];
+      matches.forEach(function (raw) {
+        var block = raw.trim();
+        function value(key) { var match = block.match(new RegExp('(?:^|\\n)' + key + ':\\s*([^\\n]+)')); return match ? match[1].trim() : ''; }
+        var payload = { repository: value('REPOSITORY'), branch: value('BRANCH'), registryPath: value('REGISTRY_PATH'), sourceCommitSha: value('SOURCE_COMMIT_SHA'), action: value('ACTION') };
+        if (payload.repository !== 'beyourlovercom/aicontrolcenter' || payload.branch !== 'rebuild/aicc-v2' || payload.registryPath !== 'docs/80_Bug_Record/01_bug_record.md' || !/^[a-f0-9]{40}$/i.test(payload.sourceCommitSha) || payload.action !== 'SYNC') return;
+        var key = payload.sourceCommitSha + '|' + payload.registryPath; if (localSyncKeys[key]) return; localSyncKeys[key] = true;
+        request('/api/bug-registry/local-sync', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }).then(function (body) { show('BUG REGISTRY · ' + ((body.result && body.result.result) || 'FAILED'), body.result && body.result.result === 'FAILED' ? 'ERROR' : 'SUCCESS'); }).catch(visibleError);
+      });
+    });
+  }
   function poll() {
     var raw = localStorage.getItem(key); if (!raw) return;
     var correlation; try { correlation = JSON.parse(raw); } catch (_) { return; }
@@ -87,9 +104,9 @@
     panel = document.createElement('aside'); panel.dataset.aiccGptBridge = 'true';
     panel.innerHTML = '<strong>AICC Bridge</strong><button data-aicc-send>发送到 AICC</button><button data-aicc-insert>插入运行报告</button><div data-aicc-status>等待 Owner 操作</div>';
     panel.style.cssText = 'position:fixed;right:16px;bottom:16px;z-index:2147483647;display:grid;gap:7px;width:220px;padding:12px;border:1px solid #d8dee8;border-radius:10px;background:#fff;box-shadow:0 8px 28px #0002;font:13px system-ui;color:#1f2937';
-    document.body.appendChild(panel); panel.querySelector('[data-aicc-send]').addEventListener('click', send); panel.querySelector('[data-aicc-insert]').addEventListener('click', insert); poll();
+    document.body.appendChild(panel); panel.querySelector('[data-aicc-send]').addEventListener('click', send); panel.querySelector('[data-aicc-insert]').addEventListener('click', insert); poll(); scanLocalSync();
   }
   if (document.body) { mount(); mountNativeActions(); } else new MutationObserver(mount).observe(document.documentElement, { childList: true });
   setInterval(mountNativeActions, 1000);
-  setInterval(poll, 3000);
+  setInterval(function () { poll(); scanLocalSync(); }, 3000);
 }());

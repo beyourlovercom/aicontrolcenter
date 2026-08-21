@@ -1,0 +1,2 @@
+export type GlobalWpAction='AUTO_CREATE_WP'|'MANUAL_CREATE_WP'|'REFRESH';
+export const GLOBAL_WP_ACTIONS:GlobalWpAction[]=['AUTO_CREATE_WP','MANUAL_CREATE_WP','REFRESH'];

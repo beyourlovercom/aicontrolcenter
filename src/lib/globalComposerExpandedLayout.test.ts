@@ -1,0 +1,31 @@
+import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
+
+const dock=readFileSync(new URL('../components/GlobalExecutionComposerDock.svelte',import.meta.url),'utf8');
+const app=readFileSync(new URL('../App.svelte',import.meta.url),'utf8');
+const css=readFileSync(new URL('../app.css',import.meta.url),'utf8');
+
+assert.match(dock,/const IDLE_INPUT_HEIGHT=32,MAX_INPUT_HEIGHT=208/,'the input height constants define the compact and bounded states');
+assert.match(dock,/\$: expanded=inputHeight>IDLE_INPUT_HEIGHT/,'one measured input-height authority selects expanded layout');
+assert.match(dock,/inputHeight=Math\.min\(Math\.max\(target\.scrollHeight,IDLE_INPUT_HEIGHT\),MAX_INPUT_HEIGHT\)/,'the same measured value expands and collapses the layout');
+assert.match(dock,/class:expanded class="global-execution-composer"/,'the composer applies the single expanded state to its surface');
+assert.match(dock,/grid-template-areas:"primary primary primary" "leading footer trailing"/,'expanded input spans the full top row');
+assert.match(dock,/\.global-execution-composer\.expanded\{grid-template-areas:"primary primary primary" "leading footer trailing";grid-template-rows:minmax\(0,auto\) 34px/,'the footer retains a fixed-height bottom row');
+assert.match(dock,/textarea\{grid-area:primary;display:block;width:100%/,'textarea fills the primary grid area');
+assert.match(dock,/\.global-composer-leading\{grid-area:leading\}/,'leading controls are isolated from the expanded primary row');
+assert.match(dock,/\.global-composer-footer\{grid-area:footer/,'context/footer content has its own bottom region');
+assert.match(dock,/\.global-composer-trailing\{grid-area:trailing\}/,'model and send controls are isolated in the trailing footer region');
+assert.match(dock,/max-height:208px[\s\S]*overflow-y:auto/,'only the input scrolls after its maximum height');
+assert.doesNotMatch(dock,/position:sticky|position:fixed/,'composer expansion is owned by the absolute App-shell overlay rather than sticky or fixed positioning');
+assert.match(dock,/data-tooltip="更多操作" aria-label="更多操作"/,'more icon has an accurate tooltip and accessible label');
+assert.match(dock,/data-tooltip="粘贴指令" aria-label="粘贴指令"/,'paste icon has an accurate tooltip and accessible label');
+assert.match(dock,/data-tooltip="导入指令" aria-label="导入指令"/,'import icon has an accurate tooltip and accessible label');
+assert.match(dock,/data-tooltip="当前上下文" aria-label=\{`当前上下文：\$\{contextLabel\}`\}/,'context icon describes its actual binding');
+assert.match(dock,/data-tooltip="发送到 AICC 执行" aria-label="发送到 AICC 执行"/,'send icon has an explicit submission label');
+assert.match(dock,/aria-label="选择执行模型和推理强度"/,'model selector has a descriptive accessible label');
+assert.match(dock,/\.global-composer-icon\[data-tooltip\]:hover:after[\s\S]*\.global-composer-send\[data-tooltip\]:hover:after/,'compact controls render hover tooltips without changing layout');
+assert.match(app,/data-testid="global-composer-dock-lane"><GlobalExecutionComposerDock/,'the expanded composer remains in the App-shell overlay lane');
+assert.match(css,/\.global-composer-dock-lane\{position:absolute;inset:auto 0 16px/,'composer expansion remains bottom-anchored in the overlay lane');
+assert.match(app,/composer-overlay-tail-spacer/,'the measured end-only tail reserve keeps final content reachable');
+assert.doesNotMatch(app+css,/composer-bottom-spacer|aicc-composer-safe-area|scroll-padding-bottom|grid-template-rows:minmax\(0,1fr\) auto/,'expanded layout has no obsolete dock-row compensation');
+console.log('global composer expanded layout tests passed');

@@ -1,0 +1,57 @@
+import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
+import {createEmptyGlobalStateReadModel} from './globalStateReadModel.ts';
+import {projectHumanUatLayer2} from './humanUatCanonicalProjection.ts';
+import {projectTaskLayer2ReadModel} from './taskCanonicalProjection.ts';
+import {composeUiLifecycleReadModel,presentationStatus,projectTaskUiRecords,projectedLifecycleText,APP_SVELTE_LIFECYCLE_INFERENCE,APP_SVELTE_STATE_AUTHORITY,DISPLAY_FORMATTING_AUTHORITY,DUPLICATE_UI_STATUS_RESOLVER,EVIDENCE_RENDERING_AUTHORITY,SEMANTIC_STATUS_DERIVATION_IN_UI,UI_DIRECT_DOMAIN_STATE_DERIVATION,UI_LOCAL_LIFECYCLE_AUTHORITY,UI_STATE_READ_AUTHORITY} from './uiLifecycleConsumerProjection.ts';
+import {projectPhase5Lifecycle} from './runtimeResultFeedbackControlLoopProjection.ts';
+
+const task={taskId:'task-1',status:'RUNNING',executionId:'execution-1',runId:'run-1'};
+const taskModel=projectTaskLayer2ReadModel(createEmptyGlobalStateReadModel(),[task],[{runId:'run-1',phase:'RUNNING'}]);
+const runtimeModel=projectPhase5Lifecycle(createEmptyGlobalStateReadModel(),{runs:[{runId:'run-1',phase:'COMPLETED'} as any]}).model;
+const uatModel=projectHumanUatLayer2(createEmptyGlobalStateReadModel(),[{entityType:'work_package',entityId:'WP-1',status:'PASS',updatedAt:'2026-08-20T00:00:00.000Z'}]).model;
+const model=composeUiLifecycleReadModel(createEmptyGlobalStateReadModel(),[taskModel,runtimeModel,uatModel]);
+
+assert.equal(UI_STATE_READ_AUTHORITY,'AICC_GLOBAL_STATE_READ_MODEL');
+assert.equal(UI_DIRECT_DOMAIN_STATE_DERIVATION,'FORBIDDEN');
+assert.equal(DUPLICATE_UI_STATUS_RESOLVER,'FORBIDDEN');
+assert.equal(UI_LOCAL_LIFECYCLE_AUTHORITY,0);
+assert.equal(APP_SVELTE_STATE_AUTHORITY,'ROUTING_AND_PRESENTATION_ONLY');
+assert.equal(APP_SVELTE_LIFECYCLE_INFERENCE,0);
+assert.equal(DISPLAY_FORMATTING_AUTHORITY,'PRESENTATION_ONLY');
+assert.equal(SEMANTIC_STATUS_DERIVATION_IN_UI,'ABSENT');
+assert.equal(EVIDENCE_RENDERING_AUTHORITY,'DISPLAY_ONLY');
+assert.equal(projectedLifecycleText(model,'TASK','task-1','task.lifecycle'),'RUNNING');
+assert.equal(projectedLifecycleText(model,'RUN','run-1','run.lifecycle'),'COMPLETED','the Phase 5 run fragment is the exact UI authority for run lifecycle');
+assert.equal(projectedLifecycleText(model,'HUMAN_UAT','work_package:WP-1','humanUat.lifecycle'),'PASS','Human UAT is its own projected entity');
+assert.equal(projectedLifecycleText(model,'HUMAN_UAT','work_package:WP-absent','humanUat.lifecycle'),'UNKNOWN','missing canonical UAT remains unknown');
+assert.equal(projectedLifecycleText(model,'RESULT','result-absent','result.availability'),'UNKNOWN','missing Result cannot be guessed from Run completion');
+assert.equal(projectTaskUiRecords(model,[task])[0]?.status,'RUNNING','Task presentation reads Layer 2 instead of the original record field');
+assert.equal(presentationStatus('UNKNOWN'),'UNKNOWN','formatting preserves absence without promoting it to a lifecycle state');
+assert.equal(presentationStatus('COMPLETED'),'PASS');
+
+const app=readFileSync(new URL('../App.svelte',import.meta.url),'utf8');
+const humanUat=readFileSync(new URL('../components/entity/HumanUatWorkspace.svelte',import.meta.url),'utf8');
+const runtime=readFileSync(new URL('../components/entity/RuntimeWorkspace.svelte',import.meta.url),'utf8');
+const codexCli=readFileSync(new URL('../components/CodexCliLive.svelte',import.meta.url),'utf8');
+const evidence=readFileSync(new URL('../components/entity/EntityEvidencePanel.svelte',import.meta.url),'utf8');
+const milestone=readFileSync(new URL('../components/entity/MilestoneView.svelte',import.meta.url),'utf8');
+const milestoneProgress=readFileSync(new URL('../components/entity/MilestoneProgress.svelte',import.meta.url),'utf8');
+const feedbackIsland=readFileSync(new URL('../components/GlobalFeedbackIsland.svelte',import.meta.url),'utf8');
+assert.match(app,/composeUiLifecycleReadModel\(uiLifecycleReadModel/,'App composes Layer 2 fragments before presenting state');
+assert.match(app,/projectTaskUiRecords\(uiLifecycleReadModel,taskRecords\)/,'Task consumers receive projected display records');
+assert.doesNotMatch(app,/\$: schedulerQueue=/,'unused App scheduler derivation is removed rather than becoming a second authority');
+assert.match(app,/selectedTaskTabStatuses=\{运行:presentationStatus\(selectedTaskRunLifecycle\)/,'Tab state formats exact projected lifecycle values');
+assert.match(humanUat,/humanUatStatus\(context.type,context.id\)/,'Human UAT reads its independent projected canonical dimension');
+assert.doesNotMatch(humanUat,/currentStatus=record\?\.status/,'Human UAT no longer derives its displayed lifecycle from record/task/workflow fallbacks');
+assert.match(runtime,/projectPhase5Lifecycle/,'Runtime keeps the Phase 5 Layer 2 exact-run authority');
+assert.match(runtime,/lifecycle=\{focusedRunLifecycle\}/,'Codex CLI display receives the exact Layer 2 Run lifecycle');
+assert.match(codexCli,/export let lifecycle='UNKNOWN'/,'Codex CLI display does not resolve terminal state from raw phase');
+assert.match(evidence,/Run phase（原始证据）/,'evidence labels raw process facts instead of creating semantic lifecycle status');
+assert.match(milestone,/lifecycleStatus\('MILESTONE',context\.id,'milestone\.lifecycle'\)/,'Blueprint milestone presentation reads the Roadmap Layer 2 dimension');
+assert.match(milestoneProgress,/lifecycleStatus\('WORK_PACKAGE',child\.id,'wp\.lifecycle'\)/,'milestone child badges read projected WP lifecycle values');
+assert.match(milestoneProgress,/lifecycleStatus\('WORK_PACKAGE',child\.id,'wp\.progress'\)/,'Milestone Progress reads WP progress from the Layer 2 state model');
+assert.doesNotMatch(milestoneProgress,/milestone-progress-track|milestone-progress-node/,'Milestone Progress does not retain the horizontal timeline');
+assert.match(feedbackIsland,/isCopyableFeedback/,'Global Feedback Island remains the frozen single renderer');
+
+console.log('ui lifecycle consumer convergence tests passed');

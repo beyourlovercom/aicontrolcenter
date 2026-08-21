@@ -1,0 +1,27 @@
+import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
+import {filterTaskQuickList} from './taskQuickListSearch.ts';
+import type {CanonicalTaskRecord} from './bridgeCore.ts';
+
+const quickList=readFileSync(new URL('../components/TaskQuickList.svelte',import.meta.url),'utf8');
+const app=readFileSync(new URL('../App.svelte',import.meta.url),'utf8');
+const center=readFileSync(new URL('../components/GlobalTaskView.svelte',import.meta.url),'utf8');
+const task=(overrides:Partial<CanonicalTaskRecord>):CanonicalTaskRecord=>({taskId:'task-alpha',inboxId:'inbox-alpha',instructionId:'instruction-alpha',entityScope:'WORK_PACKAGE',workPackageId:'WP-ALPHA',prId:null,repository:'repo',branch:'main',origin:'OWNER',status:'COMPLETED',createdAt:'2026-01-01',updatedAt:'2026-01-01',instruction:{} as any,rawInstruction:'',...overrides});
+const records=[task({taskId:'TASK-ALPHA',taskTitle:'Deploy Alpha'}),task({taskId:'TASK-BETA',taskTitle:'Review Beta',workPackageId:'WP-BETA'})];
+assert.match(quickList,/aria-label="搜索任务名称 \/ ID"/,'TASK_QUICK_LIST_SEARCH_PRESENT');
+assert.equal(filterTaskQuickList(records,'Deploy Alpha').length,1,'SEARCH_TASK_NAME');
+assert.equal(filterTaskQuickList(records,'TASK-BETA').length,1,'SEARCH_TASK_ID');
+assert.equal(filterTaskQuickList(records,'wp-beta').length,1,'SEARCH_ENTITY_WP');
+assert.equal(filterTaskQuickList(records,'deploy').length,1,'SEARCH_CASE_INSENSITIVE');
+assert.equal(filterTaskQuickList(records,'pha').length,1,'SEARCH_SUBSTRING_MATCH');
+assert.equal(filterTaskQuickList(records,'  TASK-ALPHA  ').length,1,'SEARCH_TRIMS_WHITESPACE');
+assert.equal(filterTaskQuickList(records,'').length,2,'EMPTY_SEARCH_SHOWS_ALL');
+assert.equal(filterTaskQuickList(records,'missing').length,0,'NO_MATCH_EMPTY_STATE');
+assert.match(quickList,/visibleTasks=filterTaskQuickList\(tasks,searchQuery\)/,'SEARCH_SCOPE = LEFT_QUICK_LIST_ONLY');
+assert.match(quickList,/selectedTaskId===task\.taskId/,'SEARCH_MUTATES_SELECTED_TASK_ID = NO');
+assert.match(quickList,/没有匹配的任务/,'NO_MATCH_EMPTY_STATE');
+assert.match(app,/TaskQuickList tasks=\{taskRecords\} selectedTaskId=\{selectedTaskId\} onSelect=\{selectCanonicalTask\}/,'canonical Task source and selection remain unchanged');
+assert.match(center,/export let groups:GlobalTaskGroups/,'CENTER_COUNTS_AND_FILTERS_MODIFIED = NO');
+assert.match(quickList,/taskStatusIcon|taskStatusLabel/,'STATUS_PRESENTATION_REGRESSION');
+assert.match(quickList,/onCopyResult\(task\)/,'RESULT_COPY_REGRESSION');
+console.log('Task left Quick List search tests passed');

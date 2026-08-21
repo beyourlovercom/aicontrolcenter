@@ -4,12 +4,24 @@
 | --- | --- | --- | --- | --- | --- |
 | AICC-V2-PROJECT-CONSTITUTION-001 | 1.2 | APPROVED_BASELINE | 2026-08-13 | 1 | PASS |
 | AICC-V2-CODE-ARCHITECTURE-STANDARD-001 | 1.0 | APPROVED_BASELINE | 2026-08-12 | 2 | PARTIAL |
-| AICC-V2-UI-INTERACTION-STANDARD-001 | 1.2 | APPROVED_BASELINE | 2026-08-13 | 2 | PASS |
+| AICC-V2-UI-INTERACTION-STANDARD-001 | 1.5 (`AICC_ROADMAP_CONTEXT_UI_BASELINE = V1.0`) | FROZEN / APPROVED_BASELINE | 2026-08-18 | 2 | PASS |
+| AICC_STATE_PROJECTION_ARCHITECTURE_V1 | 1.0 | FROZEN / APPROVED_BASELINE | 2026-08-18 | Shared state projection architecture; specialized entity baselines may add stricter policy | Roadmap PASS; Blueprint / PR / Task architecture-only |
+| AICC-WEB-BRIDGE-UI-STANDARD-001 | 1.0 | FROZEN / APPROVED_BASELINE | 2026-08-14 | Specialized under AICC-V2-UI-INTERACTION-STANDARD-001 | PASS |
+| AICC_CANONICAL_TASK_INTERACTION_CONTRACT | 1.0 | OWNER_APPROVED_BASELINE | 2026-08-16 | Canonical Task UI interaction authority | PASS |
+| AICC_UNIFIED_CANONICAL_TASK_FEED_UI_CONTRACT | 1.0 | OWNER_APPROVED_BASELINE | 2026-08-16 | Canonical Task collection/list projection authority | PASS |
+| AICC_V2_CORE_CONTROL_LOOP | 1.0 | OWNER_APPROVED / HUMAN_UAT_PROVEN | 2026-08-16 | Canonical V2 GPT Web → AICC → Codex Luna control-loop authority | PASS |
 | AICC-V2-CANONICAL-EXECUTION-STANDARD-001 | 1.2 | APPROVED_BASELINE | 2026-08-13 | 2 | PASS |
 
 The registry records approved authority documents and current implementation
 conformance. Execution conformance is PASS for the v1.2 pass-through
 control-plane model; v1.0/v1.1 wording remains historical traceability only.
+
+`AICC_V2_CORE_CONTROL_LOOP` conformance includes the closed M8.2.1.8 real
+three-round Human UAT, exact Conversation binding, durable expected-turn and
+submission reconciliation, exactly-once control/feedback handling, Luna as the
+default executor, and terminal stop-state monotonicity. This registry entry
+records conformance to the existing approved authority document; it does not
+change its semantics or grant AICC decision authority.
 
 ## Historical baseline traceability
 

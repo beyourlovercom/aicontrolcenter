@@ -1,0 +1,27 @@
+{
+  "schema": "aicc.project-registry.v1",
+  "activeProjectId": "aicc",
+  "projectContextRevision": 0,
+  "projects": [
+    {
+      "projectId": "aicc",
+      "displayName": "AIcontrolcenter",
+      "repositoryPath": "/Users/a/AI/007/AIcontrolcenter",
+      "repositoryIdentity": "beyourlovercom/aicontrolcenter",
+      "remoteOrigin": "git@github.com:beyourlovercom/aicontrolcenter.git",
+      "currentBranch": "rebuild/aicc-v2",
+      "defaultBranch": "main",
+      "roadmapPath": "docs/10_Planning_Roadmap/01_LIVING_ROADMAP.md"
+    },
+    {
+      "projectId": "erpbeyourlovercom",
+      "displayName": "ERP BeYourLover",
+      "repositoryPath": "/Users/a/AI/007/erpbeyourlovercom",
+      "repositoryIdentity": "beyourlovercom/erpbeyourlovercom",
+      "remoteOrigin": "git@github.com:beyourlovercom/erpbeyourlovercom.git",
+      "currentBranch": "docs/mvp1-uat-page-by-page-transition-001",
+      "defaultBranch": "NOT_AVAILABLE",
+      "roadmapPath": "NOT_CONFIGURED"
+    }
+  ]
+}

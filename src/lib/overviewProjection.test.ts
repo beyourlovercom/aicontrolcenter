@@ -24,7 +24,8 @@ assert.match(app,/feedback\.state!==\'IDLE\'/,'idle feedback does not duplicate 
 assert.equal(app.includes('等待 Owner 操作'),false,'duplicate idle owner action copy removed');
 assert.match(header,/statusOverride/,'entity header consumes owner status projection');
 assert.match(workflow,/getStatusPresentationMeta\(stage\.status\)/,'workflow labels use status presentation metadata');
-assert.match(roadmap,/StatusDot status=\{node\.status\}/,'roadmap status consumes projected node status');
+assert.match(roadmap,/mapRoadmapStatusToVisualFamily\(node\.canonicalStatus\?\?node\.status\)/,'roadmap status uses the canonical three-family authority');
+assert.match(roadmap,/roadmap-status-tooltip/,'roadmap preserves exact status detail in its tooltip');
 const context={type:'work_package',status:'WAITING_UAT',statusLabel:'等待人工 UAT',formalization:'FORMAL_READY',runtime:{runId:'run-1',phase:'COMPLETED',exitCode:0},lifecycle:{stages:[{id:'IMPLEMENTATION',status:'COMPLETE'},{id:'HUMAN_UAT',status:'WAITING_UAT'}]}} as any;
 const projected=resolveOwnerStatusProjection(context,[{state:'READY',report:{runId:'run-1'}}]);
 assert.equal(projected.status,'WAITING_UAT');
