@@ -12,7 +12,10 @@ No tool, agent, artifact, task checkbox, local session, or application state may
 
 `AICC_GITHUB_REVIEW_LOOP_V1 = FROZEN`
 
-`CODE_IMPLEMENTATION_EXECUTOR = CODEX`
+`CODE_IMPLEMENTATION_EXECUTOR = OWNER_ASSIGNED_EXECUTOR`
+`SUPPORTED_IMPLEMENTATION_EXECUTORS = CODEX | CLAUDE`
+`ACTIVE_IMPLEMENTATION_EXECUTOR_PER_WORKTREE = ONE`
+`CONCURRENT_SAME_WORKTREE_IMPLEMENTATION_EXECUTORS = FORBIDDEN`
 `CODE_REVIEW_SOURCE = GITHUB`
 `GPT_CODE_REVIEW_AUTHORITY = GITHUB_COMMIT`
 `NEXT_STEP_PLANNING_AUTHORITY = GPT`
@@ -26,21 +29,21 @@ Standard loop:
 
 `GPT instruction`
 → `AICC`
-→ `Codex IMPLEMENT`
+→ `Owner-assigned Implementation Executor`
 → `machine validation`
 → `git commit`
 → `git push`
 → `GPT reviews exact GitHub commit`
 → `GPT issues next implementation / remediation / Owner UAT`
 
-Codex responsibilities are limited to:
+Implementation Executor responsibilities are limited to:
 
 `IMPLEMENT`
 `TEST`
 `COMMIT`
 `PUSH`
 
-Codex must not:
+Implementation Executor must not:
 
 - approve its own architecture;
 - enter the next Phase automatically based on its own PASS;
@@ -61,6 +64,22 @@ A Work Package uses one continuous development branch by default.
 `FAILED_CHECKPOINT_IS_IMPLEMENTATION_PASS = NO`
 `FAILED_CHECKPOINT_PURPOSE = GPT_GITHUB_REVIEW`
 `CODEX_REMEDIATION_BEFORE_GPT_REVIEW = FORBIDDEN`
+`IMPLEMENTATION_EXECUTOR_REMEDIATION_BEFORE_GPT_REVIEW = FORBIDDEN`
+
+`ONE_ACTIVE_IMPLEMENTATION_EXECUTOR_PER_WORKTREE = TRUE`
+`CODEX_AND_CLAUDE_SAME_WORKTREE_CONCURRENT_EDIT = FORBIDDEN`
+`EXECUTOR_HANDOFF_REQUIRES_GITHUB_REVIEWED_SHA = TRUE`
+`EXECUTOR_HANDOFF_REQUIRES_CLEAN_WORKTREE = TRUE`
+
+Executor handoff must fetch or pull the exact reviewed branch state, check out
+the exact reviewed commit or branch, and verify a clean worktree. Uncommitted
+workspace handoff by rsync is forbidden.
+
+`EXECUTOR_MACHINE_LOCAL_RUNTIME_STATE = NON_AUTHORITATIVE`
+
+`~/.aicc-v2`, `node_modules`, `.env*`, and runtime PID/PTY/session state must
+not be synchronized between executor machines. GitHub commits are the
+cross-machine code handoff authority.
 
 If `CODE_MODIFIED = NO` and `BLOCKER != NONE`, stop without creating a meaningless commit and hand the result to GPT review.
 
