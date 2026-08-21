@@ -8,6 +8,80 @@ OpenSpec, Codex sessions, runtime state, dashboards, local workspaces, caches, a
 
 No tool, agent, artifact, task checkbox, local session, or application state may authorize its own execution.
 
+## GitHub-Reviewed Development Loop Authority
+
+`AICC_GITHUB_REVIEW_LOOP_V1 = FROZEN`
+
+`CODE_IMPLEMENTATION_EXECUTOR = CODEX`
+`CODE_REVIEW_SOURCE = GITHUB`
+`GPT_CODE_REVIEW_AUTHORITY = GITHUB_COMMIT`
+`NEXT_STEP_PLANNING_AUTHORITY = GPT`
+`OWNER_UAT_AUTHORITY = OWNER`
+
+`UNPUSHED_CODE_REVIEWABLE = NO`
+`CODEX_SELF_ADVANCE = NO`
+`CODEX_ARCHITECTURE_SELF_APPROVAL = NO`
+
+Standard loop:
+
+`GPT instruction`
+→ `AICC`
+→ `Codex IMPLEMENT`
+→ `machine validation`
+→ `git commit`
+→ `git push`
+→ `GPT reviews exact GitHub commit`
+→ `GPT issues next implementation / remediation / Owner UAT`
+
+Codex responsibilities are limited to:
+
+`IMPLEMENT`
+`TEST`
+`COMMIT`
+`PUSH`
+
+Codex must not:
+
+- approve its own architecture;
+- enter the next Phase automatically based on its own PASS;
+- execute a remediation loop continuously on its own;
+- treat unpushed code as GPT-reviewed code;
+- repeat the same implementation after `CODE_MODIFIED=NO` and `BLOCKER!=NONE`.
+
+Every code review must bind:
+
+`repository`
+`branch`
+`exact BASE_SHA`
+`exact COMMIT_SHA`
+
+A Work Package uses one continuous development branch by default.
+
+`FAILED_IMPLEMENTATION_WITH_CODE_CHANGES = CHECKPOINT_COMMIT_REQUIRED`
+`FAILED_CHECKPOINT_IS_IMPLEMENTATION_PASS = NO`
+`FAILED_CHECKPOINT_PURPOSE = GPT_GITHUB_REVIEW`
+`CODEX_REMEDIATION_BEFORE_GPT_REVIEW = FORBIDDEN`
+
+If `CODE_MODIFIED = NO` and `BLOCKER != NONE`, stop without creating a meaningless commit and hand the result to GPT review.
+
+GitHub is code-review truth, not runtime truth:
+
+`CODE_REVIEW_TRUTH = GITHUB`
+`RUNTIME_TRUTH = ACTUAL_RUNTIME`
+`CODEX_CWD_TRUTH = ACTUAL_PROCESS_RUNTIME`
+`REMOTE_CLAUDE_TRUTH = REMOTE_RUNNER_RUNTIME`
+`REAL_BROWSER_UAT = REAL_BROWSER_EVIDENCE / OWNER`
+
+Git safety:
+
+`FORCE_PUSH = FORBIDDEN`
+`MAIN_DIRECT_WRITE = FORBIDDEN`
+`AUTOMATIC_REBASE = FORBIDDEN`
+`AUTOMATIC_RESET = FORBIDDEN`
+`AUTOMATIC_CLEAN = FORBIDDEN`
+
+PR creation and merge require explicit authorization.
+
 ## AICC V2 Core Control Loop Authority
 
 Canonical baseline: `docs/00_Governance/AICC_V2_CORE_CONTROL_LOOP.md`
