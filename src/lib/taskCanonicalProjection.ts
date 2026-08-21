@@ -1,22 +1,24 @@
 import {
   availableSourceRevision,
   dimensionProjection,
-  entityIdentity,
+  entityIdentity as rawEntityIdentity,
   explicitBinding,
   knownDimensionValue,
   projectGlobalStateReadModel,
   projectionSource,
-  sourceEntityIdentity,
+  sourceEntityIdentity as rawSourceEntityIdentity,
   unknownDimensionValue,
   type AiccGlobalStateReadModel
 } from './globalStateReadModel.ts';
-import type {ProjectIdentityScope} from './projectEntityScope.ts';
 
 export type TaskLifecycleProjectionInput=Readonly<{taskId:string;status:string;executionId?:string;runId?:string}>;
 export type TaskRunLifecycleProjectionInput=Readonly<{runId:string;phase?:string}>;
 
 /** Browser-safe Phase 2 adapter: Layer 1 values enter only here, never in a UI renderer. */
-export function projectTaskLayer2ReadModel(previous:AiccGlobalStateReadModel,records:readonly TaskLifecycleProjectionInput[],runtimes:readonly TaskRunLifecycleProjectionInput[],scope:ProjectIdentityScope):AiccGlobalStateReadModel{
+export function projectTaskLayer2ReadModel(previous:AiccGlobalStateReadModel,records:readonly TaskLifecycleProjectionInput[],runtimes:readonly TaskRunLifecycleProjectionInput[]):AiccGlobalStateReadModel{
+  const scope=previous;
+  const entityIdentity=<K extends import('./globalStateReadModel.ts').EntityKind>(kind:K,id:string)=>rawEntityIdentity(scope,kind,id);
+  const sourceEntityIdentity=(domain:import('./globalStateReadModel.ts').SourceDomain,id:string)=>rawSourceEntityIdentity(scope,domain,id);
   const runtimeByRun=new Map(runtimes.filter(runtime=>runtime?.runId).map(runtime=>[runtime.runId,runtime]));
   const entities:any[]=[],bindings:any[]=[],seenEntities=new Set<string>(),seenBindings=new Set<string>();
   const addEntity=(identity:any,dimensions:any[])=>{const key=`${identity.kind}:${identity.id}`;if(!seenEntities.has(key)){seenEntities.add(key);entities.push({identity,dimensions})}};

@@ -59,6 +59,7 @@ function formalization(snapshot:AiccProjectSnapshot,id:string):FormalizationStat
  */
 export function projectWpLayer2(previous:AiccGlobalStateReadModel,snapshot:AiccProjectSnapshot,tasks:readonly any[],scope:ProjectWpScope):WpLayer2Projection{
   if(!scope?.projectId||!scope.repositoryIdentity)throw new Error('WP_PROJECT_SCOPE_REQUIRED');
+  if(scope.projectId!==previous.projectId||scope.repositoryIdentity!==previous.repositoryIdentity)throw new Error('PROJECT_SCOPE_MISMATCH');
   const prs=snapshot.pullRequests.value??[];
   const milestones=(snapshot.roadmap.value??[]).map(milestone=>({
     id:milestone.id,
@@ -112,7 +113,7 @@ export function projectWpLayer2(previous:AiccGlobalStateReadModel,snapshot:AiccP
   };
   const model=projectGlobalStateReadModel(previous,candidate);
   const projectionRecords=records.map(record=>{
-    const revision=model.entityRevisions.find(item=>item.identity.kind==='WORK_PACKAGE'&&item.identity.id===record.identityKey)?.projectionRevision??0;
+    const revision=model.entityRevisions.find(item=>item.identity.kind==='WORK_PACKAGE'&&item.identity.id===record.id)?.projectionRevision??0;
     return Object.freeze({id:record.id,identityKey:record.identityKey,title:record.structure.title,milestoneId:record.structure.milestoneId,milestoneTitle:record.structure.milestoneTitle,structuralExistence:true as const,phase:record.structure.phase,phasePlanAvailability:record.structure.phasePlanAvailability,roadmapGroupNumber:record.structure.roadmapGroupNumber,roadmapGroupTitle:record.structure.roadmapGroupTitle,lifecycle:record.lifecycle,lifecycleStatus:record.lifecycle.effectiveStatus,implementation:record.implementation,validation:record.validation,uat:record.uat,closure:record.closure,progress:record.progress,taskIds:Object.freeze(record.taskIds),prIds:Object.freeze(record.prIds),entityProjectionRevision:revision});
   });
   return Object.freeze({model,records:Object.freeze(projectionRecords)});

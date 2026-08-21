@@ -2,12 +2,12 @@ import {
   availableSourceRevision,
   createEmptyGlobalStateReadModel,
   dimensionProjection,
-  entityIdentity,
+  entityIdentity as rawEntityIdentity,
   explicitBinding,
   knownDimensionValue,
   projectGlobalStateReadModel,
   projectionSource,
-  sourceEntityIdentity,
+  sourceEntityIdentity as rawSourceEntityIdentity,
   unknownDimensionValue,
   type AiccGlobalStateReadModel,
   type DimensionValue,
@@ -18,6 +18,7 @@ import {
   type SourceDomain
 } from './globalStateReadModel.ts';
 import type {CanonicalExecutionResult,RuntimeRecord} from './model/entityTypes.ts';
+import type {ProjectIdentityScope} from './projectEntityScope.ts';
 
 export const RUNTIME_SUMMARY_STATE_SOURCE='GLOBAL_STATE_READ_MODEL' as const;
 export const RUNTIME_MONITOR_STATE_SOURCE='GLOBAL_STATE_READ_MODEL' as const;
@@ -199,9 +200,12 @@ function one(values:readonly string[]):string|null{
  * canonical record; explicit cross-record identities create bindings only.
  */
 export function projectPhase5Lifecycle(
-  previous:AiccGlobalStateReadModel=createEmptyGlobalStateReadModel(),
+  previous:AiccGlobalStateReadModel,
   input:Phase5ProjectionInput={}
 ):Phase5LifecycleProjection{
+  const scope:ProjectIdentityScope=previous;
+  const entityIdentity=<K extends import('./globalStateReadModel.ts').EntityKind>(kind:K,id:string)=>rawEntityIdentity(scope,kind,id);
+  const source=(domain:SourceDomain,id:string,value:unknown):ProjectionSourceEvidence=>projectionSource(rawSourceEntityIdentity(scope,domain,id),availableSourceRevision(stable(value)));
   const runtimes=uniqueById(input.runs??[],item=>item.runId);
   const tasks=uniqueById(input.tasks??[],item=>item.taskId);
   const explicitExecutions=uniqueById(input.executions??[],item=>item.executionId);
