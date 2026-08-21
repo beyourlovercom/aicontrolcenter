@@ -3,8 +3,7 @@ import {resolveWorkPackageLifecycle} from './context/lifecycleResolver.ts';
 import {availableSourceRevision,createEmptyGlobalStateReadModel,dimensionProjection,entityIdentity,explicitBinding,knownDimensionValue,projectGlobalStateReadModel,projectionSource,sourceEntityIdentity,unavailableSourceRevision,unknownDimensionValue,type AiccGlobalStateReadModel,type DimensionValue,type GlobalStateProjectionCandidate} from './globalStateReadModel.ts';
 import type {AiccProjectSnapshot,FormalizationState,WorkPackageLifecycle} from './model/entityTypes.ts';
 import type {AiccStatus,RoadmapNode} from './workflow.ts';
-import {scopedEntityKey} from './projectEntityScope.ts';
-import type {ProjectIdentityScope} from './projectEntityScope.ts';
+import {scopedEntityKey,type ProjectIdentityScope} from './projectEntityScope.ts';
 
 /** Phase 4: UI reads one WP projection; Roadmap remains the existence authority. */
 export const WP_IDENTITY_KEY='CANONICAL_WORK_PACKAGE_ID' as const;
@@ -60,15 +59,16 @@ function formalization(snapshot:AiccProjectSnapshot,id:string):FormalizationStat
 export function projectWpLayer2(previous:AiccGlobalStateReadModel,snapshot:AiccProjectSnapshot,tasks:readonly any[],scope:ProjectWpScope):WpLayer2Projection{
   if(!scope?.projectId||!scope.repositoryIdentity)throw new Error('WP_PROJECT_SCOPE_REQUIRED');
   if(scope.projectId!==previous.projectId||scope.repositoryIdentity!==previous.repositoryIdentity)throw new Error('PROJECT_SCOPE_MISMATCH');
+  const projectScope=previous;
   const prs=snapshot.pullRequests.value??[];
   const milestones=(snapshot.roadmap.value??[]).map(milestone=>({
     id:milestone.id,
     lifecycle:typeof milestone.canonicalStatus==='string'&&milestone.canonicalStatus.trim()?milestone.canonicalStatus:typeof milestone.status==='string'&&milestone.status.trim()?milestone.status:null,
-    source:projectionSource(sourceEntityIdentity(scope,'ROADMAP',`${snapshot.roadmapSource}:${milestone.id}`),availableSourceRevision(signature(milestone)))
+    source:projectionSource(sourceEntityIdentity(projectScope,'ROADMAP',`${snapshot.roadmapSource}:${milestone.id}`),availableSourceRevision(signature(milestone)))
   }));
   const records=wpNodes(snapshot).map(({milestone,node})=>{
-    const id=node.id,identityKey=scopedEntityKey(scope,'WORK_PACKAGE',id),formal=snapshot.formalWorkPackages.value?.[id]??null;
-    const lifecycle=resolveWorkPackageLifecycle({id,identityKey},scope,formalization(snapshot,id),resolveAuthorizationForEntity({type:'work_package',id},snapshot),snapshot);
+    const id=node.id,identityKey=id,formal=snapshot.formalWorkPackages.value?.[id]??null;
+    const lifecycle=resolveWorkPackageLifecycle({id,identityKey:scopedEntityKey(projectScope,'WORK_PACKAGE',id)},scope,formalization(snapshot,id),resolveAuthorizationForEntity({type:'work_package',id},snapshot),snapshot);
     const stage=(stageId:string)=>lifecycle.stages.find(item=>item.id===stageId)?.status;
     const evidence=snapshot.lifecycleEvidence.value?.find(item=>item.workPackageId===id)??null;
     const uat=snapshot.humanUat.value?.find(item=>item.entityType==='work_package'&&item.workPackageId===id)??null;

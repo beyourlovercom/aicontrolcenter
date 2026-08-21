@@ -42,7 +42,7 @@
   import {allRoadmapExpanded,expandableRoadmapIds,expandRoadmapAncestors,roadmapEntityLabel,roadmapPath,toggleCollapsedNode,type CollapsedNodeIds} from './lib/roadmapUiBaseline.ts';
   import {deserializeRoadmapProjection,preserveRoadmapUiState,type RoadmapProjection} from './lib/roadmapProjection.ts';
   import {deserializePrNavigationSnapshot,toPullRequestRecordLike,type PrNavigationSnapshot} from './lib/prNavigationSnapshot.ts';
-  import {createEmptyGlobalStateReadModel} from './lib/globalStateReadModel.ts';
+  import {createEmptyGlobalStateReadModel,type AiccGlobalStateReadModel} from './lib/globalStateReadModel.ts';
   import {projectTaskLayer2ReadModel} from './lib/taskCanonicalProjection.ts';
   import {projectPrLayer2,type PrLayer2Projection} from './lib/prCanonicalProjection.ts';
   import {projectWpLayer2,projectWpRoadmapNodes,type WpLayer2Projection} from './lib/wpCanonicalProjection.ts';
@@ -93,24 +93,24 @@
   let raw:RawProjectSources={formalWorkPackages:{},entityDescriptions:[],localDevelopment:false};
   const TASK_CACHE_KEY='aicc.task.snapshot.v1';
   let prNavigationSnapshot:PrNavigationSnapshot|null=null,selectedPrNavigationId:string|null=null;
-  let prLayer2:PrLayer2Projection=projectPrLayer2(createEmptyGlobalStateReadModel(),[]);
-  let wpLayer2:WpLayer2Projection={model:createEmptyGlobalStateReadModel(),records:[]};
-  let humanUatLayer2:HumanUatLayer2Projection=projectHumanUatLayer2(createEmptyGlobalStateReadModel(),[]);
-  let uiLifecycleReadModel=createEmptyGlobalStateReadModel();
+  let prLayer2:PrLayer2Projection|null=null;
+  let wpLayer2:WpLayer2Projection|null=null;
+  let humanUatLayer2:HumanUatLayer2Projection|null=null;
+  let uiLifecycleReadModel:AiccGlobalStateReadModel|null=null;
   const uiLayer2Changes=createLayer2ChangeNotifier();let uiLifecycleRevision=0;
   const stopUiLayer2Changes=uiLayer2Changes.subscribe(change=>{uiLifecycleRevision=change.globalProjectionRevision});
-  setContext('AICC_UI_LIFECYCLE_READ_MODEL',{humanUatStatus:(entityType:'work_package'|'pull_request',entityId:string)=>projectedLifecycleText(uiLifecycleReadModel,'HUMAN_UAT',`${entityType}:${entityId}`,'humanUat.lifecycle'),lifecycleStatus:(kind:any,id:string,dimension:any)=>projectedLifecycleText(uiLifecycleReadModel,kind,id,dimension),lifecycleRevision:()=>uiLifecycleRevision});
-  function rebuildWpLayer2(snapshot:any,tasks:any[]){if(!activeRoadmapProject){wpLayer2={model:createEmptyGlobalStateReadModel(),records:[]};return wpLayer2;}wpLayer2=projectWpLayer2(wpLayer2.model,snapshot,tasks,activeRoadmapProject);return wpLayer2;}
+  setContext('AICC_UI_LIFECYCLE_READ_MODEL',{humanUatStatus:(entityType:'work_package'|'pull_request',entityId:string)=>uiLifecycleReadModel?projectedLifecycleText(uiLifecycleReadModel,'HUMAN_UAT',`${entityType}:${entityId}`,'humanUat.lifecycle'):'UNKNOWN',lifecycleStatus:(kind:any,id:string,dimension:any)=>uiLifecycleReadModel?projectedLifecycleText(uiLifecycleReadModel,kind,id,dimension):'UNKNOWN',lifecycleRevision:()=>uiLifecycleRevision});
+  function rebuildWpLayer2(snapshot:any,tasks:any[]){if(!activeRoadmapProject){wpLayer2=null;return null;}const previous=wpLayer2?.model??createEmptyGlobalStateReadModel(activeRoadmapProject);wpLayer2=projectWpLayer2(previous,snapshot,tasks,activeRoadmapProject);return wpLayer2;}
   function readTaskCache(){try{const cached=JSON.parse(localStorage.getItem(TASK_CACHE_KEY)||'null');return cached?.schemaVersion==='aicc.task.projection.v1'&&Array.isArray(cached.items)?cached:null}catch{return null}}
-  function acceptTaskProjection(projection:any){if(projection?.schemaVersion!=='aicc.task.projection.v1'||!Array.isArray(projection.items))return;taskRecords=projection.items;legacyTaskCount=projection.legacyCount??0;try{localStorage.setItem(TASK_CACHE_KEY,JSON.stringify(projection))}catch{}}
-  function acceptPrNavigationSnapshot(accepted:PrNavigationSnapshot){prNavigationSnapshot=accepted;const pullRequests=accepted.records.map(record=>toPullRequestRecordLike(record));raw={...raw,pullRequests};prLayer2=projectPrLayer2(prLayer2.model,pullRequests,String(accepted.snapshot_version),activeRoadmapProject??undefined);if(selectedPrNavigationId&&!prLayer2.records.some(record=>record.selectionId===selectedPrNavigationId)){selectedPrNavigationId=null;globalWorkspace=true;}}
+  function acceptTaskProjection(projection:any){if(!activeRoadmapProject||projection?.schemaVersion!=='aicc.task.projection.v1'||!Array.isArray(projection.items))return;if(projection.projectId!==activeRoadmapProject.projectId||projection.repositoryIdentity!==activeRoadmapProject.repositoryIdentity||projection.projectContextRevision!==activeRoadmapProject.projectContextRevision)return;taskRecords=projection.items;legacyTaskCount=projection.legacyCount??0;try{localStorage.setItem(TASK_CACHE_KEY,JSON.stringify(projection))}catch{}}
+  function acceptPrNavigationSnapshot(accepted:PrNavigationSnapshot){if(!activeRoadmapProject||!prLayer2)return;prNavigationSnapshot=accepted;const pullRequests=accepted.records.map(record=>toPullRequestRecordLike(record));raw={...raw,pullRequests};prLayer2=projectPrLayer2(prLayer2.model,pullRequests,String(accepted.snapshot_version),activeRoadmapProject);if(selectedPrNavigationId&&!prLayer2.records.some(record=>record.selectionId===selectedPrNavigationId)){selectedPrNavigationId=null;globalWorkspace=true;}}
   async function loadPrNavigationSnapshot(){const data=await boundedRequest('/api/pr-navigation');const accepted=deserializePrNavigationSnapshot(data?.snapshot);if(!accepted)throw new Error('PR_NAVIGATION_READ_MODEL_INVALID');acceptPrNavigationSnapshot(accepted);}
   async function refreshPrNavigationSnapshot(){if(busy)return;busy=true;setFeedback({state:'RUNNING',title:'正在刷新 PR…',message:'正在读取 GitHub PR 事实并持久化本地 Read Model。',code:'REFRESH_PR'});try{const data=await request('/api/pr-navigation',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({})});const accepted=deserializePrNavigationSnapshot(data?.snapshot);if(!accepted)throw new Error('PR_NAVIGATION_SNAPSHOT_INVALID');acceptPrNavigationSnapshot(accepted);setFeedback({state:'SUCCESS',title:'PR 已刷新',message:'GitHub PR 事实、本地 Read Model 与全局状态投影已更新。',code:'REFRESH_PR_SUCCESS'})}catch(error){const message=error instanceof Error?error.message:'PR_NAVIGATION_REFRESH_FAILED';setFeedback({state:'ERROR',title:'PR 刷新失败',message,code:message.split(':')[0]})}finally{busy=false}}
   function formatPrNavigationLastUpdated(value:string|undefined){if(!value)return '尚未刷新';const time=new Date(value);return Number.isFinite(time.getTime())?new Intl.DateTimeFormat('zh-CN',{dateStyle:'short',timeStyle:'medium'}).format(time):'时间不可用'}
   let roadmapProjection:RoadmapProjection|null=null,roadmapSyncState='未同步';
   let activeRoadmapProject:{projectId:string;repositoryIdentity:string;projectContextRevision:number}|null=null;
   const projectQuery=()=>activeRoadmapProject?`projectId=${encodeURIComponent(activeRoadmapProject.projectId)}&repositoryIdentity=${encodeURIComponent(activeRoadmapProject.repositoryIdentity)}&projectContextRevision=${activeRoadmapProject.projectContextRevision}`:'';
-  function bindActiveRoadmapProject(data:any){const next=data&&typeof data.projectId==='string'&&typeof data.repositoryIdentity==='string'&&Number.isSafeInteger(data.projectContextRevision)?{projectId:data.projectId,repositoryIdentity:data.repositoryIdentity,projectContextRevision:data.projectContextRevision}:null;if(!next)throw new Error('PROJECT_CONTEXT_INVALID');const changed=activeRoadmapProject!==null&&(activeRoadmapProject.projectId!==next.projectId||activeRoadmapProject.projectContextRevision!==next.projectContextRevision);activeRoadmapProject=next;if(changed){selectedEntity={type:'milestone',id:'PROJECT_ROADMAP_UNAVAILABLE'};milestoneOverviewId=null;centerViewMode='ENTITY_WORKSPACE';executionContextLock=unlockExecutionContext();collapsedNodeIds=new Set();taskRecords=[];runtimeHistory=[];selectedTaskId=null;selectedPrNavigationId=null;prNavigationSnapshot=null;raw={formalWorkPackages:{},entityDescriptions:[],localDevelopment:false};const empty=createEmptyGlobalStateReadModel(next);prLayer2=projectPrLayer2(empty,[]);wpLayer2={model:empty,records:[]};humanUatLayer2=projectHumanUatLayer2(empty,[]);uiLifecycleReadModel=empty;persistWorkspaceNavigation();}}
+  function bindActiveRoadmapProject(data:any){const next=data&&typeof data.projectId==='string'&&typeof data.repositoryIdentity==='string'&&Number.isSafeInteger(data.projectContextRevision)?{projectId:data.projectId,repositoryIdentity:data.repositoryIdentity,projectContextRevision:data.projectContextRevision}:null;if(!next)throw new Error('PROJECT_CONTEXT_INVALID');const changed=activeRoadmapProject===null||activeRoadmapProject.projectId!==next.projectId||activeRoadmapProject.repositoryIdentity!==next.repositoryIdentity||activeRoadmapProject.projectContextRevision!==next.projectContextRevision;activeRoadmapProject=next;if(changed){selectedEntity={type:'milestone',id:'PROJECT_ROADMAP_UNAVAILABLE'};milestoneOverviewId=null;centerViewMode='ENTITY_WORKSPACE';executionContextLock=unlockExecutionContext();collapsedNodeIds=new Set();taskRecords=[];runtimeHistory=[];selectedTaskId=null;selectedPrNavigationId=null;prNavigationSnapshot=null;raw={formalWorkPackages:{},entityDescriptions:[],localDevelopment:false};const empty=createEmptyGlobalStateReadModel(next);prLayer2=projectPrLayer2(empty,[]);wpLayer2={model:empty,records:[]};humanUatLayer2=projectHumanUatLayer2(empty,[]);uiLifecycleReadModel=empty;persistWorkspaceNavigation();}}
   function acceptRoadmapProjection(accepted:RoadmapProjection,_persisted:unknown,state='已加载',data?:any){bindActiveRoadmapProject(data);roadmapProjection=accepted;roadmapSyncState=`${state} r${accepted.revision}`;raw={...raw,roadmapNodes:accepted.nodes,sourceErrors:{...raw.sourceErrors,roadmap:undefined}}}
   function acceptRoadmapNotConfigured(data:any){bindActiveRoadmapProject(data);roadmapProjection=null;roadmapSyncState='未配置';raw={...raw,roadmapNodes:undefined,sourceErrors:{...raw.sourceErrors,roadmap:'ROADMAP_NOT_CONFIGURED'}}}
   async function loadAcceptedRoadmapProjection(){try{const data=await boundedRequest('/api/roadmap');if(data?.availability==='NOT_CONFIGURED'){acceptRoadmapNotConfigured(data);return}const accepted=deserializeRoadmapProjection(data?.projection);if(!accepted)throw new Error('ROADMAP_READ_MODEL_INVALID');acceptRoadmapProjection(accepted,data.projection,'已加载',data);}catch{roadmapProjection=null;roadmapSyncState='不可用';raw={...raw,roadmapNodes:undefined,sourceErrors:{...raw.sourceErrors,roadmap:'ROADMAP_READ_MODEL_BUILD_FAILED'}}}}
@@ -120,12 +120,11 @@
   $: persistWorkspaceNavigation({entity:selectedEntity,activeTab,selectedInboxId,selectedRunId,selectedTaskId,activeGlobalTab});
   $: snapshot=createProjectSnapshot(raw);
   $: wpProjection=rebuildWpLayer2(snapshot,taskRecords);
-  $: humanUatLayer2=projectHumanUatLayer2(createEmptyGlobalStateReadModel(),(snapshot.humanUat.value??[]).map((record:any)=>({entityType:record.entityType,entityId:record.entityId??record.workPackageId,status:record.status,updatedAt:record.updatedAt,record})));
-  $: uiLifecycleReadModel=composeUiLifecycleReadModel(uiLifecycleReadModel,[projectTaskLayer2ReadModel(createEmptyGlobalStateReadModel(),taskRecords,runtimeHistory),prLayer2.model,wpProjection.model,projectPhase5Lifecycle(createEmptyGlobalStateReadModel(),{runs:runtimeHistory}).model,humanUatLayer2.model],activeRoadmapProject??undefined,{tasks:taskRecords,runtimeHistory,results:taskRecords});
-  $: uiLayer2Changes.publish(uiLifecycleReadModel);
-  $: globalTasks=uiLifecycleReadModel.scopedTasks;
+  $: if(activeRoadmapProject&&prLayer2&&wpProjection){const empty=createEmptyGlobalStateReadModel(activeRoadmapProject);humanUatLayer2=projectHumanUatLayer2(empty,(snapshot.humanUat.value??[]).map((record:any)=>({entityType:record.entityType,entityId:record.entityId??record.workPackageId,status:record.status,updatedAt:record.updatedAt,record})));const taskModel=projectTaskLayer2ReadModel(empty,taskRecords,runtimeHistory);const phase5=projectPhase5Lifecycle(empty,{runs:runtimeHistory}).model;uiLifecycleReadModel=composeUiLifecycleReadModel(empty,[taskModel,prLayer2.model,wpProjection.model,phase5,humanUatLayer2.model],{tasks:taskRecords,runtimeHistory,results:taskRecords});}else{humanUatLayer2=null;uiLifecycleReadModel=null;}
+  $: if(uiLifecycleReadModel)uiLayer2Changes.publish(uiLifecycleReadModel);
+  $: globalTasks=uiLifecycleReadModel?.scopedTasks??[];
   $: context=resolveEntityContext(snapshot,selectedEntity,prLayer2,wpProjection,activeRoadmapProject??undefined);
-  $: milestoneOverviewContextCandidate=milestoneOverviewId?resolveEntityContext(snapshot,{type:'milestone',id:milestoneOverviewId},prLayer2,wpProjection,activeRoadmapProject??undefined):null;
+  $: milestoneOverviewContextCandidate=milestoneOverviewId&&prLayer2&&wpProjection?resolveEntityContext(snapshot,{type:'milestone',id:milestoneOverviewId},prLayer2,wpProjection,activeRoadmapProject??undefined):null;
   $: milestoneOverviewContext=milestoneOverviewContextCandidate?.type==='milestone'?milestoneOverviewContextCandidate:null;
   $: centerContext=centerViewMode==='MILESTONE_OVERVIEW'&&milestoneOverviewContext?milestoneOverviewContext:context;
   $: prTab=context.type==='pull_request'?resolvePrTabView(context,activeTab):null;
@@ -142,7 +141,7 @@
   $: ownerWorkflowStages=resolveOwnerWorkflowStages(context,bridgeOutbox);
   $: displayRuntime=selectCanonicalCurrentRuntime(context.runtime,runtimeHistory,selectedRunId);
   $: composerCopyResult=resolveComposerCanonicalResult(composerSubmittedRunId,[composerExactRuntime,...runtimeHistory].filter(Boolean));
-  $: scopedRuntimeHistory=uiLifecycleReadModel.scopedRuntimeHistory;
+  $: scopedRuntimeHistory=uiLifecycleReadModel?.scopedRuntimeHistory??[];
   $: scopedBridgeInbox=scopeInboxToEntity(bridgeInbox,selectedEntity,activeRoadmapProject??undefined);
   $: scopedTaskRecords=scopeTasksToEntity(globalTasks,selectedEntity,activeRoadmapProject??undefined);
   $: globalTaskGroups=buildGlobalTaskGroups(globalTasks);
@@ -161,10 +160,10 @@
   $: selectedTaskWorkPackageContextCandidate=selectedTaskWorkPackageId?resolveEntityContext(snapshot,{type:'work_package',id:selectedTaskWorkPackageId},prLayer2,wpProjection,activeRoadmapProject??undefined):null;
   $: selectedTaskWorkPackageContext=selectedTaskWorkPackageContextCandidate?.type==='work_package'?selectedTaskWorkPackageContextCandidate:null;
   $: selectedTaskRuntimeId=selectedTask?.runId??selectedTask?.executionId??null;
-  $: selectedTaskRuntime=selectedTaskRuntimeId?(selectedTaskExactRuntime?.runId===selectedTaskRuntimeId?selectedTaskExactRuntime:uiLifecycleReadModel.scopedRuntimeHistory.find((item:any)=>item.runId===selectedTaskRuntimeId)??null):null;
-  $: selectedTaskRuntimeHistory=selectedTaskRuntimeId?uiLifecycleReadModel.scopedRuntimeHistory.filter((item:any)=>item.runId===selectedTaskRuntimeId):[];
-  $: selectedTaskReport=selectedTaskRuntimeId?(uiLifecycleReadModel.scopedResults.find((item:any)=>item.runId===selectedTaskRuntimeId)?.report??null):null;
-  $: selectedTaskResultProjection=projectTaskResult({task:selectedTask,runtime:selectedTaskRuntime,outbox:uiLifecycleReadModel.scopedResults as any,reconciliationPending:selectedTaskResultReconciliationPending});
+  $: selectedTaskRuntime=selectedTaskRuntimeId?(selectedTaskExactRuntime?.runId===selectedTaskRuntimeId?selectedTaskExactRuntime:uiLifecycleReadModel?.scopedRuntimeHistory.find((item:any)=>item.runId===selectedTaskRuntimeId)??null):null;
+  $: selectedTaskRuntimeHistory=selectedTaskRuntimeId?(uiLifecycleReadModel?.scopedRuntimeHistory.filter((item:any)=>item.runId===selectedTaskRuntimeId)??[]):[];
+  $: selectedTaskReport=selectedTaskRuntimeId?(uiLifecycleReadModel?.scopedResults.find((item:any)=>item.runId===selectedTaskRuntimeId)?.report??null):null;
+  $: selectedTaskResultProjection=projectTaskResult({task:selectedTask,runtime:selectedTaskRuntime,outbox:(uiLifecycleReadModel?.scopedResults??[]) as any,reconciliationPending:selectedTaskResultReconciliationPending});
   $: selectedTaskResultKey=selectedTask?`${selectedTask.taskId}|${selectedTaskRuntimeId??''}|${selectedTask.globalProjectionRevision??0}|${selectedTask.status??''}`:'';
   $: if(selectedTaskResultKey)void reconcileSelectedTaskResult(selectedTaskResultKey);else resetSelectedTaskResultProjection();
   $: selectedTaskActiveTab=WORKSPACE_TABS.includes(activeTab)?activeTab:'运行';

@@ -53,10 +53,10 @@ function sourceRevision(record:PullRequestRecord,fallback:string){return availab
 
 /** Builds a read-only Layer 2 projection. Snapshot fields are adapter input only. */
 export function projectPrLayer2(previous:AiccGlobalStateReadModel,pullRequests:readonly PullRequestRecord[]=[],revision='UNVERSIONED',scope?:PrProjectScope):PrLayer2Projection{
-  const projectScope=scope??previous;
+  const projectScope=previous;
   if(scope&&(scope.projectId!==previous.projectId||scope.repositoryIdentity!==previous.repositoryIdentity))throw new Error('PROJECT_SCOPE_MISMATCH');
   const records=pullRequests.filter(validIdentity).map(record=>{
-    const repository=record.repository.trim(),prNumber=record.number;if(repository!==previous.repositoryIdentity)return null;const identityKey=prIdentityKey(repository,prNumber,projectScope),state=lifecycle(record);
+    const repository=record.repository.trim(),prNumber=record.number;if(repository!==previous.repositoryIdentity)return null;const identityKey=String(prNumber),state=lifecycle(record);
     const source=projectionSource(sourceEntityIdentity(projectScope,'PULL_REQUEST',identityKey),sourceRevision(record,revision));
     const value=state==='UNKNOWN'?unknownDimensionValue('pr.lifecycle'):knownDimensionValue('pr.lifecycle',state);
     return {record,repository,prNumber,identityKey,source,value};

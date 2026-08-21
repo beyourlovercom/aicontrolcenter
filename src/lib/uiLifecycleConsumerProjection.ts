@@ -34,7 +34,7 @@ const bindingKey=(kind:BindingKind,from:CanonicalEntityIdentity,to:CanonicalEnti
  * model. Later fragments only replace the same projected dimension; no UI
  * source is allowed to supply a new lifecycle value.
  */
-export function composeUiLifecycleReadModel(previous:AiccGlobalStateReadModel,fragments:readonly Layer2Fragment[],scope?:{projectId:string;repositoryIdentity:string;projectContextRevision:number},collections:GlobalStateProjectCollections={}):AiccGlobalStateReadModel{
+export function composeUiLifecycleReadModel(previous:AiccGlobalStateReadModel,fragments:readonly Layer2Fragment[],collections:GlobalStateProjectCollections={}):AiccGlobalStateReadModel{
   const dimensions=new Map<string,{identity:CanonicalEntityIdentity;fields:Map<LifecycleDimension,any>}>();
   const bindings=new Map<string,any>();
   for(const fragment of fragments){
@@ -52,8 +52,7 @@ export function composeUiLifecycleReadModel(previous:AiccGlobalStateReadModel,fr
     entities:[...dimensions.values()].map(entry=>({identity:entry.identity,dimensions:[...entry.fields.values()].map(field=>dimensionProjection(field.dimension,field.projectedValue,field.provenance))})),
     bindings:[...bindings.values()].map(binding=>explicitBinding(binding.kind,binding.from,binding.to,binding.provenance))
   };
-  if(!scope||scope.projectId!==previous.projectId||scope.repositoryIdentity!==previous.repositoryIdentity)throw new Error('UI_PROJECT_SCOPE_REQUIRED');
-  return queryGlobalStateForProject(scope,candidate,previous,undefined,collections);
+  return queryGlobalStateForProject({projectId:previous.projectId,repositoryIdentity:previous.repositoryIdentity,projectContextRevision:previous.projectContextRevision},candidate,previous,undefined,collections);
 }
 
 export function projectedLifecycle<D extends LifecycleDimension>(model:AiccGlobalStateReadModel,kind:LifecycleIdentity,id:string,dimension:D):DimensionValue<D>{

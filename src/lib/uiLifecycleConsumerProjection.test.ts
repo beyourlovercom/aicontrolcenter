@@ -6,11 +6,13 @@ import {projectTaskLayer2ReadModel} from './taskCanonicalProjection.ts';
 import {composeUiLifecycleReadModel,presentationStatus,projectTaskUiRecords,projectedLifecycleText,APP_SVELTE_LIFECYCLE_INFERENCE,APP_SVELTE_STATE_AUTHORITY,DISPLAY_FORMATTING_AUTHORITY,DUPLICATE_UI_STATUS_RESOLVER,EVIDENCE_RENDERING_AUTHORITY,SEMANTIC_STATUS_DERIVATION_IN_UI,UI_DIRECT_DOMAIN_STATE_DERIVATION,UI_LOCAL_LIFECYCLE_AUTHORITY,UI_STATE_READ_AUTHORITY} from './uiLifecycleConsumerProjection.ts';
 import {projectPhase5Lifecycle} from './runtimeResultFeedbackControlLoopProjection.ts';
 
-const task={taskId:'task-1',status:'RUNNING',executionId:'execution-1',runId:'run-1'};
-const taskModel=projectTaskLayer2ReadModel(createEmptyGlobalStateReadModel(),[task],[{runId:'run-1',phase:'RUNNING'}]);
-const runtimeModel=projectPhase5Lifecycle(createEmptyGlobalStateReadModel(),{runs:[{runId:'run-1',phase:'COMPLETED'} as any]}).model;
-const uatModel=projectHumanUatLayer2(createEmptyGlobalStateReadModel(),[{entityType:'work_package',entityId:'WP-1',status:'PASS',updatedAt:'2026-08-20T00:00:00.000Z'}]).model;
-const model=composeUiLifecycleReadModel(createEmptyGlobalStateReadModel(),[taskModel,runtimeModel,uatModel]);
+const scope={projectId:'ui-a',repositoryIdentity:'repo-ui-a',projectContextRevision:1} as const;
+const empty=()=>createEmptyGlobalStateReadModel(scope);
+const task={taskId:'task-1',status:'RUNNING',executionId:'execution-1',runId:'run-1',projectId:scope.projectId,repositoryIdentity:scope.repositoryIdentity};
+const taskModel=projectTaskLayer2ReadModel(empty(),[task],[{runId:'run-1',phase:'RUNNING'}]);
+const runtimeModel=projectPhase5Lifecycle(empty(),{runs:[{runId:'run-1',phase:'COMPLETED',projectId:scope.projectId,repositoryIdentity:scope.repositoryIdentity} as any]}).model;
+const uatModel=projectHumanUatLayer2(empty(),[{entityType:'work_package',entityId:'WP-1',status:'PASS',updatedAt:'2026-08-20T00:00:00.000Z'}]).model;
+const model=composeUiLifecycleReadModel(empty(),[taskModel,runtimeModel,uatModel]);
 
 assert.equal(UI_STATE_READ_AUTHORITY,'AICC_GLOBAL_STATE_READ_MODEL');
 assert.equal(UI_DIRECT_DOMAIN_STATE_DERIVATION,'FORBIDDEN');
@@ -38,8 +40,8 @@ const evidence=readFileSync(new URL('../components/entity/EntityEvidencePanel.sv
 const milestone=readFileSync(new URL('../components/entity/MilestoneView.svelte',import.meta.url),'utf8');
 const milestoneProgress=readFileSync(new URL('../components/entity/MilestoneProgress.svelte',import.meta.url),'utf8');
 const feedbackIsland=readFileSync(new URL('../components/GlobalFeedbackIsland.svelte',import.meta.url),'utf8');
-assert.match(app,/composeUiLifecycleReadModel\(uiLifecycleReadModel/,'App composes Layer 2 fragments before presenting state');
-assert.match(app,/projectTaskUiRecords\(uiLifecycleReadModel,taskRecords\)/,'Task consumers receive projected display records');
+assert.match(app,/composeUiLifecycleReadModel\(empty/,'App composes Layer 2 fragments before presenting state');
+assert.match(app,/globalTasks=uiLifecycleReadModel\?\.scopedTasks/,'Task consumers receive scoped Layer 2 records');
 assert.doesNotMatch(app,/\$: schedulerQueue=/,'unused App scheduler derivation is removed rather than becoming a second authority');
 assert.match(app,/selectedTaskTabStatuses=\{运行:presentationStatus\(selectedTaskRunLifecycle\)/,'Tab state formats exact projected lifecycle values');
 assert.match(humanUat,/humanUatStatus\(context.type,context.id\)/,'Human UAT reads its independent projected canonical dimension');
