@@ -1,10 +1,11 @@
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {createGlobalStateConsistencyCoordinator} from './globalStateConsistency.ts';
-import {availableSourceRevision,dimensionProjection,entityIdentity,explicitBinding,knownDimensionValue,projectionSource,sourceEntityIdentity,unknownDimensionValue,type GlobalStateProjectionCandidate} from './globalStateReadModel.ts';
+import {availableSourceRevision,createEmptyGlobalStateReadModel,dimensionProjection,entityIdentity,explicitBinding,knownDimensionValue,projectionSource,sourceEntityIdentity,unknownDimensionValue,type GlobalStateProjectionCandidate} from './globalStateReadModel.ts';
 
-const task=entityIdentity('TASK','TASK-NO-F5'),execution=entityIdentity('EXECUTION','EXEC-NO-F5'),run=entityIdentity('RUN','RUN-NO-F5'),result=entityIdentity('RESULT','RESULT-NO-F5'),feedback=entityIdentity('FEEDBACK','FEEDBACK-NO-F5');
-const source=(domain:any,id:string,revision:string)=>projectionSource(sourceEntityIdentity(domain,id),availableSourceRevision(revision));
+const scope={projectId:'no-f5',repositoryIdentity:'repo-no-f5',projectContextRevision:1} as const;
+const task=entityIdentity(scope,'TASK','TASK-NO-F5'),execution=entityIdentity(scope,'EXECUTION','EXEC-NO-F5'),run=entityIdentity(scope,'RUN','RUN-NO-F5'),result=entityIdentity(scope,'RESULT','RESULT-NO-F5'),feedback=entityIdentity(scope,'FEEDBACK','FEEDBACK-NO-F5');
+const source=(domain:any,id:string,revision:string)=>projectionSource(sourceEntityIdentity(scope,domain,id),availableSourceRevision(revision));
 function snapshot(revision:number,runState:'RUNNING'|'COMPLETED',resultAvailable:boolean,feedbackDelivery:'PENDING'|'DELIVERED'):GlobalStateProjectionCandidate{
   const taskSource=source('TASK',task.id,`task-${revision}`),executionSource=source('EXECUTION',execution.id,`execution-${revision}`),runSource=source('RUN',run.id,`run-${revision}`),resultSource=source('RESULT',result.id,`result-${revision}`),feedbackSource=source('FEEDBACK',feedback.id,`feedback-${revision}`);
   return {entities:[
@@ -16,13 +17,13 @@ function snapshot(revision:number,runState:'RUNNING'|'COMPLETED',resultAvailable
   ],bindings:[explicitBinding('TASK_TO_EXECUTION',task,execution,taskSource),explicitBinding('EXECUTION_TO_RUN',execution,run,executionSource),explicitBinding('RUN_TO_RESULT',run,result,resultSource),explicitBinding('RUN_TO_FEEDBACK',run,feedback,feedbackSource)]};
 }
 const visible:string[]=[];let reloads=0;let canonical={canonicalRevision:1,candidate:snapshot(1,'RUNNING',false,'PENDING'),projectedAt:'2026-08-20T09:00:00.000Z'};
-const coordinator=createGlobalStateConsistencyCoordinator(async()=>canonical);
+const coordinator=createGlobalStateConsistencyCoordinator(async()=>canonical,createEmptyGlobalStateReadModel(scope));
 coordinator.subscribe(change=>{const value=(kind:string,id:string,dimension:string)=>{const field=change.model.entities.find(entity=>entity.identity.kind===kind&&entity.identity.id===id)?.dimensions.find(item=>item.dimension===dimension);return field?.projectedValue.state==='KNOWN'?field.projectedValue.value:'UNKNOWN';};visible.push(`${value('RUN',run.id,'run.lifecycle')}|${value('RESULT',result.id,'result.availability')}|${value('FEEDBACK',feedback.id,'feedback.delivery')}`);});
 
 await coordinator.reconcile();
-canonical={canonicalRevision:2,candidate:snapshot(2,'COMPLETED',false,'PENDING'),projectedAt:'2026-08-20T09:01:00.000Z'};await coordinator.invalidate(sourceEntityIdentity('RUN',run.id));
-canonical={canonicalRevision:3,candidate:snapshot(3,'COMPLETED',true,'PENDING'),projectedAt:'2026-08-20T09:02:00.000Z'};await coordinator.invalidate(sourceEntityIdentity('RESULT',result.id));
-canonical={canonicalRevision:4,candidate:snapshot(4,'COMPLETED',true,'DELIVERED'),projectedAt:'2026-08-20T09:03:00.000Z'};await coordinator.invalidate(sourceEntityIdentity('FEEDBACK',feedback.id));
+canonical={canonicalRevision:2,candidate:snapshot(2,'COMPLETED',false,'PENDING'),projectedAt:'2026-08-20T09:01:00.000Z'};await coordinator.invalidate(sourceEntityIdentity(scope,'RUN',run.id));
+canonical={canonicalRevision:3,candidate:snapshot(3,'COMPLETED',true,'PENDING'),projectedAt:'2026-08-20T09:02:00.000Z'};await coordinator.invalidate(sourceEntityIdentity(scope,'RESULT',result.id));
+canonical={canonicalRevision:4,candidate:snapshot(4,'COMPLETED',true,'DELIVERED'),projectedAt:'2026-08-20T09:03:00.000Z'};await coordinator.invalidate(sourceEntityIdentity(scope,'FEEDBACK',feedback.id));
 
 assert.deepEqual(visible,['RUNNING|UNKNOWN|PENDING','COMPLETED|UNKNOWN|PENDING','COMPLETED|AVAILABLE|PENDING','COMPLETED|AVAILABLE|DELIVERED'],'Layer 3 subscriber receives every exact Layer 2 projection transition without reload');
 assert.equal(reloads,0,'the integration harness never reloads the browser');
