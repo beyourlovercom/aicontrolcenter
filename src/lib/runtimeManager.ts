@@ -351,14 +351,15 @@ export function finalizeCanonicalResult(state:RuntimeState,receivedAt=new Date()
   return state;
 }
 export function updateCanonicalResultReturn(executionId:string,update:Partial<Pick<CanonicalExecutionResult,'returnState'|'returnAttemptedAt'|'returnedAt'|'returnFailure'>>):RuntimeState|null{
-  const state=readStoredRuntimes().find(item=>item.runId===executionId)||readRuntimeHistory().find(item=>item.runId===executionId);
+  const state=findUniqueRawRuntimeIdentity([...readStoredRuntimes(),...readRuntimeHistory()],executionId);
   if(!state?.canonicalResult)return null;
   state.canonicalResult={...state.canonicalResult,...update};
   save(state);
   return state;
 }
 export function readCanonicalResult(executionId:string):RuntimeState|null{
-  return readStoredRuntimes().find(item=>item.runId===executionId&&item.canonicalResult)||readRuntimeHistory().find(item=>item.runId===executionId&&item.canonicalResult)||null;
+  const state=findUniqueRawRuntimeIdentity([...readStoredRuntimes(),...readRuntimeHistory()],executionId);
+  return state?.canonicalResult?state:null;
 }
 /** Same raw executionId can independently resolve per projectId+repositoryIdentity; a foreign scope never matches. */
 export function readRuntimeScoped(scope:Pick<ProjectEntityScope,'projectId'|'repositoryIdentity'>,runId:string):RuntimeState|null{
@@ -394,13 +395,19 @@ export async function readRuntimeHistoryAsync():Promise<RuntimeState[]>{return (
 export async function readRuntimeReadOnly(workPackageId?:string,entityType?:RuntimeState['entityType'],entityId?:string,projectScope?:Pick<ProjectEntityScope,'projectId'|'repositoryIdentity'>):Promise<RuntimeState|null>{const snapshot=await readRuntimeProjectionSnapshot(),isWpRead=Boolean(workPackageId||entityType==='work_package'),matches=(item:RuntimeState)=>{if(isWpRead&&!projectScope)return false;if(isWpRead&&!runtimeBelongsToProject(item,projectScope!))return false;return !entityId?(!workPackageId||item.workPackageId===workPackageId):item.entityType===entityType&&item.entityId===entityId},candidates=snapshot.stored.filter(matches).sort((a,b)=>Date.parse(b.lastActivityAt||b.startedAt)-Date.parse(a.lastActivityAt||a.startedAt));const active=candidates.find(item=>['STARTING','RUNNING','STOPPING'].includes(item.phase));return active??candidates[0]??snapshot.history.find(matches)??null}
 export async function readRuntimeByRunIdReadOnly(runId:string):Promise<RuntimeState|null>{
   if(!runId)return null;
+  const snapshot=await readRuntimeProjectionSnapshot();
+  const fromSnapshot=findUniqueRawRuntimeIdentity([...snapshot.stored,...snapshot.history],runId);
+  if(fromSnapshot)return fromSnapshot;
   const candidates=[join(STATE_DIR,`runtime-${runId}.json`),RUN_FILE];
+  const fileMatches:RuntimeState[]=[];
   for(const file of candidates){
-    try{const parsed=JSON.parse(await readFile(file,'utf8')) as RuntimeState;if(parsed?.runId===runId)return reconcileObservedRuntime(reconcileRuntimeEntityBinding(parsed))}catch{}
+    try{const parsed=JSON.parse(await readFile(file,'utf8')) as RuntimeState;if(parsed?.runId===runId)fileMatches.push(parsed)}catch{}
   }
-  try{const parsed=JSON.parse(await readFile(HISTORY_FILE,'utf8')) as unknown;return Array.isArray(parsed)?(parsed as RuntimeState[]).find(item=>item?.runId===runId)??null:null}catch{return null}
+  try{const parsed=JSON.parse(await readFile(HISTORY_FILE,'utf8')) as unknown;if(Array.isArray(parsed))fileMatches.push(...(parsed as RuntimeState[]).filter(item=>item?.runId===runId))}catch{}
+  const unique=findUniqueRawRuntimeIdentity(fileMatches,runId);
+  return unique?reconcileObservedRuntime(reconcileRuntimeEntityBinding(unique)):null;
 }
-export async function readCanonicalResultAsync(executionId:string):Promise<RuntimeState|null>{const snapshot=await readRuntimeProjectionSnapshot();return snapshot.stored.find(item=>item.runId===executionId&&item.canonicalResult)??snapshot.history.find(item=>item.runId===executionId&&item.canonicalResult)??null}
+export async function readCanonicalResultAsync(executionId:string):Promise<RuntimeState|null>{const snapshot=await readRuntimeProjectionSnapshot();const state=findUniqueRawRuntimeIdentity([...snapshot.stored,...snapshot.history],executionId);return state?.canonicalResult?state:null}
 export function readRuntime(workPackageId?: string, entityType?: RuntimeState['entityType'], entityId?: string, projectScope?: Pick<ProjectEntityScope,'projectId'|'repositoryIdentity'>): RuntimeState | null {
   const isWpRead=Boolean(workPackageId||entityType==='work_package');
   const candidates = readStoredRuntimes()
@@ -448,6 +455,13 @@ export function runtimeStorageKey(state:Pick<RuntimeState,'runId'|'projectId'|'r
 }
 function sameScopedRuntimeIdentity(a:Pick<RuntimeState,'runId'|'projectId'|'repositoryIdentity'>,b:Pick<RuntimeState,'runId'|'projectId'|'repositoryIdentity'>):boolean{
   return a.runId===b.runId&&a.projectId===b.projectId&&a.repositoryIdentity===b.repositoryIdentity;
+}
+/** Raw-runId-only lookups must fail closed (null) when the raw runId maps to more than one distinct project-scoped identity. */
+function findUniqueRawRuntimeIdentity(candidates:RuntimeState[],runId:string):RuntimeState|null{
+  const matches=candidates.filter(item=>item.runId===runId);
+  const distinctScopes=new Set(matches.map(item=>`${item.projectId}\x00${item.repositoryIdentity}`));
+  if(distinctScopes.size!==1)return null;
+  return matches[0]??null;
 }
 function persistTerminal(s: RuntimeState) {
   if (
@@ -646,13 +660,19 @@ export function startRuntime(
     throw error;
   }
 }
-export function persistRemoteRuntimeFacts(executionId:string,facts:{pid?:number|null;stdout?:string;stderr?:string;exitCode?:number|null;startedAt?:string;completedAt?:string;state?:string;session_id?:string;model?:string;cwd?:string;result?:string}):RuntimeState|null{
-  const state=readStoredRuntimes().find(item=>item.runId===executionId)||readRuntimeHistory().find(item=>item.runId===executionId);if(!state)return null;
+/** Remote lifecycle mutation must attach to the explicit projectId+repositoryIdentity scope of the canonical runtime; a raw executionId alone never selects the target. */
+export function persistRemoteRuntimeFacts(scope:Pick<ProjectEntityScope,'projectId'|'repositoryIdentity'>,executionId:string,facts:{pid?:number|null;stdout?:string;stderr?:string;exitCode?:number|null;startedAt?:string;completedAt?:string;state?:string;session_id?:string;model?:string;cwd?:string;result?:string}):RuntimeState|null{
+  const state=readRuntimeScoped(scope,executionId);if(!state)return null;
   const incoming=facts.state?.toUpperCase();if(['COMPLETED','FAILED'].includes(state.phase)&&incoming!=='COMPLETED'&&incoming!=='FAILED')return state;
   state.executionProvider='REMOTE_CLAUDE';state.runnerId=state.runnerId??'US-WAREHOUSE-01';state.pid=facts.pid??state.pid;state.stdout=facts.stdout??state.stdout;state.stderr=facts.stderr??state.stderr;state.exitCode=facts.exitCode??state.exitCode;state.startedAt=facts.startedAt??state.startedAt;state.completedAt=facts.completedAt??state.completedAt;state.threadId=facts.session_id??state.threadId;state.resolvedModel=facts.model??state.resolvedModel;state.spawnCwd=facts.cwd??state.spawnCwd;state.latestEvent=facts.state??state.latestEvent;state.phase=incoming==='COMPLETED'?'COMPLETED':incoming==='FAILED'?'FAILED':state.phase;state.finalAgentMessage=facts.result??state.finalAgentMessage;state.events=[...(state.events??[]),facts.state??'REMOTE_FACTS'];if(state.phase==='COMPLETED'||state.phase==='FAILED')finalizeCanonicalResult(state,facts.completedAt);save(state);return state;
 }
-export function superviseRemoteRuntime(executionId:string,envelope:{executionId:string;runnerId:string;provider:string;repositoryRoot:string;instruction:string;createdAt:string},url:string):Promise<void>{const existing=remoteLifecycleOwners.get(executionId);if(existing)return existing;const owner=(async()=>{try{const client=new DirectRemoteRunnerClient(url),accepted=await client.submit(envelope);const bound=readStoredRuntimes().find(item=>item.runId===executionId);if(bound){bound.remoteExecutionId=executionId;bound.remoteRunnerUrl=url;bound.remoteRepositoryRoot=envelope.repositoryRoot;bound.remoteInstruction=envelope.instruction;bound.runnerId=envelope.runnerId;bound.executionProvider='REMOTE_CLAUDE';save(bound)}for(let i=0;i<600;i++){const remote=await client.get(executionId),facts=remote?.facts;let result:string|undefined;if(typeof facts?.stdout==='string')for(const line of facts.stdout.split('\n'))try{const parsed=JSON.parse(line);if(typeof parsed?.result==='string')result=parsed.result}catch{}persistRemoteRuntimeFacts(executionId,{...facts,result,state:remote?.state});if(['COMPLETED','FAILED'].includes(remote?.state))break;await new Promise(resolve=>setTimeout(resolve,1000))}}finally{remoteLifecycleOwners.delete(executionId)}})();remoteLifecycleOwners.set(executionId,owner);return owner}
-export function recoverRemoteRuntimeSupervision(){for(const runtime of readStoredRuntimes()){if(runtime.executionProvider==='REMOTE_CLAUDE'&&runtime.remoteExecutionId&&runtime.remoteRunnerUrl&&runtime.phase!=='COMPLETED'&&runtime.phase!=='FAILED'&&runtime.remoteRepositoryRoot&&runtime.remoteInstruction)void superviseRemoteRuntime(runtime.runId,{executionId:runtime.remoteExecutionId,runnerId:runtime.runnerId??'US-WAREHOUSE-01',provider:'CLAUDE_CODE',repositoryRoot:runtime.remoteRepositoryRoot,instruction:runtime.remoteInstruction,createdAt:runtime.startedAt},runtime.remoteRunnerUrl)}}
+export function superviseRemoteRuntime(scope:Pick<ProjectEntityScope,'projectId'|'repositoryIdentity'>,executionId:string,envelope:{executionId:string;runnerId:string;provider:string;repositoryRoot:string;instruction:string;createdAt:string},url:string):Promise<void>{
+  const ownerKey=scopedEntityKey(scope,'remote-lifecycle',executionId);
+  const existing=remoteLifecycleOwners.get(ownerKey);if(existing)return existing;
+  const owner=(async()=>{try{const client=new DirectRemoteRunnerClient(url);await client.submit(envelope);const bound=readRuntimeScoped(scope,executionId);if(bound){bound.remoteExecutionId=executionId;bound.remoteRunnerUrl=url;bound.remoteRepositoryRoot=envelope.repositoryRoot;bound.remoteInstruction=envelope.instruction;bound.runnerId=envelope.runnerId;bound.executionProvider='REMOTE_CLAUDE';save(bound)}for(let i=0;i<600;i++){const remote=await client.get(executionId),facts=remote?.facts;let result:string|undefined;if(typeof facts?.stdout==='string')for(const line of facts.stdout.split('\n'))try{const parsed=JSON.parse(line);if(typeof parsed?.result==='string')result=parsed.result}catch{}persistRemoteRuntimeFacts(scope,executionId,{...facts,result,state:remote?.state});if(['COMPLETED','FAILED'].includes(remote?.state))break;await new Promise(resolve=>setTimeout(resolve,1000))}}finally{remoteLifecycleOwners.delete(ownerKey)}})();
+  remoteLifecycleOwners.set(ownerKey,owner);return owner;
+}
+export function recoverRemoteRuntimeSupervision(){for(const runtime of readStoredRuntimes()){if(runtime.executionProvider==='REMOTE_CLAUDE'&&runtime.remoteExecutionId&&runtime.remoteRunnerUrl&&runtime.phase!=='COMPLETED'&&runtime.phase!=='FAILED'&&runtime.remoteRepositoryRoot&&runtime.remoteInstruction)void superviseRemoteRuntime({projectId:runtime.projectId,repositoryIdentity:runtime.repositoryIdentity},runtime.runId,{executionId:runtime.remoteExecutionId,runnerId:runtime.runnerId??'US-WAREHOUSE-01',provider:'CLAUDE_CODE',repositoryRoot:runtime.remoteRepositoryRoot,instruction:runtime.remoteInstruction,createdAt:runtime.startedAt},runtime.remoteRunnerUrl)}}
 export function parseEvent(line: string, s: RuntimeState, persist = true) {
   try {
     const e = JSON.parse(line) as {
@@ -720,7 +740,7 @@ export function parseEvent(line: string, s: RuntimeState, persist = true) {
 }
 export function stopRuntime(runId: string) {
   if(!runId)throw new Error("RUN_ID_REQUIRED");
-  const s = readStoredRuntimes().find(item=>item.runId===runId)??readRuntimeHistory().find(item=>item.runId===runId)??null;
+  const s = findUniqueRawRuntimeIdentity([...readStoredRuntimes(),...readRuntimeHistory()],runId);
   if (!s) throw new Error("NO_ACTIVE_RUN");
   if(['COMPLETED','FAILED','STOPPED','RECOVERY_REQUIRED'].includes(s.phase))throw new Error("NO_ACTIVE_RUN");
   if(s.workPackageId)revokeExecutionLease(s.workPackageId);
@@ -739,7 +759,7 @@ export async function stopRuntimeWithGrace(runId:string,graceMs=1000){
   const stopped=stopRuntime(runId);
   if(stopped.phase!=='STOPPING'||!stopped.pid)return stopped;
   await new Promise(resolve=>setTimeout(resolve,graceMs));
-  const current=readStoredRuntimes().find(item=>item.runId===runId)??readRuntimeHistory().find(item=>item.runId===runId)??null;
+  const current=findUniqueRawRuntimeIdentity([...readStoredRuntimes(),...readRuntimeHistory()],runId);
   if(!current||current.runId!==runId||current.pid!==stopped.pid||!isPidAlive(stopped.pid))return current??stopped;
   try{process.kill(stopped.pid,'SIGKILL')}catch{}
   return current;
