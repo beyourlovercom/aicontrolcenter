@@ -8,6 +8,66 @@ OpenSpec, Codex sessions, runtime state, dashboards, local workspaces, caches, a
 
 No tool, agent, artifact, task checkbox, local session, or application state may authorize its own execution.
 
+## Project-Scoped Task / Run / Result Storage Authority
+
+`AICC_PROJECT_TASK_REGISTRY_AUTHORITY_V1 = FROZEN`
+
+`PROJECT_STATE_ROOT = ~/.aicc-v2/projects/<projectId>/`
+`TASK_INDEX = ~/.aicc-v2/projects/<projectId>/tasks/task-registry.json`
+`RUN_LEDGER_ROOT = ~/.aicc-v2/projects/<projectId>/runs/<runId>/`
+
+`EVERY_EXECUTION_HAS_TASK = REQUIRED`
+`TASK_PERSIST_BEFORE_RUN = REQUIRED`
+`EVERY_RUN_BELONGS_TO_TASK = REQUIRED`
+`ALL_EXECUTION_CHANNELS_USE_CANONICAL_TASK_PATH = REQUIRED`
+`ONE_RUN_ONE_RESULT_SLOT = REQUIRED`
+`CANONICAL_RESULT_WRITTEN_TO_TASK = REQUIRED`
+`RESULT_READ_AUTHORITY = PROJECT_TASK_REGISTRY`
+`BRIDGE_RESULT_SOURCE = PROJECT_TASK_REGISTRY`
+`OUTBOX_RESULT_AUTHORITY = NO`
+`RUNTIME_RESULT_READ_AUTHORITY = NO`
+`RUN_LEDGER = IMMUTABLE_EVIDENCE`
+`PHYSICAL_AND_LOGICAL_PROJECT_ISOLATION = REQUIRED`
+`AICC_DECISION_AUTHORITY = 0`
+
+Every submitted execution, regardless of channel, must first become a durable
+canonical Task in the active project's Task Index before any Run may launch.
+This applies to ChatGPT Bridge, Global Composer, clipboard/manual submission,
+local APIs, Local Codex, Remote Claude, retry/resume, and future desktop/mobile
+entry points. No execution channel may bypass Task persistence.
+
+Every Run must belong to exactly one persisted Task and retain its exact
+`projectId`, `repositoryIdentity`, `taskId`, `instructionId`, and `runId`. A Task
+may own multiple Runs; retry or resume must append a new Run identity and must
+never overwrite earlier Run history.
+
+When a canonical result exists, it must be atomically persisted into that Run's
+result slot in the Project Task Registry before the result is exposed as ready to
+consumers. Missing result evidence remains `NOT_AVAILABLE` / `null`; AICC must not
+fabricate PASS, FAIL, BLOCKED, or any other semantic result.
+
+All result consumers, including Bridge return-to-GPT, must resolve results through
+the AICC server/API from the Project Task Registry using project-scoped identity.
+Consumers must not reconstruct canonical results from active Runtime state, Outbox
+projection, current UI selection, or "latest" execution heuristics. Runtime may
+originate execution/result evidence, but it is not the consumer result-read
+authority after persistence.
+
+Bridge Outbox is delivery-state evidence only (`RESULT_READY`,
+`RETURN_SUBMITTING`, `RETURNED_TO_GPT`, `DELIVERY_FAILED`, or equivalent) and must
+not decide whether a Run has a canonical result. A missing/stale Outbox entry must
+not make a persisted canonical result disappear.
+
+Each project is physically partitioned under `projects/<projectId>/` and every
+record must still carry and validate `projectId + repositoryIdentity`; folder
+location alone is never sufficient identity authority. Per-Run Ledger files under
+`runs/<runId>/` preserve durable immutable execution evidence and final output, but
+they do not replace the Project Task Registry as the canonical result read model.
+
+Legacy shared files directly under `~/.aicc-v2/` may be used only as bounded
+migration/read fallback while parity is proven. New execution/result behavior must
+not add new primary authority to those legacy shared files.
+
 ## GitHub-Reviewed Development Loop Authority
 
 `AICC_GITHUB_REVIEW_LOOP_V1 = FROZEN`
