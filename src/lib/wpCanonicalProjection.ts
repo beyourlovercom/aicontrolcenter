@@ -132,6 +132,6 @@ export function projectWpRoadmapNodes(nodes:readonly RoadmapNode[],projection:Wp
     const children=projectWpRoadmapNodes(node.children,projection);
     const record=node.type==='work_package'?byId.get(node.id):undefined;
     const milestoneState=node.type==='milestone'?milestoneLifecycle.get(node.id):null;
-    return record?{...node,children,status:record.lifecycleStatus,canonicalStatus:record.lifecycleStatus,progress:record.progress.state==='KNOWN'?Number(record.progress.value):null,phaseProgress:node.phaseProgress}:milestoneState?{...node,children,status:milestoneState as AiccStatus,canonicalStatus:milestoneState}: {...node,children};
+    return record?{...node,children,status:record.lifecycleStatus,canonicalStatus:record.lifecycleStatus,progress:record.progress.state==='KNOWN'?Number(record.progress.value):null,phaseProgress:record.phaseProgress}:milestoneState?{...node,children,status:milestoneState as AiccStatus,canonicalStatus:milestoneState}: {...node,children};
   });
 }
