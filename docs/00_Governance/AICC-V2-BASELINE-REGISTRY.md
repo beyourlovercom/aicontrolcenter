@@ -10,6 +10,7 @@
 | AICC_CANONICAL_TASK_INTERACTION_CONTRACT | 1.0 | OWNER_APPROVED_BASELINE | 2026-08-16 | Canonical Task UI interaction authority | PASS |
 | AICC_UNIFIED_CANONICAL_TASK_FEED_UI_CONTRACT | 1.0 | OWNER_APPROVED_BASELINE | 2026-08-16 | Canonical Task collection/list projection authority | PASS |
 | AICC_V2_CORE_CONTROL_LOOP | 1.0 | OWNER_APPROVED / HUMAN_UAT_PROVEN | 2026-08-16 | Canonical V2 GPT Web → AICC → Codex Luna control-loop authority | PASS |
+| AICC_LOCAL_PAGE_FAILSAFE_STATUS_V1 | 1.0 | OWNER_APPROVED_BASELINE | 2026-08-22 | Specialized local-page failure evidence baseline under Local Service Health Recovery and UI standards | PASS |
 | AICC-V2-CANONICAL-EXECUTION-STANDARD-001 | 1.2 | APPROVED_BASELINE | 2026-08-13 | 2 | PASS |
 
 The registry records approved authority documents and current implementation

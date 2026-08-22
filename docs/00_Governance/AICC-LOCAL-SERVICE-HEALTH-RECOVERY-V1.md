@@ -77,6 +77,13 @@ The existing visual design and top-header placement remain unchanged. UI state
 projection must not show `正常` solely because a PID exists; degraded,
 restarting, disconnected, and recovery-failed states remain truthful.
 
+## Page-render separation
+
+`AICC_LOCAL_PAGE_FAILSAFE_STATUS_V1` is the specialized authority for blank/failed local-page
+render evidence. A blank or failed page render does not establish local-service failure and must
+not, by itself, trigger recovery or restart. Service recovery continues to require the independent
+process/port/health evidence defined in this document.
+
 ## Owner UAT
 
 Owner UAT covers a healthy service, process-dead recovery, process-alive but

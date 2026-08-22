@@ -30,7 +30,8 @@
     "preview": "vite preview",
     "pretauri": "python3 scripts/generate_icon.py && tauri icon src-tauri/icons/icon.png",
     "tauri": "tauri",
-    "test:autostart": "node --experimental-strip-types --experimental-specifier-resolution=node src/lib/localServiceAutostart.test.ts"
+    "test:autostart": "node --experimental-strip-types --experimental-specifier-resolution=node src/lib/localServiceAutostart.test.ts",
+    "test:local-page-failsafe": "node --experimental-strip-types --experimental-specifier-resolution=node src/lib/localPageFailsafeStatus.test.ts"
   },
   "dependencies": {
     "@tauri-apps/api": "2.11.1",
