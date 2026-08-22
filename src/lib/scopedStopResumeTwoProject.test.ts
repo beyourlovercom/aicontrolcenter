@@ -81,35 +81,60 @@ await assert.rejects(
   'stopRuntimeWithGraceScoped fails closed on unknown runId in scope'
 );
 
-// --- Blocker 2: scoped resume selects only matching inbox item ---
+// --- Blocker 2: scoped resume dedupe is exact to projectId+repositoryIdentity ---
+// Both A and B use the SAME raw resume runId, each persisted as STOPPED inbox items under different scopes.
 
-const inboxRunIdA = 'run-scoped-resume-inbox-A-001';
-const inboxRunIdB = 'run-scoped-resume-inbox-B-001';
-const itemA = makeInboxItem(scopeA, inboxRunIdA, `inbox-item-A-${Date.now()}`);
-const itemB = makeInboxItem(scopeB, inboxRunIdB, `inbox-item-B-${Date.now()}`);
+const sharedResumeRunId = 'run-scoped-resume-shared-001';
+const itemA = makeInboxItem(scopeA, sharedResumeRunId, `inbox-item-A-${Date.now()}`);
+const itemB = makeInboxItem(scopeB, sharedResumeRunId, `inbox-item-B-${Date.now()}`);
 
 persistNewInboxItemForTest(itemA);
 persistNewInboxItemForTest(itemB);
 
-// A's inbox item is found under scopeA+inboxRunIdA.
+// Both items are independently visible under their respective scopes with the same runId.
 const inboxItems = readInbox();
-const foundA = inboxItems.find(i => i.runId === inboxRunIdA && i.projectId === scopeA.projectId);
-const foundB = inboxItems.find(i => i.runId === inboxRunIdB && i.projectId === scopeB.projectId);
-assert.ok(foundA, 'inbox item A found');
-assert.ok(foundB, 'inbox item B found');
+const foundA = inboxItems.find(i => i.runId === sharedResumeRunId && i.projectId === scopeA.projectId);
+const foundB = inboxItems.find(i => i.runId === sharedResumeRunId && i.projectId === scopeB.projectId);
+assert.ok(foundA, 'inbox item A found under scopeA with sharedResumeRunId');
+assert.ok(foundB, 'inbox item B found under scopeB with sharedResumeRunId');
 
-// resumeStoppedExecutionScoped with scopeA and inboxRunIdB (B's runId) must fail closed.
+// Simulate scope A having already created a resume item for sharedResumeRunId.
+// This synthetic record has resumedFromRunId=sharedResumeRunId AND scopeA identity.
+const alreadyResumedA = {
+  ...itemA,
+  id: `resume-already-A-${Date.now()}`,
+  resumedFromRunId: sharedResumeRunId,
+  state: 'READY' as const,
+  transportState: 'QUEUED' as const,
+  runId: undefined,
+};
+persistNewInboxItemForTest(alreadyResumedA as any);
+
+// Scope A: dedupe fires because scope A already has a resume record for sharedResumeRunId.
 assert.throws(
-  () => resumeStoppedExecutionScoped(scopeA, inboxRunIdB),
-  /RESUME_SOURCE_EXECUTION_NOT_FOUND/,
-  'resumeStoppedExecutionScoped fails closed when runId belongs to foreign project scope'
+  () => resumeStoppedExecutionScoped(scopeA, sharedResumeRunId),
+  /RESUME_ALREADY_CREATED/,
+  'resumeStoppedExecutionScoped throws RESUME_ALREADY_CREATED for scope A when A already has a resume record'
 );
 
-// resumeStoppedExecutionScoped with scopeB and inboxRunIdA (A's runId) must fail closed.
+// Scope B: dedupe must NOT fire even though A has a resume record for the same raw runId.
+// B proceeds past the dedupe check; any subsequent error must NOT be RESUME_ALREADY_CREATED.
+let scopeBError: Error | undefined;
+try { resumeStoppedExecutionScoped(scopeB, sharedResumeRunId); }
+catch (e) { scopeBError = e as Error; }
+assert.ok(
+  !scopeBError || !/RESUME_ALREADY_CREATED/.test(scopeBError.message),
+  `resumeStoppedExecutionScoped must not block scope B with RESUME_ALREADY_CREATED; got: ${scopeBError?.message}`
+);
+
+// Foreign/missing scope fail-closed assertions remain.
+// resumeStoppedExecutionScoped with scopeA and a runId that only exists under scopeB must fail closed.
+const itemBOnly = makeInboxItem(scopeB, 'run-scoped-resume-B-only-001', `inbox-item-B-only-${Date.now()}`);
+persistNewInboxItemForTest(itemBOnly);
 assert.throws(
-  () => resumeStoppedExecutionScoped(scopeB, inboxRunIdA),
+  () => resumeStoppedExecutionScoped(scopeA, 'run-scoped-resume-B-only-001'),
   /RESUME_SOURCE_EXECUTION_NOT_FOUND/,
-  'resumeStoppedExecutionScoped fails closed when scope does not match inbox item project'
+  'resumeStoppedExecutionScoped fails closed when runId belongs to foreign project scope'
 );
 
 // Missing runId in any scope fails closed.

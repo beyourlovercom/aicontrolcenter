@@ -187,7 +187,7 @@ export function resumeStoppedExecutionScoped(scope:Pick<import('./projectEntityS
  const source=readInbox().find(item=>item.runId===runId&&item.projectId===scope.projectId&&item.repositoryIdentity===scope.repositoryIdentity);
  if(!source||!source.instruction)throw new Error('RESUME_SOURCE_EXECUTION_NOT_FOUND');
  if(!source.projectId||source.projectId!==scope.projectId||source.repositoryIdentity!==scope.repositoryIdentity)throw new Error('SCOPE_MISMATCH');
- if(read<InboxItem[]>(inboxFile,[]).some(item=>item.resumedFromRunId===runId))throw new Error('RESUME_ALREADY_CREATED');
+ if(read<InboxItem[]>(inboxFile,[]).some(item=>item.resumedFromRunId===runId&&item.projectId===scope.projectId&&item.repositoryIdentity===scope.repositoryIdentity))throw new Error('RESUME_ALREADY_CREATED');
  const now=new Date().toISOString(),item:InboxItem={...source,id:`resume-${source.id}-${Date.now()}-${Math.random().toString(36).slice(2,8)}`,resumedFromRunId:runId,state:'READY',transportState:'QUEUED',executionId:undefined,runId:undefined,runtimeState:undefined,startedAt:undefined,terminalState:undefined,exitCode:undefined,createdAt:now,updatedAt:now,originContext:{...source.originContext,runId:undefined}};
  persistNewInboxItem(item);
  const launched=launchInboxItem(item.id,{model:source.model,reasoning:source.reasoning_effort});
