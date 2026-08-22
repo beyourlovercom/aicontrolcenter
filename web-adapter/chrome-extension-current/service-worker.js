@@ -1,6 +1,7 @@
 const AICC_ORIGIN = 'http://127.0.0.1:1420';
 const CORRELATION_KEY = 'aicc-gpt-bridge-adapter-correlation-v1';
 const PENDING_SUBMISSION_KEY = 'aicc-gpt-bridge-pending-submission-v1';
+function scopedStorageKey(base, scopeId) { const exact = String(scopeId || '').trim(); if (!exact) throw failure('BRIDGE_SCOPE_REQUIRED', '缺少 Bridge conversation scope。', '刷新目标 ChatGPT conversation 后重试。'); return `${base}:${exact}`; }
 const AUTO_LOOP_STATUS_PATH = '/api/gpt-bridge/auto-loop';
 const LOCAL_SYNC_KEY = 'aicc-bug-registry-local-sync-v1';
 
@@ -98,9 +99,11 @@ async function sendInstruction(message) {
   const item = body.item;
   if (!item || !item.id) throw failure('INBOX_RESPONSE_INVALID', 'AICC 返回了无法识别的 Inbox 结果。', '检查本地服务日志后重试。');
   const correlation = { submissionId: item.submissionId || item.id, inboxId: item.id, instructionId: item.instruction?.instructionId, taskId: item.taskId, sourceType, ownerDirectExecution, sourceReference: message.sourceReference, originContext: message.originContext, tabId: message.tabId, sentAt: new Date().toISOString(), ...(item.executionId ? { executionId: item.executionId } : {}), ...(item.runId ? { runId: item.runId } : {}) };
-  const pending = (await chrome.storage.local.get(PENDING_SUBMISSION_KEY))[PENDING_SUBMISSION_KEY];
+  const correlationKey = scopedStorageKey(CORRELATION_KEY, message.bridgeScopeId);
+  const pendingKey = scopedStorageKey(PENDING_SUBMISSION_KEY, message.bridgeScopeId);
+  const pending = (await chrome.storage.local.get(pendingKey))[pendingKey];
   const acknowledged = pending?.submission_id === message.submissionId ? { ...pending, ack_state: 'ACKNOWLEDGED', inbox_id: item.id, task_id: item.taskId, execution_id: item.executionId, run_id: item.runId, updated_at: new Date().toISOString() } : pending;
-    await chrome.storage.local.set({ [CORRELATION_KEY]: correlation, ...(acknowledged ? { [PENDING_SUBMISSION_KEY]: acknowledged } : {}) });
+    await chrome.storage.local.set({ [correlationKey]: correlation, ...(acknowledged ? { [pendingKey]: acknowledged } : {}) });
   return { item, correlation };
 }
 
@@ -115,17 +118,19 @@ function exactPendingInbox(pending, items) {
 }
 
 async function reconcileSubmission(message = {}) {
-  const stored = await chrome.storage.local.get([PENDING_SUBMISSION_KEY, CORRELATION_KEY]);
-  const pending = message.pending || stored[PENDING_SUBMISSION_KEY];
-  if (!pending?.submission_id) return { reconciled: false, item: null, correlation: stored[CORRELATION_KEY] || null };
+  const pendingKey = scopedStorageKey(PENDING_SUBMISSION_KEY, message.bridgeScopeId);
+  const correlationKey = scopedStorageKey(CORRELATION_KEY, message.bridgeScopeId);
+  const stored = await chrome.storage.local.get([pendingKey, correlationKey]);
+  const pending = message.pending || stored[pendingKey];
+  if (!pending?.submission_id) return { reconciled: false, item: null, correlation: stored[correlationKey] || null };
   const [inboxBody, outboxBody] = await Promise.all([request('/api/gpt-bridge/inbox'), request('/api/gpt-bridge/outbox')]);
   const inbox = exactPendingInbox(pending, Array.isArray(inboxBody.items) ? inboxBody.items : []);
   if (!inbox) return { reconciled: false, item: null, correlation: null, pending };
   const outbox = (Array.isArray(outboxBody.items) ? outboxBody.items : []).find(candidate => candidate.inboxId === inbox.id && (!inbox.runId || candidate.runId === inbox.runId)) || null;
   const item = outbox || inbox;
-  const correlation = { ...(stored[CORRELATION_KEY] || {}), submissionId: inbox.submissionId || pending.submission_id, inboxId: inbox.id, instructionId: inbox.instruction?.instructionId || pending.instruction_id, taskId: inbox.taskId, executionId: item.executionId || inbox.executionId, runId: item.runId || inbox.runId, sourceType: pending.source, sourceReference: pending.source_reference, originContext: pending.origin_context || (pending.conversation_id ? { conversationId: pending.conversation_id } : undefined), reconciledAt: new Date().toISOString() };
+  const correlation = { ...(stored[correlationKey] || {}), submissionId: inbox.submissionId || pending.submission_id, inboxId: inbox.id, instructionId: inbox.instruction?.instructionId || pending.instruction_id, taskId: inbox.taskId, executionId: item.executionId || inbox.executionId, runId: item.runId || inbox.runId, sourceType: pending.source, sourceReference: pending.source_reference, originContext: pending.origin_context || (pending.conversation_id ? { conversationId: pending.conversation_id } : undefined), reconciledAt: new Date().toISOString() };
   const acknowledged = { ...pending, ack_state: 'ACKNOWLEDGED', inbox_id: inbox.id, task_id: inbox.taskId, execution_id: correlation.executionId, run_id: correlation.runId, updated_at: new Date().toISOString() };
-  await chrome.storage.local.set({ [CORRELATION_KEY]: correlation, [PENDING_SUBMISSION_KEY]: acknowledged });
+  await chrome.storage.local.set({ [correlationKey]: correlation, [pendingKey]: acknowledged });
   return { reconciled: true, item, inbox, correlation, pending: acknowledged };
 }
 
@@ -150,13 +155,14 @@ async function localSyncBugRegistry(message) {
 }
 
 async function pollResult(message) {
-  const stored = (await chrome.storage.local.get(CORRELATION_KEY))[CORRELATION_KEY];
+  const correlationKey = scopedStorageKey(CORRELATION_KEY, message.bridgeScopeId);
+  const stored = (await chrome.storage.local.get(correlationKey))[correlationKey];
   const correlation = message.correlation || stored;
   if (!correlation?.inboxId) return { item: null, correlation: null };
   const body = await request('/api/gpt-bridge/outbox');
   const item = (Array.isArray(body.items) ? body.items : []).find(candidate => candidate.inboxId === correlation.inboxId && (!correlation.runId || candidate.runId === correlation.runId)) || null;
   const resolvedCorrelation = item?.runId && !correlation.runId ? { ...correlation, runId: item.runId } : correlation;
-  if (item?.runId && !correlation.runId) await chrome.storage.local.set({ [CORRELATION_KEY]: resolvedCorrelation });
+  if (item?.runId && !correlation.runId) await chrome.storage.local.set({ [correlationKey]: resolvedCorrelation });
   return { item, correlation: resolvedCorrelation };
 }
 
@@ -165,7 +171,8 @@ async function remoteClaudeStatus() {
 }
 
 async function returnResult(message) {
-  const stored = (await chrome.storage.local.get(CORRELATION_KEY))[CORRELATION_KEY];
+  const correlationKey = scopedStorageKey(CORRELATION_KEY, message.bridgeScopeId);
+  const stored = (await chrome.storage.local.get(correlationKey))[correlationKey];
   const correlation = message.correlation || stored;
   if (!correlation?.inboxId || !correlation.originContext?.conversationId) throw failure('EXACT_ORIGIN_UNAVAILABLE', '找不到原始 ChatGPT 会话。', '返回原始对话后重试。');
   if (message.sourceReference !== correlation.sourceReference || message.originContext?.conversationId !== correlation.originContext.conversationId) throw failure('EXACT_ORIGIN_UNAVAILABLE', '当前页面不是原始 ChatGPT 会话。', '返回原始对话后重试。');
@@ -190,7 +197,8 @@ async function failReturn(message) {
 
 async function markReportInserted(message) {
   if (!message?.runId || !message?.sourceReference) throw failure('INSERT_CORRELATION_REQUIRED', '缺少原始 ChatGPT 会话关联。', '返回原始对话后重试。');
-  const correlation = (await chrome.storage.local.get(CORRELATION_KEY))[CORRELATION_KEY];
+  const correlationKey = scopedStorageKey(CORRELATION_KEY, message.bridgeScopeId);
+  const correlation = (await chrome.storage.local.get(correlationKey))[correlationKey];
   if (!correlation || correlation.runId !== message.runId || correlation.sourceReference !== message.sourceReference) throw failure('INSERT_CORRELATION_MISMATCH', '运行报告与当前 ChatGPT 会话不匹配。', '仅在原始对话中插入运行报告。');
   return { inserted: true, runId: message.runId };
 }

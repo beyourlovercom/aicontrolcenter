@@ -110,7 +110,7 @@ assert.match(automatic,/if \(!claimed\.claimGranted && feedback\.lifecycle !== '
 assert.doesNotMatch(manual,/ownerConfirmSend|KeyboardEvent|requestSubmit|\.click\(/,'normal result insertion remains insert-only');
 assert.match(worker,/return autoLoopRequest\(`feedback\/\$\{message\.operation\}`,[\s\S]*feedback_message_id[\s\S]*conversation_id/,'worker forwards durable feedback/remount identity to the server authority');
 assert.match(content,/async function refreshAutoLoopStatus\(\)[\s\S]*message\('AUTO_LOOP_STATUS', \{ conversation_id \}\)[\s\S]*autoLoop = value/,'remount reloads durable auto-loop state from the server authority');
-assert.match(content,/restoreRuntimeProjection\(\(\) => \{ void refreshAutoLoopStatus\(\);/,'runtime remount triggers durable auto-loop state restoration');
+assert.match(content,/function ensureRuntimeHydration\(\)[\s\S]*restoreRuntimeProjection\(\(\) => \{[\s\S]*await reconcilePendingSubmission\(\);[\s\S]*await pollResult\(\);[\s\S]*await refreshAutoLoopStatus\(\);/,'runtime remount restores scoped runtime truth before durable auto-loop state');
 const actionRegistry=readFileSync(join(process.cwd(),'web-adapter/chrome-extension-current/bridge-action-registry.js'),'utf8');
 assert.equal((actionRegistry.match(/actionKey:/g)??[]).length,6,'the frozen six-button action registry remains unchanged');
 console.log('M8.2.1.8.4F AICC feedback proven auto-submit matrix passed');

@@ -24,3 +24,9 @@ assert.doesNotMatch(dom,/AUTO_LOOP|AUTO_SUBMIT_PROBE|completeProtocol|firstContr
 assert.match(dom,/function ownerConfirmSend/,'DOM adapter may expose the canonical Owner-confirmed Send primitive');
 assert.match(worker,/api\/gpt-bridge\/inbox/);assert.match(worker,/api\/gpt-bridge\/outbox/);assert.match(worker,/RECONCILE_SUBMISSION/);
 console.log('Chrome extension pure transport contract passed');
+
+
+assert.match(worker,/function scopedStorageKey\(base, scopeId\)/,'service worker isolates Bridge storage by caller scope');
+assert.match(worker,/scopedStorageKey\(CORRELATION_KEY, message\.bridgeScopeId\)/,'worker correlation lookup is caller-scoped');
+assert.match(worker,/scopedStorageKey\(PENDING_SUBMISSION_KEY, message\.bridgeScopeId\)/,'worker pending submission lookup is caller-scoped');
+assert.doesNotMatch(worker,/chrome\.storage\.local\.get\(CORRELATION_KEY\)/,'worker never reads a global unscoped correlation key');

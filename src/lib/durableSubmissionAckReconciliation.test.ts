@@ -8,7 +8,11 @@ const workerSource=readFileSync(join(root,'web-adapter/chrome-extension-current/
 const inboxItem={id:'inbox-canonical',submissionId:'submission-original',payloadHash:'payload-hash',taskId:'task-canonical',executionId:'run-canonical',runId:'run-canonical',state:'LAUNCHED',runtimeState:'RUNNING',instruction:{instructionId:'instruction-canonical',sourceType:'GPT_BLOCK',originContext:{conversationId:'conversation-canonical'}}};
 const outboxItem={id:'outbox-canonical',inboxId:'inbox-canonical',executionId:'run-canonical',runId:'run-canonical',state:'READY',report:{status:'COMPLETED',canonicalResult:{version:'AICC_EXECUTION_RESULT_V1',executionId:'run-canonical',resultId:'result-canonical',resultHash:'result-hash',rawResult:'PASS'}}};
 const pending={submission_id:'submission-original',instruction_id:'instruction-canonical',payload_hash:'payload-hash',source:'GPT_BLOCK',conversation_id:'conversation-canonical',source_reference:'https://chatgpt.com/c/conversation-canonical',origin_context:{conversationId:'conversation-canonical'},created_at:'2026-08-16T09:45:09.000Z',ack_state:'UNCONFIRMED'};
-const storage:Record<string,unknown>={'aicc-gpt-bridge-pending-submission-v1':pending};
+const scopeA='conversation:conversation-canonical';
+const scopeB='conversation:conversation-other';
+const pendingKey=(scope:string)=>`aicc-gpt-bridge-pending-submission-v1:${scope}`;
+const correlationKey=(scope:string)=>`aicc-gpt-bridge-adapter-correlation-v1:${scope}`;
+const storage:Record<string,unknown>={[pendingKey(scopeA)]:pending,[pendingKey(scopeB)]:{...pending,submission_id:'submission-other',conversation_id:'conversation-other',source_reference:'https://chatgpt.com/c/conversation-other',origin_context:{conversationId:'conversation-other'}}};
 let listener:any;
 let inboxPosts=0;
 const context={
@@ -31,23 +35,28 @@ const context={
 };
 vm.runInNewContext(workerSource,context);
 assert.equal(typeof listener,'function');
-const response=await new Promise<any>(resolve=>listener({type:'RECONCILE_SUBMISSION',pending},{tab:{id:1}},resolve));
+const response=await new Promise<any>(resolve=>listener({type:'RECONCILE_SUBMISSION',pending,bridgeScopeId:scopeA},{tab:{id:1}},resolve));
 assert.equal(response.ok,true);
 assert.equal(response.reconciled,true);
 assert.equal(response.inbox.id,'inbox-canonical');
 assert.equal(response.item.id,'outbox-canonical','terminal canonical Outbox truth wins after delayed acknowledgement');
 assert.equal(response.correlation.inboxId,'inbox-canonical');
 assert.equal(response.correlation.runId,'run-canonical');
-assert.equal((storage['aicc-gpt-bridge-pending-submission-v1'] as any).ack_state,'ACKNOWLEDGED');
+assert.equal((storage[pendingKey(scopeA)] as any).ack_state,'ACKNOWLEDGED');
 assert.equal(inboxPosts,0,'reconciliation is read-only and never automatically resubmits');
 
 const fallback={...pending,submission_id:'submission-retry'};
-const fallbackResponse=await new Promise<any>(resolve=>listener({type:'RECONCILE_SUBMISSION',pending:fallback},{tab:{id:1}},resolve));
+const fallbackResponse=await new Promise<any>(resolve=>listener({type:'RECONCILE_SUBMISSION',pending:fallback,bridgeScopeId:scopeA},{tab:{id:1}},resolve));
 assert.equal(fallbackResponse.reconciled,false,'a new submission identity cannot bind to an older execution');
 assert.equal(inboxPosts,0);
 
 const changed={...fallback,payload_hash:'changed-payload'};
-const changedResponse=await new Promise<any>(resolve=>listener({type:'RECONCILE_SUBMISSION',pending:changed},{tab:{id:1}},resolve));
+const changedResponse=await new Promise<any>(resolve=>listener({type:'RECONCILE_SUBMISSION',pending:changed,bridgeScopeId:scopeA},{tab:{id:1}},resolve));
 assert.equal(changedResponse.reconciled,false,'changed payload cannot bind to the old execution');
 assert.equal(inboxPosts,0);
+
+const otherResponse=await new Promise<any>(resolve=>listener({type:'RECONCILE_SUBMISSION',bridgeScopeId:scopeB},{tab:{id:2}},resolve));
+assert.equal(otherResponse.reconciled,false,'another conversation scope cannot inherit this conversation execution');
+assert.equal((storage[pendingKey(scopeA)] as any).ack_state,'ACKNOWLEDGED','conversation A durable state remains isolated');
+assert.equal(storage[correlationKey(scopeB)],undefined,'conversation B never receives conversation A correlation');
 console.log('M8.2.1.8.10A durable acknowledgement reconciliation matrix passed');

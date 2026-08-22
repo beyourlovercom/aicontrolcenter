@@ -54,6 +54,8 @@
   const RESULT_INSERT_STATUS_KEY = 'aicc-result-insert-status-v1';
   const RUNTIME_PROJECTION_KEY = 'aicc-bridge-runtime-projection-v1';
   const PENDING_SUBMISSION_KEY = 'aicc-gpt-bridge-pending-submission-v1';
+  function bridgeStorageScopeId() { const conversationId = window.AICCChatGPTDom?.resolveConversationId?.(location) || null; if (conversationId) return `conversation:${conversationId}`; try { const url = new URL(location.href); return `url:${url.origin}${url.pathname}`; } catch { return `url:${location.href}`; } }
+  function scopedStorageKey(base) { return `${base}:${bridgeStorageScopeId()}`; }
   const ResultInsertStatus = Object.freeze({ READY: 'READY', COPYING: 'COPYING', COPIED: 'COPIED', INSERTING: 'INSERTING', INSERTED: 'INSERTED', COPY_ONLY_FAILED: 'COPY_ONLY_FAILED' });
   let resultInsertStatus = { status: ResultInsertStatus.READY, runId: null, resultId: null, resultSource: null };
   let runtimeProjection = window.AICCChatGPTDom.emptyBridgeRuntimeProjection();
@@ -115,11 +117,11 @@
   }
   async function reconcilePendingSubmission(pending) {
     if (submissionReconciliationInFlight) return null;
-    const candidate = pending || await storageValue(PENDING_SUBMISSION_KEY);
+    const candidate = pending || await storageValue(scopedStorageKey(PENDING_SUBMISSION_KEY));
     if (!candidate?.submission_id) return null;
     submissionReconciliationInFlight = true;
     try {
-      const result = await message('RECONCILE_SUBMISSION', { pending: candidate });
+      const result = await message('RECONCILE_SUBMISSION', { pending: candidate, bridgeScopeId: bridgeStorageScopeId() });
       if (!result?.ok || !result.reconciled || !result.item || !result.correlation) return null;
       reportItem = result.item?.item || result.item;
       reportCorrelation = result.correlation;
@@ -188,17 +190,18 @@
   function updateRuntimeProjection(input = {}, persist = true) {
     runtimeProjection = window.AICCChatGPTDom.projectBridgeRuntime({ ...input, previous: runtimeProjection });
     renderRuntimeProjection();
-    if (persist) panelStorage()?.set?.({ [RUNTIME_PROJECTION_KEY]: runtimeProjection });
+    if (persist) panelStorage()?.set?.({ [scopedStorageKey(RUNTIME_PROJECTION_KEY)]: runtimeProjection });
     return runtimeProjection;
   }
   function setActionLabel(button, label) { const node = button?.querySelector('[data-aicc-action-label]'); if (node) node.textContent = label; else if (button) button.textContent = label; }
   function restoreRuntimeProjection(onRestored) {
-    panelStorage()?.get?.([RUNTIME_PROJECTION_KEY], result => {
-      const stored = result?.[RUNTIME_PROJECTION_KEY];
+    panelStorage()?.get?.([scopedStorageKey(RUNTIME_PROJECTION_KEY)], result => {
+      const key = scopedStorageKey(RUNTIME_PROJECTION_KEY);
+      const stored = result?.[key];
       if (stored && Object.values(window.AICCChatGPTDom.BridgeRuntimeState).includes(stored.status)) {
         const recovered = window.AICCChatGPTDom.recoverBridgeRuntimeProjection({ ...window.AICCChatGPTDom.emptyBridgeRuntimeProjection(), ...stored });
         runtimeProjection = recovered;
-        if (recovered.status !== stored.status) panelStorage()?.set?.({ [RUNTIME_PROJECTION_KEY]: recovered });
+        if (recovered.status !== stored.status) panelStorage()?.set?.({ [scopedStorageKey(RUNTIME_PROJECTION_KEY)]: recovered });
         if (runtimeProjection.resultState === 'AVAILABLE' && (!runtimeProjection.runId || !String(runtimeProjection.resultText || '').trim())) runtimeProjection = { ...runtimeProjection, resultState: 'WAITING', resultId: null, resultHash: null, resultText: '' };
       }
       renderRuntimeProjection();
@@ -221,9 +224,9 @@
     resultInsertStatus = { ...resultInsertStatus, ...details, status };
     const statusNode = panel?.querySelector(SELECTORS.status);
     if (statusNode) { statusNode.dataset.aiccResultInsertStatus = status; statusNode.dataset.aiccResultRunId = resultInsertStatus.runId || ''; statusNode.dataset.aiccResultId = resultInsertStatus.resultId || ''; statusNode.dataset.aiccResultSource = resultInsertStatus.resultSource || ''; }
-    panelStorage()?.set?.({ [RESULT_INSERT_STATUS_KEY]: resultInsertStatus });
+    panelStorage()?.set?.({ [scopedStorageKey(RESULT_INSERT_STATUS_KEY)]: resultInsertStatus });
   }
-  function restoreResultInsertStatus() { panelStorage()?.get?.([RESULT_INSERT_STATUS_KEY], result => { const stored = result?.[RESULT_INSERT_STATUS_KEY]; if (stored?.status && Object.values(ResultInsertStatus).includes(stored.status)) { resultInsertStatus = stored; const identity = `${stored.resultSource}:${stored.resultId || stored.runId || 'ABSENT'}`; if (stored.resultId && stored.status !== ResultInsertStatus.READY) attemptedReturnIds.add(stored.resultId); if (stored.status === ResultInsertStatus.INSERTED) insertedResultIds.add(identity); updateResultInsertStatus(stored.status); } }); }
+  function restoreResultInsertStatus() { const key = scopedStorageKey(RESULT_INSERT_STATUS_KEY); panelStorage()?.get?.([key], result => { const stored = result?.[key]; if (stored?.status && Object.values(ResultInsertStatus).includes(stored.status)) { resultInsertStatus = stored; const identity = `${stored.resultSource}:${stored.resultId || stored.runId || 'ABSENT'}`; if (stored.resultId && stored.status !== ResultInsertStatus.READY) attemptedReturnIds.add(stored.resultId); if (stored.status === ResultInsertStatus.INSERTED) insertedResultIds.add(identity); updateResultInsertStatus(stored.status); } }); }
   function renderPanelState() {
     if (!panel) return;
     panel.dataset.aiccPanelState = panelExpanded ? 'EXPANDED' : 'COLLAPSED';
@@ -536,7 +539,7 @@
     const durableSource = metadata.sourceType || 'WEB_BRIDGE';
     const submissionId = window.AICCChatGPTDom.newSubmissionId();
     const pending = await pendingSubmissionFor(text, submissionId, durableSource, originContext);
-    await persistStorage(PENDING_SUBMISSION_KEY, pending);
+    await persistStorage(scopedStorageKey(PENDING_SUBMISSION_KEY), pending);
     runtimeAttemptUnbound = true;
     clearStatus();
     reportItem = null;
@@ -545,12 +548,12 @@
     const localCorrelation = { submissionId, instructionId: pending.instruction_id, sourceType: projectionSource };
     updateRuntimeProjection({ transition: 'SUBMITTING_LOCAL', sourceType: projectionSource, correlation: localCorrelation, reset: true, updatedAt: new Date().toISOString() });
     try {
-      const result = await boundedMessage(operation, { text, submissionId, sourceReference: location.href, originContext, ...metadata });
+      const result = await boundedMessage(operation, { text, submissionId, sourceReference: location.href, originContext, bridgeScopeId: bridgeStorageScopeId(), ...metadata });
       if (!result?.ok) throw result?.error || { code: 'AICC_SUBMISSION_FAILED', reason: 'AICC submission failed.' };
       const identity = window.AICCChatGPTDom.durableAck(result.item);
       if (!identity) throw { code: 'AICC_DURABLE_ACK_MISSING', reason: 'AICC did not return a durable instruction and task identity.' };
       reportCorrelation = result.correlation || { ...identity, inboxId: result.item.id, sourceType: projectionSource };
-      await persistStorage(PENDING_SUBMISSION_KEY, { ...pending, ack_state: 'ACKNOWLEDGED', inbox_id: result.item.id, task_id: identity.taskId, execution_id: identity.executionId, run_id: identity.runId, updated_at: new Date().toISOString() });
+      await persistStorage(scopedStorageKey(PENDING_SUBMISSION_KEY), { ...pending, ack_state: 'ACKNOWLEDGED', inbox_id: result.item.id, task_id: identity.taskId, execution_id: identity.executionId, run_id: identity.runId, updated_at: new Date().toISOString() });
       runtimeAttemptUnbound = false;
       const nextState = operation === 'IMPORT_AND_RUN' && identity.executionId && identity.runId ? 'RUN_CREATED' : 'AICC_ACCEPTED';
       updateRuntimeProjection({ transition: nextState, correlation: reportCorrelation, sourceType: projectionSource, runId: identity.runId, executionId: identity.executionId, updatedAt: result.item.updatedAt || new Date().toISOString() });
@@ -559,7 +562,7 @@
     } catch (error) {
       if (error?.code === 'SUBMISSION_STALLED') {
         const unconfirmed = { ...pending, ack_state: 'UNCONFIRMED', updated_at: new Date().toISOString() };
-        await persistStorage(PENDING_SUBMISSION_KEY, unconfirmed);
+        await persistStorage(scopedStorageKey(PENDING_SUBMISSION_KEY), unconfirmed);
         updateRuntimeProjection({ transition: 'SUBMISSION_STALLED', correlation: localCorrelation, sourceType: projectionSource, error: 'ACK_NOT_YET_CONFIRMED', updatedAt: new Date().toISOString() });
         setStatus('SUBMISSION_UNCONFIRMED · AICC 正在核对 durable 状态；不会自动重复提交。', 'BLOCKED');
         void reconcilePendingSubmission(unconfirmed);
@@ -672,7 +675,7 @@
 
   async function pollResult(allowAutomaticFeedback = false) {
     if (runtimeAttemptUnbound || ['SUBMISSION_STALLED', 'AICC_ACCEPTED', 'RUN_CREATED', 'RUNNING'].includes(runtimeProjection.status)) await reconcilePendingSubmission();
-    const result = await message('POLL_RESULT', { correlation: reportCorrelation });
+    const result = await message('POLL_RESULT', { correlation: reportCorrelation, bridgeScopeId: bridgeStorageScopeId() });
     if (!result?.ok) { showError(result?.error); return result; }
     if (runtimeAttemptUnbound) return result;
     reportItem = result.item?.item || result.item || null;
@@ -781,7 +784,7 @@
       let envelope = canonicalResult.rawResult;
       let claimIdentity = null;
       if (!manualRetry) {
-        const claimed = await message('RETURN_RESULT', { sourceReference: location.href, originContext: window.AICCChatGPTDom.originContext(document, null), correlation: reportCorrelation });
+        const claimed = await message('RETURN_RESULT', { sourceReference: location.href, originContext: window.AICCChatGPTDom.originContext(document, null), correlation: reportCorrelation, bridgeScopeId: bridgeStorageScopeId() });
         if (!claimed?.ok) { showError(claimed?.error); return; }
         if (claimed.alreadyReturned || claimed.deliveryInProgress) return;
         envelope = claimed.envelope;
@@ -829,7 +832,7 @@
     const exactOrigin = reportCorrelation?.sourceReference === location.href && reportCorrelation?.originContext?.conversationId === window.AICCChatGPTDom.originContext(document, null).conversationId;
     const outcome = await copyAndInsertResult(text, { runId, resultId: `aicc-report-${runId || reportItem.id}`, resultSource: 'AICC_RESULT' }, exactOrigin ? composer() : null);
     if (!outcome.inserted) return;
-    const marked = await message('MARK_REPORT_INSERTED', { runId: reportItem.runId || reportItem.report?.runId, reportVersion: reportItem.report?.version, sourceReference: location.href });
+    const marked = await message('MARK_REPORT_INSERTED', { runId: reportItem.runId || reportItem.report?.runId, reportVersion: reportItem.report?.version, sourceReference: location.href, bridgeScopeId: bridgeStorageScopeId() });
     if (!marked?.ok) return showError(marked?.error);
   }
 

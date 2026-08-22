@@ -116,9 +116,14 @@ assert.doesNotMatch(content.match(/async function insertPanelResult[\s\S]*?(?=\n
 assert.match(registry,/actionKey: 'next-step'[\s\S]*displayOrdinal: 5[\s\S]*执行下一步/,'execute-next-step remains an explicit Owner-facing action at ordinal five');
 assert.match(content,/RUNTIME_PROJECTION_KEY = 'aicc-bridge-runtime-projection-v1'/);assert.match(content,/function ensureRuntimeHydration\(\)[\s\S]*restoreRuntimeProjection\(\(\) => \{[\s\S]*await reconcilePendingSubmission\(\);[\s\S]*await pollResult\(\);[\s\S]*await refreshAutoLoopStatus\(\);[\s\S]*await refreshUsClaudeCapability\(\)/,'refresh hydrates durable runtime state before capability refresh');
 assert.match(content,/runtimeAttemptUnbound = true[\s\S]*if \(runtimeAttemptUnbound\) return result/,'stale polling cannot bind an older result while a new submission is unbound');
-assert.match(content,/message\('POLL_RESULT', \{ correlation: reportCorrelation \}\)/,'result polling carries the current page exact correlation and uses worker storage only as reload fallback');
+assert.match(content,/message\('POLL_RESULT', \{ correlation: reportCorrelation, bridgeScopeId: bridgeStorageScopeId\(\) \}\)/,'result polling carries exact correlation plus current conversation scope');
 assert.match(content,/PENDING_SUBMISSION_KEY = 'aicc-gpt-bridge-pending-submission-v1'/);
-assert.match(content,/await persistStorage\(PENDING_SUBMISSION_KEY, pending\)[\s\S]*boundedMessage\(operation/,'pending identity is durable before transport begins');
+
+assert.match(content,/function bridgeStorageScopeId\(\)[\s\S]*conversation:/,'Bridge storage is namespaced by exact conversation when available');
+assert.match(content,/scopedStorageKey\(RUNTIME_PROJECTION_KEY\)/,'runtime projection persistence is conversation-scoped');
+assert.match(content,/scopedStorageKey\(PENDING_SUBMISSION_KEY\)/,'pending submission persistence is conversation-scoped');
+assert.match(content,/scopedStorageKey\(RESULT_INSERT_STATUS_KEY\)/,'result insertion status persistence is conversation-scoped');
+assert.match(content,/await persistStorage\(scopedStorageKey\(PENDING_SUBMISSION_KEY\), pending\)[\s\S]*boundedMessage\(operation/,'conversation-scoped pending identity is durable before transport begins');
 assert.match(content,/SUBMISSION_UNCONFIRMED[\s\S]*reconcilePendingSubmission\(unconfirmed\)/,'watchdog warns and reconciles without automatic resubmission');
 assert.equal((content.match(/section\.dataset\.aiccRuntimeResultPanel = 'true'/g)??[]).length,1,'one Runtime Result Panel is created');
 assert.match(content,/const structureComplete = Boolean\(section && section\.querySelectorAll\(SELECTORS\.resultPreview\)\.length === 1[\s\S]*resultActions\.querySelectorAll\('button'\)\.length === 3/,'existing Runtime Result Panel remount validates exactly one preview and one three-button action group');
