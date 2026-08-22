@@ -14,9 +14,10 @@
   const readExecutionProvider=(): 'LOCAL_CODEX'|'REMOTE_CLAUDE' => {const value=typeof localStorage==='undefined'?null:localStorage.getItem(EXECUTION_PROVIDER_STORAGE_KEY);return value==='REMOTE_CLAUDE'?'REMOTE_CLAUDE':'LOCAL_CODEX'};
   import {buildRuntimeDiagnostic} from '../../lib/runtimeDiagnostics.ts';
   import AiccWorkspaceDrawer from '../AiccWorkspaceDrawer.svelte';
-  import {createEmptyGlobalStateReadModel} from '../../lib/globalStateReadModel.ts';
+  import {createEmptyGlobalStateReadModel,type GlobalStateProjectContext} from '../../lib/globalStateReadModel.ts';
   import {exactResultForRun,exactRunLayer2,projectPhase5Lifecycle} from '../../lib/runtimeResultFeedbackControlLoopProjection.ts';
 
+  export let projectContext:GlobalStateProjectContext|null=null;
   export let runtime:RuntimeRecord|null=null;
   export let history:RuntimeRecord[]=[];
   export let entityType:'global_task'|'work_package'|'pull_request'='work_package';
@@ -57,7 +58,9 @@
   export let onProviderChange:(provider:'LOCAL_CODEX'|'REMOTE_CLAUDE')=>void=(provider)=>{try{localStorage.setItem(EXECUTION_PROVIDER_STORAGE_KEY,provider)}catch{}};
   let modelOptions:{value:string;label:string;model:string;reasoning:string}[]=[],selectedModel='',selectedReasoning='',composerSubmitting=false,imeComposing=false;
   let resultExpandedId:string|null=null,copiedRunId:string|null=null,copyTimer:number|undefined;
-  let phase5Layer2=projectPhase5Lifecycle(createEmptyGlobalStateReadModel(),{});
+  let phase5Layer2:ReturnType<typeof projectPhase5Lifecycle>|null=null;
+  let phase5ContextKey:string|null=null;
+  $: {const key=projectContext?`${projectContext.projectId}|${projectContext.repositoryIdentity}|${projectContext.projectContextRevision}`:null;if(key!==phase5ContextKey){phase5ContextKey=key;phase5Layer2=projectContext?projectPhase5Lifecycle(createEmptyGlobalStateReadModel(projectContext),{}):null;}}
   $: currentSubmittedRun=instructionState==='RUN_STARTED'&&runtime&&selectedRunId===runtime.runId&&!['COMPLETED','FAILED','STOPPED','RECOVERY_REQUIRED'].includes(runtime.phase)?runtime:null;
   $: liveComposerRun=runtime&&runtime.pidAlive===true&&['STARTING','RUNNING','STOPPING'].includes(runtime.phase)?runtime:null;
   $: cancellableComposerRun=currentSubmittedRun??liveComposerRun;
@@ -66,12 +69,14 @@
   function persistSelection(value:string){const selected=modelOptions.find(item=>item.value===value);if(!selected)return;selectedModel=selected.model;selectedReasoning=selected.reasoning;if(typeof localStorage!=='undefined'){localStorage.setItem('aicc-selected-model',selected.model);localStorage.setItem('aicc-selected-reasoning',selected.reasoning)}}
   async function submitComposer(){if(activeComposerState!=='TEXT_READY'||composerSubmitting)return;composerSubmitting=true;try{await Promise.resolve(onComposerSend())}finally{composerSubmitting=false}}
   function onComposerKeydown(event:KeyboardEvent){if(event.key!=='Enter'||event.shiftKey||event.isComposing||imeComposing)return;if(activeComposerState!=='TEXT_READY')return;event.preventDefault();void submitComposer()}
-  $: focused=selectCanonicalCurrentRuntime(runtime,history,selectedRunId);
-  function rebuildPhase5Projection(current:RuntimeRecord|null,taskRecords:any[]){phase5Layer2=projectPhase5Lifecycle(phase5Layer2.model,{runs:current?[current]:[],tasks:taskRecords.map(task=>({taskId:task.taskId,lifecycle:task.status,executionId:task.executionId,runId:task.runId,updatedAt:task.updatedAt}))});return phase5Layer2}
-  $: lifecycleProjection=rebuildPhase5Projection(focused,tasks);
-  $: focusedRunLayer2=focused?exactRunLayer2(lifecycleProjection,focused.runId):null;
+  $: contextRuntime=projectContext&&runtime&&runtime.projectId===projectContext.projectId&&runtime.repositoryIdentity===projectContext.repositoryIdentity?runtime:null;
+  $: contextHistory=projectContext?history.filter(item=>item.projectId===projectContext!.projectId&&item.repositoryIdentity===projectContext!.repositoryIdentity):[];
+  $: focused=projectContext?selectCanonicalCurrentRuntime(contextRuntime,contextHistory,selectedRunId):null;
+  function rebuildPhase5Projection(current:RuntimeRecord|null,taskRecords:any[],previous:ReturnType<typeof projectPhase5Lifecycle>|null){if(!previous||!projectContext)return previous;const next=projectPhase5Lifecycle(previous.model,{runs:current?[current]:[],tasks:taskRecords.map(task=>({taskId:task.taskId,lifecycle:task.status,executionId:task.executionId,runId:task.runId,updatedAt:task.updatedAt}))});phase5Layer2=next;return next;}
+  $: lifecycleProjection=rebuildPhase5Projection(focused,tasks,phase5Layer2);
+  $: focusedRunLayer2=focused&&lifecycleProjection?exactRunLayer2(lifecycleProjection,focused.runId):null;
   $: focusedRunLifecycle=focusedRunLayer2?.lifecycle.state==='KNOWN'?focusedRunLayer2.lifecycle.value:'UNKNOWN';
-  $: focusedExecutionLayer2=focusedRunLayer2?.executionId?lifecycleProjection.executions.find(record=>record.executionId===focusedRunLayer2?.executionId)??null:null;
+  $: focusedExecutionLayer2=focusedRunLayer2?.executionId?lifecycleProjection?.executions.find(record=>record.executionId===focusedRunLayer2?.executionId)??null:null;
   $: focusedExecutionLifecycle=focusedExecutionLayer2?.lifecycle.state==='KNOWN'?focusedExecutionLayer2.lifecycle.value:'UNKNOWN';
   let stopPending=false,resumePending=false;
   async function stopFocusedRuntime(runId:string){if(!focused?.runId||focused.runId!==runId||stopPending)return;stopPending=true;try{await Promise.resolve(onStop(runId))}finally{stopPending=false}}
