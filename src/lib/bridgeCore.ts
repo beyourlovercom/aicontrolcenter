@@ -187,10 +187,11 @@ export function launchInboxItem(id:string,metadata?:ExecutionLaunchMetadata):Inb
  if(!item)throw new Error('INBOX_NOT_FOUND');
  if(!['READY','WAITING_OWNER'].includes(item.state))throw new Error('INBOX_NOT_READY');
  if(!item.instruction)throw new Error('INSTRUCTION_MISSING');
+ if(!item.projectId||!item.repositoryIdentity)throw new Error('INBOX_PROJECT_SCOPE_REQUIRED');
+ if(!item.instruction.projectId||!item.instruction.repositoryIdentity)throw new Error('INBOX_PROJECT_SCOPE_REQUIRED');
+ if(item.projectId!==item.instruction.projectId||item.repositoryIdentity!==item.instruction.repositoryIdentity)throw new Error('FOREIGN_PROJECT_INSTRUCTION_BINDING');
  if((metadata as any)?.executionProvider==='REMOTE_CLAUDE')return launchRemoteInboxItem(item,metadata as any);
- const projectScope=projectEntityScope(createProjectRegistryAuthority().getActiveProject());
- item.instruction={...item.instruction,...projectScope} as ExecutionInstruction;
- Object.assign(item,projectScope);
+ const projectScope={projectId:item.projectId,repositoryIdentity:item.repositoryIdentity,repositoryPath:item.repositoryPath??item.instruction.repositoryPath??''};
  if(!item.taskId)item.taskId=`task-${item.id}`;
  const context=item.instruction.originContext?.executionContext;
  item.instruction=bindExecutionToOriginContext(item.instruction,context,item.instruction.workPackageId??undefined);
@@ -207,9 +208,13 @@ export function launchInboxItem(id:string,metadata?:ExecutionLaunchMetadata):Inb
  item.state='LAUNCHED';item.transportState='SENT';item.executionId=started.runId;item.runId=started.runId;item.authorizationId=authorization?.authorizationId;item.authorizationSource=authorizationValid?'OWNER_DIRECT':undefined;item.model=started.resolvedModel;item.reasoning_effort=started.reasoningLevel;item.model_source=metadata?.modelSource??(metadata?.model?'OWNER_OVERRIDE':'CODEX_DEFAULT');item.originContext={...item.originContext,...item.instruction.originContext,runId:started.runId};item.instruction.originContext=item.originContext;item.runtimeState=started.phase;item.startedAt=started.startedAt;item.updatedAt=new Date().toISOString();saveInbox(item);syncTask(item,started);return item;
 }
 function launchRemoteInboxItem(item:InboxItem,metadata:{runnerId?:string;repositoryRoot?:string}):InboxItem{
+ if(!item.projectId||!item.repositoryIdentity)throw new Error('INBOX_PROJECT_SCOPE_REQUIRED');
+ if(!item.instruction!.projectId||!item.instruction!.repositoryIdentity)throw new Error('INBOX_PROJECT_SCOPE_REQUIRED');
+ if(item.projectId!==item.instruction!.projectId||item.repositoryIdentity!==item.instruction!.repositoryIdentity)throw new Error('FOREIGN_PROJECT_INSTRUCTION_BINDING');
  const config=readRemoteRunnerConfig(),runnerId=metadata.runnerId??REMOTE_RUNNER_ID;
  if(!config.url)throw new Error('REMOTE_RUNNER_NOT_CONFIGURED');
- const runtime=startRuntime(item.instruction!.entityId,undefined,{passThrough:true,executionType:item.instruction!.executionType,instructionBody:item.instruction!.instructionBody,instructionId:item.instruction!.instructionId,sourceType:item.instruction!.sourceType,sourceReference:item.instruction!.sourceReference,originConversationId:item.instruction!.originContext?.conversationId,originMessageId:item.instruction!.originContext?.messageId,originBlockId:item.instruction!.originContext?.blockId,executionProvider:'REMOTE_CLAUDE',runnerId,entityType:item.instruction!.entityType==='TASK'?'work_package':item.instruction!.entityType.toLowerCase() as any,entityId:item.instruction!.entityId,parentWorkPackageId:item.instruction!.workPackageId??undefined,projectScope:projectEntityScope(createProjectRegistryAuthority().getActiveProject())});const executionId=runtime.runId;item.executionId=executionId;item.runId=executionId;item.remoteExecutionId=executionId;item.executionProvider='REMOTE_CLAUDE';item.runnerId=runnerId;item.state='LAUNCHED';item.transportState='SENT';item.startedAt=runtime.startedAt;item.runtimeState=runtime.phase;item.updatedAt=new Date().toISOString();saveInbox(item);if(item.taskId)syncTask(item,runtime);
+ const frozenScope={projectId:item.projectId,repositoryIdentity:item.repositoryIdentity,repositoryPath:item.repositoryPath??item.instruction!.repositoryPath??''};
+ const runtime=startRuntime(item.instruction!.entityId,undefined,{passThrough:true,executionType:item.instruction!.executionType,instructionBody:item.instruction!.instructionBody,instructionId:item.instruction!.instructionId,sourceType:item.instruction!.sourceType,sourceReference:item.instruction!.sourceReference,originConversationId:item.instruction!.originContext?.conversationId,originMessageId:item.instruction!.originContext?.messageId,originBlockId:item.instruction!.originContext?.blockId,executionProvider:'REMOTE_CLAUDE',runnerId,entityType:item.instruction!.entityType==='TASK'?'work_package':item.instruction!.entityType.toLowerCase() as any,entityId:item.instruction!.entityId,parentWorkPackageId:item.instruction!.workPackageId??undefined,projectScope:frozenScope});const executionId=runtime.runId;item.executionId=executionId;item.runId=executionId;item.remoteExecutionId=executionId;item.executionProvider='REMOTE_CLAUDE';item.runnerId=runnerId;item.state='LAUNCHED';item.transportState='SENT';item.startedAt=runtime.startedAt;item.runtimeState=runtime.phase;item.updatedAt=new Date().toISOString();saveInbox(item);if(item.taskId)syncTask(item,runtime);
  const envelope=canonicalRemoteEnvelope({executionId,instruction:item.instruction!,createdAt:item.createdAt},{...config,configured:true,url:config.url,runnerId:runnerId as typeof REMOTE_RUNNER_ID,reachable:true},metadata.repositoryRoot??process.env.AICC_REMOTE_RUNNER_WORKSPACE??'/Users/a/ai/aicc-claude');
  void superviseRemoteRuntime({projectId:runtime.projectId,repositoryIdentity:runtime.repositoryIdentity},executionId,envelope,config.url);
  return item;

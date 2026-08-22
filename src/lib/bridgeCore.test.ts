@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import {parseExecutionV1,normalizeExecutionProtocol,normalizeExecutionLaunchMetadata,createNaturalLanguageInstruction,canonicalExecutionV1Example,createCanonicalExecutionRequest,canonicalTaskFromInbox,projectCanonicalTaskRegistry,normalizeTaskLifecycleStatus,resolveCanonicalTaskBranch,submitExecution,readInbox,reconcileBridgeExecution,TASK_LIFECYCLE_STATUSES,AICC_EXECUTION_V1_REQUIRED_FIELDS,AICC_EXECUTION_V1_OPTIONAL_FIELDS,AICC_EXECUTION_V1_EXECUTION_TYPES,INBOX_STATES,OUTBOX_STATES,activeTaskProjectContext} from './bridgeCore.ts';
+import {parseExecutionV1,normalizeExecutionProtocol,normalizeExecutionLaunchMetadata,createNaturalLanguageInstruction,canonicalExecutionV1Example,createCanonicalExecutionRequest,canonicalTaskFromInbox,projectCanonicalTaskRegistry,normalizeTaskLifecycleStatus,resolveCanonicalTaskBranch,submitExecution,readInbox,reconcileBridgeExecution,TASK_LIFECYCLE_STATUSES,AICC_EXECUTION_V1_REQUIRED_FIELDS,AICC_EXECUTION_V1_OPTIONAL_FIELDS,AICC_EXECUTION_V1_EXECUTION_TYPES,INBOX_STATES,OUTBOX_STATES,activeTaskProjectContext,launchInboxItem,persistNewInboxItemForTest,type InboxItem} from './bridgeCore.ts';
 import {routeExecutionContext} from './executionContextRouter.ts';
 import {buildPrompt,resolveRuntimeExecutionPolicy} from './runtimeManager.ts';
 import {readWorkPackage} from './controlService.ts';
@@ -113,3 +113,17 @@ assert.equal(runtimeReport.terminalState,'COMPLETED','reconcileBridgeExecution r
 assert.equal(runtimeReport.transportState,'RESULT_RECEIVED','terminal reconciliation publishes the canonical transport state');
 console.log('bridge run report runtime reference passed');
 console.log('bridge instruction fidelity matrix passed');
+
+// D0A_3_CREATION_TIME_SCOPE_FREEZE — launch paths must use frozen creation-time scope
+
+// Scope freeze: item created with PROJECT_A scope; startRuntime throws non-scope error proving
+// the launch path derived scope from the item, not the current active project registry.
+{const instrFreeze:ExecutionInstruction={...parseExecutionV1(valid),projectId:'project-a-freeze',repositoryIdentity:'org/repo-a-freeze'};const itemFreeze:InboxItem={id:`scope-freeze-local-${Date.now()}`,state:'READY',gates:[],createdAt:new Date().toISOString(),updatedAt:new Date().toISOString(),projectId:'project-a-freeze',repositoryIdentity:'org/repo-a-freeze',instruction:instrFreeze};persistNewInboxItemForTest(itemFreeze);let scopeFreezeError:Error|null=null;try{launchInboxItem(itemFreeze.id)}catch(err){scopeFreezeError=err as Error}assert.ok(scopeFreezeError,'launch of frozen-scope item throws at runtime level');assert.ok(!/FOREIGN_PROJECT_INSTRUCTION_BINDING|INBOX_PROJECT_SCOPE_REQUIRED/.test(scopeFreezeError!.message),'creation-time scope preserved — error is not a scope rejection')}
+
+// Scope freeze for REMOTE_CLAUDE path: matching creation-time scope passes scope check (fails at REMOTE_RUNNER_NOT_CONFIGURED, not scope error)
+{const instrRemoteA:ExecutionInstruction={...parseExecutionV1(valid),projectId:'remote-project-a-ok',repositoryIdentity:'org/remote-repo-a-ok'};const itemRemoteA:InboxItem={id:`scope-remote-ok-${Date.now()}`,state:'READY',gates:[],createdAt:new Date().toISOString(),updatedAt:new Date().toISOString(),projectId:'remote-project-a-ok',repositoryIdentity:'org/remote-repo-a-ok',instruction:instrRemoteA};persistNewInboxItemForTest(itemRemoteA);assert.throws(()=>launchInboxItem(itemRemoteA.id,{executionProvider:'REMOTE_CLAUDE'}),/REMOTE_RUNNER_NOT_CONFIGURED/,'REMOTE_CLAUDE matching scope passes scope check; fails at runner config not scope validation')}
+
+// Fail-closed at persistence boundary: scope mismatch between item and instruction is rejected before storage
+{const instrMismatch:ExecutionInstruction={...parseExecutionV1(valid),projectId:'project-a-mismatch',repositoryIdentity:'org/repo-a-mismatch'};const itemMismatch:InboxItem={id:`scope-persist-mismatch-${Date.now()}`,state:'READY',gates:[],createdAt:new Date().toISOString(),updatedAt:new Date().toISOString(),projectId:'project-b-mismatch',repositoryIdentity:'org/repo-b-mismatch',instruction:instrMismatch};assert.throws(()=>persistNewInboxItemForTest(itemMismatch),/FOREIGN_PROJECT_INSTRUCTION_BINDING/,'mismatched item/instruction scope is rejected at persistence boundary')}
+
+console.log('D0A_3_CREATION_TIME_SCOPE_FREEZE regression passed');
