@@ -10,7 +10,7 @@ const runtimeManager=readFileSync(join(root,'src/lib/runtimeManager.ts'),'utf8')
 
 assert.match(app,/async function refreshRuntimeProjection\(\)\{[\s\S]*?const pq=projectQuery\(\);const query=pq\?`\?entityType=/,'entity runtime polling derives active project scope');
 assert.match(app,/query\?request\(`\/api\/codex\/runtime\$\{query\}`\):Promise\.resolve\(\{info:null,runtime:null,history:\[\],availability:'NOT_AVAILABLE'\}\)/,'entity runtime polling fails closed without project scope');
-assert.match(server,/entityType==='work_package'\|\|entityType==='pull_request'\|\|entityType==='global_task'/,'server requires project scope for PR runtime reads');
+assert.match(server,/if\(!scope\)return json\(res,\{info:null,runtime:null,history:\[\],availability:'NOT_AVAILABLE'\}\)/,'server requires project scope for every runtime read, including PR');
 assert.match(runtimeManager,/entityType==='work_package'\|\|entityType==='pull_request'\|\|entityType==='global_task'/,'runtime read-only lookup treats PR as project-scoped');
 
 const scopeA={projectId:'project-a',repositoryIdentity:'repo/a',projectContextRevision:1} as const;

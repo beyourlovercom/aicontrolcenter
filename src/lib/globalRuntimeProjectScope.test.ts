@@ -9,8 +9,8 @@ const server=readFileSync(join(root,'vite.config.ts'),'utf8');
 
 assert.match(app,/async function refreshGlobalRuntimeProjection\(\)\{[\s\S]*?const pq=projectQuery\(\)/,'global runtime polling derives the frozen active project scope');
 assert.match(app,/pq\?request\(`\/api\/codex\/runtime\?entityType=global_task&entityId=GLOBAL_TASK&\$\{pq\}`\):Promise\.resolve\(\{info:null,runtime:null,history:\[\],availability:'NOT_AVAILABLE'\}\)/,'global runtime request carries project scope and fails closed without it');
-assert.match(server,/\(entityType==='work_package'\|\|entityType==='global_task'\|\|legacyId\)&&!scope/,'server requires project scope for global_task runtime reads');
-assert.ok(server.includes("history.filter(item=>!scope||(entityType==='global_task'?runtimeBelongsToProject(item,scope):scopedWpRecord(item,scope))).filter(matches)"),'runtime history is project-filtered before entity filtering');
+assert.match(server,/if\(!scope\)return json\(res,\{info:null,runtime:null,history:\[\],availability:'NOT_AVAILABLE'\}\)/,'server requires project scope for every runtime read, including global_task');
+assert.ok(server.includes("history.filter(item=>runtimeBelongsToProject(item,scope)).filter(matches)"),'runtime history is project-filtered before entity filtering');
 
 const scopeA={projectId:'project-a',repositoryIdentity:'repo/a',projectContextRevision:1} as const;
 const scopeB={projectId:'project-b',repositoryIdentity:'repo/b',projectContextRevision:1} as const;
