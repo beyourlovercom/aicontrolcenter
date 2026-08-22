@@ -493,15 +493,21 @@
   function ensureRuntimeResultPanel() {
     if (!panel) return;
     let section = panel.querySelector(SELECTORS.runtimePanel);
-    if (!section) {
+    const resultActions = section?.querySelector(SELECTORS.resultActions) || null;
+    const copyResult = section?.querySelector(SELECTORS.copyResult) || null;
+    const expandResult = section?.querySelector(SELECTORS.expandResult) || null;
+    const insertGpt = section?.querySelector(SELECTORS.insertGpt) || null;
+    const structureComplete = Boolean(section && section.querySelectorAll(SELECTORS.resultPreview).length === 1 && section.querySelectorAll(SELECTORS.resultActions).length === 1 && resultActions && copyResult && expandResult && insertGpt && resultActions.contains(copyResult) && resultActions.contains(expandResult) && resultActions.contains(insertGpt) && resultActions.querySelectorAll('button').length === 3);
+    if (!structureComplete) {
+      if (section) section.remove();
       section = document.createElement('section');
       section.className = 'aicc-runtime-result';
       section.dataset.aiccRuntimeResultPanel = 'true';
       section.innerHTML = '<div class="aicc-runtime-heading"><strong class="aicc-runtime-status-badge" data-aicc-runtime-status>IDLE</strong><span class="aicc-runtime-source" data-aicc-runtime-source></span></div><div class="aicc-runtime-message" data-aicc-status data-aicc-runtime-error aria-live="polite" hidden></div><dl class="aicc-runtime-fields aicc-runtime-details"><div class="aicc-runtime-row" data-aicc-runtime-row="run-profile" hidden><dt>Run Profile</dt><dd class="aicc-runtime-profile" data-aicc-runtime-run-profile></dd></div><div class="aicc-runtime-row" data-aicc-runtime-row="run-id" hidden><dt>Run ID</dt><dd class="aicc-runtime-id" data-aicc-runtime-run-id></dd></div><div class="aicc-runtime-row" data-aicc-runtime-row="execution-id" hidden><dt>Execution ID</dt><dd class="aicc-runtime-id" data-aicc-runtime-execution-id></dd></div><div class="aicc-runtime-row" data-aicc-runtime-row="execution"><dt>Execution</dt><dd data-aicc-runtime-execution></dd></div><div class="aicc-runtime-row" data-aicc-runtime-row="result"><dt>Result</dt><dd data-aicc-runtime-result></dd></div><div class="aicc-runtime-row" data-aicc-runtime-row="updated"><dt>Updated</dt><dd data-aicc-runtime-updated></dd></div></dl><div class="aicc-result-preview-label">结果预览</div><pre class="aicc-result-preview" data-aicc-result-preview></pre><div class="aicc-result-actions" data-aicc-result-actions hidden><button type="button" data-aicc-copy-result aria-label="复制完整结果"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="8" y="8" width="11" height="12" rx="2"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v10h2"/></svg><span data-aicc-footer-label>复制结果</span></button><button type="button" data-aicc-expand-result><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 4h6v6M20 4h6v6M20 4l-7 7M10 20H4v-6m0 6 7-7"/></svg><span data-aicc-footer-label>展开结果</span></button></div><div class="aicc-insert-gpt-footer"><button type="button" data-aicc-insert-gpt aria-label="插入 GPT" disabled title="插入 GPT · 当前没有可用的最新结果预览。">插入 GPT</button></div>';
-      const resultActions = section.querySelector(SELECTORS.resultActions);
+      const rebuiltResultActions = section.querySelector(SELECTORS.resultActions);
       const insertGptFooter = section.querySelector('.aicc-insert-gpt-footer');
-      const insertGpt = section.querySelector(SELECTORS.insertGpt);
-      if (resultActions && insertGptFooter && insertGpt) { resultActions.appendChild(insertGpt); insertGptFooter.remove(); }
+      const rebuiltInsertGpt = section.querySelector(SELECTORS.insertGpt);
+      if (rebuiltResultActions && insertGptFooter && rebuiltInsertGpt) { rebuiltResultActions.appendChild(rebuiltInsertGpt); insertGptFooter.remove(); }
       panel.appendChild(section);
     }
     bindPanelControl(SELECTORS.copyResult, copyPanelResult);

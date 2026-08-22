@@ -12,7 +12,7 @@ const startup = content.slice(content.indexOf('if (document.body)'));
 assert.ok(handler, 'bottom-center action has a dedicated click handler');
 assert.match(content, /class="aicc-insert-gpt-footer"[\s\S]*data-aicc-insert-gpt[^>]*>插入 GPT/);
 assert.match(content, /\.aicc-insert-gpt-footer\{display:flex;justify-content:center\}/, 'footer action is centered');
-assert.match(content, /resultActions\.appendChild\(insertGpt\); insertGptFooter\.remove\(\)/, 'the GPT control joins the existing result footer parent');
+assert.match(content, /rebuiltResultActions\.appendChild\(rebuiltInsertGpt\); insertGptFooter\.remove\(\)/, 'the GPT control joins the rebuilt canonical result action group');
 assert.match(content, /\.aicc-result-actions\{grid-template-columns:repeat\(3,minmax\(0,1fr\)\);grid-auto-flow:column;white-space:nowrap\}/, 'all three footer controls occupy one no-wrap row');
 assert.match(content, /bindPanelControl\(SELECTORS\.insertGpt, insertLatestResultToGpt\)/, 'footer action uses one guarded binding');
 assert.match(content, /const insertGpt = section\.querySelector\(SELECTORS\.insertGpt\)/);

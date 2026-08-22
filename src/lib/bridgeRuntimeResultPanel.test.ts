@@ -121,6 +121,8 @@ assert.match(content,/PENDING_SUBMISSION_KEY = 'aicc-gpt-bridge-pending-submissi
 assert.match(content,/await persistStorage\(PENDING_SUBMISSION_KEY, pending\)[\s\S]*boundedMessage\(operation/,'pending identity is durable before transport begins');
 assert.match(content,/SUBMISSION_UNCONFIRMED[\s\S]*reconcilePendingSubmission\(unconfirmed\)/,'watchdog warns and reconciles without automatic resubmission');
 assert.equal((content.match(/section\.dataset\.aiccRuntimeResultPanel = 'true'/g)??[]).length,1,'one Runtime Result Panel is created');
+assert.match(content,/const structureComplete = Boolean\(section && section\.querySelectorAll\(SELECTORS\.resultPreview\)\.length === 1[\s\S]*resultActions\.querySelectorAll\('button'\)\.length === 3/,'existing Runtime Result Panel remount validates exactly one preview and one three-button action group');
+assert.match(content,/if \(!structureComplete\) \{[\s\S]*if \(section\) section\.remove\(\)/,'an incomplete Runtime Result Panel is rebuilt instead of preserving stale DOM');
 assert.match(content,/const existing = document\.querySelector\(SELECTORS\.mount\)[\s\S]*if \(existing\) \{ panel = existing;[\s\S]*ensureRuntimeResultPanel\(\)/,'remount reconciliation preserves singleton ownership');
 assert.match(content,/const AICC_DECISION_AUTHORITY = 0/);
 
