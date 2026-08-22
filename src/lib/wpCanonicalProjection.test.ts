@@ -86,6 +86,9 @@ assert.match(readFileSync(new URL('./wpCanonicalProjection.ts',import.meta.url),
 assert.doesNotMatch(entityContextSource,/nextAction:node\.status|statusText\(node\.status\)/,'Milestone derived presentation does not fall back to raw Roadmap status');
 assert.doesNotMatch(entityContextSource,/prProjection\?\.parentWpId\?\?node\?\.parentId/,'PR to WP binding never falls back to Roadmap parent inference');
 assert.match(entityContextSource,/const parent=prProjection\?\.parentWpId\?\?null/,'PR parent WP comes only from canonical PR projection');
+assert.match(entityContextSource,/const parent=nodes\.find\(milestone=>milestone\.id===wpProjection\.milestoneId\)\?\?null/,'WP to Milestone binding uses the canonical WP projection milestone ID');
+assert.match(entityContextSource,/title:wpProjection\.title/,'WP context title comes only from the canonical WP projection');
+assert.doesNotMatch(entityContextSource,/title:wpProjection\?\.title\?\?formal|children\.some\(child=>child\.id===selected\.id\)/,'WP context does not re-derive title or Milestone binding from raw sources');
 const app=readFileSync(new URL('../App.svelte',import.meta.url),'utf8');
 assert.match(app,/projectWpRoadmapNodes\(roadmapProjection\?\.nodes\?\?\[\],wpProjection\)/,'left WP state consumes Layer 2');
 assert.match(app,/projectGlobalWorkPackages\(snapshot,globalTasks,wpProjection\)/,'center WP state consumes Layer 2');
