@@ -86,7 +86,7 @@
   $: diagnostic=buildRuntimeDiagnostic(focusedTask??tasks.find(task=>task?.taskId===selectedTaskId)??null,focused);
   $: if(resultExpandedId&&resultExpandedId!==focused?.runId)resultExpandedId=null;
   function runtimeForRun(runId:string|null){return runId?[contextRuntime,...contextHistory].find(item=>item?.runId===runId)??null:null}
-  function resultForRun(run:RuntimeRecord|null){return run&&['COMPLETED','FAILED','STOPPED'].includes(run.phase)?run.canonicalResult?.rawResult??null:null}
+  function resultForRun(run:RuntimeRecord|null){return run&&lifecycleProjection?exactResultForRun(lifecycleProjection,run.runId)?.canonical?.rawResult??null:null}
   async function copyResult(runId=focused?.runId){if(!runId||!resultForRun(runtimeForRun(runId)))return;await onCopyResult(runId);copiedRunId=runId;if(copyTimer)clearTimeout(copyTimer);copyTimer=window.setTimeout(()=>copiedRunId=null,1600)}
   function formatDuration(start?:string,end?:string){if(!start)return '不可用';const from=Date.parse(start),to=end?Date.parse(end):Date.now();if(!Number.isFinite(from)||!Number.isFinite(to))return '不可用';const seconds=Math.max(0,Math.floor((to-from)/1000));return `${Math.floor(seconds/60)}分${String(seconds%60).padStart(2,'0')}秒`}
 </script>
