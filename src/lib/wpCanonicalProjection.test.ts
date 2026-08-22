@@ -126,4 +126,8 @@ assert.equal(lifecycleRow.wp_progress.state,'UNKNOWN','missing Roadmap progress 
 assert.equal(lifecycleRow.workPackageId,lifecycleRow.wp_id,'central row retains exact canonical WP identity');
 const globalWpWorkspace=readFileSync(new URL('../components/GlobalWpWorkspace.svelte',import.meta.url),'utf8');
 assert.doesNotMatch(globalWpWorkspace,/01_LIVING_ROADMAP|roadmapGroup(?:Number|Title)|8\.3|8\.4/,'WP UI does not parse or hardcode Roadmap grouping');
+assert.doesNotMatch(globalWpWorkspace,/\[\.\.\.records,\.\.\.created\]/,'prepared local WP objects never join the canonical WP record set');
+assert.doesNotMatch(globalWpWorkspace,/records\.length\+created\.length/,'prepared local WP objects never affect canonical WP counts');
+assert.match(globalWpWorkspace,/Prepared Work Packages[\s\S]*Not canonical · awaiting Roadmap admission/,'prepared WP objects remain visibly separated from canonical Roadmap-backed WPs');
+assert.doesNotMatch(globalWpWorkspace,/#each created as record\}<button[^>]+on(?:click|Click)=/,'prepared WP objects cannot drive canonical WP selection');
 console.log('AICC Phase 4 WP canonical projection contract passed');
