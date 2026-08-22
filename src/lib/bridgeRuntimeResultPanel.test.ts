@@ -27,6 +27,10 @@ assert.doesNotMatch(panelTemplate,/data-aicc-auto-submit-probe|UAT · Auto Submi
 assert.equal((panelTemplate.match(/type=\"checkbox\"/g)??[]).length,2,'auto control has exactly two Owner-facing toggles');
 assert.match(panelTemplate,/锁定 GPT 聊天口[\s\S]*开启自动循环/);
 assert.match(content,/data-aicc-runtime-result-panel/);assert.match(content,/<dt>Result<\/dt><dd data-aicc-runtime-result>/,'runtime panel exposes the canonical Result field');assert.match(content,/结果预览/);
+assert.match(content,/preview\.textContent = runtimeProjection\.resultText \|\| '暂无可用结果'/,'result preview remains visible with a truthful empty-state placeholder');
+assert.match(content,/const actions = section\.querySelector\(SELECTORS\.resultActions\); if \(actions\) actions\.hidden = false/,'result footer actions remain visible in every runtime state');
+assert.doesNotMatch(content,/data-aicc-result-actions hidden/,'result footer is never structurally hidden');
+assert.doesNotMatch(content,/data-aicc-result-state=\"WAITING\"[^}]*aicc-result-preview/,'WAITING state does not hide the result preview capability');
 assert.match(content,/class="aicc-runtime-status-badge" data-aicc-runtime-status>IDLE</,'compact panel owns the canonical runtime badge');
 assert.doesNotMatch(content,/Codex 执行中 · 来源:|Codex 结果已就绪 · 来源:/,'legacy duplicate runtime status is removed');
 assert.equal((content.match(/data-aicc-status(?=[ >])/g)??[]).length,1,'one unified live status surface remains');
