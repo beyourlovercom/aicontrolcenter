@@ -407,6 +407,28 @@ export async function readRuntimeByRunIdReadOnly(runId:string):Promise<RuntimeSt
   const unique=findUniqueRawRuntimeIdentity(fileMatches,runId);
   return unique?reconcileObservedRuntime(reconcileRuntimeEntityBinding(unique)):null;
 }
+/** Async scoped read: same raw runId resolves only within the supplied projectId+repositoryIdentity. */
+export async function readRuntimeByRunIdScoped(scope:Pick<ProjectEntityScope,'projectId'|'repositoryIdentity'>,runId:string):Promise<RuntimeState|null>{
+  if(!runId)return null;
+  const snapshot=await readRuntimeProjectionSnapshot();
+  const all=[...snapshot.stored,...snapshot.history];
+  const scopedMatch=all.find(item=>item.runId===runId&&runtimeBelongsToProject(item,scope));
+  if(scopedMatch)return scopedMatch;
+  const candidates=[join(STATE_DIR,`runtime-${runId}.json`),RUN_FILE];
+  const fileMatches:RuntimeState[]=[];
+  for(const file of candidates){
+    try{const parsed=JSON.parse(await readFile(file,'utf8')) as RuntimeState;if(parsed?.runId===runId&&runtimeBelongsToProject(parsed,scope))fileMatches.push(parsed)}catch{}
+  }
+  try{const parsed=JSON.parse(await readFile(HISTORY_FILE,'utf8')) as unknown;if(Array.isArray(parsed))fileMatches.push(...(parsed as RuntimeState[]).filter(item=>item?.runId===runId&&runtimeBelongsToProject(item,scope)))}catch{}
+  const unique=findUniqueRawRuntimeIdentity(fileMatches,runId);
+  return unique?reconcileObservedRuntime(reconcileRuntimeEntityBinding(unique)):null;
+}
+/** Stop runtime only if it belongs to the supplied scope; throws SCOPE_MISMATCH if not. */
+export async function stopRuntimeWithGraceScoped(scope:Pick<ProjectEntityScope,'projectId'|'repositoryIdentity'>,runId:string,graceMs=1000):Promise<RuntimeState>{
+  const current=await readRuntimeByRunIdScoped(scope,runId);
+  if(!current)throw new Error('SCOPE_MISMATCH');
+  return stopRuntimeWithGrace(runId,graceMs);
+}
 export async function readCanonicalResultAsync(executionId:string):Promise<RuntimeState|null>{const snapshot=await readRuntimeProjectionSnapshot();const state=findUniqueRawRuntimeIdentity([...snapshot.stored,...snapshot.history],executionId);return state?.canonicalResult?state:null}
 export function readRuntime(workPackageId?: string, entityType?: RuntimeState['entityType'], entityId?: string, projectScope?: Pick<ProjectEntityScope,'projectId'|'repositoryIdentity'>): RuntimeState | null {
   const isWpRead=Boolean(workPackageId||entityType==='work_package');

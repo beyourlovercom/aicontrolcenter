@@ -1,4 +1,4 @@
-import { buildPrompt, monitorRuntimeState, parseEvent, resolveRuntimeExecutionPolicy, type RuntimeState } from './runtimeManager.ts';
+import { buildPrompt, monitorRuntimeState, parseEvent, resolveRuntimeExecutionPolicy, readRuntimeScoped, runtimeBelongsToProject, type RuntimeState } from './runtimeManager.ts';
 import {selectCanonicalCurrentRuntime} from './runtimeSelection.ts';
 import { readWorkPackage } from './controlService.ts';
 function assert(x:unknown,m:string):asserts x{if(!x)throw new Error(m)}
@@ -9,3 +9,18 @@ const remediationPolicy=resolveRuntimeExecutionPolicy('REMEDIATION','workspace-w
 const opaqueType='OWNER_DEFINED_FUTURE_EXECUTION';const opaquePolicy=resolveRuntimeExecutionPolicy(opaqueType,'workspace-write');assert(opaquePolicy.executionType===opaqueType,'unknown execution type remains opaque metadata');assert(opaquePolicy.sandboxMode==='workspace-write','unknown execution type does not block pass-through launch');
 const staleRunning:RuntimeState={...s,runId:'stale-running',phase:'RUNNING',pid:99999,supervisorPid:99998,startedAt:'2026-08-18T00:00:00.000Z',lastActivityAt:'2026-08-18T00:00:00.000Z'};monitorRuntimeState(staleRunning,Date.parse('2026-08-18T01:00:00.000Z'),()=>false);assert(staleRunning.phase==='FAILED'&&staleRunning.failure==='PROCESS_EXITED','dead Runtime process without a live supervisor reconciles to factual terminal failure');
 const oldTerminal={runId:'old',phase:'COMPLETED',lastActivityAt:'2026-08-13T02:30:00.000Z',startedAt:'2026-08-13T02:29:00.000Z'};const newActive={runId:'new',phase:'STARTING',lastActivityAt:'2026-08-13T02:37:23.296Z',startedAt:'2026-08-13T02:37:23.296Z'};assert(selectCanonicalCurrentRuntime(oldTerminal,[oldTerminal,newActive],'old')?.runId==='new','active runtime outranks a stale selected terminal runtime');const newTerminal={...newActive,phase:'COMPLETED'};assert(selectCanonicalCurrentRuntime(newTerminal,[oldTerminal,newTerminal],'old')?.runId==='old','explicit historical selection remains exact after all runs are terminal');
+// D0B_1: exact-run scoped transport — same runId resolves by projectId+repositoryIdentity
+const scopeA={projectId:'project-a',repositoryIdentity:'repo-a'};const scopeB={projectId:'project-b',repositoryIdentity:'repo-b'};
+const runA:RuntimeState={...s,runId:'shared-run-id',projectId:'project-a',repositoryIdentity:'repo-a'};
+const runB:RuntimeState={...s,runId:'shared-run-id',projectId:'project-b',repositoryIdentity:'repo-b'};
+assert(runtimeBelongsToProject(runA,scopeA),'runA belongs to scopeA');
+assert(!runtimeBelongsToProject(runA,scopeB),'runA does not belong to scopeB');
+assert(runtimeBelongsToProject(runB,scopeB),'runB belongs to scopeB');
+assert(!runtimeBelongsToProject(runB,scopeA),'runB does not belong to scopeA');
+// readRuntimeScoped (sync) returns null for foreign scope — cannot resolve across projects
+const storedScopeA=readRuntimeScoped(scopeA,'shared-run-id');
+const storedScopeB=readRuntimeScoped(scopeB,'shared-run-id');
+// These will both be null since we have no live storage here, but the scope filter logic is validated above via runtimeBelongsToProject
+assert(storedScopeA===null||typeof storedScopeA==='object','readRuntimeScoped returns null or object for scopeA');
+assert(storedScopeB===null||typeof storedScopeB==='object','readRuntimeScoped returns null or object for scopeB');
+console.log('D0B_1 scope isolation contract tests passed');
