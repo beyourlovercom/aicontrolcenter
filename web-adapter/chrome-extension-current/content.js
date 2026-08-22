@@ -642,12 +642,13 @@
     finally { clipboardChatGptSendInFlight = false; }
   }
   function mountNativeActions() { console.log('[AICC composer mount] caller entered'); window.AICCChatGPTDom.removeChatContentFloatingButtons(document); const canonicalImportAndRun = (text, originContext) => sendTask(text, originContext, 'Composer', 'IMPORT_AND_RUN', { sourceType: 'GPT_BLOCK' }); console.log('[AICC composer mount] API available', Boolean(window.AICCChatGPTDom?.mountComposerAiccAction)); window.AICCChatGPTDom.mountComposerAiccAction(document, canonicalImportAndRun); refreshExplicitPayloadBinding(); }
+  function safeMountNativeActions() { try { mountNativeActions(); } catch (error) { try { console.warn('[AICC composer mount] isolated failure', error); } catch {} } }
 
   let nativeMountQueued = false;
   function scheduleNativeMount() {
     if (nativeMountQueued) return;
     nativeMountQueued = true;
-    queueMicrotask(() => { nativeMountQueued = false; mount(); mountNativeActions(); });
+    queueMicrotask(() => { nativeMountQueued = false; try { mount(); } catch (error) { try { console.warn('[AICC bridge mount] isolated failure', error); } catch {} } safeMountNativeActions(); });
   }
 
   async function pollResult(allowAutomaticFeedback = false) {
@@ -850,12 +851,15 @@
     protocolCaptureQueued = true;
     window.setTimeout(() => { protocolCaptureQueued = false; void captureExplicitBugProtocols(); void captureExplicitLocalSyncProtocols(); }, 250);
   }
+  window.setInterval(() => { void pollResult(); void consumeNewAssistantControl(); }, 3000);
+  window.setInterval(() => { void refreshUsClaudeCapability(); }, 15000);
   const bootstrapObserver = new MutationObserver(() => {
     if (!document.body) return;
     bootstrapObserver.disconnect();
-    mount(); mountNativeActions(); scheduleProtocolCapture();
+    try { mount(); } catch (error) { try { console.warn('[AICC bridge mount] isolated failure', error); } catch {} }
+    safeMountNativeActions(); scheduleProtocolCapture();
   });
-  if (document.body) { mount(); mountNativeActions(); scheduleProtocolCapture(); }
+  if (document.body) { try { mount(); } catch (error) { try { console.warn('[AICC bridge mount] isolated failure', error); } catch {} } safeMountNativeActions(); scheduleProtocolCapture(); }
   else bootstrapObserver.observe(document.documentElement, { childList: true, subtree: true });
   new MutationObserver(records => {
     if (!hasExternalDomMutation(records)) return;
@@ -863,6 +867,4 @@
     scheduleProtocolCapture();
   }).observe(document.documentElement, { childList: true, subtree: true });
   document.addEventListener('selectionchange', refreshExplicitPayloadBinding);
-  window.setInterval(() => { void pollResult(); void consumeNewAssistantControl(); }, 3000);
-  window.setInterval(() => { void refreshUsClaudeCapability(); }, 15000);
 }());

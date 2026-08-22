@@ -10,6 +10,10 @@ assert.match(source, /if \(!hasExternalDomMutation\(records\)\) return;/, 'Bridg
 assert.match(source, /function isAiccOwnedNode\(node\)/, 'Bridge-owned subtree identity is explicit');
 assert.doesNotMatch(source, /window\.setInterval\(\(\) => \{ mount\(\);/, 'mount is not timer-driven');
 assert.doesNotMatch(source, /window\.setInterval\(mountNativeActions/, 'Composer mounting is not timer-driven');
+assert.match(source, /function safeMountNativeActions\(\) \{ try \{ mountNativeActions\(\); \} catch/, 'Composer rail mount failures are isolated from Bridge runtime lifecycle');
+const runtimeTimerIndex = source.indexOf('window.setInterval(() => { void pollResult(); void consumeNewAssistantControl(); }, 3000);');
+const bootstrapIndex = source.indexOf('const bootstrapObserver = new MutationObserver');
+assert.ok(runtimeTimerIndex >= 0 && bootstrapIndex > runtimeTimerIndex, 'runtime polling timer is registered before any DOM bootstrap mount can fail');
 
 assert.match(source, /stack\.dataset\.aiccActionSignature !== signature/, 'action rendering is structural and idempotent');
 assert.match(source, /stack\.dataset\.aiccRegistryBound !== 'true'/, 'delegated action binding is one-time');
@@ -24,6 +28,6 @@ assert.equal((source.match(/deliverCanonicalResult\(\)/g) ?? []).length, 3, 'res
 assert.doesNotMatch(source.slice(source.indexOf('if (document.body)')), /insertTextIntoComposer|ownerConfirmSend|deliverCanonicalResult/, 'startup does not insert or submit Composer content');
 
 const actionKeys = [...registry.matchAll(/actionKey: '([^']+)'/g)].map(match => match[1]);
-assert.deepEqual(actionKeys, ['clipboard-codex-execute', 'codex-execute', 'codex-result', 'aicc-send', 'next-step'], 'the five-button registry baseline is preserved exactly once');
+assert.deepEqual(actionKeys, ['us-claude', 'clipboard-codex-execute', 'codex-execute', 'codex-result', 'aicc-send', 'next-step'], 'the six-button registry baseline is preserved exactly once');
 
 console.log('Bridge startup freeze regression tests passed');

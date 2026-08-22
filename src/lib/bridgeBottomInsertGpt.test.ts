@@ -41,7 +41,7 @@ assert.doesNotMatch(handler, /initialSendButton/, 'Send readiness is not cached 
 assert.ok(handler.indexOf('verifyComposerText') < handler.indexOf('const conversationId') && handler.indexOf('const conversationId') < handler.indexOf('submitChatGPTComposerOnce'), 'submission follows verified insertion');
 assert.match(handler, /INSERT_GPT_VERIFICATION_FAILED[\s\S]*未提交/);
 
-assert.match(startup, /mount\(\); mountNativeActions\(\); scheduleProtocolCapture\(\);/);
+assert.match(startup, /safeMountNativeActions\(\); scheduleProtocolCapture\(\);/);
 assert.doesNotMatch(startup, /insertLatestResultToGpt\(\)/, 'boot and external mutation handling never invoke the footer action');
 assert.doesNotMatch(startup, /submitChatGPTComposerOnce\(/, 'boot never submits to ChatGPT');
 assert.match(content, /if \(stack\.dataset\.aiccRegistryBound !== 'true'\)/, 'primary button binding is one-time');
