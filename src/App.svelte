@@ -159,7 +159,7 @@
   $: globalCurrentWorkPackage=globalFocus?.workPackage??null;
   $: globalCurrentPhase=globalFocus?.phase??null;
   $: selectedTask=globalTasks.find(item=>item.taskId===selectedTaskId)??null;
-  $: selectedTaskWorkPackageId=selectedTask?.formalWpId??selectedTask?.formal_wp_id??selectedTask?.workPackageId??selectedTask?.instruction?.formalWpId??selectedTask?.instruction?.workPackageId??(String(selectedTask?.instruction?.entityType??'').toLowerCase()==='work_package'?selectedTask?.instruction?.entityId:null)??null;
+  $: selectedTaskWorkPackageId=selectedTask&&wpProjection?wpProjection.records.find(record=>record.taskIds.includes(selectedTask.taskId))?.id??null:null;
   $: selectedTaskWorkPackageContextCandidate=selectedTaskWorkPackageId&&activeRoadmapProject&&prLayer2&&wpProjection?resolveEntityContext(snapshot,{type:'work_package',id:selectedTaskWorkPackageId},prLayer2,wpProjection,activeRoadmapProject):null;
   $: selectedTaskWorkPackageContext=selectedTaskWorkPackageContextCandidate?.type==='work_package'?selectedTaskWorkPackageContextCandidate:null;
   $: selectedTaskRuntimeId=selectedTask?.runId??selectedTask?.executionId??null;
@@ -207,7 +207,7 @@
     if(stageKey!==lastCurrentStageFeedbackKey){lastCurrentStageFeedbackKey=stageKey;setFeedback({state:'INFO',title:`当前阶段：${context.lifecycle.currentStage}`,message:currentStageMessage(context.lifecycle.currentStage),code:'WP_CURRENT_STAGE'});}
   }else lastCurrentStageFeedbackKey='';
   function updateComposerHeight(height:number){composerHeight=Math.max(0,Math.ceil(height))}
-  function toggleExecutionContextLock(){const taskWorkPackageId=selectedTask?.workPackageId??selectedTask?.instruction?.workPackageId??(selectedTask?.instruction?.entityType==='WORK_PACKAGE'?selectedTask?.instruction?.entityId:null);const target=selectedTask?{type:'task' as const,id:selectedTask.taskId,workPackageId:taskWorkPackageId}:selectedEntity;executionContextLock=executionContextLock.locked?unlockExecutionContext():lockExecutionContext(target);persistExecutionContextLock(executionContextLock);setFeedback({state:'SUCCESS',title:executionContextLock.locked?'执行上下文已锁定':'执行上下文已解锁',message:executionContextLock.locked?`新任务默认绑定：${executionContextLock.entity?.id??'当前实体'}`:'未锁定默认上下文，未声明实体的任务保持 UNKNOWN。',code:executionContextLock.locked?'EXECUTION_CONTEXT_LOCKED':'EXECUTION_CONTEXT_UNLOCKED'})}
+  function toggleExecutionContextLock(){const target=selectedTask?{type:'task' as const,id:selectedTask.taskId,workPackageId:selectedTaskWorkPackageId}:selectedEntity;executionContextLock=executionContextLock.locked?unlockExecutionContext():lockExecutionContext(target);persistExecutionContextLock(executionContextLock);setFeedback({state:'SUCCESS',title:executionContextLock.locked?'执行上下文已锁定':'执行上下文已解锁',message:executionContextLock.locked?`新任务默认绑定：${executionContextLock.entity?.id??'当前实体'}`:'未锁定默认上下文，未声明实体的任务保持 UNKNOWN。',code:executionContextLock.locked?'EXECUTION_CONTEXT_LOCKED':'EXECUTION_CONTEXT_UNLOCKED'})}
   const toggleExecutionContextContextLock=toggleExecutionContextLock;
   function enterWorkPackageRoot(){
     activeGlobalTab='WP';

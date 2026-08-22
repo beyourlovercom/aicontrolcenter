@@ -84,9 +84,13 @@ assert.match(entityContextSource,/milestoneContext\(snapshot,selected,[^;]+,wpLa
 assert.match(entityContextSource,/projectWpRoadmapNodes\(\[node\],wpLayer2\)/,'Milestone WP children are projected through canonical WP Layer 2 before summary/title/phase use');
 assert.match(readFileSync(new URL('./wpCanonicalProjection.ts',import.meta.url),'utf8'),/phaseProgress:record\.phaseProgress/,'projected Roadmap WP phase progress comes from Layer 2');
 assert.doesNotMatch(entityContextSource,/nextAction:node\.status|statusText\(node\.status\)/,'Milestone derived presentation does not fall back to raw Roadmap status');
+assert.doesNotMatch(entityContextSource,/prProjection\?\.parentWpId\?\?node\?\.parentId/,'PR to WP binding never falls back to Roadmap parent inference');
+assert.match(entityContextSource,/const parent=prProjection\?\.parentWpId\?\?null/,'PR parent WP comes only from canonical PR projection');
 const app=readFileSync(new URL('../App.svelte',import.meta.url),'utf8');
 assert.match(app,/projectWpRoadmapNodes\(roadmapProjection\?\.nodes\?\?\[\],wpProjection\)/,'left WP state consumes Layer 2');
 assert.match(app,/projectGlobalWorkPackages\(snapshot,globalTasks,wpProjection\)/,'center WP state consumes Layer 2');
+assert.match(app,/wpProjection\.records\.find\(record=>record\.taskIds\.includes\(selectedTask\.taskId\)\)\?\.id\?\?null/,'Task to WP selection in UI inverts the canonical WP_TO_TASK binding projection');
+assert.doesNotMatch(app,/selectedTask\?\.(?:formalWpId|formal_wp_id|workPackageId).*instruction\?\.(?:formalWpId|workPackageId)/,'Task to WP UI does not infer binding from legacy Task fields');
 assert.match(app,/resolveEntityContext\(snapshot,selectedEntity,prLayer2,wpProjection/,'right WP context consumes Layer 2');
 assert.match(app,/function navigateGlobalEntity/,'existing WP selection and routing remain App-level');
 assert.doesNotMatch(readFileSync(new URL('./wpCanonicalProjection.ts',import.meta.url),'utf8'),/M\\d\+.*prefix|startsWith\(['"]AICC/,'WP parent or existence prefix guessing is absent');
