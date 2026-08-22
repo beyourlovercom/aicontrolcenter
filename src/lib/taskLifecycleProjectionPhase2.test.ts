@@ -11,9 +11,9 @@ const task=(taskId:string,executionId?:string,runId?:string,status:'RUNNING'|'CO
 }) as CanonicalTaskRecord;
 
 const taskA=task('task-a','execution-a','run-a'),taskB=task('task-b','execution-b','run-b');
-const running=projectTaskLayer2ReadModel(createEmptyGlobalStateReadModel(emptyContext),[taskA,taskB],[{runId:'run-a',phase:'RUNNING'} as any,{runId:'run-b',phase:'RUNNING'} as any]);
+const running=projectTaskLayer2ReadModel(createEmptyGlobalStateReadModel(emptyContext),[taskA,taskB],[{runId:'run-a',phase:'RUNNING',...scope} as any,{runId:'run-b',phase:'RUNNING',...scope} as any]);
 assert.equal(running.globalProjectionRevision,1);
-const completedA=projectTaskLayer2ReadModel(running,[{...taskA,status:'COMPLETED',updatedAt:'2026-08-20T00:01:00.000Z'},taskB],[{runId:'run-a',phase:'COMPLETED'} as any,{runId:'run-b',phase:'RUNNING'} as any]);
+const completedA=projectTaskLayer2ReadModel(running,[{...taskA,status:'COMPLETED',updatedAt:'2026-08-20T00:01:00.000Z'},taskB],[{runId:'run-a',phase:'COMPLETED',...scope} as any,{runId:'run-b',phase:'RUNNING',...scope} as any]);
 assert.equal(completedA.globalProjectionRevision,2,'exact terminal Task projection advances the global revision');
 assert.equal(completedA.entities.find(entity=>entity.identity.kind==='TASK'&&entity.identity.id==='task-a')?.dimensions[0]?.projectedValue.state,'KNOWN');
 const completedTaskValue=completedA.entities.find(entity=>entity.identity.kind==='TASK'&&entity.identity.id==='task-a')?.dimensions[0]?.projectedValue;
@@ -23,7 +23,7 @@ assert.equal(completedRunValue?.state==='KNOWN'&&completedRunValue.value,'COMPLE
 assert.equal(completedA.entityRevisions.find(entity=>entity.identity.kind==='TASK'&&entity.identity.id==='task-a')?.projectionRevision,2,'bound Task revision advances');
 assert.equal(completedA.entityRevisions.find(entity=>entity.identity.kind==='TASK'&&entity.identity.id==='task-b')?.projectionRevision,1,'unrelated Task remains untouched');
 assert.deepEqual(resolveExplicitBindings(completedA,'TASK_TO_EXECUTION',entityIdentity(scope,'TASK','task-a')),resolveExplicitBindings(completedA,'TASK_TO_EXECUTION',entityIdentity(scope,'TASK','task-a')),'only the explicit Task binding is usable');
-assert.equal(projectTaskLayer2ReadModel(completedA,[{...taskA,status:'COMPLETED',updatedAt:'2026-08-20T00:01:00.000Z'},taskB],[{runId:'run-a',phase:'COMPLETED'} as any,{runId:'run-b',phase:'RUNNING'} as any]),completedA,'no-op reprojection cannot synthesize a revision');
+assert.equal(projectTaskLayer2ReadModel(completedA,[{...taskA,status:'COMPLETED',updatedAt:'2026-08-20T00:01:00.000Z'},taskB],[{runId:'run-a',phase:'COMPLETED',...scope} as any,{runId:'run-b',phase:'RUNNING',...scope} as any]),completedA,'no-op reprojection cannot synthesize a revision');
 const unbound=projectTaskLayer2ReadModel(createEmptyGlobalStateReadModel(emptyContext),[task('task-unbound')],[]);
 assert.equal(resolveExplicitBindings(unbound,'TASK_TO_EXECUTION',entityIdentity(scope,'TASK','task-unbound')).state,'UNBOUND','missing exact binding stays UNBOUND');
 
