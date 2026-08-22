@@ -61,16 +61,16 @@
   let phase5Layer2:ReturnType<typeof projectPhase5Lifecycle>|null=null;
   let phase5ContextKey:string|null=null;
   $: {const key=projectContext?`${projectContext.projectId}|${projectContext.repositoryIdentity}|${projectContext.projectContextRevision}`:null;if(key!==phase5ContextKey){phase5ContextKey=key;phase5Layer2=projectContext?projectPhase5Lifecycle(createEmptyGlobalStateReadModel(projectContext),{}):null;}}
-  $: currentSubmittedRun=instructionState==='RUN_STARTED'&&runtime&&selectedRunId===runtime.runId&&!['COMPLETED','FAILED','STOPPED','RECOVERY_REQUIRED'].includes(runtime.phase)?runtime:null;
-  $: liveComposerRun=runtime&&runtime.pidAlive===true&&['STARTING','RUNNING','STOPPING'].includes(runtime.phase)?runtime:null;
+  $: contextRuntime=projectContext&&runtime&&runtime.projectId===projectContext.projectId&&runtime.repositoryIdentity===projectContext.repositoryIdentity?runtime:null;
+  $: contextHistory=projectContext?history.filter(item=>item.projectId===projectContext!.projectId&&item.repositoryIdentity===projectContext!.repositoryIdentity):[];
+  $: currentSubmittedRun=instructionState==='RUN_STARTED'&&contextRuntime&&selectedRunId===contextRuntime.runId&&!['COMPLETED','FAILED','STOPPED','RECOVERY_REQUIRED'].includes(contextRuntime.phase)?contextRuntime:null;
+  $: liveComposerRun=contextRuntime&&contextRuntime.pidAlive===true&&['STARTING','RUNNING','STOPPING'].includes(contextRuntime.phase)?contextRuntime:null;
   $: cancellableComposerRun=currentSubmittedRun??liveComposerRun;
   $: activeComposerState=composerSubmitting?'SUBMITTING':cancellableComposerRun?.phase==='STARTING'?'STARTING':cancellableComposerRun?.phase==='RUNNING'?'RUNNING':cancellableComposerRun?.phase==='STOPPING'?'STOPPING':bridgePayload.trim()?'TEXT_READY':'EMPTY';
   onMount(async()=>{recordWorkspaceMount();try{const response=await fetch('/api/providers/codex');const payload=await response.json();modelOptions=(payload.models??[]).flatMap((item:any)=>(item.reasoningLevels??[]).map((reasoning:string)=>({value:`${item.model}:${reasoning}`,label:`${item.displayName} · ${reasoning}`,model:item.model,reasoning})));const savedModel=localStorage.getItem('aicc-selected-model')??payload.defaultModel,savedReasoning=localStorage.getItem('aicc-selected-reasoning')??payload.defaultReasoning;const saved=modelOptions.find(item=>item.model===savedModel&&item.reasoning===savedReasoning)??modelOptions[0];if(saved){selectedModel=saved.model;selectedReasoning=saved.reasoning}}catch{modelOptions=[]}return ()=>{if(copyTimer)clearTimeout(copyTimer)}});
   function persistSelection(value:string){const selected=modelOptions.find(item=>item.value===value);if(!selected)return;selectedModel=selected.model;selectedReasoning=selected.reasoning;if(typeof localStorage!=='undefined'){localStorage.setItem('aicc-selected-model',selected.model);localStorage.setItem('aicc-selected-reasoning',selected.reasoning)}}
   async function submitComposer(){if(activeComposerState!=='TEXT_READY'||composerSubmitting)return;composerSubmitting=true;try{await Promise.resolve(onComposerSend())}finally{composerSubmitting=false}}
   function onComposerKeydown(event:KeyboardEvent){if(event.key!=='Enter'||event.shiftKey||event.isComposing||imeComposing)return;if(activeComposerState!=='TEXT_READY')return;event.preventDefault();void submitComposer()}
-  $: contextRuntime=projectContext&&runtime&&runtime.projectId===projectContext.projectId&&runtime.repositoryIdentity===projectContext.repositoryIdentity?runtime:null;
-  $: contextHistory=projectContext?history.filter(item=>item.projectId===projectContext!.projectId&&item.repositoryIdentity===projectContext!.repositoryIdentity):[];
   $: focused=projectContext?selectCanonicalCurrentRuntime(contextRuntime,contextHistory,selectedRunId):null;
   function rebuildPhase5Projection(current:RuntimeRecord|null,taskRecords:any[],previous:ReturnType<typeof projectPhase5Lifecycle>|null){if(!previous||!projectContext)return previous;const next=projectPhase5Lifecycle(previous.model,{runs:current?[current]:[],tasks:taskRecords.map(task=>({taskId:task.taskId,lifecycle:task.status,executionId:task.executionId,runId:task.runId,updatedAt:task.updatedAt}))});phase5Layer2=next;return next;}
   $: lifecycleProjection=rebuildPhase5Projection(focused,tasks,phase5Layer2);
@@ -85,7 +85,7 @@
   $: focusedTask=focused?tasks.find(task=>task?.runId===focused.runId||task?.executionId===focused.runId)??null:null;
   $: diagnostic=buildRuntimeDiagnostic(focusedTask??tasks.find(task=>task?.taskId===selectedTaskId)??null,focused);
   $: if(resultExpandedId&&resultExpandedId!==focused?.runId)resultExpandedId=null;
-  function runtimeForRun(runId:string|null){return runId?[runtime,...history].find(item=>item?.runId===runId)??null:null}
+  function runtimeForRun(runId:string|null){return runId?[contextRuntime,...contextHistory].find(item=>item?.runId===runId)??null:null}
   function resultForRun(run:RuntimeRecord|null){return run&&['COMPLETED','FAILED','STOPPED'].includes(run.phase)?run.canonicalResult?.rawResult??null:null}
   async function copyResult(runId=focused?.runId){if(!runId||!resultForRun(runtimeForRun(runId)))return;await onCopyResult(runId);copiedRunId=runId;if(copyTimer)clearTimeout(copyTimer);copyTimer=window.setTimeout(()=>copiedRunId=null,1600)}
   function formatDuration(start?:string,end?:string){if(!start)return '不可用';const from=Date.parse(start),to=end?Date.parse(end):Date.now();if(!Number.isFinite(from)||!Number.isFinite(to))return '不可用';const seconds=Math.max(0,Math.floor((to-from)/1000));return `${Math.floor(seconds/60)}分${String(seconds%60).padStart(2,'0')}秒`}

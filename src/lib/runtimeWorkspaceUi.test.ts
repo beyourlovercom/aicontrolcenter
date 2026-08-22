@@ -28,8 +28,12 @@ assert.doesNotMatch(workspace,/bridge-inbox-item|查看指令|gateReason|rawInst
 assert.doesNotMatch(workspace,/disabled\={autoExecute\|\|instructionState!==\'IMPORTED_PENDING\'}/,'explicit submission is not gated by Auto Execute or READY');
 assert.match(workspace,/runtime-current-execution/);
 assert.match(workspace,/runtime-live-activity/);
-assert.match(workspace,/runtime&&runtime\.pidAlive===true/,'only a proven live current runtime owns Stop');
-assert.match(workspace,/instructionState==='RUN_STARTED'&&runtime&&selectedRunId===runtime\.runId/,'the current submitted run owns Stop before PID readiness');
+assert.match(workspace,/contextRuntime&&contextRuntime\.pidAlive===true/,'only a proven live project-scoped runtime owns Stop');
+assert.match(workspace,/instructionState==='RUN_STARTED'&&contextRuntime&&selectedRunId===contextRuntime\.runId/,'the current submitted run uses project-scoped contextRuntime, not raw runtime');
+assert.doesNotMatch(workspace,/liveComposerRun=runtime&&runtime\.pidAlive/,'liveComposerRun must not read raw unscoped runtime prop');
+assert.doesNotMatch(workspace,/currentSubmittedRun=instructionState==='RUN_STARTED'&&runtime&&/,'currentSubmittedRun must not read raw unscoped runtime prop');
+assert.match(workspace,/\[contextRuntime,\.\.\.contextHistory\]/,'runtimeForRun must search only project-scoped runtime/history');
+assert.doesNotMatch(workspace,/\[runtime,\.\.\.history\]\.find/,'runtimeForRun must not search raw unscoped runtime/history');
 assert.match(workspace,/composerSubmitting\?'SUBMITTING'/,'composer has a local duplicate-submission state');
 assert.match(workspace,/onkeydown=\{onComposerKeydown\}/,'textarea handles keyboard submission');
 assert.match(workspace,/event\.shiftKey\|\|event\.isComposing\|\|imeComposing/,'Shift+Enter and IME composition do not submit');
