@@ -7,6 +7,7 @@ export type RuntimeFeedbackProjection={
   title:string;
   message:string;
   code:string;
+  /** True only when the exact Phase 5 Result is available for the Run. */
   terminal:boolean;
 };
 
@@ -21,17 +22,17 @@ export function projectRuntimeFeedbackFromLayer2(run:RunLayer2Record,result:Resu
   const runtime=run.canonical;
   const phase=known(run.lifecycle);
   const canonicalResult=result?.availability.state==='KNOWN'&&result.availability.value==='AVAILABLE'?result.canonical:null;
-  if(!runtime)return {state:'ERROR',title:'Runtime 状态异常',message:'无法确认当前执行状态。',code:'RUNTIME_STATE_UNAVAILABLE',terminal:true};
+  if(!runtime)return {state:'ERROR',title:'Runtime 状态异常',message:'无法确认当前执行状态。',code:'RUNTIME_STATE_UNAVAILABLE',terminal:false};
   if(canonicalResult)return {state:'RUNNING',title:'Codex Result',message:canonicalResult.rawResult,code:'CODEX_RESULT_AVAILABLE',terminal:true};
   if(phase==='STARTING')return {state:'RUNNING',title:'已提交执行',message:runtime.runId,code:'EXECUTION_SENT',terminal:false};
   if(phase==='RUNNING'||phase==='STOPPING')return {state:'RUNNING',title:'正在执行',message:runtime.runId,code:phase==='RUNNING'?'CODEX_RUNNING':'CODEX_STOPPING',terminal:false};
-  if(phase&&['COMPLETED','FAILED','STOPPED','RECOVERY_REQUIRED'].includes(phase))return {state:'RUNNING',title:'Codex Result',message:'NOT_AVAILABLE',code:'CODEX_RESULT_NOT_AVAILABLE',terminal:true};
-  return {state:'ERROR',title:'Runtime 状态异常',message:runtime.failure??'无法确认当前执行状态。',code:runtime.failure??'RUNTIME_STATE_UNAVAILABLE',terminal:true};
+  if(phase&&['COMPLETED','FAILED','STOPPED','RECOVERY_REQUIRED'].includes(phase))return {state:'RUNNING',title:'Codex Result',message:'NOT_AVAILABLE',code:'CODEX_RESULT_NOT_AVAILABLE',terminal:false};
+  return {state:'ERROR',title:'Runtime 状态异常',message:runtime.failure??'无法确认当前执行状态。',code:runtime.failure??'RUNTIME_STATE_UNAVAILABLE',terminal:false};
 }
 
 export function projectRuntimeFeedbackFromGlobalState(projection:Phase5LifecycleProjection,runId:string):RuntimeFeedbackProjection{
   const run=exactRunLayer2(projection,runId);
-  if(!run)return {state:'ERROR',title:'Runtime 状态异常',message:'无法确认当前执行状态。',code:'RUNTIME_STATE_UNAVAILABLE',terminal:true};
+  if(!run)return {state:'ERROR',title:'Runtime 状态异常',message:'无法确认当前执行状态。',code:'RUNTIME_STATE_UNAVAILABLE',terminal:false};
   return projectRuntimeFeedbackFromLayer2(run,exactResultForRun(projection,runId));
 }
 
@@ -57,12 +58,15 @@ export function projectControlLoopFeedbackFromGlobalState(projection:Phase5Lifec
 
 /** Projects the exact Run to Layer 2 using an explicit project context. Fails closed if runtime scope does not match context. */
 export function projectRuntimeFeedback(runtime:RuntimeRecord,context:GlobalStateProjectContext):RuntimeFeedbackProjection{
-  if(runtime.projectId!==context.projectId||runtime.repositoryIdentity!==context.repositoryIdentity)return {state:'ERROR',title:'Runtime 状态异常',message:'项目上下文不匹配，无法确认执行状态。',code:'PROJECT_CONTEXT_MISMATCH',terminal:true};
+  if(runtime.projectId!==context.projectId||runtime.repositoryIdentity!==context.repositoryIdentity)return {state:'ERROR',title:'Runtime 状态异常',message:'项目上下文不匹配，无法确认执行状态。',code:'PROJECT_CONTEXT_MISMATCH',terminal:false};
   const projection=projectPhase5Lifecycle(createEmptyGlobalStateReadModel(context),{runs:[runtime]});
   return projectRuntimeFeedbackFromGlobalState(projection,runtime.runId);
 }
 
 export function shouldContinueRuntimePolling(runtime:RuntimeRecord|null,hasPendingInbox:boolean,selectedRunId?:string|null){
   if(hasPendingInbox||isActiveRuntime(runtime))return true;
-  return Boolean(runtime&&runtime.runId===selectedRunId&&['COMPLETED','FAILED','STOPPED'].includes(runtime.phase)&&!runtime.canonicalResult);
+  if(!runtime||runtime.runId!==selectedRunId||!['COMPLETED','FAILED','STOPPED','RECOVERY_REQUIRED'].includes(runtime.phase))return false;
+  const context={projectId:runtime.projectId,repositoryIdentity:runtime.repositoryIdentity,projectContextRevision:0};
+  const projection=projectPhase5Lifecycle(createEmptyGlobalStateReadModel(context),{runs:[runtime]});
+  return exactResultForRun(projection,runtime.runId)===null;
 }
