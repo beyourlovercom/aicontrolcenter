@@ -9,7 +9,7 @@ const legacy=readFileSync(new URL('../../web-adapter/chatgpt-aicc-bridge.js',imp
 
 assert(bridge.includes('BridgeNotification')&&bridge.includes('saveTerminalNotification'),'terminal notifications use the bridge terminal reconciliation path');
 assert(bridge.includes('AICC · Codex 执行完成')&&bridge.includes('AICC · Codex 执行失败')&&bridge.includes('AICC · Codex 执行已停止'),'terminal notification copy covers all terminal outcomes');
-assert(bridge.includes('notifications.some(notification=>notification.runId===item.runId)'),'notification persistence is idempotent per terminal Run');
+assert(bridge.includes('notification.runId===item.runId&&notification.projectId===item.projectId&&notification.repositoryIdentity===item.repositoryIdentity'),'notification persistence is idempotent per project-scoped terminal Run');
 assert(vite.includes("/api/gpt-bridge/notifications")&&vite.includes('readNotifications()'),'canonical notifications are exposed through the local service');
 assert(app.includes("request('/api/gpt-bridge/notifications')")&&app.includes('bridgeNotificationInitialized'),'AICC page consumes persisted terminal notifications without refresh re-notification');
 assert(worker.includes('sourceReference: message.sourceReference')&&worker.includes('MARK_REPORT_INSERTED')&&content.includes('insertedResultIds'),'extension preserves exact conversation correlation and insertion idempotency');

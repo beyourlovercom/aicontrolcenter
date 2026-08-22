@@ -449,9 +449,9 @@ export async function stopRuntimeWithGraceScoped(scope:Pick<ProjectEntityScope,'
 }
 export async function readCanonicalResultAsync(executionId:string):Promise<RuntimeState|null>{const snapshot=await readRuntimeProjectionSnapshot();const state=findUniqueRawRuntimeIdentity([...snapshot.stored,...snapshot.history],executionId);return state?.canonicalResult?state:null}
 export function readRuntime(workPackageId?: string, entityType?: RuntimeState['entityType'], entityId?: string, projectScope?: Pick<ProjectEntityScope,'projectId'|'repositoryIdentity'>): RuntimeState | null {
-  const isWpRead=Boolean(workPackageId||entityType==='work_package');
+  const requiresProjectScope=Boolean(workPackageId||entityType==='work_package'||entityType==='pull_request'||entityType==='global_task');
   const candidates = readStoredRuntimes()
-    .filter((item) => {if(isWpRead&&!projectScope)return false;if(isWpRead&&!runtimeBelongsToProject(item,projectScope!))return false;return !entityId ? (!workPackageId || item.workPackageId === workPackageId) : item.entityType === entityType && item.entityId === entityId;})
+    .filter((item) => {if(requiresProjectScope&&!projectScope)return false;if(projectScope&&!runtimeBelongsToProject(item,projectScope))return false;return !entityId ? (!workPackageId || item.workPackageId === workPackageId) : item.entityType === entityType && item.entityId === entityId;})
     .sort((a,b)=>Date.parse(b.lastActivityAt||b.startedAt)-Date.parse(a.lastActivityAt||a.startedAt));
   const active = candidates.find(item=>["STARTING","RUNNING","STOPPING"].includes(item.phase));
   const current = active ?? candidates[0];
@@ -462,7 +462,7 @@ export function readRuntime(workPackageId?: string, entityType?: RuntimeState['e
     if (monitored.phase !== before || monitored.healthWarning || monitored.pidAlive !== current.pidAlive || monitored.writerLockReleased !== current.writerLockReleased) save(monitored);
     return monitored;
   }
-  return readRuntimeHistory().find(item=>{if(isWpRead&&!projectScope)return false;if(isWpRead&&!runtimeBelongsToProject(item,projectScope!))return false;return entityId ? item.entityType===entityType&&item.entityId===entityId : (!workPackageId||item.workPackageId===workPackageId)})??null;
+  return readRuntimeHistory().find(item=>{if(requiresProjectScope&&!projectScope)return false;if(projectScope&&!runtimeBelongsToProject(item,projectScope))return false;return entityId ? item.entityType===entityType&&item.entityId===entityId : (!workPackageId||item.workPackageId===workPackageId)})??null;
 }
 function readStoredRuntimes():RuntimeState[]{
   const files=[RUN_FILE];
