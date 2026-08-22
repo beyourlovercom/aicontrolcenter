@@ -89,21 +89,32 @@ These samples are context only. They are incomplete telemetry and must not be mi
 - `QUOTA_LIMIT_TRIGGERED_IN_CYCLE`: NO
 - `CYCLE_CONCLUSION`: No 5-hour quota event occurred. Sonnet 5 remained reliable for complex implementation but the broadest remediation (execution 5) produced 110 turns and 10.85M cache reads; tighter GPT decomposition is required. Haiku was efficient for narrow mechanical test remediation. Thinking-disable launcher was corrected after execution 1.
 
-## Cycle C002 — ACTIVE
+## Cycle C002 — COMPLETE
 
 | # | Time (UTC) | Logical concern | Model | Effort | Think | Session | GPT review | Min | Turns | Input | Cache write | Cache read | Output | Think tok | API-eq | Quota |
 |---|---|---|---|---|---|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---|
 | 1 | 2026-08-21 20:12 | Batch3B1 raw runtime ID fail-closed | Sonnet 5 | low | OFF | fresh | PASS — Batch3B1 closed | 2.94 | 40 | 80 | 117791 | 3380883 | 17839 | 0 | $1.3274 | NO |
-| 2 |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |
-| 3 |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |
-| 4 |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |
-| 5 |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |
+| 2 | 2026-08-21 23:42 | Batch3B2A R1 auto-loop scope mutation isolation | Sonnet 5 | low | requested OFF / observed ON | fresh | FAIL — raw readFeedback cross-project | 12.52 | 95 | 190 | 204276 | 13657677 | 81399 | 30340 | $4.3646 | NO |
+| 3 | 2026-08-21 23:50 | Batch3B2A R2 legacy ambiguity and read isolation | Sonnet 5 | low | requested OFF / observed ON | fresh | PASS — Batch3B2A closed | 2.77 | 38 | 76 | 58037 | 1857824 | 14697 | 2506 | $0.7525 | NO |
+| 4 | 2026-08-21 23:56 | Batch3C1A runtime feedback explicit project context | Sonnet 4.6 | medium | OFF | fresh | PASS — Batch3C1A closed | 2.92 | 33 | 75 | 54512 | 1063989 | 10422 | 0 | $0.8043 | NO |
+| 5 | 2026-08-22 00:04 | Batch3C1B RuntimeWorkspace explicit project context | Sonnet 4.6 | low | OFF | fresh | PASS — Batch3C1B closed | 3.75 | 52 | 49 | 82660 | 3342669 | 12050 | 0 | $1.6811 | NO |
 
 ### Cycle C002 summary
 
-- `EXECUTIONS_COMPLETED`: 1 / 5
+- `EXECUTIONS_COMPLETED`: 5 / 5
+- `MODEL_DISTRIBUTION`: Sonnet 5 = 2; Sonnet 4.6 = 2; Haiku 4.5 = 0
+- `SUBSTANTIVE_FAILURES_IN_CYCLE`: 1
+- `FIRST_PASS_LOGICAL_CLOSURES`: 4
+- `REMEDIATION_ATTEMPTS`: 1
+- `TOTAL_ELAPSED`: 24.90 min
+- `TOTAL_INPUT_TOKENS`: 470
+- `TOTAL_CACHE_WRITE_TOKENS`: 517276
+- `TOTAL_CACHE_READ_TOKENS`: 23303042
+- `TOTAL_OUTPUT_TOKENS`: 136407
+- `TOTAL_THINKING_TOKENS`: 32846
+- `TOTAL_API_EQUIVALENT`: $8.9299
 - `QUOTA_LIMIT_TRIGGERED_IN_CYCLE`: NO
-- `CYCLE_CONCLUSION`: active
+- `CYCLE_CONCLUSION`: Cycle C002 closed with 4 first-pass closures and 1 remediation. Sonnet 5 produced unexpected thinking tokens on execs 2–3 despite launcher disabling thinking; mitigation required MAX_THINKING_TOKENS=0 + CLAUDE_CODE_DISABLE_ADAPTIVE_THINKING=1. Sonnet 4.6 produced zero thinking tokens. Raw runtime-ID ambiguity remediated in exec 3; scoped APIs now authoritative across Batch3B2A/3C. Total API-equivalent usage was $8.93, lower than C001 ($10.89) despite 24.9 min vs 21.7 min wall time (258 vs 257 turns). 23.3M cache reads (2.3% more than C001's 22.7M) reflects larger remediation scope in exec 2 (95 turns).
 
 ## Daily review log
 
@@ -117,6 +128,17 @@ For each day, append one review after reconciling completed executions from the 
 - `MODEL_EFFICIENCY_SIGNAL`: Haiku is materially cheaper on narrow mechanical remediation; Sonnet 5 needs tighter GPT-scoped concerns to avoid high-turn/cache-read runs
 - `FIRST_PASS_RELIABILITY_SIGNAL`: insufficient for permanent model routing; C001 had multiple remediation rounds
 - `GPT_RECOMMENDATION_FOR_NEXT_DAY`: keep Sonnet 5 for contract-sensitive cross-module work, thinking OFF, subagents denied; continue splitting by independently reviewable logical concern
+
+### 2026-08-22
+
+- `EXECUTIONS_REVIEWED`: C002 complete (5)
+- `ACTIVE_CYCLE`: awaiting C003 launch
+- `QUOTA_LIMIT_EVENT_TODAY`: NO
+- `MODEL_EFFICIENCY_SIGNAL`: Sonnet 4.6 matched C002 exec 1 pass closure with 0 thinking tokens and lower cache footprint on narrow Batch3C tasks; Sonnet 5 remediation (execs 2–3) cost $5.12 combined but closed Batch3B2A scope isolation gaps. C002 total API-equiv $8.93 (7.8% less than C001's $10.89) with 24.9 min elapsed vs C001's 21.7 min indicates better cost/turn ratio. 23.3M cache reads (2.3% more than C001's 22.7M) due to larger exec 2 scope (95 turns).
+- `THINKING_POLICY_VIOLATION_SIGNAL`: Sonnet 5 observed 30340+2506 = 32846 thinking tokens (6.3% of total I/O tokens) despite launcher setting thinking OFF; C002 exec 1 had 0 thinking tokens. Requires CLAUDE_CODE_DISABLE_ADAPTIVE_THINKING=1 or explicit max-thinking-tokens=0 in next cycle.
+- `FIRST_PASS_RELIABILITY`: 4/5 first-pass closures (80%); C001 was 1/5 (20%)
+- `REMEDIATION_COST`: exec 2 failed (raw readFeedback ambiguity), exec 3 passed (fail-closed remediation). $5.12 for one remediation pair vs C001 average $2.72 per failed concern
+- `GPT_RECOMMENDATION_FOR_NEXT_DAY`: Sonnet 4.6 recommended for Tier 2 narrow-scope tasks; Sonnet 5 only for cross-module contract work with explicit narrow GPT decomposition; enforce thinking disable via launcher settings (not just --thinking flag); continue cycle-based measurement through 2026-08-31
 
 ## 2026-09-01 final routing review template
 
