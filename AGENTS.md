@@ -173,17 +173,20 @@ scope growth are signals to stop and return evidence to GPT.
 
 GPT Plus Web must classify every Claude dispatch before launch:
 
-- Tier 1 — Haiku 4.5 (`claude-haiku-4-5`): pure audit, grep/search,
+- Tier 1 — Haiku 4.5 (`claude-haiku-4-5`): optional pure audit, grep/search,
   classification, simple fixture work, mechanical edits, repetitive
   low-complexity changes.
-- Tier 2 — Sonnet 4.6 (`claude-sonnet-4-6`): ordinary implementation,
-  clear-plan implementation, medium-complexity changes.
-- Tier 3 — Sonnet 5 (`claude-sonnet-5`): complex architecture implementation,
-  difficult remediation, cross-module migration, hard-to-localize failures.
+- Tier 2 / default implementation — Sonnet 4.6 (`claude-sonnet-4-6`):
+  ordinary implementation, clear-plan implementation, medium-complexity,
+  multi-file, and contract-sensitive changes after GPT decomposition.
+- Tier 3 / escalation — Sonnet 5 (`claude-sonnet-5`): evidence-established
+  difficult remediation, architecture/integration failure, or hard-to-localize
+  concern that Sonnet 4.6 did not reliably close.
 
-Cost saving alone must not downgrade below the capability GPT judges necessary.
-Claude cannot promote or demote itself. A failed lower-tier implementation
-returns to GPT; only GPT may select a different tier for the next execution.
+Claude cannot promote or demote itself. During an active low-quota routing window,
+Sonnet 5 must not be selected proactively only because a task looks complex or has
+promotional pricing. A Sonnet 4.6 failure returns to GPT exact review first; only
+GPT may select a different tier for the next execution.
 
 ### Temporary low-quota routing window
 
