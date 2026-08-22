@@ -7,9 +7,9 @@ const record=(scope:typeof aicc|typeof erp)=>({registryVersion:2,recordType:'CAN
 const records=[record(aicc),record(erp)];
 assert.equal(queryProjectScopedTaskRegistry(records,aicc).items.length,1);assert.equal(queryProjectScopedTaskRegistry(records,aicc).items[0].repository,'beyourlovercom/aicontrolcenter');
 assert.equal(queryProjectScopedTaskRegistry(records,erp).items.length,1);assert.equal(queryProjectScopedTaskRegistry(records,erp).items[0].repository,'beyourlovercom/erpbeyourlovercom');
-const inbox={id:'inbox-create',taskId:'SAME_TASK',state:'READY',createdAt:'2026-08-20T00:00:00.000Z',updatedAt:'2026-08-20T00:00:00.000Z',gates:[],instruction:record(aicc).instruction} as any;
+const inbox={id:'inbox-create',taskId:'SAME_TASK',state:'READY',createdAt:'2026-08-20T00:00:00.000Z',updatedAt:'2026-08-20T00:00:00.000Z',gates:[],instruction:record(aicc).instruction,...aicc} as any;
 const created=canonicalTaskFromInbox(inbox);
 assert.equal((created as any).projectId,aicc.projectId);assert.equal((created as any).repositoryIdentity,aicc.repositoryIdentity);
-const immutable=canonicalTaskFromInbox({...inbox,instruction:record(erp).instruction},undefined,created);
-assert.equal((immutable as any).projectId,aicc.projectId);assert.equal((immutable as any).repositoryIdentity,aicc.repositoryIdentity);
+assert.throws(()=>canonicalTaskFromInbox({...inbox,instruction:record(erp).instruction},undefined,created),/TASK_PROJECT_SCOPE_REQUIRED/,'foreign instruction cannot bind into a scoped Inbox');
+assert.throws(()=>canonicalTaskFromInbox({...inbox,...erp,instruction:record(erp).instruction},undefined,created),/FOREIGN_TASK_SCOPE_BINDING/,'existing Task identity cannot be rebound to another Project');
 console.log('Phase 3 Step A project-scoped Task registry matrix passed');

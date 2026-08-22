@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
-import {cpSync,mkdtempSync,rmSync} from 'node:fs';
+import {cpSync,mkdirSync,mkdtempSync,readFileSync,realpathSync,rmSync,writeFileSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
-import {readFileSync} from 'node:fs';
+import {execFileSync} from 'node:child_process';
 import {createEmptyGlobalStateReadModel,dimensionProjection,entityIdentity,knownDimensionValue,projectGlobalStateReadModel,projectionSource,sourceEntityIdentity} from './globalStateReadModel.ts';
 import {createProjectRegistryAuthority} from './projectRegistryAuthority.ts';
 import {bindGlobalStateToActiveProject,ROADMAP_NOT_CONFIGURED,projectScopedRoadmapNodes,readActiveProjectRoadmap,syncActiveProjectRoadmap} from './projectScopedRoadmap.ts';
@@ -10,6 +10,13 @@ import {bindGlobalStateToActiveProject,ROADMAP_NOT_CONFIGURED,projectScopedRoadm
 const directory=mkdtempSync(join(tmpdir(),'aicc-project-roadmap-'));
 const registryFile=join(directory,'04_AICC_PROJECT_REGISTRY.json');
 cpSync(join(process.cwd(),'docs/10_Planning_Roadmap/04_AICC_PROJECT_REGISTRY.json'),registryFile);
+const aiccRepository=realpathSync(mkdtempSync(join(tmpdir(),'aicc-project-roadmap-aicc-')));
+const erpRepository=realpathSync(mkdtempSync(join(tmpdir(),'aicc-project-roadmap-erp-')));
+for(const [repository,origin] of [[aiccRepository,'git@github.com:beyourlovercom/aicontrolcenter.git'],[erpRepository,'git@github.com:beyourlovercom/erpbeyourlovercom.git']] as const){execFileSync('git',['-C',repository,'init','-b','fixture-branch'],{stdio:'ignore'});execFileSync('git',['-C',repository,'remote','add','origin',origin],{stdio:'ignore'});}
+const roadmapDir=join(aiccRepository,'docs/10_Planning_Roadmap');mkdirSync(roadmapDir,{recursive:true});cpSync(join(process.cwd(),'docs/10_Planning_Roadmap/01_LIVING_ROADMAP.md'),join(roadmapDir,'01_LIVING_ROADMAP.md'));
+const registryFixture=JSON.parse(readFileSync(registryFile,'utf8'));
+registryFixture.projects=registryFixture.projects.map((project:any)=>project.projectId==='aicc'?{...project,repositoryPath:aiccRepository,currentBranch:'fixture-branch'}:project.projectId==='erpbeyourlovercom'?{...project,repositoryPath:erpRepository,currentBranch:'fixture-branch'}:project);
+writeFileSync(registryFile,JSON.stringify(registryFixture,null,2)+'\n');
 try{
   const aicc=readActiveProjectRoadmap(registryFile);
   assert.equal(aicc.projectId,'aicc');assert.equal(aicc.availability,'AVAILABLE');assert.equal(aicc.roadmapPath,'docs/10_Planning_Roadmap/01_LIVING_ROADMAP.md');assert.ok(projectScopedRoadmapNodes(aicc)?.nodes.length);
@@ -24,4 +31,4 @@ try{
   assert.match(app,/await loadAcceptedRoadmapProjection\(\);\s*if\(activeRoadmapProject\?\.projectId!=='aicc'\)return/,'ERP structural state does not request AICC-only snapshot sources');
   assert.doesNotMatch(app,/compileRoadmapProjection|normalizeRoadmap/,'UI does not parse project Markdown');
   console.log('Phase 2 project-scoped Roadmap and Global State matrix passed');
-}finally{rmSync(directory,{recursive:true,force:true})}
+}finally{rmSync(directory,{recursive:true,force:true});rmSync(aiccRepository,{recursive:true,force:true});rmSync(erpRepository,{recursive:true,force:true})}
