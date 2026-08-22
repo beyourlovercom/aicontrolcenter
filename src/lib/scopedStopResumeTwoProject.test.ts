@@ -6,9 +6,6 @@
  *   independently and successfully create resume executions (not merely avoid RESUME_ALREADY_CREATED).
  */
 import assert from 'node:assert/strict';
-import {execFileSync} from 'node:child_process';
-import {readFileSync, writeFileSync} from 'node:fs';
-import {join} from 'node:path';
 import {
   parseEvent,
   readRuntimeScoped,
@@ -22,30 +19,7 @@ import {
   type InboxItem,
 } from './bridgeCore.ts';
 
-/**
- * Fixture setup only (no production code touched): resumeStoppedExecutionScoped's launch path
- * reads docs/10_Planning_Roadmap/04_AICC_PROJECT_REGISTRY.json and validates each entry's
- * repositoryPath against `git rev-parse --show-toplevel`. On this machine the registry stores
- * paths with different casing than git's canonical resolution, so validation throws
- * PROJECT_REPOSITORY_INVALID before the resume logic under test ever runs. Patch the registry's
- * repositoryPath fields to their git-canonical form for the duration of this test only, and
- * restore the original file content afterward regardless of outcome.
- */
-const registryFile = join(process.cwd(), 'docs', '10_Planning_Roadmap', '04_AICC_PROJECT_REGISTRY.json');
-const originalRegistryContent = readFileSync(registryFile, 'utf8');
-function canonicalToplevel(path: string): string | null {
-  try { return execFileSync('git', ['-C', path, 'rev-parse', '--show-toplevel'], {encoding: 'utf8'}).trim() || null; }
-  catch { return null; }
-}
-{
-  const registry = JSON.parse(originalRegistryContent) as {projects: Array<{repositoryPath: string}>};
-  for (const project of registry.projects) {
-    const canonical = canonicalToplevel(project.repositoryPath);
-    if (canonical) project.repositoryPath = canonical;
-  }
-  writeFileSync(registryFile, JSON.stringify(registry, null, 2) + '\n');
-}
-
+// Registry path casing is intentionally left untouched; canonical path identity must handle it.
 const scopeA = {projectId:'aicc',repositoryIdentity:'beyourlovercom/aicontrolcenter'} as const;
 const scopeB = {projectId:'erpbeyourlovercom',repositoryIdentity:'beyourlovercom/erpbeyourlovercom'} as const;
 const sharedRunId = 'run-scoped-stop-resume-001';
@@ -78,7 +52,6 @@ function makeInboxItem(scope:{projectId:string;repositoryIdentity:string},runId:
   };
 }
 
-try {
 
 // --- Blocker 1: scoped stop mutates only A, not B ---
 
@@ -211,7 +184,3 @@ assert.throws(
 );
 
 console.log('scoped stop/resume two-project regression passed [D0B_1_EXACT_RUNTIME_TRANSPORT_SCOPE attempt 2 + D0B_1 attempt 4 dual-success proof]');
-
-} finally {
-  writeFileSync(registryFile, originalRegistryContent);
-}

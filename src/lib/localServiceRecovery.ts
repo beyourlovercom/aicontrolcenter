@@ -1,3 +1,4 @@
+import {sameCanonicalPath} from './canonicalPathIdentity.ts';
 export const HEALTH_FAILURE_THRESHOLD=2;
 export const MAX_RECOVERY_ATTEMPTS=3;
 
@@ -10,7 +11,7 @@ export type RecoveryDecision={state:SupervisorHealthState;action:'NONE'|'RETRY_H
 
 export function isCanonicalListener(observation:ServiceObservation):boolean{
   const listener=observation.listener;
-  return Boolean(listener&&listener.cwd===observation.repositoryRoot&&/node_modules\/\.bin\/vite|vite .*127\.0\.0\.1/.test(listener.command));
+  return Boolean(listener&&sameCanonicalPath(listener.cwd,observation.repositoryRoot)&&/node_modules\/\.bin\/vite|vite .*127\.0\.0\.1/.test(listener.command));
 }
 
 export function classifyLocalService(observation:ServiceObservation):LocalServiceClassification{

@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import {chmodSync,cpSync,mkdtempSync,readFileSync,rmSync,writeFileSync} from 'node:fs';
+import {chmodSync,cpSync,mkdtempSync,readFileSync,realpathSync,rmSync,writeFileSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {createProjectRegistryAuthority,ACTIVE_PROJECT_AUTHORITY,PROJECT_REGISTRY_AUTHORITY} from './projectRegistryAuthority.ts';
@@ -14,6 +14,7 @@ try{
   const asyncInitial=await authority.getProjectRegistryAsync();
   assert.equal(PROJECT_REGISTRY_AUTHORITY,ACTIVE_PROJECT_AUTHORITY);
   assert.equal(initial.projects.filter(project=>project.projectId==='aicc').length,1);
+  assert.equal(initial.projects.find(project=>project.projectId==='aicc')?.canonicalRepositoryPath,realpathSync.native('/Users/a/AI/007/AIcontrolcenter'));
   assert.equal(initial.projects.filter(project=>project.projectId==='erpbeyourlovercom').length,1);
   assert.equal(authority.getActiveProject().projectId,'aicc');
   assert.equal(initial.projectContextRevision,0);
@@ -31,7 +32,7 @@ try{
   const source=readFileSync(new URL('./projectRegistryAuthority.ts',import.meta.url),'utf8');
   assert.doesNotMatch(source,/startRuntime|submitExecution|launchInboxItem|readFileSync\(.*erpbeyourlovercom/,'project context does not execute, route runtime, or load ERP planning data');
   assert.match(source,/execFileAsync\('git',[\s\S]*timeout:PROJECT_REGISTRY_GIT_TIMEOUT_MS[\s\S]*maxBuffer:64\*1024/,'async git validation has an explicit bounded timeout and output');
-  assert.match(source,/realpathSync\.native\(left\)===realpathSync\.native\(right\)/,'repository root validation uses filesystem-canonical identity rather than path casing');
+  assert.match(source,/sameCanonicalPath\(gitRoot,project\.repositoryPath\)/,'repository root validation delegates filesystem identity to the shared canonical path helper');
   assert.match(source,/for\(const project of state\.projects\)projects\.push\(await validateAsync\(project\)\)/,'async project validation is sequentially bounded');
   fakeBin=mkdtempSync(join(tmpdir(),'aicc-project-registry-bin-'));
   const fakeGit=join(fakeBin,'git');

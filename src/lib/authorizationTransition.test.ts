@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {authorizationSupersessionBlocker,type Authorization,type RepositoryModel} from './controlService.ts';
 
-const repo:RepositoryModel={repository:'/repo',branch:'rebuild/aicc-v2',head:'current-head',localMain:'main',remoteMain:'main',worktree:'CLEAN',lastCommit:'test'};
+const repo:RepositoryModel={repository:process.cwd(),branch:'rebuild/aicc-v2',head:'current-head',localMain:'main',remoteMain:'main',worktree:'CLEAN',lastCommit:'test'};
 const old:Authorization={authorizationId:'old',workPackageId:'AICC-V2-PR-RUNNER-001',authoritySha:'main',branch:repo.branch,headShaAtAuthorization:'old-head',repositoryRoot:repo.repository,scope:[],allowed:[],forbidden:[],authorizedAt:'old',status:'ACTIVE'};
 const safe={activeRuntime:false,writerLockHeld:false};
 assert.equal(authorizationSupersessionBlocker('AICC-V2-DUAL-PANEL-001',repo,old,safe),null,'different inactive WP can supersede');

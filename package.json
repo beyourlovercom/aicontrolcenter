@@ -34,7 +34,8 @@
     "test:local-page-failsafe": "node --experimental-strip-types --experimental-specifier-resolution=node src/lib/localPageFailsafeStatus.test.ts",
     "test:browser-node-boundary": "node --experimental-strip-types --experimental-specifier-resolution=node src/lib/browserNodeBoundary.test.ts",
     "test:app-boot-context": "node --experimental-strip-types --experimental-specifier-resolution=node src/lib/appBootContextGuard.test.ts",
-    "test:local-service-canonical-path": "node --experimental-strip-types --experimental-specifier-resolution=node src/lib/localServiceCanonicalPath.test.ts"
+    "test:local-service-canonical-path": "node --experimental-strip-types --experimental-specifier-resolution=node src/lib/localServiceCanonicalPath.test.ts",
+    "test:canonical-path-identity": "node --experimental-strip-types --experimental-specifier-resolution=node src/lib/canonicalPathIdentity.test.ts"
   },
   "dependencies": {
     "@tauri-apps/api": "2.11.1",

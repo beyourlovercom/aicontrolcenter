@@ -15,6 +15,7 @@ import {DirectRemoteRunnerClient} from './directRemoteRunnerClient.ts';
 import {canonicalRemoteEnvelope,readRemoteRunnerConfig,REMOTE_RUNNER_ID} from './remoteTaskExecution.ts';
 import {createEmptyGlobalStateReadModel,type AiccGlobalStateReadModel} from './globalStateReadModel.ts';
 import {projectTaskLayer2ReadModel as projectCanonicalTaskLayer2ReadModel} from './taskCanonicalProjection.ts';
+import {sameCanonicalPath} from './canonicalPathIdentity.ts';
 
 export const INBOX_STATES=['RECEIVED','PARSED','INVALID','READY','WAITING_OWNER','BLOCKED','LAUNCHED','CONSUMED'] as const;
 export const OUTBOX_STATES=['READY','DELIVERED','ACKNOWLEDGED','FAILED'] as const;
@@ -211,7 +212,7 @@ export function launchInboxItem(id:string,metadata?:ExecutionLaunchMetadata):Inb
  const delivery=item.instruction.executionType==='OWNER_AUTHORIZED_GIT_DELIVERY';
  const formalWpId=item.instruction.formalWpId??item.instruction.workPackageId;
  const authorization=delivery?readAuthorization():null;
- const authorizationValid=Boolean(authorization&&formalWpId&&authorization.workPackageId===formalWpId&&authorization.branch===item.instruction.branch&&authorization.repositoryRoot===readRepository().repository&&authorization.authoritySha===readRepository().remoteMain&&authorization.allowed.includes('codex_runtime'));
+ const authorizationValid=Boolean(authorization&&formalWpId&&authorization.workPackageId===formalWpId&&authorization.branch===item.instruction.branch&&sameCanonicalPath(authorization.repositoryRoot,readRepository().repository)&&authorization.authoritySha===readRepository().remoteMain&&authorization.allowed.includes('codex_runtime'));
  if(delivery&&!authorizationValid){
  item.state=authorization?'BLOCKED':'WAITING_OWNER'; item.runtimeState=item.state; item.launchError=authorization?'OWNER_AUTHORIZATION_INVALID':'OWNER_AUTHORIZATION_REQUIRED'; item.updatedAt=new Date().toISOString(); saveInbox(item); syncTask(item); throw new Error(item.launchError);
  }

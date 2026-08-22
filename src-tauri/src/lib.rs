@@ -464,6 +464,13 @@ fn safe_remote(remote: &str) -> Option<String> {
     }
 }
 
+fn same_canonical_path(left: &Path, right: &Path) -> bool {
+    match (fs::canonicalize(left), fs::canonicalize(right)) {
+        (Ok(a), Ok(b)) => a == b,
+        _ => false,
+    }
+}
+
 fn validate_root<R: GitRunner>(
     runner: &R,
     path: &Path,
@@ -477,7 +484,7 @@ fn validate_root<R: GitRunner>(
     }
     let input = fs::canonicalize(path)
         .map_err(|_| err("REPOSITORY_INVALID", "repository path does not exist"))?;
-    if production && input != Path::new(CANONICAL_PATH) {
+    if production && !same_canonical_path(&input, Path::new(CANONICAL_PATH)) {
         return Err(err(
             "REPOSITORY_INVALID",
             "repository path is not canonical",
@@ -493,7 +500,7 @@ fn validate_root<R: GitRunner>(
         .ok_or_else(|| err("REPOSITORY_INVALID", "git root output is empty"))?;
     let shown = fs::canonicalize(shown)
         .map_err(|_| err("REPOSITORY_INVALID", "git root output is invalid"))?;
-    if shown != input {
+    if !same_canonical_path(&shown, &input) {
         return Err(err(
             "REPOSITORY_INVALID",
             "git root does not match requested root",

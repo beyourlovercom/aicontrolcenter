@@ -1,38 +1,38 @@
 import {execFile,execFileSync} from 'node:child_process';
-import {readFileSync,realpathSync,renameSync,writeFileSync} from 'node:fs';
+import {readFileSync,renameSync,writeFileSync} from 'node:fs';
 import {readFile} from 'node:fs/promises';
 import {join} from 'node:path';
 import {promisify} from 'node:util';
+import {canonicalFilesystemPath,sameCanonicalPath} from './canonicalPathIdentity.ts';
 
 export const PROJECT_REGISTRY_FILE=join('docs','10_Planning_Roadmap','04_AICC_PROJECT_REGISTRY.json');
 export const PROJECT_REGISTRY_AUTHORITY='PROJECT_REGISTRY_AUTHORITY_V1' as const;
 export const ACTIVE_PROJECT_AUTHORITY='PROJECT_REGISTRY_AUTHORITY_V1' as const;
 export const PROJECT_REGISTRY_GIT_TIMEOUT_MS=750;
-export type ProjectRecord=Readonly<{projectId:string;displayName:string;repositoryPath:string;repositoryIdentity:string;remoteOrigin:string|null;currentBranch:string;defaultBranch:string;roadmapPath:string}>;
+export type ProjectRecord=Readonly<{projectId:string;displayName:string;repositoryPath:string;canonicalRepositoryPath?:string;repositoryIdentity:string;remoteOrigin:string|null;currentBranch:string;defaultBranch:string;roadmapPath:string}>;
 export type ProjectRegistryState=Readonly<{schema:'aicc.project-registry.v1';activeProjectId:string;projectContextRevision:number;projects:readonly ProjectRecord[]}>;
 
 const execFileAsync=promisify(execFile);
 function git(root:string,args:string[]):string|null{try{const value=execFileSync('git',['-C',root,...args],{encoding:'utf8',stdio:['ignore','pipe','ignore']}).trim();return value||null}catch{return null}}
 async function gitAsync(root:string,args:string[]):Promise<string|null>{try{const result=await execFileAsync('git',['-C',root,...args],{encoding:'utf8',timeout:PROJECT_REGISTRY_GIT_TIMEOUT_MS,maxBuffer:64*1024,windowsHide:true});const value=String(result.stdout).trim();return value||null}catch{return null}}
 function identity(origin:string|null):string|null{if(!origin)return null;const matched=origin.replace(/^git@github\.com:/,'').replace(/^https:\/\/github\.com\//,'').replace(/\.git$/,'');return matched.includes('/')?matched:null}
-function sameRepositoryRoot(left:string,right:string):boolean{try{return realpathSync.native(left)===realpathSync.native(right)}catch{return false}}
 function validate(project:ProjectRecord):ProjectRecord{
   const gitRoot=git(project.repositoryPath,['rev-parse','--show-toplevel']);
   const currentBranch=git(project.repositoryPath,['branch','--show-current']);
   const remoteOrigin=git(project.repositoryPath,['config','--get','remote.origin.url']);
   const repositoryIdentity=identity(remoteOrigin);
-  if(!gitRoot||!sameRepositoryRoot(gitRoot,project.repositoryPath)||!currentBranch||!repositoryIdentity)throw new Error('PROJECT_REPOSITORY_INVALID');
+  if(!gitRoot||!sameCanonicalPath(gitRoot,project.repositoryPath)||!currentBranch||!repositoryIdentity)throw new Error('PROJECT_REPOSITORY_INVALID');
   const defaultRef=git(project.repositoryPath,['symbolic-ref','--short','refs/remotes/origin/HEAD']);
-  return {...project,repositoryIdentity,remoteOrigin,currentBranch,defaultBranch:defaultRef?.replace(/^origin\//,'')??'NOT_AVAILABLE'};
+  return {...project,canonicalRepositoryPath:canonicalFilesystemPath(project.repositoryPath)??undefined,repositoryIdentity,remoteOrigin,currentBranch,defaultBranch:defaultRef?.replace(/^origin\//,'')??'NOT_AVAILABLE'};
 }
 async function validateAsync(project:ProjectRecord):Promise<ProjectRecord>{
   const gitRoot=await gitAsync(project.repositoryPath,['rev-parse','--show-toplevel']);
   const currentBranch=await gitAsync(project.repositoryPath,['branch','--show-current']);
   const remoteOrigin=await gitAsync(project.repositoryPath,['config','--get','remote.origin.url']);
   const repositoryIdentity=identity(remoteOrigin);
-  if(!gitRoot||!sameRepositoryRoot(gitRoot,project.repositoryPath)||!currentBranch||!repositoryIdentity)throw new Error('PROJECT_REPOSITORY_INVALID');
+  if(!gitRoot||!sameCanonicalPath(gitRoot,project.repositoryPath)||!currentBranch||!repositoryIdentity)throw new Error('PROJECT_REPOSITORY_INVALID');
   const defaultRef=await gitAsync(project.repositoryPath,['symbolic-ref','--short','refs/remotes/origin/HEAD']);
-  return {...project,repositoryIdentity,remoteOrigin,currentBranch,defaultBranch:defaultRef?.replace(/^origin\//,'')??'NOT_AVAILABLE'};
+  return {...project,canonicalRepositoryPath:canonicalFilesystemPath(project.repositoryPath)??undefined,repositoryIdentity,remoteOrigin,currentBranch,defaultBranch:defaultRef?.replace(/^origin\//,'')??'NOT_AVAILABLE'};
 }
 function parse(file:string):ProjectRegistryState{const state=JSON.parse(readFileSync(file,'utf8')) as ProjectRegistryState;if(state.schema!=='aicc.project-registry.v1'||!Array.isArray(state.projects)||!state.projects.length)throw new Error('PROJECT_REGISTRY_INVALID');return state}
 async function parseAsync(file:string):Promise<ProjectRegistryState>{const state=JSON.parse(await readFile(file,'utf8')) as ProjectRegistryState;if(state.schema!=='aicc.project-registry.v1'||!Array.isArray(state.projects)||!state.projects.length)throw new Error('PROJECT_REGISTRY_INVALID');return state}

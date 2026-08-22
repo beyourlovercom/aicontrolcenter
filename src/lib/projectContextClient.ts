@@ -1,4 +1,4 @@
-export type BrowserProjectRecord=Readonly<{projectId:string;displayName:string;repositoryPath:string;repositoryIdentity:string;remoteOrigin:string|null;currentBranch:string;defaultBranch:string;roadmapPath:string}>;
+export type BrowserProjectRecord=Readonly<{projectId:string;displayName:string;repositoryPath:string;canonicalRepositoryPath?:string;repositoryIdentity:string;remoteOrigin:string|null;currentBranch:string;defaultBranch:string;roadmapPath:string}>;
 export type BrowserProjectRegistryState=Readonly<{schema:'aicc.project-registry.v1';activeProjectId:string;projectContextRevision:number;projects:readonly BrowserProjectRecord[]}>;
 export type BrowserProjectContextResponse=Readonly<{registry:BrowserProjectRegistryState;activeProject:BrowserProjectRecord}>;
 

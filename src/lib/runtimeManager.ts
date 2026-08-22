@@ -30,6 +30,7 @@ import {resolveCodexModel} from './codexModelCatalog.ts';
 import {DirectRemoteRunnerClient} from './directRemoteRunnerClient.ts';
 import {resolveAiccStateDir} from './stateDirectory.ts';
 import {readProtocolField,resolveTaskEntityBinding,type FormalWorkPackageRegistration} from './taskEntityBinding.ts';
+import {sameCanonicalPath} from './canonicalPathIdentity.ts';
 const execFileAsync=promisify(execFile);
 export {selectCanonicalCurrentRuntime} from "./runtimeSelection.ts";
 
@@ -595,9 +596,9 @@ export function startRuntime(
   const deliveryProfileRequested=options.executionProfile==='OWNER_AUTHORIZED_GIT_DELIVERY'||effectiveExecutionType==='OWNER_AUTHORIZED_GIT_DELIVERY';
   if(deliveryProfileRequested&&!(effectiveExecutionType==='OWNER_AUTHORIZED_GIT_DELIVERY'&&options.executionProfile==='OWNER_AUTHORIZED_GIT_DELIVERY'&&options.requiresAuthorization===true&&options.ownerDirectExecution===true))throw new Error('OWNER_GIT_DELIVERY_AUTH_REQUIRED');
   const isReadOnly = effectivePolicy.sandboxMode === "read-only";
-  if (!passThrough && options.expectedRepository && options.expectedRepository !== repo.repository)
+  if (!passThrough && options.expectedRepository && !sameCanonicalPath(options.expectedRepository,repo.repository))
     throw new Error("REPOSITORY_MISMATCH");
-  const matchingStoredAuth = !passThrough&&storedAuth?.workPackageId === wpId && storedAuth.branch === repo.branch && storedAuth.repositoryRoot === repo.repository ? storedAuth : null;
+  const matchingStoredAuth = !passThrough&&storedAuth?.workPackageId === wpId && storedAuth.branch === repo.branch && sameCanonicalPath(storedAuth.repositoryRoot,repo.repository) ? storedAuth : null;
   const auth = matchingStoredAuth ?? (options.allowReadOnlyWithoutAuthorization && isReadOnly ? { authorizationId: "read-only-local-audit", workPackageId: wpId, authoritySha: repo.remoteMain, branch: repo.branch, headShaAtAuthorization: repo.head, repositoryRoot: repo.repository, scope: ["read_repository", "read_work_package"], allowed: ["read_only_audit"], forbidden: ["arbitrary_shell", "push", "merge"], authorizedAt: new Date().toISOString() } : storedAuth);
   const scope = passThrough?[]:[];
   const projectScope=options.projectScope??projectEntityScope(createProjectRegistryAuthority().getActiveProject());

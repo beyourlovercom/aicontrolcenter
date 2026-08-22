@@ -13,6 +13,7 @@ import {deserializeRoadmapReadModel,ensureRoadmapReadModel,roadmapReadModelPath,
 import {buildPrNavigationSnapshot,deserializePrNavigationSnapshot,toPullRequestRecordLike,type PrNavigationSnapshot,type PrNavigationSnapshotInput} from './prNavigationSnapshot.ts';
 import {createJsonDeliveryContextRecordStore} from './deliveryContextPersistence.ts';
 import {createProjectRegistryAuthority,type ProjectRecord} from './projectRegistryAuthority.ts';
+import {sameCanonicalPath} from './canonicalPathIdentity.ts';
 
 export const REPOSITORY_ROOT = '/Users/a/AI/007/AIcontrolcenter';
 export const LOCAL_SERVICE_LABEL = 'com.aicc.v2.local-service';
@@ -275,9 +276,9 @@ export function readLocalServiceSupervisorState():LocalServiceSupervisorState|nu
   }catch{return null;}
 }
 export function detectPortOwner(healthProbe:()=>boolean=()=>true): Pick<LocalServiceStatus,'portOwner'|'conflict'> {
-  try { const pid=execFileSync('/usr/sbin/lsof',['-nP','-iTCP:1420','-sTCP:LISTEN','-t'],{encoding:'utf8'}).trim().split(/\s+/)[0]; if(!pid)return {portOwner:'UNAVAILABLE'}; const command=safeProcessCommand(pid); const cwd=(()=>{try{return execFileSync('/usr/sbin/lsof',['-a','-p',pid,'-d','cwd','-Fn'],{encoding:'utf8'}).split('\n').find(x=>x.startsWith('n'))?.slice(1)??''}catch{return ''}})(); const canonical=healthProbe()&&((pid===String(process.pid)&&repositoryAvailableForService())||(cwd===REPOSITORY_ROOT&&/npm|node|vite/.test(command))); return canonical?{portOwner:'CANONICAL_AICC_SERVICE'}:{portOwner:'FOREIGN_PROCESS',conflict:{pid,command}}; } catch { return {portOwner:'UNAVAILABLE'}; }
+  try { const pid=execFileSync('/usr/sbin/lsof',['-nP','-iTCP:1420','-sTCP:LISTEN','-t'],{encoding:'utf8'}).trim().split(/\s+/)[0]; if(!pid)return {portOwner:'UNAVAILABLE'}; const command=safeProcessCommand(pid); const cwd=(()=>{try{return execFileSync('/usr/sbin/lsof',['-a','-p',pid,'-d','cwd','-Fn'],{encoding:'utf8'}).split('\n').find(x=>x.startsWith('n'))?.slice(1)??''}catch{return ''}})(); const canonical=healthProbe()&&((pid===String(process.pid)&&repositoryAvailableForService())||(sameCanonicalPath(cwd,REPOSITORY_ROOT)&&/npm|node|vite/.test(command))); return canonical?{portOwner:'CANONICAL_AICC_SERVICE'}:{portOwner:'FOREIGN_PROCESS',conflict:{pid,command}}; } catch { return {portOwner:'UNAVAILABLE'}; }
 }
-export async function detectPortOwnerAsync(healthProbe:()=>boolean=()=>true):Promise<Pick<LocalServiceStatus,'portOwner'|'conflict'>>{try{const result=await execFileAsync('/usr/sbin/lsof',['-nP','-iTCP:1420','-sTCP:LISTEN','-t'],{encoding:'utf8',timeout:HEALTH_CHILD_PROCESS_TIMEOUT_MS});const pid=String(result.stdout).trim().split(/\s+/)[0];if(!pid)return {portOwner:'UNAVAILABLE'};const command=await asyncProcessCommand(pid,HEALTH_CHILD_PROCESS_TIMEOUT_MS);const cwdResult=await execFileAsync('/usr/sbin/lsof',['-a','-p',pid,'-d','cwd','-Fn'],{encoding:'utf8',timeout:HEALTH_CHILD_PROCESS_TIMEOUT_MS});const cwd=String(cwdResult.stdout).split('\n').find(value=>value.startsWith('n'))?.slice(1)??'';const canonical=healthProbe()&&((pid===String(process.pid)&&repositoryAvailableForService())||(cwd===REPOSITORY_ROOT&&/npm|node|vite/.test(command)));return canonical?{portOwner:'CANONICAL_AICC_SERVICE'}:{portOwner:'FOREIGN_PROCESS',conflict:{pid,command}}}catch{return {portOwner:'UNAVAILABLE'}}}
+export async function detectPortOwnerAsync(healthProbe:()=>boolean=()=>true):Promise<Pick<LocalServiceStatus,'portOwner'|'conflict'>>{try{const result=await execFileAsync('/usr/sbin/lsof',['-nP','-iTCP:1420','-sTCP:LISTEN','-t'],{encoding:'utf8',timeout:HEALTH_CHILD_PROCESS_TIMEOUT_MS});const pid=String(result.stdout).trim().split(/\s+/)[0];if(!pid)return {portOwner:'UNAVAILABLE'};const command=await asyncProcessCommand(pid,HEALTH_CHILD_PROCESS_TIMEOUT_MS);const cwdResult=await execFileAsync('/usr/sbin/lsof',['-a','-p',pid,'-d','cwd','-Fn'],{encoding:'utf8',timeout:HEALTH_CHILD_PROCESS_TIMEOUT_MS});const cwd=String(cwdResult.stdout).split('\n').find(value=>value.startsWith('n'))?.slice(1)??'';const canonical=healthProbe()&&((pid===String(process.pid)&&repositoryAvailableForService())||(sameCanonicalPath(cwd,REPOSITORY_ROOT)&&/npm|node|vite/.test(command)));return canonical?{portOwner:'CANONICAL_AICC_SERVICE'}:{portOwner:'FOREIGN_PROCESS',conflict:{pid,command}}}catch{return {portOwner:'UNAVAILABLE'}}}
 function repositoryAvailableForService(){return existsSync(REPOSITORY_ROOT)&&existsSync(join(REPOSITORY_ROOT,'package.json'))&&existsSync(ROADMAP)}
 function safeProcessCommand(pid:string){try{return execFileSync('/bin/ps',['-p',pid,'-o','command='],{encoding:'utf8'}).trim().slice(0,240)}catch{return 'unavailable'}}
 export function restartLocalService(){ execFile('/bin/sh',[LOCAL_SERVICE_SUPERVISOR_SCRIPT,'restart'],()=>{}); return 'RESTART_REQUESTED'; }
@@ -299,7 +300,7 @@ export function authorizationSupersessionBlocker(id: string, repo: RepositoryMod
   if (base && base !== 'AUTHORIZATION_CONFLICT') return base;
   if (safety.activeRuntime) return 'ACTIVE_RUNTIME_CONFLICT';
   if (safety.writerLockHeld) return 'WRITER_LOCK_HELD';
-  if (existing && existing.repositoryRoot !== repo.repository) return 'AUTHORIZATION_REPOSITORY_MISMATCH';
+  if (existing && !sameCanonicalPath(existing.repositoryRoot,repo.repository)) return 'AUTHORIZATION_REPOSITORY_MISMATCH';
   if (existing && existing.branch !== repo.branch) return 'AUTHORIZATION_BRANCH_MISMATCH';
   if (existing && existing.authoritySha !== repo.remoteMain) return 'AUTHORITY_DRIFT';
   return null;
@@ -309,7 +310,7 @@ export function authorizationState(id: string, repo: RepositoryModel): { status:
   if (record.workPackageId !== id) return { status: 'INVALID', record, reason: 'WORK_PACKAGE_CHANGED' };
   if (record.branch !== repo.branch) return { status: 'INVALID', record, reason: 'BRANCH_CHANGED' };
   if (record.authoritySha !== repo.remoteMain) return { status: 'INVALID', record, reason: 'AUTHORITY_CHANGED' };
-  if (record.repositoryRoot !== repo.repository) return { status: 'INVALID', record, reason: 'REPOSITORY_CHANGED' };
+  if (!sameCanonicalPath(record.repositoryRoot,repo.repository)) return { status: 'INVALID', record, reason: 'REPOSITORY_CHANGED' };
   return { status: 'AUTHORIZED', record };
 }
 export function authorizationBlocker(id: string, repo: RepositoryModel | null, wpExists: boolean,preflight?:ExecutionPreflight): string | null {
