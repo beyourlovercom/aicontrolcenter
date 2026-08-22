@@ -118,6 +118,14 @@ must never transfer analysis authority to Claude.
 `GPT_DECOMPOSITION_AUTHORITY = GPT`
 `GPT_CODE_REVIEW_AUTHORITY = GITHUB_EXACT_SHA`
 `CLAUDE_EXECUTION_ROLE = IMPLEMENTATION_ONLY`
+`CLAUDE_QUOTA_IS_SCARCE_RESOURCE = TRUE`
+`GPT_CONFIRMS_REAL_PRODUCTION_CONCERN_BEFORE_CLAUDE_DISPATCH = REQUIRED`
+`GPT_OWNS_SCAN_DIFF_TEST_CLASSIFICATION_AND_GITHUB_REVIEW = TRUE`
+`CLAUDE_NON_IMPLEMENTATION_WORK = FORBIDDEN_BY_DEFAULT`
+`CLAUDE_FOCUSED_IMPLEMENTATION_VALIDATION = ALLOWED`
+`CLAUDE_BROAD_TEST_SWEEPS = FORBIDDEN_BY_DEFAULT`
+`CLAUDE_GIT_DIFF_REVIEW = FORBIDDEN_BY_DEFAULT`
+`CLAUDE_TEST_FAILURE_CLASSIFICATION = FORBIDDEN_BY_DEFAULT`
 `CLAUDE_SELF_ADVANCE = FORBIDDEN`
 `CLAUDE_AUTONOMOUS_REMEDIATION = FORBIDDEN`
 `CLAUDE_BROAD_CODEBASE_EXPLORATION = FORBIDDEN_BY_DEFAULT`
@@ -130,12 +138,12 @@ must never transfer analysis authority to Claude.
 
 Required loop:
 
-`GPT analyzes exact evidence`
-→ `GPT selects Claude model and gives a concrete implementation instruction`
-→ `Claude implements and validates only that instruction`
-→ `Claude commits/pushes or returns blocker/checkpoint`
-→ `GPT reads the result and exact GitHub commit`
-→ `GPT analyzes, decomposes, and issues the next instruction`
+`GPT scans, analyzes exact evidence, classifies failures, and confirms a real production concern`
+→ `GPT selects Claude model and gives one concrete implementation instruction`
+→ `Claude implements only that confirmed concern and may run only focused validation necessary to prove the change`
+→ `Claude returns the implementation result or blocker/checkpoint without broad scan, diff review, test-failure classification, or GitHub review`
+→ `GPT independently runs/owns broader validation, diff review, test classification, commit/push control, and exact GitHub SHA review`
+→ `GPT analyzes, decomposes, and issues the next instruction only when another real production change is confirmed`
 → repeat until Owner UAT or completion.
 
 
@@ -173,9 +181,10 @@ scope growth are signals to stop and return evidence to GPT.
 
 GPT Plus Web must classify every Claude dispatch before launch:
 
-- Tier 1 — Haiku 4.5 (`claude-haiku-4-5`): optional pure audit, grep/search,
-  classification, simple fixture work, mechanical edits, repetitive
-  low-complexity changes.
+- Tier 1 — Haiku 4.5 (`claude-haiku-4-5`): optional simple fixture work,
+  mechanical implementation, and repetitive low-complexity edits only after GPT
+  has already confirmed the production concern. Audit, grep/search, classification,
+  diff review, and GitHub review remain GPT-owned work and are not Claude dispatches.
 - Tier 2 / default implementation — Sonnet 4.6 (`claude-sonnet-4-6`):
   ordinary implementation, clear-plan implementation, medium-complexity,
   multi-file, and contract-sensitive changes after GPT decomposition.
