@@ -62,6 +62,7 @@
   const AUTO_REPORT_INSERT_DEFAULT = false;
   const SUBMISSION_ACK_TIMEOUT_MS = 8000;
   let submissionReconciliationInFlight = false;
+  let runtimeHydrationStarted = false;
   let autoLoop = { loop: null, status: null, control_loop_state: null, global_feedback: null, expected_turn: null };
   let autoLoopFeedbackInFlight = false;
   let autoLoopControlInFlight = false;
@@ -202,6 +203,18 @@
       }
       renderRuntimeProjection();
       onRestored?.();
+    });
+  }
+  function ensureRuntimeHydration() {
+    if (runtimeHydrationStarted) return;
+    runtimeHydrationStarted = true;
+    restoreRuntimeProjection(() => {
+      void (async () => {
+        await reconcilePendingSubmission();
+        await pollResult();
+        await refreshAutoLoopStatus();
+        await refreshUsClaudeCapability();
+      })().catch(error => showError(error));
     });
   }
   function updateResultInsertStatus(status, details = {}) {
@@ -822,7 +835,7 @@
 
   function mount() {
     const existing = document.querySelector(SELECTORS.mount);
-    if (existing) { panel = existing; removeLegacyAutoLoopUi(); addPanelStyle(); ensurePanelActions(); ensureAutoLoopSetup(); ensureRuntimeResultPanel(); renderPanelState(); return; }
+    if (existing) { panel = existing; removeLegacyAutoLoopUi(); addPanelStyle(); ensurePanelActions(); ensureAutoLoopSetup(); ensureRuntimeResultPanel(); ensureRuntimeHydration(); renderPanelState(); return; }
     addPanelStyle();
     panel = document.createElement('aside');
     panel.dataset.aiccGptBridgeExtension = 'true';
@@ -837,11 +850,11 @@
     ensurePanelActions();
     ensureAutoLoopSetup();
     ensureRuntimeResultPanel();
+    ensureRuntimeHydration();
     refreshExplicitPayloadBinding();
     restorePanelState();
     restoreResultInsertStatus();
     restoreCodexProfile();
-    restoreRuntimeProjection(() => { void refreshAutoLoopStatus(); void pollResult(); void refreshUsClaudeCapability(); });
   }
 
   function isAiccOwnedNode(node) {

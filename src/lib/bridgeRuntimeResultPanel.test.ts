@@ -114,7 +114,7 @@ assert.equal((content.match(/await copyAndInsertResult\(/g)??[]).length,3,'Codex
 assert.match(content,/async function deliverCanonicalResult\(\)[\s\S]*const ownerRequested = codexResultInFlight \|\| panelResultInFlight/,'top and panel Codex actions share canonical delivery');
 assert.doesNotMatch(content.match(/async function insertPanelResult[\s\S]*?(?=\n  function togglePanelResult)/)?.[0]??'',/ownerConfirmSend|KeyboardEvent|requestSubmit|\.click\(/,'panel insertion never submits GPT');
 assert.match(registry,/actionKey: 'next-step'[\s\S]*displayOrdinal: 5[\s\S]*执行下一步/,'execute-next-step remains an explicit Owner-facing action at ordinal five');
-assert.match(content,/RUNTIME_PROJECTION_KEY = 'aicc-bridge-runtime-projection-v1'/);assert.match(content,/restoreRuntimeProjection\(\(\) => \{ void refreshAutoLoopStatus\(\); void pollResult\(\); void refreshUsClaudeCapability\(\); \}\)/,'refresh restores before durable reconciliation and capability refresh');
+assert.match(content,/RUNTIME_PROJECTION_KEY = 'aicc-bridge-runtime-projection-v1'/);assert.match(content,/function ensureRuntimeHydration\(\)[\s\S]*restoreRuntimeProjection\(\(\) => \{[\s\S]*await reconcilePendingSubmission\(\);[\s\S]*await pollResult\(\);[\s\S]*await refreshAutoLoopStatus\(\);[\s\S]*await refreshUsClaudeCapability\(\)/,'refresh hydrates durable runtime state before capability refresh');
 assert.match(content,/runtimeAttemptUnbound = true[\s\S]*if \(runtimeAttemptUnbound\) return result/,'stale polling cannot bind an older result while a new submission is unbound');
 assert.match(content,/message\('POLL_RESULT', \{ correlation: reportCorrelation \}\)/,'result polling carries the current page exact correlation and uses worker storage only as reload fallback');
 assert.match(content,/PENDING_SUBMISSION_KEY = 'aicc-gpt-bridge-pending-submission-v1'/);
@@ -124,6 +124,9 @@ assert.equal((content.match(/section\.dataset\.aiccRuntimeResultPanel = 'true'/g
 assert.match(content,/const structureComplete = Boolean\(section && section\.querySelectorAll\(SELECTORS\.resultPreview\)\.length === 1[\s\S]*resultActions\.querySelectorAll\('button'\)\.length === 3/,'existing Runtime Result Panel remount validates exactly one preview and one three-button action group');
 assert.match(content,/if \(!structureComplete\) \{[\s\S]*if \(section\) section\.remove\(\)/,'an incomplete Runtime Result Panel is rebuilt instead of preserving stale DOM');
 assert.match(content,/const existing = document\.querySelector\(SELECTORS\.mount\)[\s\S]*if \(existing\) \{ panel = existing;[\s\S]*ensureRuntimeResultPanel\(\)/,'remount reconciliation preserves singleton ownership');
+assert.match(content,/function ensureRuntimeHydration\(\)[\s\S]*restoreRuntimeProjection\(\(\) => \{[\s\S]*await reconcilePendingSubmission\(\);[\s\S]*await pollResult\(\)/,'reload hydration restores durable submission state before relying on polling');
+assert.match(content,/if \(existing\) \{ panel = existing;[\s\S]*ensureRuntimeResultPanel\(\); ensureRuntimeHydration\(\); renderPanelState\(\); return;/,'existing panel remount always hydrates runtime state exactly once');
+assert.match(content,/ensureRuntimeResultPanel\(\);\n    ensureRuntimeHydration\(\);\n    refreshExplicitPayloadBinding\(\);/,'new panel starts durable runtime hydration before optional payload UI refresh');
 assert.match(content,/const AICC_DECISION_AUTHORITY = 0/);
 
 console.log('M8.2.1.8 Bridge runtime result panel compact UX matrix passed');
