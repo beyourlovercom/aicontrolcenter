@@ -5,6 +5,7 @@ import {dirname,join} from 'node:path';
 import {tmpdir} from 'node:os';
 import {finalizeCanonicalResult, parseEvent, reconcileProcessExit, runtimeStorageKey, type RuntimeState} from '../src/lib/runtimeManager.ts';
 import {buildOwnerGitDeliveryEnvironment, resolveGitHubCredential, redactSecret, stripGitHubCredentialEnvironment} from '../src/lib/gitCredentialBridge.ts';
+import {persistRuntimeTaskState} from '../src/lib/projectTaskStore.ts';
 
 type SupervisorSpec={state:RuntimeState;stateDir:string;repositoryRoot:string;lockFile:string;prompt:string;command?:string;args?:string[]};
 const specFile=process.argv[2];
@@ -34,6 +35,7 @@ function persist(state:RuntimeState){
   const runTemp=`${runFile}.${process.pid}.tmp`;
   writeFileSync(runTemp,JSON.stringify(state,null,2),{mode:0o600});
   renameSync(runTemp,runFile);
+  persistRuntimeTaskState(state);
   if(!['COMPLETED','FAILED','STOPPED','RECOVERY_REQUIRED'].includes(state.phase))return;
   let history:RuntimeState[]=[];
   try{history=JSON.parse(readFileSync(historyFile,'utf8')) as RuntimeState[]}catch{}

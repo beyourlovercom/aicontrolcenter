@@ -1,14 +1,15 @@
-import type {RuntimeRecord} from './model/entityTypes.ts';
-import {createEmptyGlobalStateReadModel} from './globalStateReadModel.ts';
-import {exactResultForRun,projectPhase5Lifecycle} from './runtimeResultFeedbackControlLoopProjection.ts';
+import {canonicalTaskResultForRun} from './taskResultProjection.ts';
 
-export function resolveComposerCanonicalResult(runId:string|null,runtimes:RuntimeRecord[]):string|null{
+type TaskRecord={
+  taskId?:string;executionId?:string;runId?:string;latestRunId?:string;
+  projectId?:string;repositoryIdentity?:string;canonicalResult?:any;
+  runs?:Array<{runId?:string;executionId?:string;canonicalResult?:any}>;
+};
+
+export function resolveComposerCanonicalResult(runId:string|null,tasks:TaskRecord[]):string|null{
   if(!runId)return null;
-  const matches=runtimes.filter(run=>run.runId===runId);
-  const identities=[...new Set(matches.map(run=>`${run.projectId}\u0000${run.repositoryIdentity}`))];
-  if(matches.length===0||identities.length!==1)return null;
-  const run=matches[0]!;
-  const context={projectId:run.projectId,repositoryIdentity:run.repositoryIdentity,projectContextRevision:0};
-  const projection=projectPhase5Lifecycle(createEmptyGlobalStateReadModel(context),{runs:[run]});
-  return exactResultForRun(projection,runId)?.canonical?.rawResult??null;
+  const matches=tasks.filter(task=>(task.latestRunId??task.runId??task.executionId)===runId||task.runs?.some(run=>run?.runId===runId));
+  const identities=[...new Set(matches.map(task=>`${task.projectId??''}\0${task.repositoryIdentity??''}`))];
+  if(matches.length!==1||identities.length!==1||identities[0]==='\0')return null;
+  return canonicalTaskResultForRun(matches[0]!,runId)?.rawResult??null;
 }

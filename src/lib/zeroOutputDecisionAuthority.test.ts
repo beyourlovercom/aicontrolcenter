@@ -29,11 +29,11 @@ assert.equal(incompleteFacts.canonicalResult?.rawResult,pass);
 const absent=finalizeCanonicalResult(base('run-absent'));
 assert.equal(absent.canonicalResult,undefined);
 const absentProjection=projectRuntimeFeedback(absent as RuntimeRecord,emptyContext);
-assert.deepEqual(absentProjection,{state:'RUNNING',title:'Codex Result',message:'NOT_AVAILABLE',code:'CODEX_RESULT_NOT_AVAILABLE',terminal:true});
+assert.deepEqual(absentProjection,{state:'RUNNING',title:'Codex Result',message:'NOT_AVAILABLE',code:'CODEX_RESULT_NOT_AVAILABLE',terminal:false});
 
 // TEST_06 / TEST_07 / TEST_08: feedback body stays exact and status cannot override it.
 assert.equal(buildGptReturnEnvelope(canary.canonicalResult!),pass);
-const resultDespiteFailure=projectRuntimeFeedback({...canary,phase:'FAILED',failure:'PROCESS_EXIT_NONZERO'} as RuntimeRecord,emptyContext);
+const resultDespiteFailure=projectRuntimeFeedback({...canary,phase:'FAILED',failure:'PROCESS_EXIT_NONZERO'} as RuntimeRecord,emptyContext,canary.canonicalResult!);
 assert.deepEqual(resultDespiteFailure,{state:'RUNNING',title:'Codex Result',message:pass,code:'CODEX_RESULT_AVAILABLE',terminal:true});
 
 // TEST_09: raw process facts stay available as evidence.
@@ -45,8 +45,11 @@ assert.equal(factProjection.runs[0]?.processFacts.processCloseObserved,false);
 // TEST_10: the read model only projects result availability from the actual payload.
 const noResultModel=projectPhase5Lifecycle(createEmptyGlobalStateReadModel(emptyContext),{runs:[absent as RuntimeRecord]});
 assert.equal(noResultModel.results.length,0);
-const exactTask=projectTaskResult({task:{taskId:'task-canary',runId:canary.runId,executionId:canary.runId,status:'FAILED'},runtime:canary as RuntimeRecord});
+const runtimeOnlyTask=projectTaskResult({task:{taskId:'task-canary',projectId:emptyContext.projectId,repositoryIdentity:emptyContext.repositoryIdentity,runId:canary.runId,executionId:canary.runId,status:'FAILED'},runtime:canary as RuntimeRecord});
+assert.equal(runtimeOnlyTask.state,'NOT_AVAILABLE','Runtime result is not Task Result read authority');
+const exactTask=projectTaskResult({task:{taskId:'task-canary',projectId:emptyContext.projectId,repositoryIdentity:emptyContext.repositoryIdentity,runId:canary.runId,latestRunId:canary.runId,executionId:canary.runId,status:'FAILED',runs:[{runId:canary.runId,executionId:canary.runId,canonicalResult:canary.canonicalResult}],canonicalResult:canary.canonicalResult}});
 assert.equal(exactTask.state,'RESULT_AVAILABLE');
+assert.equal(exactTask.source,'PROJECT_TASK_REGISTRY');
 assert.equal(exactTask.result?.rawResult,pass);
 
 const manager=readFileSync(new URL('./runtimeManager.ts',import.meta.url),'utf8');

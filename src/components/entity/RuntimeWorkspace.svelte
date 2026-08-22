@@ -15,7 +15,8 @@
   import {buildRuntimeDiagnostic} from '../../lib/runtimeDiagnostics.ts';
   import AiccWorkspaceDrawer from '../AiccWorkspaceDrawer.svelte';
   import {createEmptyGlobalStateReadModel,type GlobalStateProjectContext} from '../../lib/globalStateReadModel.ts';
-  import {exactResultForRun,exactRunLayer2,projectPhase5Lifecycle} from '../../lib/runtimeResultFeedbackControlLoopProjection.ts';
+  import {exactRunLayer2,projectPhase5Lifecycle} from '../../lib/runtimeResultFeedbackControlLoopProjection.ts';
+  import {canonicalTaskResultForRun} from '../../lib/taskResultProjection.ts';
 
   export let projectContext:GlobalStateProjectContext|null=null;
   export let runtime:RuntimeRecord|null=null;
@@ -72,7 +73,7 @@
   async function submitComposer(){if(activeComposerState!=='TEXT_READY'||composerSubmitting)return;composerSubmitting=true;try{await Promise.resolve(onComposerSend())}finally{composerSubmitting=false}}
   function onComposerKeydown(event:KeyboardEvent){if(event.key!=='Enter'||event.shiftKey||event.isComposing||imeComposing)return;if(activeComposerState!=='TEXT_READY')return;event.preventDefault();void submitComposer()}
   $: focused=projectContext?selectCanonicalCurrentRuntime(contextRuntime,contextHistory,selectedRunId):null;
-  function rebuildPhase5Projection(current:RuntimeRecord|null,taskRecords:any[],previous:ReturnType<typeof projectPhase5Lifecycle>|null){if(!previous||!projectContext)return previous;const next=projectPhase5Lifecycle(previous.model,{runs:current?[current]:[],tasks:taskRecords.map(task=>({taskId:task.taskId,lifecycle:task.status,executionId:task.executionId,runId:task.runId,updatedAt:task.updatedAt}))});phase5Layer2=next;return next;}
+  function rebuildPhase5Projection(current:RuntimeRecord|null,taskRecords:any[],previous:ReturnType<typeof projectPhase5Lifecycle>|null){if(!previous||!projectContext)return previous;const statusRun=current?(({canonicalResult:_ignored,...run})=>run)(current as any):null;const next=projectPhase5Lifecycle(previous.model,{runs:statusRun?[statusRun]:[],tasks:taskRecords.map(task=>({taskId:task.taskId,lifecycle:task.status,executionId:task.executionId,runId:task.latestRunId??task.runId,updatedAt:task.updatedAt}))});phase5Layer2=next;return next;}
   $: lifecycleProjection=rebuildPhase5Projection(focused,tasks,phase5Layer2);
   $: focusedRunLayer2=focused&&lifecycleProjection?exactRunLayer2(lifecycleProjection,focused.runId):null;
   $: focusedRunLifecycle=focusedRunLayer2?.lifecycle.state==='KNOWN'?focusedRunLayer2.lifecycle.value:'UNKNOWN';
@@ -81,12 +82,12 @@
   let stopPending=false,resumePending=false;
   async function stopFocusedRuntime(runId:string){if(!focused?.runId||focused.runId!==runId||stopPending)return;stopPending=true;try{await Promise.resolve(onStop(runId))}finally{stopPending=false}}
   async function resumeFocusedRuntime(runId:string){if(!focused?.runId||focused.runId!==runId||resumePending)return;resumePending=true;try{await Promise.resolve(onResume(runId))}finally{resumePending=false}}
-  $: focusedResult=focused?exactResultForRun(lifecycleProjection,focused.runId)?.canonical?.rawResult??null:null;
-  $: focusedTask=focused?tasks.find(task=>task?.runId===focused.runId||task?.executionId===focused.runId)??null:null;
+  $: focusedTask=focused?tasks.find(task=>(task?.latestRunId??task?.runId??task?.executionId)===focused.runId||task?.runs?.some((run:any)=>run?.runId===focused.runId))??null:null;
+  $: focusedResult=focused&&focusedTask?canonicalTaskResultForRun(focusedTask,focused.runId)?.rawResult??null:null;
   $: diagnostic=buildRuntimeDiagnostic(focusedTask??tasks.find(task=>task?.taskId===selectedTaskId)??null,focused);
   $: if(resultExpandedId&&resultExpandedId!==focused?.runId)resultExpandedId=null;
   function runtimeForRun(runId:string|null){return runId?[contextRuntime,...contextHistory].find(item=>item?.runId===runId)??null:null}
-  function resultForRun(run:RuntimeRecord|null){return run&&lifecycleProjection?exactResultForRun(lifecycleProjection,run.runId)?.canonical?.rawResult??null:null}
+  function resultForRun(run:RuntimeRecord|null){if(!run)return null;const task=tasks.find(item=>(item?.latestRunId??item?.runId??item?.executionId)===run.runId||item?.runs?.some((candidate:any)=>candidate?.runId===run.runId));return task?canonicalTaskResultForRun(task,run.runId)?.rawResult??null:null}
   async function copyResult(runId=focused?.runId){if(!runId||!resultForRun(runtimeForRun(runId)))return;await onCopyResult(runId);copiedRunId=runId;if(copyTimer)clearTimeout(copyTimer);copyTimer=window.setTimeout(()=>copiedRunId=null,1600)}
   function formatDuration(start?:string,end?:string){if(!start)return '不可用';const from=Date.parse(start),to=end?Date.parse(end):Date.now();if(!Number.isFinite(from)||!Number.isFinite(to))return '不可用';const seconds=Math.max(0,Math.floor((to-from)/1000));return `${Math.floor(seconds/60)}分${String(seconds%60).padStart(2,'0')}秒`}
 </script>

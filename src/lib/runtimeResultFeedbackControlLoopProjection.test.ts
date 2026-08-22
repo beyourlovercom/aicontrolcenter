@@ -103,7 +103,9 @@ assert.match(feedbackProjection,/exactResultForRun\(projection,runId\)/,'feedbac
 assert.doesNotMatch(island,/projectGlobalStateReadModel|writeFile|fetch\(/,'Global Feedback Island remains a renderer with no state authority');
 
 const app=readFileSync(new URL('../App.svelte',import.meta.url),'utf8');
-assert.match(app,/function phase5ResultForRuntime\(run:any\)[\s\S]*?exactResultForRun\(projection,run\.runId\)/,'App result copy/read consumers use exact Phase 5 RUN_TO_RESULT binding');
+assert.match(app,/function phase5ResultsFromTasks\(tasks:any\[\]\)[\s\S]*?canonicalResult/,'App supplies Phase 5 Result input from Task Registry records');
+assert.match(app,/runs:runtimeHistory\.map\(runtimeStatusOnly\),results:phase5ResultsFromTasks\(taskRecords\)/,'Runtime contributes status only while Task Registry supplies Results');
+assert.doesNotMatch(app,/function phase5ResultForRuntime/,'App has no Runtime result helper');
 assert.doesNotMatch(app,/canonicalCopyResult[^\n]+\['COMPLETED','FAILED','STOPPED'\]/,'App canonical copy result does not infer Result availability from Run lifecycle');
 assert.doesNotMatch(app,/getResult:\(id\)=>runtimeHistory\.find[^\n]+canonicalResult/,'Execution action result read does not bypass Phase 5 projection');
 assert.doesNotMatch(workspace,/function resultForRun\(run:RuntimeRecord\|null\)\{return run&&\['COMPLETED','FAILED','STOPPED'\]/,'Runtime Workspace copy availability does not derive from raw Run terminal phase');

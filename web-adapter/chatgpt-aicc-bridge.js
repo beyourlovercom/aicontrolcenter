@@ -34,7 +34,7 @@
   function reportIdentity(item) { var report = item.report || {}; return [report.version || 'AICC_RUN_REPORT_V1', item.runId || report.runId || 'ABSENT', currentConversationId()].join(':'); }
   function reportMarker(item) { return insertedPrefix + reportIdentity(item); }
   function currentConversationId() { return window.AICCChatGPTDom.originContext(document, null).conversationId; }
-  function acknowledge(item) { if (item && item.id) request('/api/gpt-bridge/outbox/' + encodeURIComponent(item.id), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ state: 'ACKNOWLEDGED' }) }).catch(function () {}); }
+  function acknowledge() { /* legacy adapter has no delivery-state authority; current Bridge owns return-state persistence */ }
   function sendText(text, originContext, source) {
     if (!String(text || '').trim()) return visibleError({ reason: '没有找到可发送的任务内容。' });
     text = String(text).trim();
@@ -44,7 +44,7 @@
         var item = body.item;
         if (!item || !item.id) throw { reason: 'AICC 返回了无法识别的 Inbox 结果。', code: 'INBOX_RESPONSE_INVALID' };
         if (item.state === 'INVALID') throw { reason: (item.parseErrors && item.parseErrors[0]) || 'AICC 任务无效。请修正后重试。', code: 'INVALID_EXECUTION_INSTRUCTION' };
-        localStorage.setItem(key, JSON.stringify({ inboxId: item.id, instructionId: item.instruction && item.instruction.instructionId, sourceReference: location.href, originContext: originContext, sentAt: new Date().toISOString() }));
+        localStorage.setItem(key, JSON.stringify({ inboxId: item.id, taskId: item.taskId, instructionId: item.instruction && item.instruction.instructionId, executionId: item.executionId, runId: item.runId, projectId: item.projectId, repositoryIdentity: item.repositoryIdentity, sourceReference: location.href, originContext: originContext, sentAt: new Date().toISOString() }));
         show('已发送到 AICC · 来源: ' + source + ' · Inbox: ' + item.id + ' · 状态: ' + item.state, 'SUCCESS');
         poll();
       }).catch(visibleError);
@@ -70,11 +70,23 @@
   function poll() {
     var raw = localStorage.getItem(key); if (!raw) return;
     var correlation; try { correlation = JSON.parse(raw); } catch (_) { return; }
-    request('/api/gpt-bridge/outbox').then(function (body) {
-      reportItem = (body.items || []).find(function (item) { return item.inboxId === correlation.inboxId && (!correlation.runId || item.runId === correlation.runId); }) || null;
-      if (reportItem && reportItem.runId && !correlation.runId) { correlation.runId = reportItem.runId; localStorage.setItem(key, JSON.stringify(correlation)); }
-      var marker = reportItem && reportMarker(reportItem);
-      if (reportItem) show(localStorage.getItem(marker) ? '运行报告已插入原始对话' : '运行报告已就绪 · Run ID: ' + ((reportItem.report && reportItem.report.runId) || reportItem.runId || 'ABSENT'), 'SUCCESS');
+    var resolveExact = correlation.runId && correlation.projectId && correlation.repositoryIdentity
+      ? Promise.resolve(correlation)
+      : request('/api/gpt-bridge/inbox').then(function (body) {
+          var inbox = (body.items || []).find(function (item) { return item.id === correlation.inboxId; }) || null;
+          if (!inbox) return correlation;
+          correlation = Object.assign({}, correlation, { taskId: correlation.taskId || inbox.taskId, instructionId: correlation.instructionId || (inbox.instruction && inbox.instruction.instructionId), executionId: correlation.executionId || inbox.executionId, runId: correlation.runId || inbox.runId, projectId: correlation.projectId || inbox.projectId, repositoryIdentity: correlation.repositoryIdentity || inbox.repositoryIdentity });
+          localStorage.setItem(key, JSON.stringify(correlation));
+          return correlation;
+        });
+    resolveExact.then(function (exact) {
+      if (!exact.runId || !exact.projectId || !exact.repositoryIdentity) { reportItem = null; return; }
+      var query = new URLSearchParams({ projectId: exact.projectId, repositoryIdentity: exact.repositoryIdentity, runId: exact.runId });
+      return request('/api/tasks/result?' + query.toString()).then(function (body) {
+        reportItem = body.item || null;
+        var marker = reportItem && reportMarker(reportItem);
+        if (reportItem) show(localStorage.getItem(marker) ? '运行报告已插入原始对话' : '运行报告已就绪 · Run ID: ' + ((reportItem.report && reportItem.report.runId) || reportItem.runId || 'ABSENT'), 'SUCCESS');
+      });
     }).catch(function () { show('暂时无法读取运行结果，请稍后重试。', 'ERROR'); });
   }
   async function insert() {

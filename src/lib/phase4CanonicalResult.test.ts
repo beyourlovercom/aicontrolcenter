@@ -27,13 +27,15 @@ assert.equal(transportFailure.canonicalResult,undefined,'transport failure does 
 const streaming=finalizeCanonicalResult({...base,runId:'run-phase4-streaming',phase:'RUNNING',finalAgentMessage:'partial stream'});
 assert.equal(streaming.canonicalResult?.rawResult,'partial stream','run lifecycle cannot gate an existing Codex result');
 
-const runtime=readFileSync('/Users/a/AI/007/AIcontrolcenter/src/lib/runtimeManager.ts','utf8');
-const supervisor=readFileSync('/Users/a/AI/007/AIcontrolcenter/scripts/aicc-run-supervisor.ts','utf8');
-const workspace=readFileSync('/Users/a/AI/007/AIcontrolcenter/src/components/entity/RuntimeWorkspace.svelte','utf8');
-const app=readFileSync('/Users/a/AI/007/AIcontrolcenter/src/App.svelte','utf8');
+const runtime=readFileSync(new URL('./runtimeManager.ts',import.meta.url),'utf8');
+const supervisor=readFileSync(new URL('../../scripts/aicc-run-supervisor.ts',import.meta.url),'utf8');
+const workspace=readFileSync(new URL('../components/entity/RuntimeWorkspace.svelte',import.meta.url),'utf8');
+const app=readFileSync(new URL('../App.svelte',import.meta.url),'utf8');
 assert.match(runtime,/AICC_EXECUTION_RESULT_V1/);
 assert.match(supervisor,/finalizeCanonicalResult\(state/);
-assert.match(workspace,/canonicalResult\?\.rawResult/);
-assert.match(app,/canonicalResult\?\.rawResult/);
+assert.match(supervisor,/persistRuntimeTaskState/,'terminal producer persists canonical result into Project Task Registry');
+assert.match(workspace,/canonicalTaskResultForRun/,'Runtime workspace reads result from Task Registry projection');
+assert.match(app,/taskResultForRun/,'App result consumers read Task Registry projection');
+assert.doesNotMatch(app,/selectedTaskRuntime\?\.canonicalResult/);
 assert.doesNotMatch(app,/navigator\.clipboard[^\n]*finalAgentMessage/);
 console.log('phase 4 canonical result matrix passed');

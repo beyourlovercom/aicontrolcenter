@@ -3,7 +3,7 @@ import {readFileSync} from 'node:fs';
 import {resolveComposerCanonicalResult} from './composerCopyResult.ts';
 import {COMPOSER_RUN_BINDING_STORAGE_KEY,persistComposerRunBinding,readComposerRunBinding} from './composerRunBinding.ts';
 
-const composerRun=(runId:string,rawResult?:string)=>({runId,canonicalResult:rawResult?{rawResult}:undefined}) as any;
+const composerRun=(runId:string,rawResult?:string)=>({taskId:`task-${runId}`,projectId:'aicc',repositoryIdentity:'aicc-repo',runId,latestRunId:runId,executionId:runId,runs:[{runId,executionId:runId,canonicalResult:rawResult?{version:'AICC_EXECUTION_RESULT_V1',executionId:runId,projectId:'aicc',repositoryIdentity:'aicc-repo',rawResult,receivedAt:'now',resultId:`result-${runId}`,resultHash:`hash-${runId}`,returnState:'RESULT_READY'}:undefined}],canonicalResult:rawResult?{version:'AICC_EXECUTION_RESULT_V1',executionId:runId,projectId:'aicc',repositoryIdentity:'aicc-repo',rawResult,receivedAt:'now',resultId:`result-${runId}`,resultHash:`hash-${runId}`,returnState:'RESULT_READY'}:undefined}) as any;
 const runA=composerRun('run-a','canonical result A');
 const unrelatedRunB=composerRun('run-b','unrelated result B');
 const runC=composerRun('run-c');
@@ -29,10 +29,10 @@ assert.match(dock,/aria-label="复制运行结果"[\s\S]*>✅<\/button>/,'copy a
 assert.match(dock,/disabled=\{!copyResultAvailable\}/,'copy is unavailable before a canonical result exists');
 assert.match(app,/composerSubmittedRunId=readComposerRunBinding/,'Composer restores its submitted run identity');
 assert.match(app,/bindComposerSubmittedRun\(item\?\.runId\)/,'accepted automatic submission persists the Composer Run before clearing its draft');
-assert.match(app,/bindComposerSubmittedRun\(launched\.runId\)/,'accepted manual submission persists the Composer Run before clearing its draft');
-assert.match(app,/composerCopyResult=resolveComposerCanonicalResult\(composerSubmittedRunId,\[composerExactRuntime,\.\.\.runtimeHistory\]\.filter\(Boolean\)\)/,'copy availability is derived only from Composer identity and its exact canonical runtime');
+assert.match(app,/bindComposerSubmittedRun\(item\?\.runId\)/,'accepted submission persists the Composer Run before clearing its draft');
+assert.match(app,/composerCopyResult=resolveComposerCanonicalResult\(composerSubmittedRunId,taskRecords\)/,'copy availability is derived only from Composer identity and Project Task Registry');
 assert.match(app,/async function refreshComposerCanonicalResult\(\)[\s\S]*\/api\/codex\/runtime\?runId=/,'live polling refreshes the Composer-owned Run directly');
-assert.match(app,/async function copyComposerResult\(\)\{const result=resolveComposerCanonicalResult\(composerSubmittedRunId,\[composerExactRuntime,\.\.\.runtimeHistory\]\.filter\(Boolean\)\)/,'copy action has no selected/global result fallback');
+assert.match(app,/async function copyComposerResult\(\)\{const result=resolveComposerCanonicalResult\(composerSubmittedRunId,taskRecords\)/,'copy action reads only the Task Registry projection');
 assert.match(app,/await navigator\.clipboard\?\.writeText\(result\)/,'each copy action makes exactly one clipboard write');
 assert.match(app,/copyResultAvailable=\{Boolean\(composerCopyResult\)\}[\s\S]*onCopyResult=\{copyComposerResult\}/,'dock receives only the Composer-scoped copy authority');
 assert.doesNotMatch(app,/copyComposerResult\(\)[\s\S]{0,600}(?:displayRuntime|globalRuntime|selectedRunId)/,'Composer copy does not fall back to visible, global, or selected runtime state');

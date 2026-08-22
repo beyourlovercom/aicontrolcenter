@@ -1,4 +1,4 @@
-import type {RuntimeRecord} from './model/entityTypes.ts';
+import type {CanonicalExecutionResult,RuntimeRecord} from './model/entityTypes.ts';
 import {createEmptyGlobalStateReadModel,type GlobalStateProjectContext} from './globalStateReadModel.ts';
 import {exactResultForRun,exactRunLayer2,projectPhase5Lifecycle,type Phase5LifecycleProjection,type ResultLayer2Record,type RunLayer2Record} from './runtimeResultFeedbackControlLoopProjection.ts';
 
@@ -57,16 +57,16 @@ export function projectControlLoopFeedbackFromGlobalState(projection:Phase5Lifec
 }
 
 /** Projects the exact Run to Layer 2 using an explicit project context. Fails closed if runtime scope does not match context. */
-export function projectRuntimeFeedback(runtime:RuntimeRecord,context:GlobalStateProjectContext):RuntimeFeedbackProjection{
+export function projectRuntimeFeedback(runtime:RuntimeRecord,context:GlobalStateProjectContext,canonicalResult:CanonicalExecutionResult|null=null):RuntimeFeedbackProjection{
   if(runtime.projectId!==context.projectId||runtime.repositoryIdentity!==context.repositoryIdentity)return {state:'ERROR',title:'Runtime 状态异常',message:'项目上下文不匹配，无法确认执行状态。',code:'PROJECT_CONTEXT_MISMATCH',terminal:false};
-  const projection=projectPhase5Lifecycle(createEmptyGlobalStateReadModel(context),{runs:[runtime]});
+  const {canonicalResult:_runtimeResult,...runtimeStatus}=runtime;
+  const result=canonicalResult&&canonicalResult.projectId===context.projectId&&canonicalResult.repositoryIdentity===context.repositoryIdentity&&canonicalResult.executionId===runtime.runId?canonicalResult:null;
+  const projection=projectPhase5Lifecycle(createEmptyGlobalStateReadModel(context),{runs:[runtimeStatus as RuntimeRecord],results:result?[{result,runId:runtime.runId}]:[]});
   return projectRuntimeFeedbackFromGlobalState(projection,runtime.runId);
 }
 
-export function shouldContinueRuntimePolling(runtime:RuntimeRecord|null,hasPendingInbox:boolean,selectedRunId?:string|null){
+export function shouldContinueRuntimePolling(runtime:RuntimeRecord|null,hasPendingInbox:boolean,selectedRunId?:string|null,canonicalResult:CanonicalExecutionResult|null=null){
   if(hasPendingInbox||isActiveRuntime(runtime))return true;
   if(!runtime||runtime.runId!==selectedRunId||!['COMPLETED','FAILED','STOPPED','RECOVERY_REQUIRED'].includes(runtime.phase))return false;
-  const context={projectId:runtime.projectId,repositoryIdentity:runtime.repositoryIdentity,projectContextRevision:0};
-  const projection=projectPhase5Lifecycle(createEmptyGlobalStateReadModel(context),{runs:[runtime]});
-  return exactResultForRun(projection,runtime.runId)===null;
+  return !(canonicalResult&&canonicalResult.executionId===runtime.runId&&canonicalResult.projectId===runtime.projectId&&canonicalResult.repositoryIdentity===runtime.repositoryIdentity);
 }

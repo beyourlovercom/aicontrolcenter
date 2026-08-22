@@ -31,6 +31,7 @@ import {DirectRemoteRunnerClient} from './directRemoteRunnerClient.ts';
 import {resolveAiccStateDir} from './stateDirectory.ts';
 import {readProtocolField,resolveTaskEntityBinding,type FormalWorkPackageRegistration} from './taskEntityBinding.ts';
 import {sameCanonicalPath} from './canonicalPathIdentity.ts';
+import {ensureTaskBeforeRun,persistRuntimeTaskState,projectRunFinalMessagePath} from './projectTaskStore.ts';
 const execFileAsync=promisify(execFile);
 export {selectCanonicalCurrentRuntime} from "./runtimeSelection.ts";
 
@@ -46,6 +47,8 @@ export type RuntimePhase =
   | "RECOVERY_REQUIRED";
 export type RuntimeState = {
   runId: string;
+  taskId?: string;
+  inboxId?: string;
   executionProvider?: 'LOCAL_CODEX'|'REMOTE_CLAUDE';
   runnerId?: string;
   remoteExecutionId?: string;
@@ -204,6 +207,8 @@ export type CanonicalExecutionRequest = {
   worktreePath?: string;
   deliveryBranch?: string;
   runId?: string;
+  taskId?: string;
+  inboxId?: string;
   executionProfile?: 'OWNER_AUTHORIZED_GIT_DELIVERY';
   entityType?: 'global_task'|'work_package'|'pull_request';
   entityId?: string;
@@ -351,36 +356,14 @@ export function finalizeCanonicalResult(state:RuntimeState,receivedAt=new Date()
   state.canonicalResult={version:'AICC_EXECUTION_RESULT_V1',executionId:state.runId,projectId:state.projectId,repositoryIdentity:state.repositoryIdentity,repositoryPath:state.repositoryPath,instructionId:state.instructionId,originConversationId:state.originConversationId,originMessageId:state.originMessageId,originBlockId:state.originBlockId,rawResult,receivedAt,resultId:`result-${state.runId}`,resultHash:createHash('sha256').update(rawResult).digest('hex'),returnState:'RESULT_READY'};
   return state;
 }
-export function updateCanonicalResultReturn(executionId:string,update:Partial<Pick<CanonicalExecutionResult,'returnState'|'returnAttemptedAt'|'returnedAt'|'returnFailure'>>):RuntimeState|null{
-  const state=findUniqueRawRuntimeIdentity([...readStoredRuntimes(),...readRuntimeHistory()],executionId);
-  if(!state?.canonicalResult)return null;
-  state.canonicalResult={...state.canonicalResult,...update};
-  save(state);
-  return state;
-}
-export function readCanonicalResult(executionId:string):RuntimeState|null{
-  const state=findUniqueRawRuntimeIdentity([...readStoredRuntimes(),...readRuntimeHistory()],executionId);
-  return state?.canonicalResult?state:null;
-}
 /** Same raw executionId can independently resolve per projectId+repositoryIdentity; a foreign scope never matches. */
 export function readRuntimeScoped(scope:Pick<ProjectEntityScope,'projectId'|'repositoryIdentity'>,runId:string):RuntimeState|null{
   const matches=(item:RuntimeState)=>item.runId===runId&&runtimeBelongsToProject(item,scope);
   return readStoredRuntimes().find(matches)||readRuntimeHistory().find(matches)||null;
 }
-export function readCanonicalResultScoped(scope:Pick<ProjectEntityScope,'projectId'|'repositoryIdentity'>,executionId:string):RuntimeState|null{
-  const matches=(item:RuntimeState)=>item.runId===executionId&&Boolean(item.canonicalResult)&&runtimeBelongsToProject(item,scope);
-  return readStoredRuntimes().find(matches)||readRuntimeHistory().find(matches)||null;
-}
-export function updateCanonicalResultReturnScoped(scope:Pick<ProjectEntityScope,'projectId'|'repositoryIdentity'>,executionId:string,update:Partial<Pick<CanonicalExecutionResult,'returnState'|'returnAttemptedAt'|'returnedAt'|'returnFailure'>>):RuntimeState|null{
-  const state=readCanonicalResultScoped(scope,executionId);
-  if(!state?.canonicalResult)return null;
-  state.canonicalResult={...state.canonicalResult,...update};
-  save(state);
-  return state;
-}
 export function readRuntimeHistoryReadOnly():RuntimeState[]{try{const stored=JSON.parse(readFileSync(HISTORY_FILE,'utf8')) as RuntimeState[];let registry:Map<string,FormalWorkPackageRegistration>;try{registry=readFormalWorkPackageRegistry()}catch{registry=new Map()}return stored.map(item=>reconcileRuntimeEntityBinding(item,registry))}catch{return[]}}
 function reconcileObservedRuntime(runtime:RuntimeState):RuntimeState{const before=JSON.stringify(runtime),reconciled=monitorRuntimeState(runtime);if(JSON.stringify(reconciled)!==before)save(reconciled);return reconciled}
-async function readRuntimeFileCached(file:string,registry:Map<string,FormalWorkPackageRegistration>):Promise<RuntimeState|null>{try{const metadata=await stat(file),cached=runtimeFileCache.get(file);if(cached&&cached.mtimeMs===metadata.mtimeMs&&cached.size===metadata.size)return cached.runtime;const parsed=JSON.parse(await readFile(file,'utf8')) as RuntimeState;if(!parsed||typeof parsed.runId!=='string')return null;const runtime=reconcileObservedRuntime(reconcileRuntimeEntityBinding(parsed,registry));runtimeFileCache.set(file,{mtimeMs:metadata.mtimeMs,size:metadata.size,runtime});return runtime}catch{runtimeFileCache.delete(file);return null}}
+async function readRuntimeFileCached(file:string,registry:Map<string,FormalWorkPackageRegistration>):Promise<RuntimeState|null>{try{const metadata=await stat(file),cached=runtimeFileCache.get(file);if(cached&&cached.mtimeMs===metadata.mtimeMs&&cached.size===metadata.size)return cached.runtime;const parsed=JSON.parse(await readFile(file,'utf8')) as RuntimeState;if(!parsed||typeof parsed.runId!=='string')return null;const runtime=reconcileObservedRuntime(reconcileRuntimeEntityBinding(parsed,registry));persistRuntimeTaskState(runtime);runtimeFileCache.set(file,{mtimeMs:metadata.mtimeMs,size:metadata.size,runtime});return runtime}catch{runtimeFileCache.delete(file);return null}}
 async function readRuntimeHistoryCached(registry:Map<string,FormalWorkPackageRegistration>):Promise<RuntimeState[]>{try{const metadata=await stat(HISTORY_FILE);if(runtimeHistoryCache&&runtimeHistoryCache.mtimeMs===metadata.mtimeMs&&runtimeHistoryCache.size===metadata.size)return runtimeHistoryCache.history;const parsed=JSON.parse(await readFile(HISTORY_FILE,'utf8')) as RuntimeState[];const history=Array.isArray(parsed)?parsed.map(item=>reconcileRuntimeEntityBinding(item,registry)):[];runtimeHistoryCache={mtimeMs:metadata.mtimeMs,size:metadata.size,history};return history}catch{runtimeHistoryCache=null;return[]}}
 async function rebuildRuntimeProjectionSnapshot():Promise<RuntimeProjectionSnapshot>{let names:string[]=[];try{names=await readdir(STATE_DIR)}catch{}const files=[RUN_FILE,...names.filter(file=>/^runtime-run-[^/]+\.json$/.test(file)).map(file=>join(STATE_DIR,file))],activeFiles=new Set(files);for(const file of runtimeFileCache.keys())if(!activeFiles.has(file))runtimeFileCache.delete(file);let registry:Map<string,FormalWorkPackageRegistration>;try{registry=readFormalWorkPackageRegistry()}catch{registry=new Map()}const stored:RuntimeState[]=[];for(let offset=0;offset<files.length;offset+=RUNTIME_PROJECTION_BATCH_SIZE){const batch=await Promise.all(files.slice(offset,offset+RUNTIME_PROJECTION_BATCH_SIZE).map(file=>readRuntimeFileCached(file,registry)));stored.push(...batch.filter((item):item is RuntimeState=>Boolean(item)));if(offset+RUNTIME_PROJECTION_BATCH_SIZE<files.length)await new Promise<void>(resolve=>setImmediate(resolve))}const history=await readRuntimeHistoryCached(registry);runtimeProjectionSnapshot={stored,history,refreshedAt:Date.now()};return runtimeProjectionSnapshot}
 function refreshRuntimeProjectionSnapshot():Promise<RuntimeProjectionSnapshot>{if(runtimeProjectionRefresh)return runtimeProjectionRefresh;const revision=runtimeProjectionRequestedRevision;runtimeProjectionRefresh=rebuildRuntimeProjectionSnapshot().then(snapshot=>{runtimeProjectionCompletedRevision=revision;for(const listener of runtimeProjectionListeners)listener();return snapshot}).finally(()=>{runtimeProjectionRefresh=null;if(runtimeProjectionRequestedRevision>runtimeProjectionCompletedRevision)void refreshRuntimeProjectionSnapshot()});return runtimeProjectionRefresh}
@@ -448,7 +431,6 @@ export async function stopRuntimeWithGraceScoped(scope:Pick<ProjectEntityScope,'
   try{process.kill(stopped.pid,'SIGKILL')}catch{}
   return afterGrace;
 }
-export async function readCanonicalResultAsync(executionId:string):Promise<RuntimeState|null>{const snapshot=await readRuntimeProjectionSnapshot();const state=findUniqueRawRuntimeIdentity([...snapshot.stored,...snapshot.history],executionId);return state?.canonicalResult?state:null}
 export function readRuntime(workPackageId?: string, entityType?: RuntimeState['entityType'], entityId?: string, projectScope?: Pick<ProjectEntityScope,'projectId'|'repositoryIdentity'>): RuntimeState | null {
   const requiresProjectScope=Boolean(workPackageId||entityType==='work_package'||entityType==='pull_request'||entityType==='global_task');
   const candidates = readStoredRuntimes()
@@ -525,6 +507,7 @@ function save(s: RuntimeState) {
   markLocalRuntimeProjectionWrite(target.slice(STATE_DIR.length+1));
   writeFileSync(target, JSON.stringify(s, null, 2), { mode: 0o600 });
   persistTerminal(s);
+  persistRuntimeTaskState(s);
   invalidateRuntimeProjectionSnapshot();
 }
 function releaseLockOnce(state:RuntimeState){if(state.writerLockReleased)return;state.writerLockReleased=true;state.cleanupAt??=new Date().toISOString();state.lockEvents=[...(state.lockEvents??[]),'writer_lock.released']}
@@ -580,6 +563,16 @@ function effectiveExecutionTypeForPrompt(executionType:string){return executionT
 export function buildPassThroughPrompt(instruction:string,executionType="IMPLEMENTATION",sandboxMode="workspace-write"){
   return `AICC PASS-THROUGH TASK\nExecution type: ${executionType}\nSandbox: ${sandboxMode}\n\nBEGIN OWNER TASK\n${instruction}\nEND OWNER TASK`;
 }
+export function resolveRuntimeProjectScope(requested?:ProjectEntityScope):ProjectEntityScope{
+  const authority=createProjectRegistryAuthority();
+  if(!requested)return projectEntityScope(authority.getActiveProject());
+  const registered=authority.getProject(requested.projectId);
+  if(!registered)throw new Error('PROJECT_NOT_REGISTERED');
+  if(registered.repositoryIdentity!==requested.repositoryIdentity)throw new Error('PROJECT_REPOSITORY_IDENTITY_MISMATCH');
+  if(requested.repositoryPath&& !sameCanonicalPath(requested.repositoryPath,registered.repositoryPath))throw new Error('PROJECT_REPOSITORY_PATH_MISMATCH');
+  return projectEntityScope(registered);
+}
+
 export function startRuntime(
   wpId: string,
   adapter: ProcessAdapter = { spawn },
@@ -601,17 +594,21 @@ export function startRuntime(
   const matchingStoredAuth = !passThrough&&storedAuth?.workPackageId === wpId && storedAuth.branch === repo.branch && sameCanonicalPath(storedAuth.repositoryRoot,repo.repository) ? storedAuth : null;
   const auth = matchingStoredAuth ?? (options.allowReadOnlyWithoutAuthorization && isReadOnly ? { authorizationId: "read-only-local-audit", workPackageId: wpId, authoritySha: repo.remoteMain, branch: repo.branch, headShaAtAuthorization: repo.head, repositoryRoot: repo.repository, scope: ["read_repository", "read_work_package"], allowed: ["read_only_audit"], forbidden: ["arbitrary_shell", "push", "merge"], authorizedAt: new Date().toISOString() } : storedAuth);
   const scope = passThrough?[]:[];
-  const projectScope=options.projectScope??projectEntityScope(createProjectRegistryAuthority().getActiveProject());
+  const projectScope=resolveRuntimeProjectScope(options.projectScope);
   const entityType=options.entityType??'work_package';
   const entityId=options.entityId??wpId;
-  const now = new Date().toISOString(),
-    runId=options.runId??`run-${Date.now()}-${Math.random().toString(36).slice(2,8)}`,
-    s: RuntimeState = {
+  const now = new Date().toISOString();
+  const runId=options.runId??`run-${Date.now()}-${Math.random().toString(36).slice(2,8)}`;
+  const workPackageId=options.formalWpId??(entityType==='work_package'?entityId:entityType==='global_task'?null:(options.parentWorkPackageId??null));
+  const task=ensureTaskBeforeRun({projectId:projectScope.projectId,repositoryIdentity:projectScope.repositoryIdentity,repositoryPath:projectScope.repositoryPath,runId,taskId:options.taskId,inboxId:options.inboxId,instructionId:options.instructionId,instructionText:options.instructionText??options.instructionBody,instructionSourceType:options.sourceType,entityType,entityId,workPackageId,parentWorkPackageId:options.parentWorkPackageId,branch:auth?.branch??repo.branch,startingHeadSha:auth?.headShaAtAuthorization??repo.head,executionType:effectivePolicy.executionType,sandboxMode:effectivePolicy.sandboxMode,executionProvider:options.executionProvider??'LOCAL_CODEX',provider:options.provider??'codex',model:resolveCodexModel(options.model,options.reasoning).model,reasoningLevel:resolveCodexModel(options.model,options.reasoning).reasoning,phase:'STARTING',startedAt:now,createdAt:now});
+  const s: RuntimeState = {
       runId,
+      taskId:task.taskId,
+      inboxId:task.inboxId,
       projectId:projectScope.projectId,
       repositoryIdentity:projectScope.repositoryIdentity,
       repositoryPath:projectScope.repositoryPath,
-      workPackageId: options.formalWpId??(entityType==='work_package'?entityId:entityType==='global_task'?null:(options.parentWorkPackageId??null)),
+      workPackageId,
       entityType,
       entityId,
       parentWorkPackageId: options.parentWorkPackageId,
@@ -661,7 +658,7 @@ export function startRuntime(
       resolvedModel: resolveCodexModel(options.model,options.reasoning).model,
       reasoningLevel: resolveCodexModel(options.model,options.reasoning).reasoning,
       outputMode: 'human',
-      finalMessagePath: join(STATE_DIR, runId, 'final-message.txt'),
+      finalMessagePath: projectRunFinalMessagePath(projectScope,runId),
       startupTransitions: ['CREATED','STARTING'],
       timeoutTimerStartedAt: now,
       normalizedRuntimeEvents: ['RUN_CREATED','STARTING'],

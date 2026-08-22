@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import {existsSync,readdirSync,readFileSync} from 'node:fs';
-import {finalizeCanonicalResult,parseEvent,readCanonicalResultScoped,readRuntimeHistory,readRuntimeScoped,runtimeStorageKey,updateCanonicalResultReturnScoped,type RuntimeState} from './runtimeManager.ts';
+import {finalizeCanonicalResult,parseEvent,readRuntimeHistory,readRuntimeScoped,runtimeStorageKey,type RuntimeState} from './runtimeManager.ts';
+import {readProjectTaskResult,updateProjectTaskResultDelivery} from './projectTaskStore.ts';
 import {resolveAiccStateDir} from './stateDirectory.ts';
 
 const stateDir=resolveAiccStateDir();
@@ -61,13 +62,14 @@ assert.equal(resolvedB?.canonicalResult?.rawResult,'B_RESULT');
 // Foreign/unrelated scope lookup fails closed.
 const missingScope={projectId:'nonexistent-project',repositoryIdentity:'nonexistent/repo'};
 assert.equal(readRuntimeScoped(missingScope,sharedRunId),null,'lookup under an unrelated scope fails closed');
-assert.equal(readCanonicalResultScoped(missingScope,sharedRunId),null,'canonical result lookup under an unrelated scope fails closed');
+assert.equal(readProjectTaskResult(missingScope,sharedRunId),null,'Task Registry result lookup under an unrelated scope fails closed');
 
 // Scoped update mutates only the caller's own project, never the other project's same-runId record.
-const updatedA=updateCanonicalResultReturnScoped(scopeA,sharedRunId,{returnState:'RETURNED_TO_GPT',returnedAt:new Date().toISOString()});
-assert.equal(updatedA?.canonicalResult?.returnState,'RETURNED_TO_GPT');
-const stillPendingB=readCanonicalResultScoped(scopeB,sharedRunId);
-assert.notEqual(stillPendingB?.canonicalResult?.returnState,'RETURNED_TO_GPT','updating project A never mutates project B\'s same-runId record');
+const currentA=readProjectTaskResult(scopeA,sharedRunId)?.canonicalResult!;
+const updatedA=updateProjectTaskResultDelivery(scopeA,sharedRunId,{returnState:'RETURNED_TO_GPT',returnedAt:new Date().toISOString()},{resultId:currentA.resultId,resultHash:currentA.resultHash});
+assert.equal(updatedA?.returnState,'RETURNED_TO_GPT');
+const stillPendingB=readProjectTaskResult(scopeB,sharedRunId)?.canonicalResult;
+assert.notEqual(stillPendingB?.returnState,'RETURNED_TO_GPT','updating project A never mutates project B\'s same-runId record');
 
 assert.equal(existsSync(`${stateDir}/runtime-history.json`),true);
 const historyOnDisk=JSON.parse(readFileSync(`${stateDir}/runtime-history.json`,'utf8')) as RuntimeState[];

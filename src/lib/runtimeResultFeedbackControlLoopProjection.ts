@@ -209,8 +209,9 @@ export function projectPhase5Lifecycle(
   const explicitExecutions=uniqueById(input.executions??[],item=>item.executionId);
   const loops=uniqueById(input.controlLoops??[],item=>item.control_loop_id);
   const feedback=uniqueById(input.feedback??[],item=>item.feedback_id);
+  // Result payloads enter Layer 2 only through explicit canonical Result inputs.
+  // Runtime lifecycle evidence is never a result-read authority.
   const resultInputs:ResultLifecycleInput[]=[...(input.results??[])];
-  for(const runtime of runtimes)if(runtime.canonicalResult)resultInputs.push({result:runtime.canonicalResult,runId:runtime.runId});
   const results=uniqueById(resultInputs,item=>item.result.resultId);
 
   const executionIds=new Set<string>();

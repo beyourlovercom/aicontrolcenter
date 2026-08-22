@@ -8,8 +8,12 @@ export type AdapterStorage = {
 
 export type AdapterCorrelation = {
   instructionId?: string;
+  taskId?: string;
   inboxId: string;
+  executionId?: string;
   runId?: string;
+  projectId?: string;
+  repositoryIdentity?: string;
   sourceReference?: string;
   originContext?: { conversationId?: string; conversationUrl?: string; messageId?: string; blockId?: string };
   sentAt: string;
@@ -18,6 +22,11 @@ export type AdapterCorrelation = {
 export type AdapterInboxItem = {
   id: string;
   state: string;
+  taskId?: string;
+  executionId?: string;
+  runId?: string;
+  projectId?: string;
+  repositoryIdentity?: string;
   instruction?: { instructionId?: string; entityId?: string; executionType?: string };
   error?: string;
   parseErrors?: string[];
@@ -109,6 +118,11 @@ export class WebBridgeClient {
     const correlation: AdapterCorrelation = {
       inboxId: item.id,
       instructionId: item.instruction?.instructionId,
+      taskId:item.taskId,
+      executionId:item.executionId,
+      runId:item.runId,
+      projectId:item.projectId,
+      repositoryIdentity:item.repositoryIdentity,
       sourceReference,
       originContext,
       sentAt: new Date().toISOString()
@@ -119,15 +133,22 @@ export class WebBridgeClient {
 
   async pollMatchingResult(correlation: AdapterCorrelation | null = restoreCorrelation(this.storage)): Promise<AdapterOutboxItem | null> {
     if (!correlation) return null;
-    let response: Response;
-    try { response = await this.fetchImpl(`${this.baseUrl}/api/gpt-bridge/outbox`); }
-    catch { throw failureFrom('AICC_UNAVAILABLE', '无法读取 AICC 运行结果。', '确认本地服务可用后重试。'); }
-    if (!response.ok) throw httpFailure(response.status);
-    const body = await responseBody(response);
-    const items = Array.isArray(body.items) ? body.items as AdapterOutboxItem[] : [];
-    const match = items.find(item => item.inboxId === correlation.inboxId && (!correlation.runId || item.runId === correlation.runId));
-    if (match?.runId && !correlation.runId) persistCorrelation(this.storage, { ...correlation, runId: match.runId });
-    return match ?? null;
+    let exact={...correlation};
+    if(!exact.runId||!exact.projectId||!exact.repositoryIdentity){
+      let response:Response;
+      try{response=await this.fetchImpl(`${this.baseUrl}/api/gpt-bridge/inbox`)}catch{throw failureFrom('AICC_UNAVAILABLE','无法恢复 AICC Task correlation。','确认本地服务可用后重试。')}
+      if(!response.ok)throw httpFailure(response.status);
+      const body=await responseBody(response),items=Array.isArray(body.items)?body.items as AdapterInboxItem[]:[],inbox=items.find(item=>item.id===exact.inboxId)??null;
+      if(inbox)exact={...exact,instructionId:exact.instructionId??inbox.instruction?.instructionId,taskId:exact.taskId??inbox.taskId,executionId:exact.executionId??inbox.executionId,runId:exact.runId??inbox.runId,projectId:exact.projectId??inbox.projectId,repositoryIdentity:exact.repositoryIdentity??inbox.repositoryIdentity};
+    }
+    persistCorrelation(this.storage,exact);
+    if(!exact.runId||!exact.projectId||!exact.repositoryIdentity)return null;
+    const query=new URLSearchParams({projectId:exact.projectId,repositoryIdentity:exact.repositoryIdentity,runId:exact.runId});
+    let response:Response;
+    try{response=await this.fetchImpl(`${this.baseUrl}/api/tasks/result?${query}`)}catch{throw failureFrom('AICC_UNAVAILABLE','无法读取 AICC 运行结果。','确认本地服务可用后重试。')}
+    if(!response.ok)throw httpFailure(response.status);
+    const body=await responseBody(response);
+    return (body.item as AdapterOutboxItem|undefined)??null;
   }
 }
 

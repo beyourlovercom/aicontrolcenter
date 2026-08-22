@@ -4,6 +4,7 @@ import {join} from 'node:path';
 import {resolveAiccStateDir} from './stateDirectory.ts';
 import {parseExecutionV1, type BridgeReport, type ParsedInstruction, type InboxItem, type ExecutionSourceType} from './bridgeCore.ts';
 import {type ProjectIdentityScope, sameProjectScope} from './projectEntityScope.ts';
+import {readProjectTaskResult} from './projectTaskStore.ts';
 
 export const GPT_AUTO_CONTROL_LOOP = 'GPT_AUTO_CONTROL_LOOP' as const;
 export const CONTROL_CONTRACT_TYPES = ['AICC_EXECUTION_V1', 'AICC_OWNER_UAT_V1', 'AICC_WP_COMPLETE_V1', 'AICC_BLOCKED_V1'] as const;
@@ -848,17 +849,18 @@ export function consumeGptControl(input: {conversation_id: string; assistant_mes
 }
 
 export function recordExecutionResult(control_loop_id: string, report: BridgeReport): FeedbackRecord | null {
-  const result = report.canonicalResult;
-  if (!result || !report.runId || !result.resultId || !result.resultHash) return null;
-  if (!result.projectId || !result.repositoryIdentity) return null;
-  const loop = readControlLoop(control_loop_id, {projectId: result.projectId, repositoryIdentity: result.repositoryIdentity});
+  if (!report.runId || !report.projectId || !report.repositoryIdentity) return null;
+  const resolved=readProjectTaskResult({projectId:report.projectId,repositoryIdentity:report.repositoryIdentity},report.runId);
+  const result=resolved?.canonicalResult??null;
+  if (!result || !result.resultId || !result.resultHash) return null;
+  const loop = readControlLoop(control_loop_id, {projectId: report.projectId, repositoryIdentity: report.repositoryIdentity});
   if (!loop) {
     let existsElsewhere = false;
     try { existsElsewhere = Boolean(readControlLoop(control_loop_id)); } catch { existsElsewhere = true; }
     if (existsElsewhere) throw new Error('FOREIGN_EXECUTION_RESULT_PROJECT_SCOPE');
     return null;
   }
-  return buildFeedbackRecord({control_loop_id, projectId: result.projectId, repositoryIdentity: result.repositoryIdentity, formal_wp_id: loop.formal_wp_id, binding_epoch: loop.binding_epoch, current_pr_id: report.entityType === 'PULL_REQUEST' ? report.entityId : null, task_id: report.inboxId, instruction_id: result.instructionId, execution_id: result.executionId, run_id: report.runId, source: GPT_AUTO_CONTROL_LOOP, runtime: 'CODEX_CLI', model: report.model, result_id: result.resultId, result_hash: result.resultHash, execution_result: result.rawResult, conversation_id: loop.conversation_id});
+  return buildFeedbackRecord({control_loop_id, projectId: report.projectId, repositoryIdentity: report.repositoryIdentity, formal_wp_id: loop.formal_wp_id, binding_epoch: loop.binding_epoch, current_pr_id: report.entityType === 'PULL_REQUEST' ? report.entityId : null, task_id: resolved!.task.taskId, instruction_id: result.instructionId, execution_id: result.executionId, run_id: report.runId, source: GPT_AUTO_CONTROL_LOOP, runtime: 'CODEX_CLI', model: report.model, result_id: result.resultId, result_hash: result.resultHash, execution_result: result.rawResult, conversation_id: loop.conversation_id});
 }
 
 export type CanonicalControlLoopReadModel = {

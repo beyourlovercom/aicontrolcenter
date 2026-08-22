@@ -14,7 +14,7 @@ const explicit=(text:string,workPackageId:string,type:ProgressEvidenceType,sourc
   return out;
 };
 
-export function resolveProgressTruthState(args:{entityId:string;milestoneId?:string;workPackageId:string;roadmap:WorkPackagePhaseProgress|null;runtime?:RuntimeRecord|null;codexResult?:CanonicalExecutionResult|null;uat?:HumanUatRecord|null;lifecycleEvidence?:LifecycleEvidenceRecord|null;roadmapSync:RoadmapSyncState}):ProgressTruthState{
+export function resolveProgressTruthState(args:{entityId:string;milestoneId?:string;workPackageId:string;roadmap:WorkPackagePhaseProgress|null;runtime?:RuntimeRecord|null;codexResult?:CanonicalExecutionResult|null;codexResults?:CanonicalExecutionResult[];uat?:HumanUatRecord|null;lifecycleEvidence?:LifecycleEvidenceRecord|null;roadmapSync:RoadmapSyncState}):ProgressTruthState{
   const plan=args.roadmap?.phases??[];
   const metadata=args.roadmap?.currentPhaseNumber??null;
   const candidates:ProgressEvidence[]=[];
@@ -23,8 +23,9 @@ export function resolveProgressTruthState(args:{entityId:string;milestoneId?:str
     const phase=declared?.match(/(?:PHASE[_ ]|CURRENT[_ ]PHASE\s*[:=]\s*)(\d+)/i)?.[1]??declared?.match(/^(\d+)$/)?.[1];
     if(phase)candidates.push({id:`ROADMAP:${source}:${args.workPackageId}`,type:'ROADMAP',workPackageId:args.workPackageId,phaseNumber:Number(phase),at:args.roadmapSync.updatedAt,source:source as ProgressTruthSource,explicit:true});
   }
-  if(args.runtime){const text=[args.runtime.finalAgentMessage,args.runtime.implementationResult,args.runtime.instructionText].filter(Boolean).join('\n');candidates.push(...explicit(text,args.workPackageId,'EXECUTION','Execution Evidence',args.runtime.completedAt??args.runtime.lastActivityAt));}
-  if(args.codexResult)candidates.push(...explicit(args.codexResult.rawResult,args.workPackageId,'CODEX_RESULT','Codex Result',args.codexResult.receivedAt));
+  if(args.runtime){const text=[args.runtime.implementationResult].filter(Boolean).join('\n');if(text)candidates.push(...explicit(text,args.workPackageId,'EXECUTION','Execution Evidence',args.runtime.completedAt??args.runtime.lastActivityAt));}
+  const codexResults=[...(args.codexResults??[]),...(args.codexResult?[args.codexResult]:[])].filter((result,index,array)=>array.findIndex(item=>item.resultId===result.resultId)===index);
+  for(const result of codexResults)candidates.push(...explicit(result.rawResult,args.workPackageId,'CODEX_RESULT','Codex Result',result.receivedAt));
   if(args.uat)candidates.push(...explicit([args.uat.overallNote,...args.uat.items.flatMap(item=>item.evidence??[])].filter(Boolean).join('\n'),args.workPackageId,'UAT','Owner UAT',args.uat.updatedAt));
   for(const item of args.lifecycleEvidence?.phaseEvidence??[])candidates.push({id:`CODEX_AUDIT:${args.workPackageId}:phase-${item.phaseNumber}`,type:'CODEX_AUDIT',workPackageId:args.workPackageId,phaseNumber:item.phaseNumber,phaseTitle:item.phaseTitle,status:item.status,at:item.recordedAt,source:'Codex Result',explicit:true});
   const relevant=candidates.filter(item=>item.workPackageId===args.workPackageId).sort((a,b)=>date(b.at)-date(a.at)||(b.source===('GitHub Roadmap' as ProgressTruthSource)?1:0)-(a.source===('GitHub Roadmap' as ProgressTruthSource)?1:0));

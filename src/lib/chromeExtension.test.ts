@@ -22,7 +22,7 @@ assert.match(worker,/function autoLoopRequest/);
 assert.doesNotMatch(worker,/projectAutoLoopStatus|consumeGptControl|canonicalControlLoopReadModel/,'worker owns no control-loop semantic authority');
 assert.doesNotMatch(dom,/AUTO_LOOP|AUTO_SUBMIT_PROBE|completeProtocol|firstControlContract|resolveInstructionSource/,'DOM adapter remains control-loop-semantic free');
 assert.match(dom,/function ownerConfirmSend/,'DOM adapter may expose the canonical Owner-confirmed Send primitive');
-assert.match(worker,/api\/gpt-bridge\/inbox/);assert.match(worker,/api\/gpt-bridge\/outbox/);assert.match(worker,/RECONCILE_SUBMISSION/);
+assert.match(worker,/api\/gpt-bridge\/inbox/);assert.match(worker,/api\/tasks\/result/);assert.match(worker,/RECONCILE_SUBMISSION/);const pollResultSource=worker.match(/async function pollResult[\s\S]*?(?=async function remoteClaudeStatus)/)?.[0]??'';assert.doesNotMatch(pollResultSource,/api\/gpt-bridge\/outbox/,'POLL_RESULT must not read Outbox result authority');
 console.log('Chrome extension pure transport contract passed');
 
 

@@ -2,7 +2,8 @@ import assert from 'node:assert/strict';
 import {writeFileSync} from 'node:fs';
 import {join} from 'node:path';
 import {resolveAiccStateDir} from './stateDirectory.ts';
-import {finalizeCanonicalResult,invalidateRuntimeProjectionSnapshot,readCanonicalResult,readRuntime,readRuntimeByRunIdReadOnly,runtimeBelongsToProject} from './runtimeManager.ts';
+import {finalizeCanonicalResult,invalidateRuntimeProjectionSnapshot,readRuntime,readRuntimeByRunIdReadOnly,runtimeBelongsToProject} from './runtimeManager.ts';
+import {persistRuntimeTaskState,readProjectTaskResult} from './projectTaskStore.ts';
 
 const aicc={projectId:'aicc',repositoryIdentity:'repo-a',repositoryPath:'/repo-a'};
 const erp={projectId:'erpbeyourlovercom',repositoryIdentity:'repo-b',repositoryPath:'/repo-b'};
@@ -22,12 +23,11 @@ console.log('Phase 3 project-scoped WP runtime reader passed');
 const SAME_RUN_ID='run-same-id';
 const runA=runtime(aicc,SAME_RUN_ID);
 finalizeCanonicalResult(runA);
-writeFileSync(join(state,`runtime-${SAME_RUN_ID}.json`),JSON.stringify(runA));
+writeFileSync(join(state,`runtime-${SAME_RUN_ID}.json`),JSON.stringify(runA));persistRuntimeTaskState(runA);
 invalidateRuntimeProjectionSnapshot();
-const resultA=readCanonicalResult(SAME_RUN_ID);
+const resultA=readProjectTaskResult(aicc,SAME_RUN_ID)?.canonicalResult;
 assert.equal(resultA?.projectId,aicc.projectId);
-assert.equal(resultA?.canonicalResult?.projectId,aicc.projectId);
-assert.equal(resultA?.canonicalResult?.repositoryIdentity,aicc.repositoryIdentity);
+assert.equal(resultA?.repositoryIdentity,aicc.repositoryIdentity);
 const readBackA=await readRuntimeByRunIdReadOnly(SAME_RUN_ID);
 assert.equal(readBackA?.projectId,aicc.projectId);
 assert.equal(readBackA?.canonicalResult?.projectId,aicc.projectId);
@@ -37,7 +37,9 @@ const runB=runtime(erp,SAME_RUN_ID);
 finalizeCanonicalResult(runB);
 const resultBRaw=JSON.parse(JSON.stringify(runB));
 assert.equal(resultBRaw.canonicalResult.projectId,erp.projectId);
-assert.notEqual(resultBRaw.canonicalResult.projectId,resultA?.canonicalResult?.projectId);
+persistRuntimeTaskState(runB);assert.notEqual(resultBRaw.canonicalResult.projectId,resultA?.projectId);
+assert.equal(readProjectTaskResult(erp,SAME_RUN_ID)?.canonicalResult?.projectId,erp.projectId);
+assert.equal(readProjectTaskResult(aicc,SAME_RUN_ID)?.canonicalResult?.projectId,aicc.projectId);
 console.log('Phase 3 same raw run ID cross-project canonical result scope passed');
 
 // Legacy persisted unscoped runtime must fail closed for project-scoped reads, never silently attach to current project.
