@@ -3,14 +3,14 @@ import * as pty from 'node-pty';
 import {mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, unlinkSync, writeFileSync} from 'node:fs';
 import {dirname,join} from 'node:path';
 import {tmpdir} from 'node:os';
-import {finalizeCanonicalResult, parseEvent, reconcileProcessExit, type RuntimeState} from '../src/lib/runtimeManager.ts';
+import {finalizeCanonicalResult, parseEvent, reconcileProcessExit, runtimeStorageKey, type RuntimeState} from '../src/lib/runtimeManager.ts';
 import {buildOwnerGitDeliveryEnvironment, resolveGitHubCredential, redactSecret, stripGitHubCredentialEnvironment} from '../src/lib/gitCredentialBridge.ts';
 
 type SupervisorSpec={state:RuntimeState;stateDir:string;repositoryRoot:string;lockFile:string;prompt:string;command?:string;args?:string[]};
 const specFile=process.argv[2];
 if(!specFile)throw new Error('SUPERVISOR_SPEC_REQUIRED');
 const spec=JSON.parse(readFileSync(specFile,'utf8')) as SupervisorSpec;
-const runFile=spec.state.passThrough?join(spec.stateDir,`runtime-${spec.state.runId}.json`):join(spec.stateDir,'runtime.json');
+const runFile=spec.state.passThrough?join(spec.stateDir,`runtime-run-scoped-${runtimeStorageKey(spec.state)}.json`):join(spec.stateDir,'runtime.json');
 const historyFile=join(spec.stateDir,'runtime-history.json');
 const maxHistory=20;
 const maxTerminalChunks=200;
@@ -38,7 +38,7 @@ function persist(state:RuntimeState){
   let history:RuntimeState[]=[];
   try{history=JSON.parse(readFileSync(historyFile,'utf8')) as RuntimeState[]}catch{}
   const historyTemp=`${historyFile}.${process.pid}.tmp`;
-  writeFileSync(historyTemp,JSON.stringify([state,...history.filter(item=>item.runId!==state.runId)].slice(0,maxHistory),null,2),{mode:0o600});
+  writeFileSync(historyTemp,JSON.stringify([state,...history.filter(item=>!(item.runId===state.runId&&item.projectId===state.projectId&&item.repositoryIdentity===state.repositoryIdentity))].slice(0,maxHistory),null,2),{mode:0o600});
   renameSync(historyTemp,historyFile);
 }
 function releaseLock(){try{unlinkSync(spec.lockFile)}catch{}}
