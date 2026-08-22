@@ -30,13 +30,14 @@ export function projectTaskResult(args:{task:TaskRecord|null;runtime?:RuntimeRec
   const status=String(task?.status??task?.runtimeState??task?.terminalState??task?.state??'UNKNOWN').toUpperCase();
   if(!runId)return {taskId,executionId,runId,status,state:'NOT_AVAILABLE',result:null,resultId:null,resultHash:null,source:'NONE'};
 
+  const resultMatchesIdentity=(result:CanonicalExecutionResult)=>result.executionId===runId&&(!executionId||result.executionId===executionId);
   const candidates:Candidate[]=[];
-  if(args.runtime?.runId===runId&&args.runtime.canonicalResult)candidates.push({result:args.runtime.canonicalResult,source:'EXACT_RUN_RUNTIME'});
+  if(args.runtime?.runId===runId&&args.runtime.canonicalResult&&resultMatchesIdentity(args.runtime.canonicalResult))candidates.push({result:args.runtime.canonicalResult,source:'EXACT_RUN_RUNTIME'});
   for(const item of args.outbox??[]){
     const result=item.report?.canonicalResult;
-    if(item.runId===runId&&item.report?.runId===runId&&(!executionId||item.executionId===executionId)&&(!executionId||item.report?.executionId===executionId)&&result)candidates.push({result,source:'EXACT_RUN_OUTBOX'});
+    if(item.runId===runId&&item.report?.runId===runId&&(!executionId||item.executionId===executionId)&&(!executionId||item.report?.executionId===executionId)&&result&&resultMatchesIdentity(result))candidates.push({result,source:'EXACT_RUN_OUTBOX'});
   }
-  if(task?.canonicalResult)candidates.push({result:task.canonicalResult,source:'TASK_HISTORICAL_FALLBACK'});
+  if(task?.canonicalResult&&resultMatchesIdentity(task.canonicalResult))candidates.push({result:task.canonicalResult,source:'TASK_HISTORICAL_FALLBACK'});
 
   const declaredScope=scopeKey(task)??scopeKey(args.runtime);
   const candidateScopes=[...new Set(candidates.map(item=>scopeKey(item.result)).filter((value):value is string=>Boolean(value)))];
@@ -45,8 +46,9 @@ export function projectTaskResult(args:{task:TaskRecord|null;runtime?:RuntimeRec
   const [projectId,repositoryIdentity]=selectedScope.split('\u0000');
   const scopedCandidates=candidates.filter(item=>scopeKey(item.result)===selectedScope);
   const runtime=args.runtime&&scopeKey(args.runtime)===selectedScope?args.runtime:null;
+  const projectionRuntime=runtime?{...runtime,canonicalResult:runtime.canonicalResult&&resultMatchesIdentity(runtime.canonicalResult)?runtime.canonicalResult:undefined}:null;
   const projection=projectPhase5Lifecycle(createEmptyGlobalStateReadModel({projectId,repositoryIdentity,projectContextRevision:0}),{
-    runs:runtime?[runtime]:[],
+    runs:projectionRuntime?[projectionRuntime]:[],
     results:scopedCandidates.map(item=>({result:item.result,runId}))
   });
   const projected=exactResultForRun(projection,runId)?.canonical??null;
