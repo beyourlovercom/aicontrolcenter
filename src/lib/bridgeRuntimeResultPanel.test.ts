@@ -26,7 +26,7 @@ assert.match(autoLoopDomain,/function systemManagedControlLoopId\(conversation_i
 assert.doesNotMatch(panelTemplate,/data-aicc-auto-submit-probe|UAT · Auto Submit Probe|data-aicc-auto-submit-probe-status/,'diagnostic probe UI is absent');
 assert.equal((panelTemplate.match(/type=\"checkbox\"/g)??[]).length,2,'auto control has exactly two Owner-facing toggles');
 assert.match(panelTemplate,/锁定 GPT 聊天口[\s\S]*开启自动循环/);
-assert.match(content,/data-aicc-runtime-result-panel/);assert.match(content,/>运行结果</);assert.match(content,/结果预览/);
+assert.match(content,/data-aicc-runtime-result-panel/);assert.match(content,/<dt>Result<\/dt><dd data-aicc-runtime-result>/,'runtime panel exposes the canonical Result field');assert.match(content,/结果预览/);
 assert.match(content,/class="aicc-runtime-status-badge" data-aicc-runtime-status>IDLE</,'compact panel owns the canonical runtime badge');
 assert.doesNotMatch(content,/Codex 执行中 · 来源:|Codex 结果已就绪 · 来源:/,'legacy duplicate runtime status is removed');
 assert.equal((content.match(/data-aicc-status(?=[ >])/g)??[]).length,1,'one unified live status surface remains');
@@ -110,11 +110,11 @@ assert.equal((runtimeTemplate.match(/data-aicc-runtime-source/g)??[]).length,1,'
 assert.match(content,/function togglePanelResult\(\)[\s\S]*resultExpanded = !resultExpanded/);
 assert.match(content,/async function copyPanelResult\(\)[\s\S]*navigator\.clipboard\.writeText\(result\.text\)/,'copy uses the full stored projection text');
 assert.match(content,/async function insertPanelResult\(\)[\s\S]*insertReport\(\)[\s\S]*deliverCanonicalResult\(\)/,'panel delegates to existing AICC and Codex result actions');
-assert.equal((content.match(/await copyAndInsertResult\(/g)??[]).length,2,'Codex and AICC retain one shared reliability pipeline');
+assert.equal((content.match(/await copyAndInsertResult\(/g)??[]).length,3,'Codex, AICC, and remote-provider result delivery retain one shared reliability pipeline');
 assert.match(content,/async function deliverCanonicalResult\(\)[\s\S]*const ownerRequested = codexResultInFlight \|\| panelResultInFlight/,'top and panel Codex actions share canonical delivery');
 assert.doesNotMatch(content.match(/async function insertPanelResult[\s\S]*?(?=\n  function togglePanelResult)/)?.[0]??'',/ownerConfirmSend|KeyboardEvent|requestSubmit|\.click\(/,'panel insertion never submits GPT');
 assert.match(registry,/actionKey: 'next-step'[\s\S]*displayOrdinal: 5[\s\S]*执行下一步/,'execute-next-step remains an explicit Owner-facing action at ordinal five');
-assert.match(content,/RUNTIME_PROJECTION_KEY = 'aicc-bridge-runtime-projection-v1'/);assert.match(content,/restoreRuntimeProjection\(\(\) => \{ void refreshAutoLoopStatus\(\); void pollResult\(\); \}\)/,'refresh restores before durable reconciliation');
+assert.match(content,/RUNTIME_PROJECTION_KEY = 'aicc-bridge-runtime-projection-v1'/);assert.match(content,/restoreRuntimeProjection\(\(\) => \{ void refreshAutoLoopStatus\(\); void pollResult\(\); void refreshUsClaudeCapability\(\); \}\)/,'refresh restores before durable reconciliation and capability refresh');
 assert.match(content,/runtimeAttemptUnbound = true[\s\S]*if \(runtimeAttemptUnbound\) return result/,'stale polling cannot bind an older result while a new submission is unbound');
 assert.match(content,/PENDING_SUBMISSION_KEY = 'aicc-gpt-bridge-pending-submission-v1'/);
 assert.match(content,/await persistStorage\(PENDING_SUBMISSION_KEY, pending\)[\s\S]*boundedMessage\(operation/,'pending identity is durable before transport begins');

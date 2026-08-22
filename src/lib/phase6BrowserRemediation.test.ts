@@ -78,47 +78,20 @@ const protocol='AICC_EXECUTION_V1\nINSTRUCTION_ID: phase6-browser\nINSTRUCTION_B
 
 const document=new FakeDocument();
 document.messages=[new MessageNode([], 'ordinary')];
-dom.mountAssistantAiccActions(document,()=>null);
-assert.equal(document.querySelectorAll('[data-aicc-action-rail]').length,0,'ordinary prose creates no floating action');
-
-const pre=new FakeNode('pre',protocol);const nestedCode=new FakeNode('code',protocol);pre.appendChild(nestedCode);
-document.messages=[new MessageNode([pre,nestedCode], 'executable')];
-dom.mountAssistantAiccActions(document,()=>null);
-assert.equal(document.querySelectorAll('[data-aicc-action-rail]').length,1,'nested executable children reconcile to one canonical action');
-dom.mountAssistantAiccActions(document,()=>null);
-assert.equal(document.querySelectorAll('[data-aicc-action-rail]').length,1,'rescan does not duplicate the action');
-
-let exactPayload='';let importCount=0;
-dom.mountAssistantAiccActions(document,(text:string)=>{exactPayload=text;importCount+=1;return {item:{state:'LAUNCHED'}};});
-document.querySelectorAll('[data-aicc-action="assistant"]')[0].click();
-await Promise.resolve();
-assert.equal(exactPayload,protocol,'inline action captures the exact canonical block');
-assert.equal(importCount,1,'one click invokes importAndRun exactly once');
-
-const failureDocument=new FakeDocument();const failurePre=new FakeNode('pre',protocol);failureDocument.messages=[new MessageNode([failurePre],'failure')];
-dom.mountAssistantAiccActions(failureDocument,()=>Promise.reject({code:'AICC_HTTP_503',reason:'本地服务不可用'}));
-failureDocument.querySelectorAll('[data-aicc-action="assistant"]')[0].click();
-await new Promise(resolve=>setTimeout(resolve,0));
-const visibleFailure=failureDocument.querySelectorAll('[data-aicc-action-error]')[0];
-assert.match(visibleFailure.textContent,/AICC_HTTP_503/,'inline failure exposes transport code');
-assert.match(visibleFailure.textContent,/本地服务不可用/,'inline failure exposes transport reason');
-
-const rerenderedPre=new FakeNode('pre',protocol);document.messages=[new MessageNode([rerenderedPre], 'executable')];
-dom.mountAssistantAiccActions(document,()=>null);
-assert.equal(document.querySelectorAll('[data-aicc-action-rail]').length,1,'rerender preserves one action identity');
-document.messages=[];dom.mountAssistantAiccActions(document,()=>null);
-assert.equal(document.querySelectorAll('[data-aicc-action-rail]').length,0,'removed surface removes the orphan action');
+assert.equal(typeof dom.mountAssistantAiccActions,'undefined','chat-content floating actions stay removed');
+assert.equal(typeof dom.mountComposerAiccAction,'function','canonical Composer AICC action remains available');
+assert.equal(typeof dom.removeChatContentFloatingButtons,'function','legacy chat-content rails are actively removed');
+assert.doesNotMatch(domSource,/function mountAssistantAiccActions|function actionSurfaces/,'removed assistant action authority cannot return');
+assert.doesNotMatch(content,/mountAssistantAiccActions/,'content script never remounts assistant floating actions');
+assert.match(content,/removeChatContentFloatingButtons\(document\)/,'chat-content cleanup remains wired');
+assert.match(content,/mountComposerAiccAction\(document/,'Composer action maintenance remains wired');
 
 const selectionSurface=new FakeNode('pre',protocol);const selectedChild=new FakeNode('span','检查当前仓库');selectionSurface.appendChild(selectedChild);document.messages=[new MessageNode([selectionSurface], 'selected')];
-const selected=dom.selectedExecutablePayload(document,{toString:()=> '检查当前仓库',anchorNode:selectedChild,focusNode:selectedChild});
-assert.equal(selected.text,protocol,'explicit selection binds the exact executable surface');
-
-const signatureOnlyMessage=new MessageNode([], 'signature-only');signatureOnlyMessage.innerText=protocol;signatureOnlyMessage.textContent=protocol;
-document.messages=[signatureOnlyMessage];dom.mountAssistantAiccActions(document,()=>null);
-assert.equal(document.querySelectorAll('[data-aicc-action-rail]').length,1,'standalone protocol signature is recognized without fragile code classes');
+const selected=dom.selectedPayload(document,{toString:()=> '检查当前仓库',anchorNode:selectedChild,focusNode:selectedChild});
+assert.equal(selected.text,'检查当前仓库','explicit selection preserves the exact Owner-selected text');
 
 assert.doesNotMatch(content,/resolveTaskSource\(document/,'right panel never falls back to latest Assistant text');
-assert.match(content,/selectedExecutablePayload/);
+assert.match(content,/selectedPayload/,'right-panel explicit binding uses the current canonical selection primitive');
 assert.match(content,/navigator\.clipboard\.readText\(\)/,'clipboard is read only through explicit send interaction');
 assert.match(content,/if \(explicitPayloadBinding\?\.text[\s\S]*source: '已选指令'[\s\S]*inboundClipboardBinding/,'explicit binding outranks clipboard payload');
 assert.match(content,/data-aicc-payload-state="GHOST"/,'no known payload keeps the right-panel send button visually ghosted');
@@ -129,7 +102,7 @@ assert.equal((content.match(/copyAndInsertResult\(envelope/g)??[]).length,1,'one
 assert.match(domSource,/copyAndInsertResultArtifact[\s\S]*clipboard\.writeText\(artifact\)[\s\S]*insertTextIntoComposer\(node, artifact\)/,'canonical adapter copies before best-effort insertion');
 const returnBody=content.match(/async function deliverCanonicalResult\(\)[\s\S]*?(?=function reportText)/)?.[0]??'';
 assert.doesNotMatch(returnBody,/reportFormatPresent|verifyComposerText/,'return transport does not judge existing Composer content');
-assert.match(returnBody,/returnInFlight/);assert.match(content,/attemptedReturnIds/);assert.match(content,/returnState === 'RESULT_READY'/);assert.match(worker,/claimGranted !== true/);
+assert.match(returnBody,/returnInFlight/);assert.match(content,/attemptedReturnIds/);assert.match(returnBody,/message\('RETURN_RESULT'/,'result return claims one durable return identity');assert.match(returnBody,/message\('MARK_RETURN_COMPLETE'/,'successful insertion completes that exact return identity');assert.match(worker,/claimGranted !== true/);
 assert.doesNotMatch(content,/button\[type="submit"\]|KeyboardEvent|\.submit\(|requestSubmit\(|\.click\(\)/,'result return never auto-sends ChatGPT');
 assert.doesNotMatch(content,/latestAssistantMessage|latestMessage|lastAssistant|mostRecentAssistant/);
 console.log('M4.1 Phase 6 browser remediation matrix passed');

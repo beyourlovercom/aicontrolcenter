@@ -55,10 +55,10 @@ assert.equal(readControlLoop(loopId)?.conversation_id,currentConversation,'misma
 
 const content=readFileSync(join(process.cwd(),'web-adapter/chrome-extension-current/content.js'),'utf8');
 const worker=readFileSync(join(process.cwd(),'web-adapter/chrome-extension-current/service-worker.js'),'utf8');
-assert.match(content,/bind\.checked = Boolean\(currentConversationId\(\) && autoLoop\.loop\?\.binding_active === true && autoLoop\.loop\?\.conversation_id === currentConversationId\(\)\)/,'checkbox derives from active durable/current equality');
+assert.match(content,/const bound = Boolean\(autoLoop\.loop\?\.binding_active === true && autoLoop\.loop\?\.conversation_id === currentConversationId\(\)\);[\s\S]*nodes\.bind\.checked = bound/,'checkbox derives from active durable/current equality');
 assert.match(content,/function handleConversationLockChange\(event\)[\s\S]*bindCurrentConversation\(\)[\s\S]*unlockCurrentConversation\(\)/,'Owner interaction uses explicit lock and unlock operations');
-assert.match(worker,/verified\.loop\.binding_active !== true \|\| verified\.loop\.conversation_id !== message\.conversation_id/,'worker performs active-binding read-after-write verification');
-assert.match(content,/AUTO LOOP · CONVERSATION MISMATCH/);
+assert.match(worker,/return autoLoopRequest\('bind', \{ formal_wp_id: message\.formal_wp_id, conversation_id/,'worker forwards the canonical explicit bind request to the server authority');
+assert.match(content,/EXACT_CONVERSATION_REQUIRED/,'result insertion fails closed when the exact bound conversation is unavailable');
 assert.doesNotMatch(content,/pushState[\s\S]{0,120}AUTO_LOOP_BIND|popstate[\s\S]{0,120}AUTO_LOOP_BIND/,'navigation cannot silently rebind');
 const five=['clipboard-codex-execute','codex-execute','codex-result','aicc-send','next-step'];
 assert.deepEqual(five.map(key=>content.indexOf(`data-aicc-action-key="${key}"`)),[...five.map(key=>content.indexOf(`data-aicc-action-key="${key}"`))].sort((a,b)=>a-b),'revised five-button order remains unchanged');
