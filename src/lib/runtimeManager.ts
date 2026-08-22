@@ -423,11 +423,29 @@ export async function readRuntimeByRunIdScoped(scope:Pick<ProjectEntityScope,'pr
   const unique=findUniqueRawRuntimeIdentity(fileMatches,runId);
   return unique?reconcileObservedRuntime(reconcileRuntimeEntityBinding(unique)):null;
 }
-/** Stop runtime only if it belongs to the supplied scope; throws SCOPE_MISMATCH if not. */
+/** Stop an already-scoped RuntimeState identity without re-resolving by raw runId. */
+function stopRuntimeFromState(s:RuntimeState):RuntimeState{
+  if(['COMPLETED','FAILED','STOPPED','RECOVERY_REQUIRED'].includes(s.phase))throw new Error('NO_ACTIVE_RUN');
+  if(s.workPackageId)revokeExecutionLease(s.workPackageId);
+  if(!s.pid||!isPidAlive(s.pid)){
+    s.phase='STOPPED';s.stopRequested=true;s.stopReason='OWNER_STOPPED';s.pidAlive=false;s.processAlive=false;s.failure=undefined;s.currentTask='CANCELLED_BEFORE_SPAWN';s.completedAt=new Date().toISOString();s.lockEvents=[...(s.lockEvents??[]),'OWNER_STOP_REQUESTED','CANCELLED_BEFORE_SPAWN'];releaseLockOnce(s);save(s);return s;
+  }
+  s.phase='STOPPING';s.stopRequested=true;s.stopReason='OWNER_STOPPED';save(s);
+  try{process.kill(s.pid,'SIGTERM')}catch{}
+  return s;
+}
+/** Stop runtime only if it belongs to the supplied scope; throws SCOPE_MISMATCH if not. Uses scoped identity throughout. */
 export async function stopRuntimeWithGraceScoped(scope:Pick<ProjectEntityScope,'projectId'|'repositoryIdentity'>,runId:string,graceMs=1000):Promise<RuntimeState>{
-  const current=await readRuntimeByRunIdScoped(scope,runId);
+  const current=readRuntimeScoped(scope,runId);
   if(!current)throw new Error('SCOPE_MISMATCH');
-  return stopRuntimeWithGrace(runId,graceMs);
+  if(['COMPLETED','FAILED','STOPPED','RECOVERY_REQUIRED'].includes(current.phase))throw new Error('NO_ACTIVE_RUN');
+  const stopped=stopRuntimeFromState(current);
+  if(stopped.phase!=='STOPPING'||!stopped.pid)return stopped;
+  await new Promise(resolve=>setTimeout(resolve,graceMs));
+  const afterGrace=readRuntimeScoped(scope,runId);
+  if(!afterGrace||afterGrace.pid!==stopped.pid||!isPidAlive(stopped.pid))return afterGrace??stopped;
+  try{process.kill(stopped.pid,'SIGKILL')}catch{}
+  return afterGrace;
 }
 export async function readCanonicalResultAsync(executionId:string):Promise<RuntimeState|null>{const snapshot=await readRuntimeProjectionSnapshot();const state=findUniqueRawRuntimeIdentity([...snapshot.stored,...snapshot.history],executionId);return state?.canonicalResult?state:null}
 export function readRuntime(workPackageId?: string, entityType?: RuntimeState['entityType'], entityId?: string, projectScope?: Pick<ProjectEntityScope,'projectId'|'repositoryIdentity'>): RuntimeState | null {

@@ -182,6 +182,17 @@ export function resumeStoppedExecution(runId:string):InboxItem{
  persistNewInboxItem(item);
  return launchInboxItem(item.id,{model:source.model,reasoning:source.reasoning_effort});
 }
+/** Resume a stopped execution scoped to a specific project; fails closed if no matching inbox item. */
+export function resumeStoppedExecutionScoped(scope:Pick<import('./projectEntityScope.ts').ProjectEntityScope,'projectId'|'repositoryIdentity'>,runId:string):{item:InboxItem}{
+ const source=readInbox().find(item=>item.runId===runId&&item.projectId===scope.projectId&&item.repositoryIdentity===scope.repositoryIdentity);
+ if(!source||!source.instruction)throw new Error('RESUME_SOURCE_EXECUTION_NOT_FOUND');
+ if(!source.projectId||source.projectId!==scope.projectId||source.repositoryIdentity!==scope.repositoryIdentity)throw new Error('SCOPE_MISMATCH');
+ if(read<InboxItem[]>(inboxFile,[]).some(item=>item.resumedFromRunId===runId))throw new Error('RESUME_ALREADY_CREATED');
+ const now=new Date().toISOString(),item:InboxItem={...source,id:`resume-${source.id}-${Date.now()}-${Math.random().toString(36).slice(2,8)}`,resumedFromRunId:runId,state:'READY',transportState:'QUEUED',executionId:undefined,runId:undefined,runtimeState:undefined,startedAt:undefined,terminalState:undefined,exitCode:undefined,createdAt:now,updatedAt:now,originContext:{...source.originContext,runId:undefined}};
+ persistNewInboxItem(item);
+ const launched=launchInboxItem(item.id,{model:source.model,reasoning:source.reasoning_effort});
+ return {item:launched};
+}
 export function launchInboxItem(id:string,metadata?:ExecutionLaunchMetadata):InboxItem{
  const item=read<InboxItem[]>(inboxFile,[]).find(x=>x.id===id);
  if(!item)throw new Error('INBOX_NOT_FOUND');

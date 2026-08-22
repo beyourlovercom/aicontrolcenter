@@ -20,8 +20,8 @@ assert.match(manager,/stopRuntimeWithGrace[\s\S]*setTimeout[\s\S]*process\.kill\
 assert.match(manager,/current\.runId!==runId\|\|current\.pid!==stopped\.pid/,'PID_REUSE_SAFETY');
 assert.match(manager,/function reconcileOwnerStoppedProjection\([\s\S]*state\.phase='STOPPED'/,'OWNER_CANCEL_FINAL_STATE');
 assert.match(controlLoop,/stopControlLoopByOwner/,'AUTO_LOOP_STOPPED_BY_OWNER');
-assert.match(vite,/readRuntimeByRunIdReadOnly\(payload\.runId\)/,'STOP_LOOKUP_EXACT_RUN');
-assert.match(vite,/stopControlLoopByOwner\(loop\.control_loop_id\)/,'AUTO_LOOP_CONTINUE_DISABLED');
-assert.match(vite,/stopRuntimeWithGrace\(payload\.runId\)/,'STOP_EXACT_RUNTIME');
+assert.match(vite,/readRuntimeByRunIdScoped\(requestScope,payload\.runId\)/,'STOP_LOOKUP_EXACT_RUN');
+assert.match(vite,/stopControlLoopByOwner\(loop\.control_loop_id,runtimeScope\)/,'AUTO_LOOP_CONTINUE_DISABLED');
+assert.match(vite,/stopRuntimeWithGraceScoped\(requestScope,payload\.runId\)/,'STOP_EXACT_RUNTIME');
 
 console.log('runtime exact-run Owner Stop contract passed');

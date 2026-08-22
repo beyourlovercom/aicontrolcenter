@@ -29,7 +29,7 @@ assert.match(bridge,/controlLoopId:instruction\.originContext\?\.controlLoopId/,
 assert.match(vite,/server\.middlewares\.use\('\/api\/codex\/resume'/,'RESUME_ENDPOINT');
 assert.match(vite,/current\.phase!== 'STOPPED'|current\.phase!=='STOPPED'/,'RESUME_RUNTIME_PHASE_GATE');
 assert.match(vite,/resumeControlLoopByOwner/,'RESUME_CANONICAL_LOOP_HANDLER');
-assert.match(vite,/!current\.controlLoopId\)\{const resumed=resumeStoppedExecution/,'ORDINARY_RUN_RESUME_PATH');
+assert.match(vite,/!current\.controlLoopId\)\{const resumed=resumeStoppedExecutionScoped/,'ORDINARY_RUN_RESUME_PATH');
 assert.match(vite,/newRunId:resumed\.item\.runId/,'RESUME_RETURNS_NEW_RUN_ID');
 assert.match(app,/正在继续自动循环/,'RESUMING_FEEDBACK');
 assert.match(app,/已继续执行/,'RESUMED_FEEDBACK');
