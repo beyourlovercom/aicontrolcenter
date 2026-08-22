@@ -37,7 +37,7 @@ export const TASK_LIFECYCLE_STATUSES=['READY','SUBMITTING','STARTING','RUNNING',
 export type TaskLifecycleStatus=typeof TASK_LIFECYCLE_STATUSES[number];
 export type CanonicalTaskRecord={registryVersion?:2;recordType?:'CANONICAL_TASK';taskId:string;inboxId:string;instructionId:string;executionId?:string;runId?:string;executionProvider?:'LOCAL_CODEX'|'REMOTE_CLAUDE';runnerId?:string;remoteExecutionId?:string;entityScope:ExecutionEntityScope;workPackageId:string|null;prId:string|null;repository:string;branch:string;origin:string;authorizationId?:string;authorizationSource?:'OWNER_DIRECT';conversationId?:string;messageId?:string;provider?:string;model?:string;reasoning?:string;status:TaskLifecycleStatus;createdAt:string;updatedAt:string;startedAt?:string;completedAt?:string;instruction:ExecutionInstruction;rawInstruction:string;task_id?:string|null;instruction_id?:string|null;entity_class?:EntityClass;formal_wp_id?:string|null;phase_id?:string|null;milestone_id?:string|null;origin_source?:string|null;execution_id?:string|null;run_id?:string|null;legacy_entity_reference?:string|null;entityClass?:EntityClass;formalWpId?:string|null;formalWpTitle?:string|null;phaseId?:string|null;phaseTitle?:string|null;milestoneId?:string|null;milestoneTitle?:string|null;taskCode?:string|null;taskTitle?:string|null;legacyEntityReference?:string|null;bindingState?:'BOUND'|'UNMAPPED';projectId:string;repositoryIdentity:string;repositoryPath?:string};
 export type TaskRegistryProjection={items:CanonicalTaskRecord[];legacy:CanonicalTaskRecord[]};
-export type TaskExecutionBranchEvidence={execution_id:string;branch?:string};
+export type TaskExecutionBranchEvidence={execution_id:string;branch?:string;projectId?:string;repositoryIdentity?:string};
 export type TaskRunBranchEvidence={runId:string;branch?:string;deliveryBranch?:string;projectId?:string;repositoryIdentity?:string};
 export type OutboxItem={id:string;state:OutboxState;inboxId:string;executionId?:string;runId?:string;projectId?:string;repositoryIdentity?:string;report:BridgeReport;createdAt:string;updatedAt:string};
 export type BridgeNotification={id:string;runId:string;inboxId:string;executionId?:string;projectId?:string;repositoryIdentity?:string;phase:'COMPLETED'|'FAILED'|'STOPPED';title:string;message:string;createdAt:string};
@@ -95,9 +95,9 @@ export function normalizeTaskLifecycleStatus(value:unknown):TaskLifecycleStatus{
 function availableBranch(value:unknown):value is string{return typeof value==='string'&&Boolean(value.trim())&&!['UNAVAILABLE','NOT_AVAILABLE','UNKNOWN'].includes(value.trim().toUpperCase())}
 export function resolveCanonicalTaskBranch(record:Pick<CanonicalTaskRecord,'branch'|'executionId'|'runId'|'projectId'|'repositoryIdentity'>,executionContexts:TaskExecutionBranchEvidence[]=[],runtimes:TaskRunBranchEvidence[]=[]):string{
   if(availableBranch(record.branch))return record.branch;
-  const execution=executionContexts.find(item=>item.execution_id===record.executionId);
-  if(availableBranch(execution?.branch))return execution.branch;
   const hasScope=Boolean(record.projectId&&record.repositoryIdentity);
+  const execution=executionContexts.find(item=>item.execution_id===record.executionId&&(!hasScope||(item.projectId===record.projectId&&item.repositoryIdentity===record.repositoryIdentity)));
+  if(availableBranch(execution?.branch))return execution.branch;
   const runtime=runtimes.find(item=>(item.runId===record.runId||item.runId===record.executionId)&&(!hasScope||(item.projectId===record.projectId&&item.repositoryIdentity===record.repositoryIdentity)));
   if(availableBranch(runtime?.deliveryBranch))return runtime.deliveryBranch;
   if(availableBranch(runtime?.branch))return runtime.branch;
