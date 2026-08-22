@@ -22,7 +22,7 @@ assert.equal(projection.items[0]?.canonicalResult,null,'project A task cannot in
 assert.equal(projection.items[0]?.runtimeStatus,'RUNNING','project A task resolves only the same-scope runtime');
 
 const layer2=projectTaskLayer2ReadModel(createEmptyGlobalStateReadModel(scopeA),[taskA],[runtimeB,runtimeA]);
-const runEntity=layer2.entities.find((entity:any)=>entity.identity.kind==='RUN'&&entity.identity.id===runId);const runLifecycle=runEntity?.dimensions.find((dimension:any)=>dimension.dimension==='run.lifecycle');assert.equal(runLifecycle?.projectedValue?.value,'RUNNING','Layer 2 run lifecycle ignores foreign-project same-runId evidence');
+const runEntity=layer2.entities.find((entity:any)=>entity.identity.kind==='RUN'&&entity.identity.id===runId);const runLifecycle=runEntity?.dimensions.find((dimension:any)=>dimension.dimension==='run.lifecycle');const projectedRunLifecycle=runLifecycle?.projectedValue;assert.equal(projectedRunLifecycle?.state==='KNOWN'?projectedRunLifecycle.value:undefined,'RUNNING','Layer 2 run lifecycle ignores foreign-project same-runId evidence');
 
 assert.match(bridge,/runtimeKey=.*projectId.*repositoryIdentity.*runId/,'bridge reconciliation indexes runtime by project scope plus runId');
 assert.match(bridge,/snapshotRuntime\?\.runId===item\.runId&&sameScope\(snapshotRuntime\)/,'snapshot runtime must match inbox project scope');
