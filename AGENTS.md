@@ -185,33 +185,43 @@ Cost saving alone must not downgrade below the capability GPT judges necessary.
 Claude cannot promote or demote itself. A failed lower-tier implementation
 returns to GPT; only GPT may select a different tier for the next execution.
 
-### Temporary Sonnet 5 promotion window
+### Temporary low-quota routing window
 
-`CLAUDE_PROMO_ROUTING_WINDOW = 2026-08-21_THROUGH_2026-08-31`
-`CLAUDE_PROMO_ROUTING_REVIEW_DATE = 2026-09-01`
-`PROMO_ROUTING_REVIEW_BEFORE_CONTINUATION = REQUIRED`
+`CLAUDE_ROUTING_WINDOW = 2026-08-22_THROUGH_2026-08-31`
+`CLAUDE_ROUTING_REVIEW_DATE = 2026-09-01`
+`ROUTING_REVIEW_BEFORE_CONTINUATION = REQUIRED`
+`DEFAULT_IMPLEMENTATION_MODEL = claude-sonnet-4-6`
+`DEFAULT_IMPLEMENTATION_EFFORT = low`
+`SONNET_5_MODE = EVIDENCE_BASED_ESCALATION_ONLY`
+`PRIMARY_USAGE_CONSTRAINT = FIVE_HOUR_SESSION_LIMIT`
+`PROMO_PRICE_DOES_NOT_OVERRIDE_SESSION_EFFICIENCY = TRUE`
 
-During this temporary window, GPT uses the following routing refinement:
+During this window, GPT uses the following routing refinement:
 
-- Tier 1 — Haiku 4.5: audit, grep/search, classification, simple fixtures,
-  mechanical and repetitive low-complexity changes.
-- Tier 2A — Sonnet 4.6: narrow/localized ordinary implementation with a clear
-  plan, low integration risk, and low expected remediation risk.
-- Tier 2B Promo — Sonnet 5: medium-complexity or multi-file implementation,
-  contract-sensitive work, borderline Tier-2 work, or work where stronger
-  first-pass completion is expected to reduce retries.
-- Tier 3 — Sonnet 5: complex architecture implementation, difficult
-  remediation, cross-module migration, or hard-to-localize failures.
+- Tier 1 — Haiku 4.5: optional for pure audit, grep/search, classification,
+  simple fixtures, and clearly mechanical low-risk edits.
+- Default implementation — Sonnet 4.6 `low`: ordinary, medium-complexity,
+  multi-file, and contract-sensitive implementation when GPT has already
+  localized the concern and supplied a complete execution plan.
+- Escalation — Sonnet 5: do not select proactively merely because work is
+  multi-file, contract-sensitive, or promotion-priced. Select only after exact
+  returned evidence shows Sonnet 4.6 cannot reliably close the current logical
+  concern, or after prior failed evidence already establishes a genuinely hard
+  architecture/remediation/localization problem.
 
-For a substantive implementation failure caused by reasoning/integration rather
-than infrastructure, GPT should normally promote the next attempt to Sonnet 5
-with thinking still disabled. GPT may authorize one-run thinking when exact
-evidence justifies deeper local reasoning. The existing three-substantive-failure
-Owner gate remains mandatory and overrides promotion.
+A substantive Sonnet 4.6 failure returns to GPT exact review first. GPT should
+prefer narrowing/reframing the concern before escalating. If the failure is
+reasoning/integration/architecture related and the same concern remains unresolved,
+GPT may promote the next attempt to Sonnet 5 with thinking still disabled. GPT may
+authorize one-run thinking only when exact evidence justifies deeper local reasoning.
+The existing three-substantive-failure Owner gate remains mandatory and overrides
+all model escalation. Infrastructure-only quota/429 failures never trigger Sonnet 5.
 
-This is a temporary routing experiment, not a permanent Sonnet 4.6 replacement.
-On 2026-09-01 GPT and Owner must review measured usage/reliability evidence
-before choosing the post-promotion routing baseline.
+The Sonnet 5 price promotion is telemetry context only; it is not a routing reason.
+Because a 5-hour session-limit event blocks further Claude work, session/quota
+efficiency takes precedence over API-equivalent promotional cost through 2026-08-31.
+On 2026-09-01 GPT and Owner must review measured usage/reliability evidence before
+choosing the post-window routing baseline.
 
 ### Executor usage telemetry and five-run cycles
 
