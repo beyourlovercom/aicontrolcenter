@@ -28,7 +28,7 @@ export function resolveEntityContext(snapshot:AiccProjectSnapshot,selected:Selec
   if(!scope?.projectId||!scope.repositoryIdentity||!wpLayer2)throw new Error('WP_PROJECT_SCOPE_REQUIRED');
   if(wpLayer2.model.projectId!==scope.projectId||wpLayer2.model.repositoryIdentity!==scope.repositoryIdentity)throw new Error('WP_PROJECT_SCOPE_MISMATCH');
   const effectiveWpProjection=wpLayer2;
-  const wpProjection=effectiveWpProjection.records.find(record=>record.identityKey===scopedEntityKey(scope,'WORK_PACKAGE',selected.id))??null;
+  const wpProjection=wpLayer2Record(effectiveWpProjection,selected.id);
   if(!wpProjection)throw new Error('WP_CANONICAL_REF_REQUIRED');
   const formal=snapshot.formalWorkPackages.value?.[selected.id]??null;
   const formalization:FormalizationState=snapshot.formalWorkPackages.availability==='UNAVAILABLE'||snapshot.formalWorkPackageReadError?.startsWith('FORMAL_WP_INVALID')?'FORMAL_INVALID':formal?'FORMAL_READY':'PLANNED_ONLY';

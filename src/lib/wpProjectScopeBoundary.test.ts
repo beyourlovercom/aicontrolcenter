@@ -10,10 +10,10 @@ const snapshot=createProjectSnapshot({roadmap:{source:'fixture',content:'## Acti
 const aiccProjection=projectWpLayer2(createEmptyGlobalStateReadModel(aicc),snapshot,[],aicc);
 const erpProjection=projectWpLayer2(createEmptyGlobalStateReadModel(erp),snapshot,[],erp);
 const aiccWp=aiccProjection.records[0]!,erpWp=erpProjection.records[0]!;
-assert.notEqual(aiccWp.identityKey,erpWp.identityKey);
-assert.equal(aiccWp.identityKey,scopedEntityKey(aicc,'WORK_PACKAGE','SAME_WP'));
-assert.equal(erpWp.identityKey,scopedEntityKey(erp,'WORK_PACKAGE','SAME_WP'));
-assert.equal(aiccProjection.records.filter(record=>record.identityKey===scopedEntityKey(aicc,'WORK_PACKAGE','SAME_WP')).length,1);
-assert.equal(erpProjection.records.filter(record=>record.identityKey===scopedEntityKey(erp,'WORK_PACKAGE','SAME_WP')).length,1);
+assert.equal(aiccWp.identityKey,'SAME_WP','canonical WP record identity remains the Roadmap WP ID');
+assert.equal(erpWp.identityKey,'SAME_WP','the same canonical WP ID may exist in another Project');
+assert.notEqual(scopedEntityKey(aicc,'WORK_PACKAGE',aiccWp.id),scopedEntityKey(erp,'WORK_PACKAGE',erpWp.id),'Layer 2 entity identity remains Project scoped');
+assert.equal(aiccProjection.model.entities.filter(entity=>entity.identity.kind==='WORK_PACKAGE'&&entity.identity.id==='SAME_WP').length,1);
+assert.equal(erpProjection.model.entities.filter(entity=>entity.identity.kind==='WORK_PACKAGE'&&entity.identity.id==='SAME_WP').length,1);
 assert.throws(()=>projectWpLayer2(createEmptyGlobalStateReadModel(aicc),snapshot,[],undefined as never),/WP_PROJECT_SCOPE_REQUIRED/);
 console.log('Phase 3 WP canonical project-scope boundary passed');
