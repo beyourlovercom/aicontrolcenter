@@ -126,11 +126,12 @@
   $: if(activeRoadmapProject&&prLayer2&&wpProjection){const empty=createEmptyGlobalStateReadModel(activeRoadmapProject);humanUatLayer2=projectHumanUatLayer2(empty,(snapshot.humanUat.value??[]).map((record:any)=>({entityType:record.entityType,entityId:record.entityId??record.workPackageId,status:record.status,updatedAt:record.updatedAt,record})));const taskModel=projectTaskLayer2ReadModel(empty,taskRecords,runtimeHistory);const phase5=projectPhase5Lifecycle(empty,{runs:runtimeHistory}).model;uiLifecycleReadModel=composeUiLifecycleReadModel(uiLifecycleReadModel??empty,[taskModel,prLayer2.model,wpProjection.model,phase5,humanUatLayer2.model],{tasks:taskRecords,runtimeHistory,results:taskRecords});}else{humanUatLayer2=null;uiLifecycleReadModel=null;}
   $: if(uiLifecycleReadModel)uiLayer2Changes.publish(uiLifecycleReadModel);
   $: globalTasks=uiLifecycleReadModel?.scopedTasks??[];
-  $: context=activeRoadmapProject&&prLayer2&&wpProjection?resolveEntityContext(snapshot,selectedEntity,prLayer2,wpProjection,activeRoadmapProject):unavailableEntityContext(selectedEntity);
+  $: entityContextReady=Boolean(activeRoadmapProject&&prLayer2&&wpProjection);
+  $: context=entityContextReady?resolveEntityContext(snapshot,selectedEntity,prLayer2!,wpProjection!,activeRoadmapProject!):unavailableEntityContext(selectedEntity);
   $: milestoneOverviewContextCandidate=milestoneOverviewId&&prLayer2&&wpProjection?resolveEntityContext(snapshot,{type:'milestone',id:milestoneOverviewId},prLayer2,wpProjection,activeRoadmapProject??undefined):null;
   $: milestoneOverviewContext=milestoneOverviewContextCandidate?.type==='milestone'?milestoneOverviewContextCandidate:null;
   $: centerContext=centerViewMode==='MILESTONE_OVERVIEW'&&milestoneOverviewContext?milestoneOverviewContext:context;
-  $: prTab=context.type==='pull_request'?resolvePrTabView(context,activeTab):null;
+  $: prTab=entityContextReady&&context.type==='pull_request'?resolvePrTabView(context,activeTab):null;
   $: prUatRecord=context.type==='pull_request'?snapshot.humanUat.value?.find(item=>item.entityType==='pull_request'&&(item.entityId===context.id||item.prIdentity===context.id))??null:null;
   $: roadmapNodes=wpProjection?projectWpRoadmapNodes(roadmapProjection?.nodes??[],wpProjection):[];
   $: roadmapFullyExpanded=allRoadmapExpanded(roadmapNodes,collapsedNodeIds);
@@ -141,7 +142,7 @@
   $: descriptionKey=`${snapshot.repository.value?.repository??'local'}|${selectedEntity.type}|${selectedEntity.id}`;
   $: selectedDescription=descriptions.find(item=>`${item.repositoryKey}|${item.entityType}|${item.entityId}`===descriptionKey)?.description??context.title;
   $: ownerStatus=resolveOwnerStatusProjection(context,bridgeOutbox);
-  $: ownerWorkflowStages=resolveOwnerWorkflowStages(context,bridgeOutbox);
+  $: ownerWorkflowStages=entityContextReady?resolveOwnerWorkflowStages(context,bridgeOutbox):[];
   $: displayRuntime=selectCanonicalCurrentRuntime(context.runtime,runtimeHistory,selectedRunId);
   $: composerCopyResult=resolveComposerCanonicalResult(composerSubmittedRunId,[composerExactRuntime,...runtimeHistory].filter(Boolean));
   $: scopedRuntimeHistory=uiLifecycleReadModel?.scopedRuntimeHistory??[];
@@ -178,7 +179,7 @@
   $: contextUatLifecycle=context.type==='work_package'?uiLifecycleText('HUMAN_UAT',`work_package:${context.id}`,'humanUat.lifecycle'):context.type==='pull_request'?uiLifecycleText('HUMAN_UAT',`pull_request:${context.id}`,'humanUat.lifecycle'):'UNKNOWN';
   $: contextWpLifecycle=context.type==='work_package'?uiLifecycleText('WORK_PACKAGE',context.id,'wp.lifecycle'):'UNKNOWN';
   $: contextHeaderLifecycle=context.type==='milestone'?uiLifecycleText('MILESTONE',context.id,'milestone.lifecycle'):context.type==='work_package'?contextWpLifecycle:context.type==='pull_request'&&context.prProjection?uiLifecycleText('PULL_REQUEST',context.prProjection.identityKey,'pr.lifecycle'):'UNKNOWN';
-  $: tabStatuses=context.type==='work_package'?{运行:presentationStatus(displayRunLifecycle),UAT:presentationStatus(contextUatLifecycle),概览:presentationStatus(contextWpLifecycle),证据:'NOT_STARTED',授权:context.authorization.state==='VALID'?'PASS':'NOT_STARTED'}:{};
+  $: tabStatuses=entityContextReady&&context.type==='work_package'?{运行:presentationStatus(displayRunLifecycle),UAT:presentationStatus(contextUatLifecycle),概览:presentationStatus(contextWpLifecycle),证据:'NOT_STARTED',授权:context.authorization.state==='VALID'?'PASS':'NOT_STARTED'}:{};
 
   function scheduleFeedbackRestore(overlay:Feedback,fallback?:Feedback){if(feedbackCopyTimer)clearTimeout(feedbackCopyTimer);feedbackCopyTimer=window.setTimeout(()=>{if(feedback!==overlay)return;const current=runtimeLifecycleFeedback??fallback;if(current)setFeedback(current,current===runtimeLifecycleFeedback?'EXACT_RUN':'GENERAL')},1500)}
   function setFeedback(value:Feedback,source:'GENERAL'|'EXACT_RUN'='GENERAL'){if(feedbackCopyTimer){clearTimeout(feedbackCopyTimer);feedbackCopyTimer=undefined}feedback=value;if(source==='GENERAL'&&runtimeLifecycleFeedback&&value!==runtimeLifecycleFeedback&&value.state!=='IDLE')scheduleFeedbackRestore(value)}
@@ -202,7 +203,7 @@
     }
   }
   function currentStageMessage(stage:string){return stage==='HUMAN_UAT'?'等待 Owner 完成真实 UI Human UAT。':'当前阶段由统一生命周期解析器确定。'}
-  $: if(context.type==='work_package'){
+  $: if(entityContextReady&&context.type==='work_package'){
     const stageKey=`${context.id}:${context.lifecycle.currentStage}`;
     if(stageKey!==lastCurrentStageFeedbackKey){lastCurrentStageFeedbackKey=stageKey;setFeedback({state:'INFO',title:`当前阶段：${context.lifecycle.currentStage}`,message:currentStageMessage(context.lifecycle.currentStage),code:'WP_CURRENT_STAGE'});}
   }else lastCurrentStageFeedbackKey='';
@@ -481,6 +482,8 @@
         <GlobalWpWorkspace records={globalWorkPackages} nodes={globalMilestones} selectedId={selectedEntity.type==='work_package'?selectedEntity.id:null} onSelect={navigateGlobalEntity} onRefresh={refreshWorkPackageProjection}/>
       {:else if globalWorkspace && activeGlobalTab==='BLUEPRINT'}
         <GlobalBlueprintWorkspace milestones={globalMilestones} workPackages={globalWorkPackages} pullRequests={snapshot.pullRequests.value??[]} tasks={globalTasks} currentMilestone={globalCurrentMilestone} currentWorkPackage={globalCurrentWorkPackage} currentPhase={globalCurrentPhase} ownerWaiting={globalOwnerWaiting}/>
+      {:else if !entityContextReady}
+        <section class="entity-context-loading" data-testid="entity-context-loading"><strong>正在加载项目上下文…</strong><p>等待 canonical Project / Roadmap projection。</p></section>
       {:else if centerViewMode==='MILESTONE_OVERVIEW'&&milestoneOverviewContext}
         <MilestoneView context={milestoneOverviewContext} selectedWorkPackageId={selectedEntity.type==='work_package'?selectedEntity.id:null} onSelect={(id)=>inspectMilestoneWorkPackage(milestoneOverviewContext.id,id)} onOpen={(id)=>{inspectMilestoneWorkPackage(milestoneOverviewContext.id,id);openSelectedWorkPackageWorkspace()}}/>
       {:else if context.type==='milestone'}
@@ -497,7 +500,7 @@
       <div class="composer-overlay-tail-spacer" data-testid="composer-overlay-tail-spacer" aria-hidden="true" style={`--aicc-composer-overlay-height:${composerHeight}px`}></div>
     </div></div><div class="global-composer-dock-lane" data-testid="global-composer-dock-lane"><GlobalExecutionComposerDock payload={bridgePayload} {instructionState} contextLabel={currentContextPrimaryLabel} copyResultAvailable={Boolean(composerCopyResult)} onPayloadChange={updateBridgePayload} onPaste={pasteInstruction} onSubmitStart={beginComposerExecution} onImport={importInstruction} onProfileChange={syncGlobalExecutionProfile} onCopyResult={copyComposerResult} onHeightChange={updateComposerHeight}/></div></main>
     <div class="resize-handle" onpointerdown={(event)=>resize('right',event)} role="separator" aria-label="调整状态宽度"></div>
-  <aside class:drawer-open={drawer==='status'} class="status panel">{#if milestoneOverviewId&&context.type==='work_package'}<WpRightContextInspector {context} onClear={()=>milestoneOverviewId&&select(milestoneOverviewId)} onOpen={openSelectedWorkPackageWorkspace}/>{:else if activeGlobalTab==='TASK'&&selectedTask}<TaskRightContextInspector task={selectedTask} runtime={selectedTaskRuntime} report={selectedTaskReport} resultProjection={selectedTaskResultProjection} onClose={clearSelectedTask} onViewWorkPackage={(id)=>navigateGlobalEntity({type:'work_package',id})}/>{:else if activeGlobalTab==='PR'&&!selectedPrNavigationId}<div data-testid="pr-evidence-empty"><div class="panel-header"><div><span class="kicker">03 / EVIDENCE</span><h2>状态与证据</h2></div></div><p class="evidence-intro">选择一个 PR 后显示状态与证据。</p></div>{:else if activeGlobalTab==='PR'&&selectedEntity.type==='pull_request'}<div data-testid="pr-selected-right-inspector"><div class="panel-header"><div><span class="kicker">03 / EVIDENCE</span><h2>状态与证据</h2></div></div><EntityEvidencePanel {context} repository={snapshot.repository.value} {codexInfo} runtimeOverride={displayRuntime}/></div>{:else}<div class="panel-header"><div><span class="kicker">03 / EVIDENCE</span><h2>状态与证据</h2></div><div class="status-tools"><button class="service-action" onclick={()=>runAction('REFRESH')}>刷新状态</button>{#if context.type==='work_package'}<button class="service-action" onclick={()=>runAction('SAFE_MAIN_SYNC')}>同步本地 main</button>{/if}</div></div><EntityEvidencePanel {context} repository={snapshot.repository.value} {codexInfo} runtimeOverride={displayRuntime}/>{/if}</aside>
+  <aside class:drawer-open={drawer==='status'} class="status panel">{#if !entityContextReady}<div data-testid="entity-context-loading-inspector"><div class="panel-header"><div><span class="kicker">03 / EVIDENCE</span><h2>状态与证据</h2></div></div><p class="evidence-intro">正在加载项目上下文…</p></div>{:else if milestoneOverviewId&&context.type==='work_package'}<WpRightContextInspector {context} onClear={()=>milestoneOverviewId&&select(milestoneOverviewId)} onOpen={openSelectedWorkPackageWorkspace}/>{:else if activeGlobalTab==='TASK'&&selectedTask}<TaskRightContextInspector task={selectedTask} runtime={selectedTaskRuntime} report={selectedTaskReport} resultProjection={selectedTaskResultProjection} onClose={clearSelectedTask} onViewWorkPackage={(id)=>navigateGlobalEntity({type:'work_package',id})}/>{:else if activeGlobalTab==='PR'&&!selectedPrNavigationId}<div data-testid="pr-evidence-empty"><div class="panel-header"><div><span class="kicker">03 / EVIDENCE</span><h2>状态与证据</h2></div></div><p class="evidence-intro">选择一个 PR 后显示状态与证据。</p></div>{:else if activeGlobalTab==='PR'&&selectedEntity.type==='pull_request'}<div data-testid="pr-selected-right-inspector"><div class="panel-header"><div><span class="kicker">03 / EVIDENCE</span><h2>状态与证据</h2></div></div><EntityEvidencePanel {context} repository={snapshot.repository.value} {codexInfo} runtimeOverride={displayRuntime}/></div>{:else}<div class="panel-header"><div><span class="kicker">03 / EVIDENCE</span><h2>状态与证据</h2></div><div class="status-tools"><button class="service-action" onclick={()=>runAction('REFRESH')}>刷新状态</button>{#if context.type==='work_package'}<button class="service-action" onclick={()=>runAction('SAFE_MAIN_SYNC')}>同步本地 main</button>{/if}</div></div><EntityEvidencePanel {context} repository={snapshot.repository.value} {codexInfo} runtimeOverride={displayRuntime}/>{/if}</aside>
   </div>
 </div>
 

@@ -39,6 +39,18 @@ The failsafe performs no restart, stop, retry loop, task execution, result mutat
 mutation, or Git mutation. Seeing the failsafe must never itself trigger a service restart.
 Existing `AICC-LOCAL-SERVICE-HEALTH-RECOVERY-V1` remains the authority for service recovery.
 
+
+## Browser / local-path prevention guards
+
+Browser-delivered Svelte/TypeScript modules must not import Node-only authorities or `node:*`
+built-ins. Canonical Project Registry filesystem/Git validation stays on the Vite/local-service
+side; browser consumers obtain the validated active-project projection through
+`/api/project-context`.
+
+On macOS, repository/process ownership checks must compare filesystem-canonical paths rather than
+raw path strings, so case aliases such as `/AI/` and `/ai/` do not create false repository-invalid
+or foreign-process conclusions. Canonicalization does not relax PID/process ownership checks.
+
 If port 1420 cannot serve the HTML shell at all, the browser may show its native network error;
 this in-page failsafe cannot execute before HTML is delivered. That condition must be established
 from independent port/HTTP evidence, not inferred from a blank UI.

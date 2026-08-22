@@ -31,6 +31,7 @@ try{
   const source=readFileSync(new URL('./projectRegistryAuthority.ts',import.meta.url),'utf8');
   assert.doesNotMatch(source,/startRuntime|submitExecution|launchInboxItem|readFileSync\(.*erpbeyourlovercom/,'project context does not execute, route runtime, or load ERP planning data');
   assert.match(source,/execFileAsync\('git',[\s\S]*timeout:PROJECT_REGISTRY_GIT_TIMEOUT_MS[\s\S]*maxBuffer:64\*1024/,'async git validation has an explicit bounded timeout and output');
+  assert.match(source,/realpathSync\.native\(left\)===realpathSync\.native\(right\)/,'repository root validation uses filesystem-canonical identity rather than path casing');
   assert.match(source,/for\(const project of state\.projects\)projects\.push\(await validateAsync\(project\)\)/,'async project validation is sequentially bounded');
   fakeBin=mkdtempSync(join(tmpdir(),'aicc-project-registry-bin-'));
   const fakeGit=join(fakeBin,'git');

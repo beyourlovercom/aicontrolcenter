@@ -2,6 +2,7 @@
 set -eu
 
 REPOSITORY_ROOT="/Users/a/AI/007/AIcontrolcenter"
+CANONICAL_REPOSITORY_ROOT="$(/bin/realpath "$REPOSITORY_ROOT" 2>/dev/null || printf '%s' "$REPOSITORY_ROOT")"
 LABEL="com.aicc.v2.local-service"
 PLIST="$HOME/Library/LaunchAgents/$LABEL.plist"
 HEALTH_URL="http://127.0.0.1:1420/api/health"
@@ -127,8 +128,9 @@ canonical_pid() {
   CHECK_PID="$1"
   [ -n "$CHECK_PID" ] || return 1
   CHECK_CWD="$(/usr/sbin/lsof -a -p "$CHECK_PID" -d cwd -Fn 2>/dev/null | sed -n 's/^n//p' | head -n 1)"
+  CHECK_CWD_CANONICAL="$(/bin/realpath "$CHECK_CWD" 2>/dev/null || printf '%s' "$CHECK_CWD")"
   CHECK_COMMAND="$(/bin/ps -p "$CHECK_PID" -o command= 2>/dev/null || true)"
-  [ "$CHECK_CWD" = "$REPOSITORY_ROOT" ] && printf '%s' "$CHECK_COMMAND" | grep -Eq 'node_modules/.bin/vite|vite .*127\.0\.0\.1'
+  [ "$CHECK_CWD_CANONICAL" = "$CANONICAL_REPOSITORY_ROOT" ] && printf '%s' "$CHECK_COMMAND" | grep -Eq 'node_modules/.bin/vite|vite .*127\.0\.0\.1'
 }
 
 acquire_singleton() {

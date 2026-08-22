@@ -1,11 +1,12 @@
 <script lang="ts">
+  import {onMount} from 'svelte';
   import type {SelectedEntityRef} from '../lib/model/entityTypes.ts';
   import GlobalTaskActionBar from './GlobalTaskActionBar.svelte';
   import SchedulerPanel from './entity/SchedulerPanel.svelte';
   import SchedulerStatusProjection from './SchedulerStatusProjection.svelte';
   import WpGeneratorPanel from './WpGeneratorPanel.svelte';
   import ProjectContextPanel from './ProjectContextPanel.svelte';
-  import {createProjectRegistryAuthority} from '../lib/projectRegistryAuthority.ts';
+  import {readBrowserProjectContext,type BrowserProjectRecord} from '../lib/projectContextClient.ts';
   import WorkPackageDetailView from './entity/WorkPackageDetailView.svelte';
   import CreateWorkPackageModal from './CreateWorkPackageModal.svelte';
   import {createWorkPackage,type CreateWorkPackageRequest,type CreatedWorkPackage} from '../lib/workPackageCreationRuntime.ts';
@@ -28,8 +29,8 @@
   export let onSelect:(entity:SelectedEntityRef)=>void=()=>{};
   export let onRefresh:()=>void=()=>{};
   let filter='ALL';
-  const projectAuthority=createProjectRegistryAuthority();
-  $: activeProject=projectAuthority.getActiveProject();
+  let activeProject:BrowserProjectRecord|null=null;
+  onMount(()=>{void readBrowserProjectContext().then(value=>{activeProject=value.activeProject}).catch(()=>{activeProject=null})});
   let selectedRecord:any=null;
   let createOpen=false;let autoCreateOpen=false;let created:CreatedWorkPackage[]=[];
   function create(request:CreateWorkPackageRequest){const values=new Map<string,CreatedWorkPackage>(created.map(item=>[item.id,item]));const item=createWorkPackage(request,{get:id=>values.get(id)??null,put:value=>values.set(value.id,value)},wp=>({delivery_context_id:`delivery-${wp.id}`,execution_context_id:null}));created=[...created.filter(value=>value.id!==item.id),item];createOpen=false;}
@@ -41,7 +42,7 @@
 
 <section class="global-summary-workspace global-wp-workspace" data-testid="global-wp-workspace">
   <div class="section-label"><span>Global Work Packages</span><small>WP management · {records.length}</small><GlobalTaskActionBar onAutoCreateWorkPackage={()=>autoCreateOpen=true} onManualCreateWorkPackage={()=>createOpen=true} {onRefresh}/></div>
-  <ProjectContextPanel projects={[activeProject] as any}/><GlobalWorkspaceSelector workspace={selectedRecord}/><SelfDevelopmentPanel/><SelfOptimizationPanel/><AgentOrchestrationPanel/><KnowledgeGraphPanel/><ContinuousDeliveryDashboard projects={1} activeWp={records.length} running={records.filter((r:any)=>r.executionState==='RUNNING').length} risk={records.filter((r:any)=>r.risk==='HIGH'||r.risk==='CRITICAL').length} blocked={records.filter((r:any)=>r.status==='BLOCKED').length}/><ProjectOverviewPanel project={null}/><DependencyPanel/><IssueIntelligencePanel issues={records.flatMap((record:any)=>record.issueIntelligence??[])}/><AutonomousProposalPanel proposal={null}/><RemediationPanel remediation={null}/><CodexExecutionPanel execution={selectedRecord}/><DeliveryEvidencePanel evidence={records.flatMap((record:any)=>record.evidence??[])}/>
+  <ProjectContextPanel projects={activeProject?[activeProject] as any:[]}/><GlobalWorkspaceSelector workspace={selectedRecord}/><SelfDevelopmentPanel/><SelfOptimizationPanel/><AgentOrchestrationPanel/><KnowledgeGraphPanel/><ContinuousDeliveryDashboard projects={1} activeWp={records.length} running={records.filter((r:any)=>r.executionState==='RUNNING').length} risk={records.filter((r:any)=>r.risk==='HIGH'||r.risk==='CRITICAL').length} blocked={records.filter((r:any)=>r.status==='BLOCKED').length}/><ProjectOverviewPanel project={null}/><DependencyPanel/><IssueIntelligencePanel issues={records.flatMap((record:any)=>record.issueIntelligence??[])}/><AutonomousProposalPanel proposal={null}/><RemediationPanel remediation={null}/><CodexExecutionPanel execution={selectedRecord}/><DeliveryEvidencePanel evidence={records.flatMap((record:any)=>record.evidence??[])}/>
   <div class="global-summary-grid global-wp-counters"><div><strong>{records.length}</strong><span>All</span></div><div><strong>{records.filter((r:any)=>r.status==='IN_PROGRESS').length}</strong><span>Active</span></div><div><strong>{records.filter((r:any)=>r.status==='BLOCKED').length}</strong><span>Blocked</span></div><div><strong>{records.filter((r:any)=>r.status==='COMPLETE'||r.status==='CLOSED').length}</strong><span>Completed</span></div><div><strong>{records.filter((r:any)=>!r.workPackageId).length}</strong><span>Unmapped</span></div></div>
   <div class="global-wp-filters" role="tablist" aria-label="Work Package 筛选"><button class:active={filter==='ALL'} onclick={()=>filter='ALL'}>All</button><button class:active={filter==='IN_PROGRESS'} onclick={()=>filter='IN_PROGRESS'}>Active</button><button class:active={filter==='BLOCKED'} onclick={()=>filter='BLOCKED'}>Blocked</button><button class:active={filter==='COMPLETE'} onclick={()=>filter='COMPLETE'}>Completed</button></div>
   <div class="global-wp-list" data-testid="global-wp-list"><div class="source-banner">Source: GitHub · Lifecycle projection: AICC · Evidence: Available when discovered</div>{#each filtered as record}<button class:selected={selectedId===record.id} class="global-wp-row" onclick={()=>onSelect({type:'work_package',id:record.id})}><strong>{record.id}</strong><span>{record.title}</span><span>{record.source??record.origin??'GITHUB'}</span><span>{record.milestoneId??'—'}</span><span>{record.phase??'—'}</span><b>{record.status??'UNKNOWN'}</b><span>{record.provider??'codex'}</span><span>{record.executionState??'NOT_STARTED'}</span><span>{record.deliveryState??'NOT_AVAILABLE'}</span></button>{:else}<p class="global-empty">暂无符合条件的 Work Package。</p>{/each}</div>

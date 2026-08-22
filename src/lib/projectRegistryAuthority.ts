@@ -1,5 +1,5 @@
 import {execFile,execFileSync} from 'node:child_process';
-import {readFileSync,renameSync,writeFileSync} from 'node:fs';
+import {readFileSync,realpathSync,renameSync,writeFileSync} from 'node:fs';
 import {readFile} from 'node:fs/promises';
 import {join} from 'node:path';
 import {promisify} from 'node:util';
@@ -15,12 +15,13 @@ const execFileAsync=promisify(execFile);
 function git(root:string,args:string[]):string|null{try{const value=execFileSync('git',['-C',root,...args],{encoding:'utf8',stdio:['ignore','pipe','ignore']}).trim();return value||null}catch{return null}}
 async function gitAsync(root:string,args:string[]):Promise<string|null>{try{const result=await execFileAsync('git',['-C',root,...args],{encoding:'utf8',timeout:PROJECT_REGISTRY_GIT_TIMEOUT_MS,maxBuffer:64*1024,windowsHide:true});const value=String(result.stdout).trim();return value||null}catch{return null}}
 function identity(origin:string|null):string|null{if(!origin)return null;const matched=origin.replace(/^git@github\.com:/,'').replace(/^https:\/\/github\.com\//,'').replace(/\.git$/,'');return matched.includes('/')?matched:null}
+function sameRepositoryRoot(left:string,right:string):boolean{try{return realpathSync.native(left)===realpathSync.native(right)}catch{return false}}
 function validate(project:ProjectRecord):ProjectRecord{
   const gitRoot=git(project.repositoryPath,['rev-parse','--show-toplevel']);
   const currentBranch=git(project.repositoryPath,['branch','--show-current']);
   const remoteOrigin=git(project.repositoryPath,['config','--get','remote.origin.url']);
   const repositoryIdentity=identity(remoteOrigin);
-  if(!gitRoot||gitRoot!==project.repositoryPath||!currentBranch||!repositoryIdentity)throw new Error('PROJECT_REPOSITORY_INVALID');
+  if(!gitRoot||!sameRepositoryRoot(gitRoot,project.repositoryPath)||!currentBranch||!repositoryIdentity)throw new Error('PROJECT_REPOSITORY_INVALID');
   const defaultRef=git(project.repositoryPath,['symbolic-ref','--short','refs/remotes/origin/HEAD']);
   return {...project,repositoryIdentity,remoteOrigin,currentBranch,defaultBranch:defaultRef?.replace(/^origin\//,'')??'NOT_AVAILABLE'};
 }
@@ -29,7 +30,7 @@ async function validateAsync(project:ProjectRecord):Promise<ProjectRecord>{
   const currentBranch=await gitAsync(project.repositoryPath,['branch','--show-current']);
   const remoteOrigin=await gitAsync(project.repositoryPath,['config','--get','remote.origin.url']);
   const repositoryIdentity=identity(remoteOrigin);
-  if(!gitRoot||gitRoot!==project.repositoryPath||!currentBranch||!repositoryIdentity)throw new Error('PROJECT_REPOSITORY_INVALID');
+  if(!gitRoot||!sameRepositoryRoot(gitRoot,project.repositoryPath)||!currentBranch||!repositoryIdentity)throw new Error('PROJECT_REPOSITORY_INVALID');
   const defaultRef=await gitAsync(project.repositoryPath,['symbolic-ref','--short','refs/remotes/origin/HEAD']);
   return {...project,repositoryIdentity,remoteOrigin,currentBranch,defaultBranch:defaultRef?.replace(/^origin\//,'')??'NOT_AVAILABLE'};
 }
