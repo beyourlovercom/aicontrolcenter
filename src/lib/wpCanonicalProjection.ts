@@ -18,7 +18,7 @@ export const WP_PR_BINDING_INFERENCE_AUTHORITY=0 as const;
 
 export type WpLayer2Record=Readonly<{
   id:string; identityKey:string; title:string; milestoneId:string; milestoneTitle:string; structuralExistence:true;
-  phase:string|null; phasePlanAvailability:'AVAILABLE'|'NOT_AVAILABLE';
+  phase:string|null; phaseProgress:RoadmapNode['phaseProgress']; phasePlanAvailability:'AVAILABLE'|'NOT_AVAILABLE';
   roadmapGroupNumber:string|null; roadmapGroupTitle:string|null;
   lifecycle:WorkPackageLifecycle; lifecycleStatus:AiccStatus;
   implementation:DimensionValue<'wp.implementation'>; validation:DimensionValue<'wp.validation'>;
@@ -77,7 +77,7 @@ export function projectWpLayer2(previous:AiccGlobalStateReadModel,snapshot:AiccP
     const prIds=prs.map(pr=>prBinding(pr,previous.repositoryIdentity)).filter((binding):binding is {wpId:string;prId:string}=>Boolean(binding&&binding.wpId===id)).map(binding=>binding.prId).sort();
     const milestoneTitle=milestone.title.startsWith(`${milestone.id} — `)?milestone.title:`${milestone.id} — ${milestone.title}`;
     const phasePlanAvailability=node.phaseProgress?'AVAILABLE' as const:'NOT_AVAILABLE' as const;
-    const structure={id,identityKey,title:node.displayTitle??formal?.title??node.title,milestoneId:milestone.id,milestoneTitle,phase:node.phaseProgress?.currentPhaseTitle??null,phasePlanAvailability,roadmapGroupNumber:node.roadmapGroupNumber??null,roadmapGroupTitle:node.roadmapGroupTitle??null};
+    const structure={id,identityKey,title:node.displayTitle??formal?.title??node.title,milestoneId:milestone.id,milestoneTitle,phase:node.phaseProgress?.currentPhaseTitle??null,phaseProgress:node.phaseProgress??null,phasePlanAvailability,roadmapGroupNumber:node.roadmapGroupNumber??null,roadmapGroupTitle:node.roadmapGroupTitle??null};
     const implementation=dimensionValue('wp.implementation',evidence?.implementation.status??explicitContractStatus(fields,['IMPLEMENTATION','IMPLEMENTATION_STATUS']));
     const validation=dimensionValue('wp.validation',evidence?.validation.status??explicitContractStatus(fields,['VALIDATION','MACHINE_VALIDATION']));
     const uatValue=dimensionValue('wp.uat',uat?.status??explicitContractStatus(fields,['HUMAN_UAT']));
@@ -114,7 +114,7 @@ export function projectWpLayer2(previous:AiccGlobalStateReadModel,snapshot:AiccP
   const model=projectGlobalStateReadModel(previous,candidate);
   const projectionRecords=records.map(record=>{
     const revision=model.entityRevisions.find(item=>item.identity.kind==='WORK_PACKAGE'&&item.identity.id===record.id)?.projectionRevision??0;
-    return Object.freeze({id:record.id,identityKey:record.identityKey,title:record.structure.title,milestoneId:record.structure.milestoneId,milestoneTitle:record.structure.milestoneTitle,structuralExistence:true as const,phase:record.structure.phase,phasePlanAvailability:record.structure.phasePlanAvailability,roadmapGroupNumber:record.structure.roadmapGroupNumber,roadmapGroupTitle:record.structure.roadmapGroupTitle,lifecycle:record.lifecycle,lifecycleStatus:record.lifecycle.effectiveStatus,implementation:record.implementation,validation:record.validation,uat:record.uat,closure:record.closure,progress:record.progress,taskIds:Object.freeze(record.taskIds),prIds:Object.freeze(record.prIds),entityProjectionRevision:revision});
+    return Object.freeze({id:record.id,identityKey:record.identityKey,title:record.structure.title,milestoneId:record.structure.milestoneId,milestoneTitle:record.structure.milestoneTitle,structuralExistence:true as const,phase:record.structure.phase,phaseProgress:record.structure.phaseProgress,phasePlanAvailability:record.structure.phasePlanAvailability,roadmapGroupNumber:record.structure.roadmapGroupNumber,roadmapGroupTitle:record.structure.roadmapGroupTitle,lifecycle:record.lifecycle,lifecycleStatus:record.lifecycle.effectiveStatus,implementation:record.implementation,validation:record.validation,uat:record.uat,closure:record.closure,progress:record.progress,taskIds:Object.freeze(record.taskIds),prIds:Object.freeze(record.prIds),entityProjectionRevision:revision});
   });
   return Object.freeze({model,records:Object.freeze(projectionRecords)});
 }

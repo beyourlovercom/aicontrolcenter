@@ -3,7 +3,7 @@ import type {AiccProjectSnapshot,FormalizationState,MilestoneEntityContext,Resol
 import {resolveAuthorizationForEntity} from './authorizationResolver.ts';
 import {resolveWorkPackageLifecycle} from './lifecycleResolver.ts';
 import {resolveAvailableActions} from './actionEligibility.ts';
-import {resolveLifecycleProgress,resolveMilestoneProgress} from '../progress.ts';
+import {resolveMilestoneProgress} from '../progress.ts';
 import {projectExactHeadValidation} from '../exactHeadEvidence.ts';
 import {projectPrLifecycleWorkspace} from '../prLifecycleWorkspace.ts';
 import {createEmptyGlobalStateReadModel} from '../globalStateReadModel.ts';
@@ -37,6 +37,6 @@ export function resolveEntityContext(snapshot:AiccProjectSnapshot,selected:Selec
   const runtime=(()=>{const candidate=snapshot.runtime.value as any;return candidate?.projectId===scope.projectId&&candidate?.repositoryIdentity===scope.repositoryIdentity&&candidate?.workPackageId===selected.id?candidate:null})();
   const humanUat=snapshot.humanUat.value?.find(item=>item.repository===scope.repositoryIdentity&&item.workPackageId===selected.id)??null;
   const writerLock=snapshot.writerLock.value??{status:'UNAVAILABLE' as const,scope:'repository' as const};
-  const context:WorkPackageEntityContext={entity:selected,type:'work_package',id:selected.id,title:wpProjection?.title??formal?.title??node?.title??selected.id,displayTitle:selected.id,status:lifecycle.effectiveStatus,statusLabel:statusText(lifecycle.effectiveStatus),progress:wpProjection?.progress.state==='KNOWN'?Number(wpProjection.progress.value):resolveLifecycleProgress(lifecycle.stages),breadcrumb:`Control Center / Roadmap / ${selected.id}`,evidence:[`Roadmap source: ${snapshot.roadmapSource}`],availableActions:[],parentMilestone:parent,formalization,formalWorkPackage:formal,lifecycle,phaseProgress:node?.phaseProgress??null,authorization,runtime,writerLock,humanUat,relatedPullRequests:(snapshot.pullRequests.value??[]).filter(pr=>wpProjection?.prIds.includes(pr.id)??false)};
+  const context:WorkPackageEntityContext={entity:selected,type:'work_package',id:selected.id,title:wpProjection?.title??formal?.title??node?.title??selected.id,displayTitle:selected.id,status:lifecycle.effectiveStatus,statusLabel:statusText(lifecycle.effectiveStatus),progress:wpProjection.progress.state==='KNOWN'?Number(wpProjection.progress.value):null,breadcrumb:`Control Center / Roadmap / ${selected.id}`,evidence:[`Roadmap source: ${snapshot.roadmapSource}`],availableActions:[],parentMilestone:parent,formalization,formalWorkPackage:formal,lifecycle,phaseProgress:wpProjection.phaseProgress??null,authorization,runtime,writerLock,humanUat,relatedPullRequests:(snapshot.pullRequests.value??[]).filter(pr=>wpProjection?.prIds.includes(pr.id)??false)};
   context.availableActions=resolveAvailableActions(selected,snapshot,formalization,lifecycle,authorization);return context;
 }

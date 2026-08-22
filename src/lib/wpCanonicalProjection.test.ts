@@ -77,6 +77,9 @@ const left=projectWpRoadmapNodes(snapshot(roadmap('Alpha changed')).roadmap.valu
 const center=projectGlobalWorkPackages(snapshot(roadmap('Alpha changed')),[explicitTask],changed).find(record=>record.workPackageId===wpA)!;
 assert.equal(left.flatMap(milestone=>milestone.children).find(node=>node.id===wpA)?.id,center.workPackageId,'left and center retain the same canonical WP identity');
 assert.equal(center.layer2,afterA,'center consumes the shared Layer 2 record');
+const entityContextSource=readFileSync(new URL('./context/entityContext.ts',import.meta.url),'utf8');
+assert.doesNotMatch(entityContextSource,/resolveLifecycleProgress\(lifecycle\.stages\)/,'WP progress remains UNKNOWN instead of being inferred from lifecycle stages');
+assert.match(entityContextSource,/phaseProgress:wpProjection\.phaseProgress\?\?null/,'WP phase progress is consumed from the canonical WP projection');
 const app=readFileSync(new URL('../App.svelte',import.meta.url),'utf8');
 assert.match(app,/projectWpRoadmapNodes\(roadmapProjection\?\.nodes\?\?\[\],wpProjection\)/,'left WP state consumes Layer 2');
 assert.match(app,/projectGlobalWorkPackages\(snapshot,globalTasks,wpProjection\)/,'center WP state consumes Layer 2');
