@@ -652,7 +652,7 @@
 
   async function pollResult(allowAutomaticFeedback = false) {
     if (runtimeAttemptUnbound || ['SUBMISSION_STALLED', 'AICC_ACCEPTED', 'RUN_CREATED', 'RUNNING'].includes(runtimeProjection.status)) await reconcilePendingSubmission();
-    const result = await message('POLL_RESULT');
+    const result = await message('POLL_RESULT', { correlation: reportCorrelation });
     if (!result?.ok) { showError(result?.error); return result; }
     if (runtimeAttemptUnbound) return result;
     reportItem = result.item?.item || result.item || null;

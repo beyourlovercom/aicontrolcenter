@@ -116,6 +116,7 @@ assert.doesNotMatch(content.match(/async function insertPanelResult[\s\S]*?(?=\n
 assert.match(registry,/actionKey: 'next-step'[\s\S]*displayOrdinal: 5[\s\S]*执行下一步/,'execute-next-step remains an explicit Owner-facing action at ordinal five');
 assert.match(content,/RUNTIME_PROJECTION_KEY = 'aicc-bridge-runtime-projection-v1'/);assert.match(content,/restoreRuntimeProjection\(\(\) => \{ void refreshAutoLoopStatus\(\); void pollResult\(\); void refreshUsClaudeCapability\(\); \}\)/,'refresh restores before durable reconciliation and capability refresh');
 assert.match(content,/runtimeAttemptUnbound = true[\s\S]*if \(runtimeAttemptUnbound\) return result/,'stale polling cannot bind an older result while a new submission is unbound');
+assert.match(content,/message\('POLL_RESULT', \{ correlation: reportCorrelation \}\)/,'result polling carries the current page exact correlation and uses worker storage only as reload fallback');
 assert.match(content,/PENDING_SUBMISSION_KEY = 'aicc-gpt-bridge-pending-submission-v1'/);
 assert.match(content,/await persistStorage\(PENDING_SUBMISSION_KEY, pending\)[\s\S]*boundedMessage\(operation/,'pending identity is durable before transport begins');
 assert.match(content,/SUBMISSION_UNCONFIRMED[\s\S]*reconcilePendingSubmission\(unconfirmed\)/,'watchdog warns and reconciles without automatic resubmission');
