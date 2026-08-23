@@ -49,5 +49,10 @@ const activeTaskContext=bridge.slice(bridge.indexOf('export function activeTaskP
 assert.match(activeTaskContext,/getConfiguredProjectRegistry\(\)/,'Task projection reads configured project identity without live Git validation');
 assert.doesNotMatch(activeTaskContext,/getProjectRegistry\(\)|getActiveProject\(\)/,'Task projection hot path must not execute validated Project Registry reads');
 assert.match(bridge,/readTaskRunBranchEvidenceReadOnly/);
+const bridgeRuntimeReconcile=bridge.slice(bridge.indexOf('export function reconcileBridgeExecution'),bridge.indexOf('function reconcilePersistedExecutions'));
+assert.match(bridgeRuntimeReconcile,/if\(!changed\)return item/,'unchanged Runtime observations are read-only for Bridge reconciliation');
+assert.doesNotMatch(bridgeRuntimeReconcile,/syncTask\(/,'Runtime-change Bridge reconciliation must not rewrite Task Registry');
+const bridgeRuntimeListener=bridge.slice(bridge.indexOf('export function reconcileBridgeProjectionOnRuntimeChange'),bridge.indexOf('export async function readOutboxAsync'));
+assert.doesNotMatch(bridgeRuntimeListener,/invalidateTaskProjectionSnapshot/,'Runtime terminal chunks must not rebuild Task Projection when Task Registry did not change');
 
 console.log('Local Service health latency invariants passed');
