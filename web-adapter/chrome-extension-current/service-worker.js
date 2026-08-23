@@ -173,12 +173,16 @@ async function remoteClaudeStatus() {
   return request('/api/gpt-bridge/remote-claude-status');
 }
 
+function conversationIdFromUrl(value) { try { const match = new URL(String(value || '')).pathname.match(/^\/c\/([^/?#]+)/); return match?.[1] || null; } catch { return null; } }
+
 async function returnResult(message) {
   const correlationKey = scopedStorageKey(CORRELATION_KEY, message.bridgeScopeId);
   const stored = (await chrome.storage.local.get(correlationKey))[correlationKey];
   const correlation = message.correlation || stored;
   if (!correlation?.inboxId || !correlation.originContext?.conversationId) throw failure('EXACT_ORIGIN_UNAVAILABLE', '找不到原始 ChatGPT 会话。', '返回原始对话后重试。');
-  if (message.sourceReference !== correlation.sourceReference || message.originContext?.conversationId !== correlation.originContext.conversationId) throw failure('EXACT_ORIGIN_UNAVAILABLE', '当前页面不是原始 ChatGPT 会话。', '返回原始对话后重试。');
+  const expectedConversationId = correlation.originContext.conversationId;
+  const callerConversationId = conversationIdFromUrl(message.tabUrl || message.sourceReference);
+  if (message.originContext?.conversationId !== expectedConversationId || callerConversationId !== expectedConversationId) throw failure('EXACT_ORIGIN_UNAVAILABLE', '当前页面不是原始 ChatGPT 会话。', '返回原始对话后重试。');
   const polled = await pollResult({ correlation, bridgeScopeId: message.bridgeScopeId });
   const item = polled.item;
   const result = item?.report?.canonicalResult;
@@ -211,7 +215,7 @@ async function codexCatalog() {
 }
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  const operation = message?.type === 'SEND_INSTRUCTION' ? sendInstruction({ ...message, tabId: sender?.tab?.id }) : message?.type === 'IMPORT_AND_RUN' ? importAndRun({ ...message, tabId: sender?.tab?.id }) : message?.type === 'BUG_CAPTURE' ? captureBug(message) : message?.type === 'BUG_REGISTRY_LOCAL_SYNC' ? localSyncBugRegistry(message) : message?.type === 'RECONCILE_SUBMISSION' ? reconcileSubmission(message) : message?.type === 'CODEX_CATALOG' ? codexCatalog() : message?.type === 'REMOTE_CLAUDE_STATUS' ? remoteClaudeStatus() : message?.type === 'POLL_RESULT' ? pollResult(message) : message?.type === 'RETURN_RESULT' ? returnResult(message) : message?.type === 'MARK_RETURN_COMPLETE' ? completeReturn(message) : message?.type === 'MARK_RETURN_FAILED' ? failReturn(message) : message?.type === 'MARK_REPORT_INSERTED' ? markReportInserted(message) : message?.type === 'AUTO_LOOP_STATUS' ? autoLoopStatus(message) : message?.type === 'AUTO_LOOP_BIND' ? autoLoopBind(message) : message?.type === 'AUTO_LOOP_UNBIND' ? autoLoopUnbind(message) : message?.type === 'AUTO_LOOP_MODE' ? autoLoopMode(message) : message?.type === 'AUTO_LOOP_FEEDBACK' ? autoLoopFeedback(message) : message?.type === 'AUTO_LOOP_FEEDBACK_STATE' ? autoLoopFeedbackState(message) : message?.type === 'AUTO_LOOP_CONTROL' ? autoLoopControl(message) : message?.type === 'AUTO_LOOP_CORRELATION_RECOVER' ? autoLoopCorrelationRecover(message) : Promise.reject(failure('MESSAGE_UNSUPPORTED', '不支持的适配器消息。', '刷新 ChatGPT 页面后重试。'));
+  const operation = message?.type === 'SEND_INSTRUCTION' ? sendInstruction({ ...message, tabId: sender?.tab?.id }) : message?.type === 'IMPORT_AND_RUN' ? importAndRun({ ...message, tabId: sender?.tab?.id }) : message?.type === 'BUG_CAPTURE' ? captureBug(message) : message?.type === 'BUG_REGISTRY_LOCAL_SYNC' ? localSyncBugRegistry(message) : message?.type === 'RECONCILE_SUBMISSION' ? reconcileSubmission(message) : message?.type === 'CODEX_CATALOG' ? codexCatalog() : message?.type === 'REMOTE_CLAUDE_STATUS' ? remoteClaudeStatus() : message?.type === 'POLL_RESULT' ? pollResult(message) : message?.type === 'RETURN_RESULT' ? returnResult({ ...message, tabUrl: sender?.tab?.url }) : message?.type === 'MARK_RETURN_COMPLETE' ? completeReturn(message) : message?.type === 'MARK_RETURN_FAILED' ? failReturn(message) : message?.type === 'MARK_REPORT_INSERTED' ? markReportInserted(message) : message?.type === 'AUTO_LOOP_STATUS' ? autoLoopStatus(message) : message?.type === 'AUTO_LOOP_BIND' ? autoLoopBind(message) : message?.type === 'AUTO_LOOP_UNBIND' ? autoLoopUnbind(message) : message?.type === 'AUTO_LOOP_MODE' ? autoLoopMode(message) : message?.type === 'AUTO_LOOP_FEEDBACK' ? autoLoopFeedback(message) : message?.type === 'AUTO_LOOP_FEEDBACK_STATE' ? autoLoopFeedbackState(message) : message?.type === 'AUTO_LOOP_CONTROL' ? autoLoopControl(message) : message?.type === 'AUTO_LOOP_CORRELATION_RECOVER' ? autoLoopCorrelationRecover(message) : Promise.reject(failure('MESSAGE_UNSUPPORTED', '不支持的适配器消息。', '刷新 ChatGPT 页面后重试。'));
   operation.then(value => sendResponse({ ok: true, ...value })).catch(error => sendResponse({ ok: false, error: error?.code ? error : failure('WEB_ADAPTER_ERROR', '适配器操作失败。', '检查 AICC 服务后重试。') }));
   return true;
 });

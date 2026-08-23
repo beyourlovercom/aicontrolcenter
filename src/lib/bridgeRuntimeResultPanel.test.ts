@@ -81,6 +81,13 @@ const completedItem={id:'outbox-1',state:'READY',inboxId:'inbox-1',runId:'run-1'
 const completed=dom.projectBridgeRuntime({previous:running,correlation:{inboxId:'inbox-1',runId:'run-1',sourceType:'CLIPBOARD_DIRECT'},item:completedItem});
 assert.equal(completed.status,'COMPLETED');assert.equal(completed.resultState,'AVAILABLE');assert.equal(completed.resultText,rawResult,'preview projects the exact persisted Codex result');assert.equal(completed.resultId,'result-1');assert.equal(completed.resultHash,'hash-1');assert.equal(completed.executionId,'execution-1');
 assert.equal(completed.runId,'run-1','the full canonical Run ID is retained in projection state');
+const staleRunningAfterCompleted=dom.projectBridgeRuntime({previous:completed,correlation:{inboxId:'inbox-1',runId:'run-1',sourceType:'CLIPBOARD_DIRECT'},item:{id:'inbox-1',inboxId:'inbox-1',taskId:'task-1',executionId:'execution-1',runId:'run-1',report:{runId:'run-1',executionId:'execution-1',status:'RUNNING'}}});
+assert.equal(staleRunningAfterCompleted.status,'COMPLETED','a delayed same-Run non-terminal poll cannot downgrade terminal truth');
+assert.equal(staleRunningAfterCompleted.resultState,'AVAILABLE','a delayed same-Run non-terminal poll cannot clear an available result');
+assert.equal(staleRunningAfterCompleted.resultText,rawResult,'a delayed same-Run non-terminal poll preserves exact canonical result text');
+const staleTerminalWithoutResult=dom.projectBridgeRuntime({previous:completed,correlation:{inboxId:'inbox-1',runId:'run-1',sourceType:'CLIPBOARD_DIRECT'},item:{...completedItem,report:{...completedItem.report,canonicalResult:undefined}}});
+assert.equal(staleTerminalWithoutResult.resultState,'AVAILABLE','a stale terminal envelope without payload cannot erase a previously available canonical result');
+assert.equal(staleTerminalWithoutResult.resultText,rawResult);
 
 const failedItem={...completedItem,report:{...completedItem.report,status:'FAILED',summary:'Codex runtime exited',canonicalResult:undefined}};
 const failed=dom.projectBridgeRuntime({previous:running,correlation:{inboxId:'inbox-1',runId:'run-1',sourceType:'GPT_BLOCK'},item:failedItem});
@@ -116,9 +123,20 @@ assert.match(content,/async function copyPanelResult\(\)[\s\S]*navigator\.clipbo
 assert.match(content,/async function insertPanelResult\(\)[\s\S]*insertReport\(\)[\s\S]*deliverCanonicalResult\(\)/,'panel delegates to existing AICC and Codex result actions');
 assert.equal((content.match(/await copyAndInsertResult\(/g)??[]).length,3,'Codex, AICC, and remote-provider result delivery retain one shared reliability pipeline');
 assert.match(content,/async function deliverCanonicalResult\(\)[\s\S]*const ownerRequested = codexResultInFlight \|\| panelResultInFlight/,'top and panel Codex actions share canonical delivery');
+const returnBody=content.match(/async function deliverCanonicalResult\(\)[\s\S]*?(?=\n  async function insertCodexResult)/)?.[0]??'';
+assert.match(returnBody,/RESULT_RETURN_IN_PROGRESS/,'manual result return surfaces an in-flight blocker instead of silently returning');
+assert.match(returnBody,/CANONICAL_RESULT_NOT_AVAILABLE/,'manual result return surfaces missing result evidence');
+assert.match(returnBody,/EXACT_ORIGIN_UNAVAILABLE/,'manual result return surfaces missing or wrong conversation correlation');
+assert.doesNotMatch(returnBody,/if \(returnInFlight \|\| !canonicalResult\?\.rawResult[\s\S]*?\) return;/,'manual result return has no silent pre-claim exit');
+assert.match(content,/function isExactOriginConversation\(\)[\s\S]*expectedConversationId[\s\S]*current\.conversationId === expectedConversationId/,'result return uses exact conversation identity rather than brittle raw URL equality');
 assert.doesNotMatch(content.match(/async function insertPanelResult[\s\S]*?(?=\n  function togglePanelResult)/)?.[0]??'',/ownerConfirmSend|KeyboardEvent|requestSubmit|\.click\(/,'panel insertion never submits GPT');
 assert.match(registry,/actionKey: 'next-step'[\s\S]*displayOrdinal: 5[\s\S]*执行下一步/,'execute-next-step remains an explicit Owner-facing action at ordinal five');
-assert.match(content,/RUNTIME_PROJECTION_KEY = 'aicc-bridge-runtime-projection-v1'/);assert.match(content,/function ensureRuntimeHydration\(\)[\s\S]*restoreRuntimeProjection\(\(\) => \{[\s\S]*await reconcilePendingSubmission\(\);[\s\S]*await pollResult\(\);[\s\S]*await refreshAutoLoopStatus\(\);[\s\S]*await refreshUsClaudeCapability\(\)/,'refresh hydrates durable runtime state before capability refresh');
+assert.match(content,/RUNTIME_PROJECTION_KEY = 'aicc-bridge-runtime-projection-v1'/);
+assert.match(content,/runtimeProjectionPersistChain = Promise\.resolve\(\)/,'runtime projection persistence is serialized');
+assert.match(content,/function persistRuntimeProjection\(snapshot\)[\s\S]*runtimeProjectionPersistChain = runtimeProjectionPersistChain\.catch[\s\S]*persistStorage\(key, value\)/,'runtime projection writes use one ordered persistence chain');
+assert.match(content,/if \(persist\) void persistRuntimeProjection\(runtimeProjection\)/,'runtime projection updates persist through the ordered writer');
+assert.match(content,/const projectionAtRestore = runtimeProjection;[\s\S]*if \(runtimeProjection !== projectionAtRestore\)/,'late storage restore cannot overwrite a projection that advanced while hydration was in flight');
+assert.match(content,/function ensureRuntimeHydration\(\)[\s\S]*restoreRuntimeProjection\(\(\) => \{[\s\S]*await reconcilePendingSubmission\(\);[\s\S]*await pollResult\(\);[\s\S]*await refreshAutoLoopStatus\(\);[\s\S]*await refreshUsClaudeCapability\(\)/,'refresh hydrates durable runtime state before capability refresh');
 assert.match(content,/runtimeAttemptUnbound = true[\s\S]*if \(runtimeAttemptUnbound\) return result/,'stale polling cannot bind an older result while a new submission is unbound');
 assert.match(content,/message\('POLL_RESULT', \{ correlation: reportCorrelation, bridgeScopeId: bridgeStorageScopeId\(\) \}\)/,'result polling carries exact correlation plus current conversation scope');
 assert.match(content,/PENDING_SUBMISSION_KEY = 'aicc-gpt-bridge-pending-submission-v1'/);

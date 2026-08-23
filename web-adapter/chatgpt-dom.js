@@ -122,9 +122,13 @@
     const runtimeState = item.report?.status || '';
     const failed = ['FAILED', 'STOPPED', 'RECOVERY_REQUIRED'].includes(runtimeState);
     const completed = runtimeState === 'COMPLETED';
+    if (terminalPreviousMatches && !failed && !completed) return previous;
     const status = failed ? BridgeRuntimeState.FAILED : completed ? BridgeRuntimeState.COMPLETED : hasExecutionIdentity({executionId, runId}) ? BridgeRuntimeState.RUNNING : ack ? BridgeRuntimeState.AICC_ACCEPTED : BridgeRuntimeState.TRANSPORT_SENT;
     const canonicalResult = item.report?.canonicalResult;
     const resultText = source === BridgeExecutionSource.AICC ? bridgeReportText(item) : canonicalResult?.version === 'AICC_EXECUTION_RESULT_V1' ? canonicalResultText(item) : '';
+    const previousHasCanonicalResult = previous.resultState === BridgeResultState.AVAILABLE && Boolean(String(previous.resultText || '').trim());
+    const incomingHasCanonicalResult = canonicalResult?.version === 'AICC_EXECUTION_RESULT_V1' && Boolean(resultText.trim());
+    if (terminalPreviousMatches && previousHasCanonicalResult && !incomingHasCanonicalResult) return previous;
     const resultBound = Boolean(hasExecutionIdentity({ executionId, runId }) && itemRunId && resultText.trim() && [BridgeRuntimeState.COMPLETED, BridgeRuntimeState.FAILED].includes(status));
     const resultId = resultBound ? canonicalResult?.resultId || null : null;
     const resultHash = resultBound ? canonicalResult?.resultHash || null : null;

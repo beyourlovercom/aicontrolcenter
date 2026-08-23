@@ -65,6 +65,7 @@
   const SUBMISSION_ACK_TIMEOUT_MS = 8000;
   let submissionReconciliationInFlight = false;
   let runtimeHydrationStarted = false;
+  let runtimeProjectionPersistChain = Promise.resolve();
   let autoLoop = { loop: null, status: null, control_loop_state: null, global_feedback: null, expected_turn: null };
   let autoLoopFeedbackInFlight = false;
   let autoLoopControlInFlight = false;
@@ -111,6 +112,7 @@
   function panelStorage() { return chrome?.storage?.local || null; }
   function storageValue(key) { return new Promise(resolve => panelStorage()?.get?.([key], result => resolve(result?.[key] || null)) ?? resolve(null)); }
   function persistStorage(key, value) { return new Promise(resolve => panelStorage()?.set?.({ [key]: value }, resolve) ?? resolve()); }
+  function persistRuntimeProjection(snapshot) { const key = scopedStorageKey(RUNTIME_PROJECTION_KEY), value = { ...snapshot }; runtimeProjectionPersistChain = runtimeProjectionPersistChain.catch(() => {}).then(() => persistStorage(key, value)); return runtimeProjectionPersistChain; }
   async function pendingSubmissionFor(text, submissionId, sourceType, originContext) {
     const payloadHash = await window.AICCChatGPTDom.submissionPayloadHash(text);
     return { submission_id: submissionId, instruction_id: submissionId, payload_hash: payloadHash, source: sourceType, ...(originContext?.conversationId ? { conversation_id: originContext.conversationId } : {}), source_reference: location.href, origin_context: originContext, created_at: new Date().toISOString(), ack_state: 'PENDING' };
@@ -190,18 +192,20 @@
   function updateRuntimeProjection(input = {}, persist = true) {
     runtimeProjection = window.AICCChatGPTDom.projectBridgeRuntime({ ...input, previous: runtimeProjection });
     renderRuntimeProjection();
-    if (persist) panelStorage()?.set?.({ [scopedStorageKey(RUNTIME_PROJECTION_KEY)]: runtimeProjection });
+    if (persist) void persistRuntimeProjection(runtimeProjection);
     return runtimeProjection;
   }
   function setActionLabel(button, label) { const node = button?.querySelector('[data-aicc-action-label]'); if (node) node.textContent = label; else if (button) button.textContent = label; }
   function restoreRuntimeProjection(onRestored) {
+    const projectionAtRestore = runtimeProjection;
     panelStorage()?.get?.([scopedStorageKey(RUNTIME_PROJECTION_KEY)], result => {
+      if (runtimeProjection !== projectionAtRestore) { renderRuntimeProjection(); onRestored?.(); return; }
       const key = scopedStorageKey(RUNTIME_PROJECTION_KEY);
       const stored = result?.[key];
       if (stored && Object.values(window.AICCChatGPTDom.BridgeRuntimeState).includes(stored.status)) {
         const recovered = window.AICCChatGPTDom.recoverBridgeRuntimeProjection({ ...window.AICCChatGPTDom.emptyBridgeRuntimeProjection(), ...stored });
         runtimeProjection = recovered;
-        if (recovered.status !== stored.status) panelStorage()?.set?.({ [scopedStorageKey(RUNTIME_PROJECTION_KEY)]: recovered });
+        if (recovered.status !== stored.status) void persistRuntimeProjection(recovered);
         if (runtimeProjection.resultState === 'AVAILABLE' && (!runtimeProjection.runId || !String(runtimeProjection.resultText || '').trim())) runtimeProjection = { ...runtimeProjection, resultState: 'WAITING', resultId: null, resultHash: null, resultText: '' };
       }
       renderRuntimeProjection();
@@ -463,7 +467,7 @@
     syncSendButton();
     return inboundClipboardBinding;
   }
-  function isExactOriginConversation() { const current = window.AICCChatGPTDom.originContext(document, null); return Boolean(reportCorrelation?.sourceReference === location.href && reportCorrelation?.originContext?.conversationId === current.conversationId); }
+  function isExactOriginConversation() { const expectedConversationId = reportCorrelation?.originContext?.conversationId || null; const current = window.AICCChatGPTDom.originContext(document, null); return Boolean(expectedConversationId && current.conversationId === expectedConversationId); }
   function bindPanelControl(selector, handler) {
     const button = panel?.querySelector(selector);
     if (!button || button.dataset.aiccBound === 'true') return;
@@ -773,9 +777,12 @@
   async function deliverCanonicalResult() {
     const ownerRequested = codexResultInFlight || panelResultInFlight;
     const canonicalResult = codexExecutionResult(reportItem);
-    if (returnInFlight || !canonicalResult?.rawResult || !reportCorrelation?.originContext?.conversationId) return;
-    const returnId = canonicalResult.resultId || reportItem.runId;
-    if (!returnId || !isExactOriginConversation()) return;
+    if (returnInFlight) { setStatus('RESULT_RETURN_IN_PROGRESS · 当前结果正在处理，请等待完成。', 'BLOCKED'); return { ok: false, code: 'RESULT_RETURN_IN_PROGRESS' }; }
+    if (!canonicalResult?.rawResult) { setStatus('CANONICAL_RESULT_NOT_AVAILABLE · 当前 Run 没有可返回的 canonical result。', 'BLOCKED'); return { ok: false, code: 'CANONICAL_RESULT_NOT_AVAILABLE' }; }
+    if (!reportCorrelation?.originContext?.conversationId) { showError({ code: 'EXACT_ORIGIN_UNAVAILABLE', reason: '找不到原始 ChatGPT 会话关联。' }); return { ok: false, code: 'EXACT_ORIGIN_UNAVAILABLE' }; }
+    const returnId = canonicalResult.resultId || reportItem?.runId || reportItem?.report?.runId;
+    if (!returnId) { setStatus('RESULT_IDENTITY_REQUIRED · 当前结果缺少 Run/Result identity。', 'BLOCKED'); return { ok: false, code: 'RESULT_IDENTITY_REQUIRED' }; }
+    if (!isExactOriginConversation()) { showError({ code: 'EXACT_ORIGIN_UNAVAILABLE', reason: '当前页面不是该结果的原始 ChatGPT 会话。' }); return { ok: false, code: 'EXACT_ORIGIN_UNAVAILABLE' }; }
     const manualRetry = ownerRequested && attemptedReturnIds.has(returnId);
     if (!ownerRequested && attemptedReturnIds.has(returnId)) return;
     attemptedReturnIds.add(returnId);

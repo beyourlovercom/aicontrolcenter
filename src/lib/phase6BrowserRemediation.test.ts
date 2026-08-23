@@ -103,6 +103,11 @@ assert.match(domSource,/copyAndInsertResultArtifact[\s\S]*clipboard\.writeText\(
 const returnBody=content.match(/async function deliverCanonicalResult\(\)[\s\S]*?(?=function reportText)/)?.[0]??'';
 assert.doesNotMatch(returnBody,/reportFormatPresent|verifyComposerText/,'return transport does not judge existing Composer content');
 assert.match(returnBody,/returnInFlight/);assert.match(content,/attemptedReturnIds/);assert.match(returnBody,/message\('RETURN_RESULT'/,'result return claims one durable return identity');assert.match(returnBody,/message\('MARK_RETURN_COMPLETE'/,'successful insertion completes that exact return identity');assert.match(worker,/claimGranted !== true/);
+const workerReturnBody=worker.match(/async function returnResult\(message\)[\s\S]*?(?=async function completeReturn)/)?.[0]??'';
+assert.match(worker,/function conversationIdFromUrl/,'worker derives conversation identity from the trusted caller tab URL');
+assert.match(worker,/RETURN_RESULT' \? returnResult\(\{ \.\.\.message, tabUrl: sender\?\.tab\?\.url \}\)/,'RETURN_RESULT receives the Chrome sender tab URL');
+assert.match(workerReturnBody,/callerConversationId !== expectedConversationId/,'worker keeps exact conversation identity as the return boundary');
+assert.doesNotMatch(workerReturnBody,/message\.sourceReference !== correlation\.sourceReference/,'return safety does not depend on brittle raw URL string equality');
 assert.doesNotMatch(content,/button\[type="submit"\]|KeyboardEvent|\.submit\(|requestSubmit\(|\.click\(\)/,'result return never auto-sends ChatGPT');
 assert.doesNotMatch(content,/latestAssistantMessage|latestMessage|lastAssistant|mostRecentAssistant/);
 console.log('M4.1 Phase 6 browser remediation matrix passed');
