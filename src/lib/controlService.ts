@@ -258,7 +258,8 @@ export async function readLocalServiceStatusAsync(options:LocalServiceAsyncDepen
   const repositoryAvailable=existsSync(REPOSITORY_ROOT)&&existsSync(join(REPOSITORY_ROOT,'package.json'))&&existsSync(ROADMAP);
   const supervisor=readLocalServiceSupervisorState();
   const terminalFailure=supervisor?.state==='RECOVERY_FAILED';
-  const portTruth=await boundedHealthDiagnostic(options.detectPortOwner??(()=>detectPortOwnerAsync(()=>true)),options.diagnosticTimeoutMs??HEALTH_DIAGNOSTIC_TIMEOUT_MS)??{portOwner:'UNAVAILABLE' as const};
+  const selfManaged=supervisor?.managedPid===process.pid;
+  const portTruth=selfManaged?{portOwner:'CANONICAL_AICC_SERVICE' as const}:await boundedHealthDiagnostic(options.detectPortOwner??(()=>detectPortOwnerAsync(()=>true)),options.diagnosticTimeoutMs??HEALTH_DIAGNOSTIC_TIMEOUT_MS)??{portOwner:'UNAVAILABLE' as const};
   const canonicalListener=portTruth.portOwner==='CANONICAL_AICC_SERVICE';
   const processRunning=canonicalListener||Boolean(supervisor?.managedPid!==null&&supervisor?.managedPid!==undefined);
   const serviceHealthy=repositoryAvailable&&!terminalFailure&&canonicalListener;

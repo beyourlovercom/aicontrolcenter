@@ -21,6 +21,8 @@ assert.doesNotMatch(statusRoute,/readLocalServiceStatus\(|detectPortOwner/);
 const healthStatus=control.slice(control.indexOf('export async function readLocalServiceStatusAsync'),control.indexOf('export function readLocalServiceSupervisorState'));
 assert.match(healthStatus,/boundedHealthDiagnostic/);
 assert.doesNotMatch(healthStatus,/execFileSync|execSync|spawnSync/);
+assert.match(healthStatus,/supervisor\?\.managedPid===process\.pid/,'normal health path recognizes the supervisor-managed Vite process without spawning diagnostics');
+assert.match(healthStatus,/selfManaged\?\{portOwner:'CANONICAL_AICC_SERVICE'/,'self-managed health path short-circuits port-owner child processes');
 assert.match(control,/HEALTH_CHILD_PROCESS_TIMEOUT_MS=500/);
 const asyncPortOwner=control.slice(control.indexOf('export async function detectPortOwnerAsync'),control.indexOf('function repositoryAvailableForService'));
 assert.equal((asyncPortOwner.match(/timeout:HEALTH_CHILD_PROCESS_TIMEOUT_MS/g)??[]).length,2);
