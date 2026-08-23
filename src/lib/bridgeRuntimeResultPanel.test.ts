@@ -60,6 +60,12 @@ assert.doesNotMatch(content,/data-aicc-runtime-model|data-aicc-runtime-reasoning
 assert.doesNotMatch(content,/data-aicc-runtime-(?:run-profile|run-id|execution-id)[^>]*>—</,'optional runtime rows have no dash placeholders');
 assert.match(content,/data-aicc-runtime-row="run-profile" hidden/);assert.match(content,/data-aicc-runtime-row="execution-id" hidden/);
 assert.match(content,/renderOptionalRuntimeField\(section, SELECTORS\.runtimeExecutionId/,'optional Execution ID visibility follows canonical evidence');
+assert.match(content,/const model = String\(projection\.model\)/,'Run Profile renders exact frozen model evidence without a removed browser-side catalog helper');
+assert.match(content,/const reasoning = projection\.reasoningEffort \? String\(projection\.reasoningEffort\) : ''/,'Run Profile renders exact frozen reasoning evidence');
+assert.doesNotMatch(content,/modelCapability\(|effortLabels\[|restoreCodexProfile\(/,'removed Model Selector helpers cannot abort runtime-result rendering');
+const runProfileSource=content.match(/function runProfileLabel\(projection\) \{[\s\S]*?\n  \}/)?.[0]??'';
+const runProfileContext:any={};vm.runInNewContext(`${runProfileSource};globalThis.value=runProfileLabel({model:'gpt-5.6-luna',reasoningEffort:'low'});`,runProfileContext);
+assert.equal(runProfileContext.value,'gpt-5.6-luna · low','real UAT Run Profile renders without ReferenceError before result preview hydration');
 
 const idle=dom.emptyBridgeRuntimeProjection('2026-08-15T00:00:00.000Z');
 assert.equal(idle.status,'IDLE');assert.equal(idle.resultState,'NONE');assert.equal(idle.resultText,'');

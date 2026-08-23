@@ -139,8 +139,8 @@
   function sourceDisplayLabel(source) { return source === 'CLIPBOARD_DIRECT' ? '剪贴板' : source || ''; }
   function runProfileLabel(projection) {
     if (!projection.model) return '';
-    const model = modelCapability(projection.model)?.displayName || projection.model;
-    const reasoning = effortLabels[projection.reasoningEffort] || projection.reasoningEffort;
+    const model = String(projection.model);
+    const reasoning = projection.reasoningEffort ? String(projection.reasoningEffort) : '';
     return reasoning ? `${model} · ${reasoning}` : model;
   }
   function resultLabel(projection) { if (projection.resultState === 'AVAILABLE' && projection.runId && projection.resultText.trim()) return 'Available'; return projection.status === 'FAILED' ? 'Unavailable' : 'Waiting'; }
@@ -864,7 +864,6 @@
     refreshExplicitPayloadBinding();
     restorePanelState();
     restoreResultInsertStatus();
-    restoreCodexProfile();
   }
 
   function isAiccOwnedNode(node) {
