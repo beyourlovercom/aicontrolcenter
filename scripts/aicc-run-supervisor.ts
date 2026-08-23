@@ -29,13 +29,13 @@ function scrubState(state:RuntimeState){
     else if(Array.isArray(value))state[key]=value.map(item=>typeof item==='string'?redactSecret(item,ephemeralGithubToken):item) as RuntimeState[typeof key];
   }
 }
-function persist(state:RuntimeState){
+function persist(state:RuntimeState,options:{syncTask?:boolean}={}){
   scrubState(state);
   mkdirSync(spec.stateDir,{recursive:true});
   const runTemp=`${runFile}.${process.pid}.tmp`;
   writeFileSync(runTemp,JSON.stringify(state,null,2),{mode:0o600});
   renameSync(runTemp,runFile);
-  persistRuntimeTaskState(state);
+  if(options.syncTask!==false)persistRuntimeTaskState(state);
   if(!['COMPLETED','FAILED','STOPPED','RECOVERY_REQUIRED'].includes(state.phase))return;
   let history:RuntimeState[]=[];
   try{history=JSON.parse(readFileSync(historyFile,'utf8')) as RuntimeState[]}catch{}
@@ -163,7 +163,7 @@ try{
   };
   child.onData((text:string)=>{state.terminalSequence=(state.terminalSequence??0)+1;state.terminalChunks=[...(state.terminalChunks??[]),text];let terminalBytes=Buffer.byteLength(state.terminalChunks.join(''));
     while(state.terminalChunks.length>maxTerminalChunks||terminalBytes>maxTerminalBytes){state.terminalChunks.shift();state.terminalFirstSequence=(state.terminalFirstSequence??1)+1;terminalBytes=Buffer.byteLength(state.terminalChunks.join(''));state.terminalTruncated=true}
-    state.terminalUpdatedAt=new Date().toISOString();state.stdout=`${state.stdout??''}${text}`.slice(-12000);if(state.outputMode==='json'||state.outputMode===undefined){buffer+=text;const parts=buffer.split('\n');buffer=parts.pop()??'';for(const line of parts){if(line.trim())state.rawFirstStdoutEvents=[...(state.rawFirstStdoutEvents??[]),line].slice(0,8);parseEvent(line,state,false)}}persist(state)});
+    state.terminalUpdatedAt=new Date().toISOString();state.stdout=`${state.stdout??''}${text}`.slice(-12000);if(state.outputMode==='json'||state.outputMode===undefined){buffer+=text;const parts=buffer.split('\n');buffer=parts.pop()??'';for(const line of parts){if(line.trim())state.rawFirstStdoutEvents=[...(state.rawFirstStdoutEvents??[]),line].slice(0,8);parseEvent(line,state,false)}}persist(state,{syncTask:false})});
   // Register both PTY listeners before any post-spawn persistence so an immediate
   // child exit cannot occur during a synchronous state-file write without a handler.
   child.onExit(({exitCode,signal})=>finalizeRuntime(exitCode,signal));

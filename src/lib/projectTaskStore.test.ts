@@ -43,5 +43,10 @@ try{
   const migrated=store.migrateLegacyTaskRegistry();
   assert.equal(migrated.some(item=>item.projectId==='erp'),true);
   assert.equal(store.readProjectTaskById(scopeB,'legacy-task')?.taskId,'legacy-task');
+  const lateLegacy={registryVersion:2,recordType:'CANONICAL_TASK',taskId:'late-legacy-task',inboxId:'late-legacy-inbox',instructionId:'late-legacy-instruction',...scopeB,rawInstruction:'late legacy',status:'READY',createdAt:'2026-08-21T01:00:00.000Z',updatedAt:'2026-08-21T01:00:00.000Z'};
+  writeFileSync(join(stateDir,'task-registry.json'),JSON.stringify([lateLegacy]));
+  assert.equal(store.readProjectTaskById(scopeB,'late-legacy-task'),null,'normal project reads must not re-read legacy registry after migration');
+  store.migrateLegacyTaskRegistry();
+  assert.equal(store.readProjectTaskById(scopeB,'late-legacy-task')?.taskId,'late-legacy-task','explicit migration may import later legacy records');
   console.log('Project Task Store physical partition + durable Run/Result ledger passed');
 }finally{rmSync(stateDir,{recursive:true,force:true})}

@@ -118,8 +118,10 @@ function mergeRecords(primary:ProjectTaskStoreRecord[],legacy:ProjectTaskStoreRe
 }
 function readLegacyRecords(scope:ProjectIdentityScope){return readJson<ProjectTaskStoreRecord[]>(LEGACY_TASK_FILE,[]).filter(record=>record&&sameScope(record,scope))}
 export function readProjectTaskRecords<T extends ProjectTaskStoreRecord=ProjectTaskStoreRecord>(scope:ProjectIdentityScope):T[]{
-  const file=projectTaskRegistryPath(scope),primary=readJson<ProjectTaskStoreRecord[]>(file,[]).filter(record=>record&&sameScope(record,scope)),legacy=readLegacyRecords(scope),merged=mergeRecords(primary,legacy);
-  if((!existsSync(file)&&merged.length)||merged.length>primary.length)withRegistryLock(scope,()=>atomicWrite(file,merged));
+  const file=projectTaskRegistryPath(scope),primary=readJson<ProjectTaskStoreRecord[]>(file,[]).filter(record=>record&&sameScope(record,scope));
+  if(existsSync(file))return primary.sort((a,b)=>Date.parse(b.createdAt||'')-Date.parse(a.createdAt||'')) as T[];
+  const legacy=readLegacyRecords(scope),merged=mergeRecords(primary,legacy);
+  if(merged.length)withRegistryLock(scope,()=>atomicWrite(file,merged));
   return merged as T[];
 }
 export function writeProjectTaskRecords<T extends ProjectTaskStoreRecord>(scope:ProjectIdentityScope,records:T[]):T[]{
@@ -144,7 +146,8 @@ function mergeTaskStoreRecords(previous:ProjectTaskStoreRecord|undefined,incomin
 export function upsertProjectTaskRecord<T extends ProjectTaskStoreRecord>(record:T):T{
   const scope=recordScope(record);
   return withRegistryLock(scope,()=>{
-    const records=mergeRecords(readJson<ProjectTaskStoreRecord[]>(projectTaskRegistryPath(scope),[]).filter(item=>sameScope(item,scope)),readLegacyRecords(scope));
+    const file=projectTaskRegistryPath(scope),primary=readJson<ProjectTaskStoreRecord[]>(file,[]).filter(item=>sameScope(item,scope));
+    const records=existsSync(file)?primary:mergeRecords(primary,readLegacyRecords(scope));
     const previous=records.find(item=>item.taskId===record.taskId);
     const merged=mergeTaskStoreRecords(previous,record);
     if(previous&&JSON.stringify(previous)===JSON.stringify(merged))return merged as T;
@@ -223,6 +226,10 @@ export function migrateLegacyTaskRegistry(){
   const legacy=readJson<ProjectTaskStoreRecord[]>(LEGACY_TASK_FILE,[]),scopes=new Map<string,ProjectIdentityScope>();
   for(const record of legacy)if(record?.projectId&&record?.repositoryIdentity)scopes.set(`${record.projectId}\x00${record.repositoryIdentity}`,{projectId:record.projectId,repositoryIdentity:record.repositoryIdentity});
   const migrated:{projectId:string;count:number;path:string}[]=[];
-  for(const scope of scopes.values()){const records=readProjectTaskRecords(scope);if(records.length)migrated.push({projectId:scope.projectId,count:records.length,path:projectTaskRegistryPath(scope)})}
+  for(const scope of scopes.values()){
+    const file=projectTaskRegistryPath(scope),primary=readJson<ProjectTaskStoreRecord[]>(file,[]).filter(record=>record&&sameScope(record,scope)),records=mergeRecords(primary,readLegacyRecords(scope));
+    if(records.length&&records.length!==primary.length)withRegistryLock(scope,()=>atomicWrite(file,records));
+    if(records.length)migrated.push({projectId:scope.projectId,count:records.length,path:file});
+  }
   return migrated;
 }
