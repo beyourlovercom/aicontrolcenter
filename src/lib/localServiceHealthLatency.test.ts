@@ -42,6 +42,9 @@ assert.match(runtime,/invalidateRuntimeProjectionSnapshot\(name\)/,'runtime watc
 assert.match(runtime,/invalidateRuntimeProjectionSnapshot\(target\)/,'local runtime writes invalidate only the written runtime file');
 assert.match(runtime,/export async function readRuntimeHistoryAsync/);
 assert.match(bridge,/export async function readTaskProjectionReadOnly/);
+const activeTaskContext=bridge.slice(bridge.indexOf('export function activeTaskProjectContext'),bridge.indexOf('export function projectTaskModelForContext'));
+assert.match(activeTaskContext,/getConfiguredProjectRegistry\(\)/,'Task projection reads configured project identity without live Git validation');
+assert.doesNotMatch(activeTaskContext,/getProjectRegistry\(\)|getActiveProject\(\)/,'Task projection hot path must not execute validated Project Registry reads');
 assert.match(bridge,/readTaskRunBranchEvidenceReadOnly/);
 
 console.log('Local Service health latency invariants passed');

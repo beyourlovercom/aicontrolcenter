@@ -41,7 +41,9 @@ function persist(file:string,state:ProjectRegistryState){const temporary=`${file
 export class ProjectRegistryAuthority{
   private readonly file:string;
   constructor(file=join(process.cwd(),PROJECT_REGISTRY_FILE)){this.file=file}
-  getProjectRegistry():ProjectRegistryState{const state=parse(this.file);const projects=state.projects.map(validate);return {...state,projects}}
+  getConfiguredProjectRegistry():ProjectRegistryState{return parse(this.file)}
+  getConfiguredActiveProject():ProjectRecord{const state=this.getConfiguredProjectRegistry();const project=state.projects.find(item=>item.projectId===state.activeProjectId);if(!project)throw new Error('ACTIVE_PROJECT_INVALID');return project}
+  getProjectRegistry():ProjectRegistryState{const state=this.getConfiguredProjectRegistry();const projects=state.projects.map(validate);return {...state,projects}}
   async getProjectRegistryAsync():Promise<ProjectRegistryState>{const state=await parseAsync(this.file);const projects:ProjectRecord[]=[];for(const project of state.projects)projects.push(await validateAsync(project));return {...state,projects}}
   getProject(projectId:string):ProjectRecord|null{return this.getProjectRegistry().projects.find(project=>project.projectId===projectId)??null}
   getActiveProject():ProjectRecord{const state=this.getProjectRegistry();const project=state.projects.find(item=>item.projectId===state.activeProjectId);if(!project)throw new Error('ACTIVE_PROJECT_INVALID');return project}
