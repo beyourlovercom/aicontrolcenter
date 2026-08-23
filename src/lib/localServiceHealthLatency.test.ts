@@ -36,6 +36,10 @@ assert.doesNotMatch(runtimeReadPath,/persistRuntimeTaskState/,'runtime read path
 const terminalOnData=supervisor.slice(supervisor.indexOf('child.onData'),supervisor.indexOf('child.onExit'));
 assert.match(terminalOnData,/persist\(state,\{syncTask:false\}\)/,'PTY chunks persist runtime evidence without rewriting Task Registry');
 assert.match(supervisor,/if\(options\.syncTask!==false\)persistRuntimeTaskState\(state\)/,'structured runtime persistence still syncs Task Registry');
+const invalidation=runtime.slice(runtime.indexOf('export function invalidateRuntimeProjectionSnapshot'),runtime.indexOf('export function onRuntimeProjectionChange'));
+assert.match(invalidation,/runtimeFileCache\.delete\(join\(STATE_DIR,name\)\)/,'single runtime changes invalidate only their cache entry');
+assert.match(runtime,/invalidateRuntimeProjectionSnapshot\(name\)/,'runtime watcher forwards the changed filename');
+assert.match(runtime,/invalidateRuntimeProjectionSnapshot\(target\)/,'local runtime writes invalidate only the written runtime file');
 assert.match(runtime,/export async function readRuntimeHistoryAsync/);
 assert.match(bridge,/export async function readTaskProjectionReadOnly/);
 assert.match(bridge,/readTaskRunBranchEvidenceReadOnly/);
