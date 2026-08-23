@@ -15,12 +15,12 @@ assert(supervisor.includes('/Users/a/AI/007/AIcontrolcenter')&&supervisor.includ
 assert(supervisor.includes('command -v node')&&supervisor.includes('command -v npm')&&supervisor.includes('$NPM_PATH'),'toolchain resolved at install time');
 assert(supervisor.includes('launchctl bootout')&&!supervisor.includes('/usr/bin/env</string><string>npm'),'reinstall replaces existing agent');
 assert(supervisor.includes('health_probe')&&supervisor.includes('canonical_pid')&&supervisor.includes('transition "PROCESS_ALIVE_HEALTH_DEGRADED"'),'watchdog distinguishes process liveness from canonical health');
-assert(supervisor.includes('curl --silent --show-error --max-time 1'),'health probe is bounded');
+assert(supervisor.includes('HEALTH_URL="http://127.0.0.1:1420/api/live"')&&supervisor.includes('curl --silent --show-error --max-time "$HEALTH_CHECK_TIMEOUT"'),'supervisor uses bounded lightweight liveness probe');
 assert(supervisor.includes('terminate_canonical_pid')&&supervisor.includes('canonical_pid "$PORT_PID"'),'health recovery uses PID-specific termination only after ownership verification');
 assert(supervisor.includes('restart)')&&supervisor.includes('terminate_canonical_pid "$PORT_PID"')&&supervisor.includes('PORT_1420_CONFLICT'),'manual restart replaces only a verified canonical listener and fails closed for a foreign owner');
 const restartCase=supervisor.slice(supervisor.indexOf('  restart)'),supervisor.indexOf('  reset)'));
 assert(!restartCase.includes('acquire_singleton'),'one-shot restart does not conflict with the running watchdog singleton');
-assert(supervisor.includes('HEALTH_FAILURE_THRESHOLD')&&supervisor.includes('MAX_RECOVERY_ATTEMPTS'),'health and recovery thresholds are configurable');
+assert(supervisor.includes('AICC_LOCAL_SERVICE_HEALTH_FAILURE_THRESHOLD:-3')&&supervisor.includes('MAX_RECOVERY_ATTEMPTS'),'health recovery tolerates transient liveness stalls and remains configurable');
 assert(supervisor.includes('RECOVERY_FAILED')&&supervisor.includes('adopt_verified_canonical_listener')&&supervisor.includes('LOCAL_SERVICE_CANONICAL_ADOPTED'),'bounded recovery can adopt a later verified canonical service');
 assert(supervisor.includes('HEALTH_CHECK_FAILED')&&supervisor.includes('reason=$LAST_HEALTH_FAILURE'),'factual health failure is logged');
 assert(vite.includes('probeOk: status.repositoryAvailable'),'restart health probe can converge while projected state is RESTARTING');

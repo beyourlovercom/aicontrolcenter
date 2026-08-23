@@ -7,6 +7,9 @@ const control=readFileSync(new URL('./controlService.ts',import.meta.url),'utf8'
 const runtime=readFileSync(new URL('./runtimeManager.ts',import.meta.url),'utf8');
 const bridge=readFileSync(new URL('./bridgeCore.ts',import.meta.url),'utf8');
 
+const liveRoute=server.match(/server\.middlewares\.use\('\/api\/live',[\s\S]*?\n  server\.middlewares\.use\('\/api\/health'/)?.[0]??'';
+assert.match(liveRoute,/live:true/);
+assert.doesNotMatch(liveRoute,/readLocalService|detectPortOwner|lsof|ps|git|codex/i);
 const healthRoute=server.match(/server\.middlewares\.use\('\/api\/health',[\s\S]*?\n  server\.middlewares\.use\('\/api\/service\/status'/)?.[0]??'';
 assert.match(healthRoute,/readLocalServiceHealthStatusAsync\(\)\.then/);
 assert.doesNotMatch(healthRoute,/readLocalServiceHealthStatus\(\)/);

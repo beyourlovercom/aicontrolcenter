@@ -5,11 +5,11 @@ REPOSITORY_ROOT="/Users/a/AI/007/AIcontrolcenter"
 CANONICAL_REPOSITORY_ROOT="$(/bin/realpath "$REPOSITORY_ROOT" 2>/dev/null || printf '%s' "$REPOSITORY_ROOT")"
 LABEL="com.aicc.v2.local-service"
 PLIST="$HOME/Library/LaunchAgents/$LABEL.plist"
-HEALTH_URL="http://127.0.0.1:1420/api/health"
+HEALTH_URL="http://127.0.0.1:1420/api/live"
 SUPERVISOR_LOCK_DIR="${TMPDIR:-/tmp}/aicc-v2-local-service-supervisor.lock"
 STATE_DIR="${AICC_STATE_DIR:-$HOME/.aicc-v2}"
 STATE_FILE="$STATE_DIR/local-service-supervisor.state"
-HEALTH_FAILURE_THRESHOLD="${AICC_LOCAL_SERVICE_HEALTH_FAILURE_THRESHOLD:-2}"
+HEALTH_FAILURE_THRESHOLD="${AICC_LOCAL_SERVICE_HEALTH_FAILURE_THRESHOLD:-3}"
 MAX_RECOVERY_ATTEMPTS="${AICC_LOCAL_SERVICE_MAX_RECOVERY_ATTEMPTS:-3}"
 STARTUP_FAILURE_THRESHOLD="${AICC_LOCAL_SERVICE_STARTUP_FAILURE_THRESHOLD:-5}"
 STARTUP_GRACE_PERIOD="${AICC_LOCAL_SERVICE_STARTUP_GRACE_PERIOD:-45}"
@@ -110,7 +110,7 @@ health_probe() {
   case "$PROBE_STATUS" in
     4??|5??) HEALTH_REASON="HTTP_$PROBE_STATUS"; return 1 ;;
     2??)
-      if printf '%s' "$PROBE_BODY" | grep -q '"service":"aicc-local-control"' && printf '%s' "$PROBE_BODY" | grep -q '"probeOk":true'; then
+      if printf '%s' "$PROBE_BODY" | grep -q '"service":"aicc-local-control"' && printf '%s' "$PROBE_BODY" | grep -q '"live":true'; then
         return 0
       fi
       HEALTH_REASON="INVALID_HEALTH_RESPONSE"

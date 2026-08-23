@@ -15,7 +15,7 @@ assert.match(output,/LAST_HEALTH_DETAIL = curl timeout with detail/);assert.matc
 assert.match(output,/END_AICC_LOCAL_PAGE_STATUS_V1$/);
 
 const index=readFileSync(join(process.cwd(),'index.html'),'utf8'),main=readFileSync(join(process.cwd(),'src/main.ts'),'utf8'),vite=readFileSync(join(process.cwd(),'vite.config.ts'),'utf8');
-assert.match(index,/FRONTEND_BOOT_TIMEOUT_MS = 5000/,'boot watchdog is bounded');
+assert.match(index,/FRONTEND_BOOT_TIMEOUT_MS = 45000/,'boot watchdog is bounded');
 assert.match(index,/\/api\/aicc-local-page-status/,'failsafe uses independent local status endpoint');
 assert.match(index,/document\.body\.textContent = text/,'failure replaces the unusable page with copyable text');
 assert.match(index,/window\.__AICC_MARK_FRONTEND_READY__/,'normal UI can cancel the watchdog only after usable render');

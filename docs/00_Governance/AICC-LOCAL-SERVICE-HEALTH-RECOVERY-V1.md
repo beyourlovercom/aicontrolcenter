@@ -42,6 +42,24 @@ including `ECONNREFUSED`, `ETIMEDOUT`, `HTTP_500`, `HTTP_404`,
 The implementation must not fabricate a reason; the last reason and available
 diagnostic detail remain observable after recovery attempts fail.
 
+## Liveness versus diagnostic health
+
+The supervisor restart authority uses the lightweight local endpoint `/api/live`.
+That endpoint proves only that the canonical Vite event loop can answer a bounded
+local request; it must not execute repository, Codex, `lsof`, `ps`, Task, Runtime,
+or other diagnostic work.
+
+`/api/health` remains the richer diagnostic projection for UI/status evidence. Its
+repository, port-owner, supervisor, and Codex facts are observable diagnostics,
+but diagnostic latency or a transient diagnostic timeout does not by itself grant
+restart authority. A canonical process that is cold-compiling or resuming from
+sleep must not be killed merely because the diagnostic projection is temporarily
+slow.
+
+Cold frontend boot has a bounded grace window long enough for first-load Vite/Svelte
+compilation. Script/runtime errors still surface immediately through the local page
+failsafe; the timeout path is reserved for a genuinely unresolved boot.
+
 ## Bounded recovery
 
 Consecutive health failures increment only on failed health checks and reset to
