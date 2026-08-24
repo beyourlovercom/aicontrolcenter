@@ -43,4 +43,15 @@ set -e
 grep -q 'CLAUDE_IMPLEMENTATION_CONCURRENCY_LIMIT' /tmp/aicc-governance-test-second.err
 wait "$holder"
 [[ ! -d "$LOCK_DIR" ]]
+
+# Exercise the real child wait/exit forwarding path under zsh. `status` is a
+# readonly zsh parameter, so this guards against regressions in the wrapper.
+set +e
+AICC_CLAUDE_GOVERNANCE_TEST_MODE=1 AICC_CLAUDE_GOVERNANCE_TEST_CHILD_EXIT_CODE=23 "$WRAPPER" -p exit-forward >/tmp/aicc-governance-test-exit.out 2>/tmp/aicc-governance-test-exit.err
+rc=$?
+set -e
+[[ $rc -eq 23 ]]
+! grep -q 'read-only variable' /tmp/aicc-governance-test-exit.err
+[[ ! -d "$LOCK_DIR" ]]
+
 echo 'Claude governed wrapper execution gates passed'

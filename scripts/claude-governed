@@ -136,16 +136,21 @@ trap cleanup_lock EXIT
 audit "LAUNCH_ALLOWED" "YES"
 
 if [[ "${AICC_CLAUDE_GOVERNANCE_TEST_MODE:-0}" == "1" ]]; then
-  sleep "${AICC_CLAUDE_GOVERNANCE_TEST_HOLD_SECONDS:-0}"
-  exit 0
+  if [[ -n "${AICC_CLAUDE_GOVERNANCE_TEST_CHILD_EXIT_CODE:-}" ]]; then
+    ( exit "$AICC_CLAUDE_GOVERNANCE_TEST_CHILD_EXIT_CODE" ) &
+    child_pid=$!
+  else
+    sleep "${AICC_CLAUDE_GOVERNANCE_TEST_HOLD_SECONDS:-0}"
+    exit 0
+  fi
+else
+  "$REAL_CLAUDE" "${args[@]}" &
+  child_pid=$!
 fi
-
-"$REAL_CLAUDE" "${args[@]}" &
-child_pid=$!
 trap 'kill -TERM "$child_pid" 2>/dev/null || true; exit 143' TERM HUP
 trap 'kill -INT "$child_pid" 2>/dev/null || true' INT
 set +e
 wait "$child_pid"
-status=$?
+child_exit_code=$?
 set -e
-exit "$status"
+exit "$child_exit_code"
