@@ -267,6 +267,16 @@ GPT may select a different tier for the next execution.
 `SONNET_5_MODE = EVIDENCE_BASED_ESCALATION_ONLY`
 `PRIMARY_USAGE_CONSTRAINT = FIVE_HOUR_SESSION_LIMIT`
 `PROMO_PRICE_DOES_NOT_OVERRIDE_SESSION_EFFICIENCY = TRUE`
+`CLAUDE_DEFAULT_MODEL_EXECUTABLE_ENFORCEMENT = REQUIRED`
+`CLAUDE_DEFAULT_MODEL_EXACT = claude-sonnet-4-6`
+`CLAUDE_DEFAULT_EFFORT_EXACT = low`
+`CLAUDE_AMBIGUOUS_SONNET_ALIAS = FORBIDDEN`
+`CLAUDE_SONNET_5_ESCALATION_EVIDENCE = REQUIRED`
+`CLAUDE_SONNET_5_ESCALATION_EVIDENCE_ENV = AICC_GPT_ESCALATION_EVIDENCE`
+`CLAUDE_MODEL_DISPATCH_AUDIT = /Users/a/.aicc-remote/CLAUDE_MODEL_DISPATCH_AUDIT.jsonl`
+`CLAUDE_GOVERNED_WRAPPER = /Users/a/.aicc-remote/claude-governed`
+
+The launcher and the machine-level governed wrapper must both enforce these values. A governance document alone is not sufficient enforcement. Sonnet 5 and Sonnet 5 long-context variants must fail closed unless explicit GPT escalation evidence accompanies that named execution; the audit record must never include prompt content or secrets.
 
 During this window, GPT uses the following routing refinement:
 
