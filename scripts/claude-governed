@@ -1,12 +1,15 @@
 #!/bin/zsh
 set -euo pipefail
 REAL_CLAUDE="/Users/a/.local/bin/claude"
-AUDIT_LOG="/Users/a/.aicc-remote/CLAUDE_MODEL_DISPATCH_AUDIT.jsonl"
+STATE_DIR="/Users/a/.aicc-remote"
+AUDIT_LOG="$STATE_DIR/CLAUDE_MODEL_DISPATCH_AUDIT.jsonl"
+LOCK_DIR="$STATE_DIR/claude-cli-implementation.lock"
 DEFAULT_MODEL="claude-sonnet-4-6"
 DEFAULT_EFFORT="low"
 SONNET5="claude-sonnet-5"
+MAX_CONCURRENT_IMPLEMENTATION=1
 
-# Pure metadata/admin commands do not launch a model session.
+# Pure metadata/admin commands never acquire implementation quota/lock.
 if (( $# > 0 )); then
   case "$1" in
     --version|-v|--help|-h|update|install|doctor|mcp|plugin|auth|setup-token)
@@ -18,25 +21,23 @@ fi
 args=("$@")
 model=""
 effort=""
-model_index=0
-effort_index=0
 for ((i=1; i<=${#args}; i++)); do
   a="${args[$i]}"
   case "$a" in
     --model)
       (( i < ${#args} )) || { echo 'CLAUDE_MODEL_VALUE_MISSING' >&2; exit 64; }
-      model="${args[$((i+1))]}"; model_index=$((i+1))
+      model="${args[$((i+1))]}"
       ;;
-    --model=*) model="${a#--model=}"; model_index=$i ;;
+    --model=*) model="${a#--model=}" ;;
     --effort)
       (( i < ${#args} )) || { echo 'CLAUDE_EFFORT_VALUE_MISSING' >&2; exit 64; }
-      effort="${args[$((i+1))]}"; effort_index=$((i+1))
+      effort="${args[$((i+1))]}"
       ;;
-    --effort=*) effort="${a#--effort=}"; effort_index=$i ;;
+    --effort=*) effort="${a#--effort=}" ;;
   esac
 done
 
-if [[ "$model" == "sonnet" ]]; then
+if [[ "$model" == sonnet* ]]; then
   echo 'CLAUDE_AMBIGUOUS_MODEL_ALIAS_FORBIDDEN: use exact model id; default is claude-sonnet-4-6' >&2
   exit 64
 fi
@@ -44,35 +45,107 @@ if [[ -z "$model" ]]; then
   model="$DEFAULT_MODEL"
   args+=(--model "$model")
 fi
-if [[ "$model" == "$SONNET5"* ]]; then
-  evidence="${AICC_GPT_ESCALATION_EVIDENCE:-}"
-  if [[ -z "${evidence//[[:space:]]/}" ]]; then
-    echo 'CLAUDE_SONNET_5_REQUIRES_GPT_ESCALATION_EVIDENCE' >&2
-    exit 64
-  fi
-  [[ -n "$effort" ]] || { effort="medium"; args+=(--effort "$effort"); }
-else
-  evidence=""
-  [[ -n "$effort" ]] || { effort="$DEFAULT_EFFORT"; args+=(--effort "$effort"); }
+if [[ -z "$effort" ]]; then
+  effort="$DEFAULT_EFFORT"
+  args+=(--effort "$effort")
+fi
+case "$effort" in
+  low|medium|high) ;;
+  *) echo "CLAUDE_EFFORT_INVALID: $effort" >&2; exit 64 ;;
+esac
+
+model_evidence="${AICC_GPT_ESCALATION_EVIDENCE:-}"
+effort_evidence="${AICC_GPT_EFFORT_ESCALATION_EVIDENCE:-}"
+subagent_evidence="${AICC_GPT_SUBAGENT_ESCALATION_EVIDENCE:-}"
+
+if [[ "$model" == "$SONNET5"* ]] && [[ -z "${model_evidence//[[:space:]]/}" ]]; then
+  echo 'CLAUDE_SONNET_5_REQUIRES_GPT_ESCALATION_EVIDENCE' >&2
+  exit 64
+fi
+if [[ "$effort" != "$DEFAULT_EFFORT" ]] && [[ -z "${effort_evidence//[[:space:]]/}" ]]; then
+  echo 'CLAUDE_NONLOW_EFFORT_REQUIRES_GPT_EFFORT_ESCALATION_EVIDENCE' >&2
+  exit 64
 fi
 
-mkdir -p "${AUDIT_LOG:h}"
+subagents_allowed="NO"
+if [[ -n "${subagent_evidence//[[:space:]]/}" ]]; then
+  subagents_allowed="YES"
+else
+  # Claude Code subagents are launched through Task; deny it at the CLI layer.
+  args+=(--disallowedTools Task)
+fi
+
+mkdir -p "$STATE_DIR"
 touch "$AUDIT_LOG"
 chmod 600 "$AUDIT_LOG"
-AICC_AUDIT_MODEL="$model" AICC_AUDIT_EFFORT="$effort" AICC_AUDIT_EVIDENCE="$evidence" AICC_AUDIT_CWD="$PWD" python3 - "$AUDIT_LOG" <<'PY'
+
+audit() {
+  local event="$1" lock_acquired="$2"
+  AICC_AUDIT_EVENT="$event" AICC_AUDIT_MODEL="$model" AICC_AUDIT_EFFORT="$effort" \
+  AICC_AUDIT_MODEL_EVIDENCE="$model_evidence" AICC_AUDIT_EFFORT_EVIDENCE="$effort_evidence" \
+  AICC_AUDIT_SUBAGENT_EVIDENCE="$subagent_evidence" AICC_AUDIT_SUBAGENTS_ALLOWED="$subagents_allowed" \
+  AICC_AUDIT_CWD="$PWD" AICC_AUDIT_LOCK="$lock_acquired" python3 - "$AUDIT_LOG" <<'PY'
 import datetime,json,os,sys
 record={
   "timestamp":datetime.datetime.now(datetime.timezone.utc).isoformat(),
+  "event":os.environ["AICC_AUDIT_EVENT"],
   "model":os.environ["AICC_AUDIT_MODEL"],
   "effort":os.environ["AICC_AUDIT_EFFORT"],
-  "gptEscalationEvidence":os.environ["AICC_AUDIT_EVIDENCE"] or None,
+  "gptModelEscalationEvidence":os.environ["AICC_AUDIT_MODEL_EVIDENCE"] or None,
+  "gptEffortEscalationEvidence":os.environ["AICC_AUDIT_EFFORT_EVIDENCE"] or None,
+  "gptSubagentEscalationEvidence":os.environ["AICC_AUDIT_SUBAGENT_EVIDENCE"] or None,
+  "subagentsAllowed":os.environ["AICC_AUDIT_SUBAGENTS_ALLOWED"]=="YES",
+  "maxConcurrentClaudeImplementation":1,
+  "concurrencyLockAcquired":os.environ["AICC_AUDIT_LOCK"]=="YES",
   "cwd":os.environ["AICC_AUDIT_CWD"],
 }
 with open(sys.argv[1],"a",encoding="utf-8") as f:f.write(json.dumps(record,separators=(",",":"))+"\n")
 PY
+}
 
 if [[ "${AICC_CLAUDE_GOVERNANCE_DRY_RUN:-0}" == "1" ]]; then
-  printf 'MODEL=%s\nEFFORT=%s\nESCALATION_EVIDENCE=%s\n' "$model" "$effort" "${evidence:-}"
+  audit "DRY_RUN_ALLOWED" "NO"
+  printf 'MODEL=%s\nEFFORT=%s\nSUBAGENTS_ALLOWED=%s\nMAX_CONCURRENT_IMPLEMENTATION=%s\n' \
+    "$model" "$effort" "$subagents_allowed" "$MAX_CONCURRENT_IMPLEMENTATION"
   exit 0
 fi
-exec "$REAL_CLAUDE" "${args[@]}"
+
+# Single-flight execution gate. Recover only a provably stale wrapper lock.
+lock_acquired="NO"
+if mkdir "$LOCK_DIR" 2>/dev/null; then
+  lock_acquired="YES"
+else
+  holder_pid=""
+  [[ -f "$LOCK_DIR/pid" ]] && holder_pid="$(cat "$LOCK_DIR/pid" 2>/dev/null || true)"
+  if [[ -n "$holder_pid" ]] && ! kill -0 "$holder_pid" 2>/dev/null; then
+    rm -rf "$LOCK_DIR"
+    if mkdir "$LOCK_DIR" 2>/dev/null; then lock_acquired="YES"; fi
+  fi
+fi
+if [[ "$lock_acquired" != "YES" ]]; then
+  audit "REJECTED_CONCURRENCY" "NO"
+  echo 'CLAUDE_IMPLEMENTATION_CONCURRENCY_LIMIT: MAX_CONCURRENT_CLAUDE_IMPLEMENTATION=1' >&2
+  exit 75
+fi
+print -r -- "$$" > "$LOCK_DIR/pid"
+print -r -- "$PWD" > "$LOCK_DIR/cwd"
+print -r -- "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > "$LOCK_DIR/started_at"
+cleanup_lock(){ rm -rf "$LOCK_DIR"; }
+trap cleanup_lock EXIT
+
+audit "LAUNCH_ALLOWED" "YES"
+
+if [[ "${AICC_CLAUDE_GOVERNANCE_TEST_MODE:-0}" == "1" ]]; then
+  sleep "${AICC_CLAUDE_GOVERNANCE_TEST_HOLD_SECONDS:-0}"
+  exit 0
+fi
+
+"$REAL_CLAUDE" "${args[@]}" &
+child_pid=$!
+trap 'kill -TERM "$child_pid" 2>/dev/null || true; exit 143' TERM HUP
+trap 'kill -INT "$child_pid" 2>/dev/null || true' INT
+set +e
+wait "$child_pid"
+status=$?
+set -e
+exit "$status"

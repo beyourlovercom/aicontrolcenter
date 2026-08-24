@@ -275,6 +275,15 @@ GPT may select a different tier for the next execution.
 `CLAUDE_SONNET_5_ESCALATION_EVIDENCE_ENV = AICC_GPT_ESCALATION_EVIDENCE`
 `CLAUDE_MODEL_DISPATCH_AUDIT = /Users/a/.aicc-remote/CLAUDE_MODEL_DISPATCH_AUDIT.jsonl`
 `CLAUDE_GOVERNED_WRAPPER = /Users/a/.aicc-remote/claude-governed`
+`CLAUDE_NONLOW_EFFORT_ESCALATION_EVIDENCE = REQUIRED`
+`CLAUDE_NONLOW_EFFORT_ESCALATION_EVIDENCE_ENV = AICC_GPT_EFFORT_ESCALATION_EVIDENCE`
+`CLAUDE_SUBAGENT_DEFAULT = DENY`
+`CLAUDE_SUBAGENT_ESCALATION_EVIDENCE = REQUIRED`
+`CLAUDE_SUBAGENT_ESCALATION_EVIDENCE_ENV = AICC_GPT_SUBAGENT_ESCALATION_EVIDENCE`
+`MAX_CONCURRENT_CLAUDE_IMPLEMENTATION = 1`
+`CLAUDE_SECOND_IMPLEMENTATION_BEHAVIOR = FAIL_CLOSED_NO_QUEUE`
+`CLAUDE_EXECUTION_LAYER_GATE = MACHINE_WRAPPER_PLUS_AICC_ADAPTER`
+`CLAUDE_EXECUTION_LAYER_POLICY_BYPASS = FORBIDDEN`
 
 The launcher and the machine-level governed wrapper must both enforce these values. A governance document alone is not sufficient enforcement. Sonnet 5 and Sonnet 5 long-context variants must fail closed unless explicit GPT escalation evidence accompanies that named execution; the audit record must never include prompt content or secrets.
 
@@ -359,7 +368,9 @@ Effort is separate from thinking. Current dispatch defaults are:
 
 - Haiku 4.5: omit unsupported effort override;
 - Sonnet 4.6: `low`;
-- Sonnet 5: `medium` by default for complex implementation.
+- Sonnet 5: `low` unless GPT provides explicit effort-escalation evidence for `medium` or `high`.
+
+Any Claude effort above `low` is fail-closed without `AICC_GPT_EFFORT_ESCALATION_EVIDENCE`. Subagents are denied at the Claude CLI tool layer through `--disallowedTools Task` unless `AICC_GPT_SUBAGENT_ESCALATION_EVIDENCE` is present for that named run. The governed machine wrapper allows only one active Claude CLI implementation at a time; a second launch fails immediately rather than queuing silently.
 
 GPT may change effort and may authorize thinking before a named execution. After
 that execution, thinking returns to disabled-by-default unless GPT explicitly
