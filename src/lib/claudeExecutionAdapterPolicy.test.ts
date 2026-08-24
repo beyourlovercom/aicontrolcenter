@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import {EventEmitter} from 'node:events';
-import {DEFAULT_CLAUDE_EFFORT,DEFAULT_CLAUDE_MODEL,ESCALATION_CLAUDE_MODEL,executeClaude,resolveClaudeLaunchPolicy} from './claudeExecutionAdapter.ts';
+import {DEFAULT_CLAUDE_EFFORT,DEFAULT_CLAUDE_MODEL,ESCALATION_CLAUDE_MODEL,GOVERNED_CLAUDE_BIN,executeClaude,resolveClaudeLaunchPolicy} from './claudeExecutionAdapter.ts';
 
+assert.equal(GOVERNED_CLAUDE_BIN,'/opt/homebrew/bin/claude');
 assert.deepEqual(resolveClaudeLaunchPolicy(),{model:DEFAULT_CLAUDE_MODEL,effort:DEFAULT_CLAUDE_EFFORT,gptEscalationEvidence:null,gptEffortEscalationEvidence:null,gptSubagentEscalationEvidence:null,subagentsAllowed:false});
 assert.throws(()=>resolveClaudeLaunchPolicy({model:'sonnet'}),/CLAUDE_AMBIGUOUS_MODEL_ALIAS_FORBIDDEN/);
 assert.throws(()=>resolveClaudeLaunchPolicy({model:ESCALATION_CLAUDE_MODEL}),/CLAUDE_SONNET_5_REQUIRES_GPT_ESCALATION_EVIDENCE/);

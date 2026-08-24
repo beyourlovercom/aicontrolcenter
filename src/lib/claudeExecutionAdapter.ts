@@ -4,6 +4,7 @@ import {once} from 'node:events';
 export const DEFAULT_CLAUDE_MODEL='claude-sonnet-4-6' as const;
 export const DEFAULT_CLAUDE_EFFORT='low' as const;
 export const ESCALATION_CLAUDE_MODEL='claude-sonnet-5' as const;
+export const GOVERNED_CLAUDE_BIN='/opt/homebrew/bin/claude' as const;
 
 export type ClaudeLaunchPolicy={
   model?:string;
@@ -28,7 +29,7 @@ export function resolveClaudeLaunchPolicy(policy:ClaudeLaunchPolicy={}){
   return {model,effort,gptEscalationEvidence,gptEffortEscalationEvidence,gptSubagentEscalationEvidence,subagentsAllowed:Boolean(gptSubagentEscalationEvidence)};
 }
 
-export async function executeClaude(instruction:string,repositoryRoot:string,adapter:ClaudeProcessAdapter={spawn:nodeSpawn},claudeBin='claude',policy:ClaudeLaunchPolicy={}):Promise<ClaudeProcess>{
+export async function executeClaude(instruction:string,repositoryRoot:string,adapter:ClaudeProcessAdapter={spawn:nodeSpawn},claudeBin:string=GOVERNED_CLAUDE_BIN,policy:ClaudeLaunchPolicy={}):Promise<ClaudeProcess>{
   const launch=resolveClaudeLaunchPolicy(policy),startedAt=new Date().toISOString();
   const args=['-p',instruction,'--model',launch.model,'--effort',launch.effort,'--output-format','stream-json','--verbose'];
   if(!launch.subagentsAllowed)args.push('--disallowedTools','Task');
