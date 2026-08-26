@@ -566,3 +566,35 @@ stable Bug ID. Bug recording must not broaden implementation scope.
 `UNRELATED_OPPORTUNISTIC_FIX = FORBIDDEN`
 `AICC_SEVERITY_JUDGMENT = NO`
 `AICC_DECISION_AUTHORITY = 0`
+
+## Local UAT / Verify Worktree And Tauri Cache Hygiene
+
+`TEMP_UAT_VERIFY_WORKTREE_AUTO_CLEANUP = REQUIRED`
+`TEMP_WORKTREE_CLEANUP_METHOD = GIT_WORKTREE_REMOVE_THEN_PRUNE`
+`TEMP_WORKTREE_RM_RF = FORBIDDEN`
+`TEMP_WORKTREE_DIRTY_AUTO_DELETE = FORBIDDEN`
+`TAURI_TARGET_AUTHORITY = NON_AUTHORITATIVE_REBUILDABLE_CACHE`
+`TAURI_TARGET_LONG_TERM_RETENTION = NOT_REQUIRED`
+`TAURI_TARGET_DISK_PRESSURE_CLEANUP = CARGO_CLEAN_ALLOWED`
+
+A temporary UAT / verify worktree must be cleaned up as part of the same
+lifecycle once its UAT or verification purpose is complete. Before automatic
+cleanup, stop services started from that worktree, verify that no running process
+references the worktree, require `git status --porcelain` to be empty, and verify
+that the checked-out commit is preserved by the intended branch, remote, or other
+reviewed Git reference. If any tracked or untracked change would be lost, or the
+commit is not otherwise preserved, cleanup must stop and surface the evidence
+instead of deleting the worktree.
+
+Eligible temporary worktrees must be removed with `git worktree remove <path>`
+and stale registrations cleaned with `git worktree prune`. This lifecycle rule
+does not authorize `git clean`, `reset --hard`, or deletion of active/formal
+implementation worktrees.
+
+`src-tauri/target/` is local Rust/Tauri build output, is Git-ignored, and is not
+source or delivery authority. It may be removed with
+`cargo clean --manifest-path <worktree>/src-tauri/Cargo.toml` when disk pressure
+warrants cleanup, and should normally be cleaned after one-off temporary Tauri
+UAT / verify worktrees are retired. Before `cargo clean`, verify that no active
+`cargo`, `rustc`, `tauri`, or executable launched from that target directory is
+running. The next build may regenerate the cache and may therefore be slower.
