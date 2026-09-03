@@ -2,7 +2,7 @@
 
 | Document ID | Version | Status | Effective | Precedence | Current conformance |
 | --- | --- | --- | --- | --- | --- |
-| AICC-V2-PROJECT-CONSTITUTION-001 | 1.2 | APPROVED_BASELINE | 2026-08-13 | 1 | PASS |
+| AICC-V2-PROJECT-CONSTITUTION-001 | 1.3 | APPROVED_BASELINE | 2026-08-24 | 1 | PASS |
 | AICC-V2-CODE-ARCHITECTURE-STANDARD-001 | 1.0 | APPROVED_BASELINE | 2026-08-12 | 2 | PARTIAL |
 | AICC-V2-UI-INTERACTION-STANDARD-001 | 1.5 (`AICC_ROADMAP_CONTEXT_UI_BASELINE = V1.0`) | FROZEN / APPROVED_BASELINE | 2026-08-18 | 2 | PASS |
 | AICC_STATE_PROJECTION_ARCHITECTURE_V1 | 1.0 | FROZEN / APPROVED_BASELINE | 2026-08-18 | Shared state projection architecture; specialized entity baselines may add stricter policy | Roadmap PASS; Blueprint / PR / Task architecture-only |
@@ -35,6 +35,8 @@ successor and does not silently mutate the meaning of v1.0.
 Version `1.2`, effective `2026-08-13`, is the Owner-approved pass-through
 successor. It preserves v1.0/v1.1 traceability while removing duplicated
 pre-Codex execution authority from AICC.
+
+Version `1.3`, effective `2026-08-24`, is the Owner-approved GPT-directed local-first repository-development successor. It keeps v1.2 product-runtime semantics intact while making Desktop Commander/local Git the default development-control path and GitHub the delivery/review/handoff authority.
 
 ## Change control
 

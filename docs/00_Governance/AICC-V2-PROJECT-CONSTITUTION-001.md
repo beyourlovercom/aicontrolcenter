@@ -1,9 +1,9 @@
 # AICC V2 Project Constitution
 
 - Document ID: `AICC-V2-PROJECT-CONSTITUTION-001`
-- Version: `1.2`
+- Version: `1.3`
 - Status: `APPROVED_BASELINE`
-- Effective: `2026-08-13`
+- Effective: `2026-08-24`
 
 This is the highest project-level engineering authority for AICC V2.
 
@@ -14,6 +14,33 @@ This is the highest project-level engineering authority for AICC V2.
 A lower layer may not override a higher layer. A conflict is reported as
 `BASELINE_CONFLICT` and execution stops until Owner-approved change control is
 complete.
+
+## GPT-Directed Local-First Development Authority v1
+
+- Status: `APPROVED_BASELINE`
+- Effective: `2026-08-24`
+
+`AICC_REPOSITORY_DEVELOPMENT_PRIMARY_PATH = GPT -> DESKTOP_COMMANDER -> OWNER_SELECTED_MACHINE -> LOCAL_REPOSITORY`
+`GPT_ANALYSIS_AUTHORITY = GPT`
+`GPT_DIAGNOSIS_AUTHORITY = GPT`
+`DIRECT_DC_FORENSICS_AND_VALIDATION = DEFAULT`
+`CODING_AGENT_ESCALATION = ONLY_WHEN_IMPLEMENTATION_AUTONOMY_IS_MATERIALLY_USEFUL`
+`ACTIVE_IMPLEMENTATION_EXECUTOR_PER_WORKTREE = ONE`
+`DUPLICATE_CODEX_CLAUDE_EXECUTION = FORBIDDEN_BY_DEFAULT`
+`GITHUB_ROLE = DELIVERY_REVIEW_AND_CROSS_MACHINE_HANDOFF_AUTHORITY`
+`GITHUB_LIVE_EDITING_DEFAULT = NO`
+`AICC_REQUIRED_FOR_AICC_REPOSITORY_DEVELOPMENT = NO`
+`AICC_PRODUCT_RUNTIME_CONTRACT_CHANGED_BY_THIS_RULE = NO`
+
+GPT owns repository investigation, architecture analysis, failure diagnosis, task decomposition, validation classification, and next-step decisions. Desktop Commander is the default execution bridge for direct repository reads, search, logs, `git status` / `git diff`, focused tests, builds, and small bounded edits. These operations do not require consuming Codex or Claude quota.
+
+Escalate to exactly one Owner-assigned coding agent only when autonomous coding, multi-file implementation, or an iterative implementation loop is materially useful. Do not run Codex and Claude on the same implementation merely to duplicate work unless the Owner explicitly requests independent verification.
+
+GitHub is not the default live editing or repository-discovery surface. Local Git and the assigned worktree are the implementation workspace; after local validation, GitHub remains the exact-commit review, delivery, PR, merge, and cross-machine code handoff authority.
+
+AICC may display, persist, transport, and observe development executions, but AICC is not a mandatory dependency for developing or repairing AICC itself. An AICC runtime/Bridge failure must not block GPT from using Desktop Commander and the Owner-selected machine to inspect, diagnose, validate, or repair the repository.
+
+Current Owner-declared topology: the China machine is the direct local repository/Desktop Commander control host; Claude implementation execution is assigned to the remote US machine. Binary presence, PATH discovery, or another machine's local installation does not reassign that role; executor assignment is Owner-controlled.
 
 ## AICC Scope Ownership Baseline v1
 
@@ -132,6 +159,8 @@ the five gates. This Constitution update does not authorize those expansions.
 Version `1.0` was the approved baseline effective `2026-08-12`. Version `1.1`
 is an Owner-approved governance update and preserves the meaning and history of
 that prior baseline; it supersedes it without silently rewriting its record.
+Version `1.2` remains the Owner-approved pass-through control-plane baseline.
+Version `1.3`, effective `2026-08-24`, adds the Owner-approved GPT-directed local-first repository-development authority without changing the AICC product runtime contract.
 
 Current conformance is assessed separately from the approved status of this
 document and its baselines.

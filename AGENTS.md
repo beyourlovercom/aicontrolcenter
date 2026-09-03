@@ -68,6 +68,28 @@ Legacy shared files directly under `~/.aicc-v2/` may be used only as bounded
 migration/read fallback while parity is proven. New execution/result behavior must
 not add new primary authority to those legacy shared files.
 
+## GPT-Directed Local-First Development Authority
+
+`AICC_GPT_DC_LOCAL_FIRST_DEVELOPMENT_V1 = FROZEN`
+
+`PRIMARY_DEVELOPMENT_PATH = GPT -> DESKTOP_COMMANDER -> OWNER_SELECTED_MACHINE -> LOCAL_REPOSITORY`
+`GPT_ANALYSIS_AUTHORITY = GPT`
+`GPT_DIAGNOSIS_AUTHORITY = GPT`
+`DC_DIRECT_FORENSICS_FIRST = TRUE`
+`DC_DIRECT_VALIDATION_FIRST = TRUE`
+`CODING_AGENT_ESCALATION_ONLY_WHEN_MATERIALLY_USEFUL = TRUE`
+`ONE_ACTIVE_IMPLEMENTATION_EXECUTOR_PER_WORKTREE = TRUE`
+`DUPLICATE_CODEX_CLAUDE_EXECUTION = FORBIDDEN_BY_DEFAULT`
+`AICC_REQUIRED_FOR_SELF_DEVELOPMENT = NO`
+`GITHUB_LIVE_EDITING_DEFAULT = NO`
+`GITHUB_DELIVERY_REVIEW_HANDOFF_AUTHORITY = TRUE`
+
+Default repository investigation, diagnosis, search, logs, `git status`, `git diff`, focused tests, builds, and small bounded edits should be performed by GPT through Desktop Commander before consuming Codex or Claude quota. Use one Owner-assigned coding agent only when autonomous or multi-file implementation is materially useful.
+
+Current Owner-declared topology: the China machine is the direct local repository and Desktop Commander control host; Claude implementation execution is assigned to the remote US machine. Do not infer executor role from binary presence or PATH; Owner assignment controls the role.
+
+AICC remains a transport, runtime, evidence, history, and UI surface when used, but it is not a mandatory dependency for inspecting, diagnosing, repairing, or upgrading the AICC repository itself. GitHub remains the exact-commit delivery, review, PR/merge, and cross-machine code-handoff authority, not the default live editing surface.
+
 ## GitHub-Reviewed Development Loop Authority
 
 `AICC_GITHUB_REVIEW_LOOP_V1 = FROZEN`
@@ -186,6 +208,24 @@ must never transfer analysis authority to Claude.
 `CLAUDE_BROAD_TEST_SWEEPS = FORBIDDEN_BY_DEFAULT`
 `CLAUDE_GIT_DIFF_REVIEW = FORBIDDEN_BY_DEFAULT`
 `CLAUDE_TEST_FAILURE_CLASSIFICATION = FORBIDDEN_BY_DEFAULT`
+
+### Claude quota priority
+
+`CLAUDE_QUOTA_PRIORITY = FROZEN`
+`P0 = CONFIRMED_PRODUCTION_IMPLEMENTATION`
+`P1 = FOCUSED_REGRESSION_REQUIRED_FOR_THAT_IMPLEMENTATION`
+
+`CLAUDE_REPOSITORY_WIDE_SCAN = FORBIDDEN_BY_DEFAULT`
+`CLAUDE_GREP_SEARCH = FORBIDDEN_BY_DEFAULT`
+`CLAUDE_ARCHITECTURE_DISCOVERY = FORBIDDEN_BY_DEFAULT`
+`CLAUDE_GIT_DIFF_REVIEW = FORBIDDEN_BY_DEFAULT`
+`CLAUDE_TEST_FAILURE_CLASSIFICATION = FORBIDDEN_BY_DEFAULT`
+`CLAUDE_BROAD_REGRESSION_SWEEP = FORBIDDEN_BY_DEFAULT`
+`CLAUDE_GITHUB_REVIEW = FORBIDDEN_BY_DEFAULT`
+`CLAUDE_NEXT_TASK_DISCOVERY = FORBIDDEN_BY_DEFAULT`
+
+Claude quota is reserved first for confirmed production implementation and second for the focused regression required to prove that implementation. All discovery, repository-wide search, architecture analysis, broad regression, review, and next-task selection remain GPT-owned unless the Owner explicitly overrides this rule for a named execution.
+
 `CLAUDE_SELF_ADVANCE = FORBIDDEN`
 `CLAUDE_AUTONOMOUS_REMEDIATION = FORBIDDEN`
 `CLAUDE_BROAD_CODEBASE_EXPLORATION = FORBIDDEN_BY_DEFAULT`
