@@ -1,6 +1,5 @@
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
-import {readFormalWorkPackageRegistry,isRegisteredFormalWorkPackage} from './controlService.ts';
 import {parseExecutionV1,projectCanonicalTaskRegistry,reconcileTaskBindingRecord,reconcileTaskBindingRecords,type CanonicalTaskRecord} from './bridgeCore.ts';
 import {buildGlobalTaskGroups} from './globalTaskView.ts';
 import {scopeTasksToEntity} from './entityScope.ts';
@@ -8,12 +7,12 @@ import {reconcileRuntimeEntityBinding,type RuntimeState} from './runtimeManager.
 import {BRIDGE_TASK_CATALOG,FORMAL_BRIDGE_WP_ID,classifyEntityIdentity,parseFormalWorkPackageRegistry,resolveTaskEntityBinding} from './taskEntityBinding.ts';
 
 const roadmap=readFileSync(new URL('../../docs/10_Planning_Roadmap/01_LIVING_ROADMAP.md',import.meta.url),'utf8');
-const registry=readFormalWorkPackageRegistry();
+const registry=parseFormalWorkPackageRegistry(roadmap);
 const bridgeRegistration=registry.get(FORMAL_BRIDGE_WP_ID);
 assert.equal(bridgeRegistration?.milestoneId,'M8','formal Bridge WP resolves through Roadmap registry to M8');
 assert.equal(bridgeRegistration?.milestoneTitle,'M8 — AICC Lifecycle Intelligence');
-assert.equal(isRegisteredFormalWorkPackage(FORMAL_BRIDGE_WP_ID),true);
-assert.equal(isRegisteredFormalWorkPackage('AICC-M8.2.1.6-BRIDGE-CODEX-MODEL-SELECTOR-001'),false,'pseudo-WP cannot acquire formal Roadmap authority');
+assert.equal(registry.has(FORMAL_BRIDGE_WP_ID),true);
+assert.equal(registry.has('AICC-M8.2.1.6-BRIDGE-CODEX-MODEL-SELECTOR-001'),false,'pseudo-WP cannot acquire formal Roadmap authority');
 assert.equal(classifyEntityIdentity('AICC-M8.2.1.6-BRIDGE-CODEX-MODEL-SELECTOR-001',registry),'TASK');
 assert.equal(classifyEntityIdentity(FORMAL_BRIDGE_WP_ID,registry),'FORMAL_WP');
 

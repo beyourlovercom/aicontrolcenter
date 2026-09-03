@@ -74,6 +74,7 @@ and GitHub PR/CI evidence without adding new product behavior.
   - `npm test` reaches `runtimeSupervisor.integration.test.ts` with every preceding pretest/main-test case PASS;
   - China Mac Node `26.7.0` + `node-pty@1.1.0` cannot spawn even `/bin/echo` (`posix_spawnp failed`), while repository GitHub CI is pinned to Node 22. Therefore the supervisor integration result is reserved for exact-head GitHub Node-22 CI rather than being misclassified as a product regression.
 - GitHub CI Run #64 on Node `22.23.2` passed OpenSpec, secret scan, absolute-path scan, and Typecheck, then exposed a platform-specific stale fixture in `localServiceRecovery.test.ts`: the test hard-coded a macOS repository path, while `sameCanonicalPath()` correctly fails closed for nonexistent paths on Ubuntu. The fixture now uses the real test repository `process.cwd()`; production canonical-path logic is unchanged.
+- GitHub CI Run #65 passed through `localServiceRecovery.test.ts` and exposed the next CI-only fixture coupling: `taskWpRoadmapBindingNormalization.test.ts` called `controlService.readFormalWorkPackageRegistry()`, which intentionally targets the Owner-selected local repository path. The contract test now parses the already-loaded checkout Roadmap directly; local-service repository configuration is unchanged.
 
 ## Next Exact Gate
 
