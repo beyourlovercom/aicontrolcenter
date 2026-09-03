@@ -20,7 +20,9 @@ assert.match(actions,/label:'查看当前 UAT'/,'UAT navigation remains availabl
 assert.equal((actions.match(/class="action primary"/g)??[]).length,1,'one primary Owner action');
 assert.match(app,/resolveOwnerStatusProjection\(context,bridgeOutbox\)/,'all owner status surfaces use the shared projection');
 assert.match(app,/resolveOwnerWorkflowStages\(context,bridgeOutbox\)/,'workflow uses the shared owner projection');
-assert.match(app,/feedback\.state!==\'IDLE\'/,'idle feedback does not duplicate the current action card');
+const feedbackIsland=readFileSync(new URL('../components/GlobalFeedbackIsland.svelte',import.meta.url),'utf8');
+assert.equal((app.match(/<GlobalFeedbackIsland/g)??[]).length,1,'one global feedback renderer owns short feedback');
+assert.match(feedbackIsland,/feedback\.state==='IDLE'/,'the global feedback renderer owns idle suppression');
 assert.equal(app.includes('等待 Owner 操作'),false,'duplicate idle owner action copy removed');
 assert.match(header,/statusOverride/,'entity header consumes owner status projection');
 assert.match(workflow,/getStatusPresentationMeta\(stage\.status\)/,'workflow labels use status presentation metadata');

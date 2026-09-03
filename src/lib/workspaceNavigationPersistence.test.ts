@@ -11,6 +11,7 @@ assert.match(app,/if\(selectedInboxId&&!items\.some\(\(item:any\)=>item\.id===se
 assert.match(app,/persistedRun=selectedRunId&&runtimeHistory\.some/,'persisted Run is validated against canonical history');
 assert.match(app,/\['STARTING','RUNNING','STOPPING'\]\.includes\(next\.runtime\.phase\)\?next\.runtime\.runId:persistedRun/,'canonical active Run overrides stale persisted Run');
 assert.doesNotMatch(app,/selectedEntity=hydrated;activeTab='概览'/,'refresh does not reset a valid tab to Overview');
-assert.match(app,/finally\(startIncomingInboxPolling\)/,'incoming polling remains enabled after startup');
+assert.match(app,/then\(\(\)=>\{if\(isActiveRuntime[\s\S]*startIncomingInboxPolling\(\)\}\)/,'incoming polling starts after initial snapshot, PR, and Bridge hydration');
+assert.match(app,/if\(bridgeTimer\)clearInterval\(bridgeTimer\)/,'incoming polling is released on destroy');
 assert.equal((app.match(/aicc-v2-(?:selected-entity|workspace-navigation)/g)??[]).filter(key=>key==='aicc-v2-selected-entity').length,0,'legacy navigation key is not used');
 console.log('workspace navigation persistence tests passed');

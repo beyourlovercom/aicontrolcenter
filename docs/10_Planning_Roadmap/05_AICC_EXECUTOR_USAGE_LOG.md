@@ -52,7 +52,7 @@ Five consecutive Claude executions form one cycle. After execution 5, record the
 `QUOTA_LIMIT_TRIGGERED_IN_CYCLE = YES` only when an actual quota/session-limit event occurs. HTTP 429/session quota is quota evidence but does not count as a substantive implementation failure.
 
 Raw per-execution telemetry buffer on the US Mac:
-`/Users/a/.aicc-remote/CLAUDE_USAGE_CYCLE_BUFFER.jsonl`
+`~/.aicc-remote/CLAUDE_USAGE_CYCLE_BUFFER.jsonl`
 
 The governed human-readable record is this Markdown file. Raw buffer data is non-authoritative runtime evidence.
 

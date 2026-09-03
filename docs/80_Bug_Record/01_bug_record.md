@@ -587,7 +587,7 @@ NOT_YET
   `readNotifications()` replay still executing after one second in
   `SyncProcessRunner`/`kevent`; 1,500 project-registry git invocations had
   started before the controlled process was terminated. The final observed
-  start was `git -C /Users/a/AI/007/AIcontrolcenter rev-parse
+  start was `git -C <AICC_REPO> rev-parse
   --show-toplevel`; it was terminated by the forensic harness, so it does not
   prove that this individual command naturally hangs. Combined with the two
   frozen Vite samples that show the identical `SyncProcessRunner` boundary

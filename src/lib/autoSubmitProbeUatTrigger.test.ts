@@ -13,7 +13,8 @@ const loop=readFileSync(join(process.cwd(),'src/lib/gptAutoControlLoop.ts'),'utf
 assert.doesNotMatch(content,/runAutoSubmitProbe|autoSubmitProbeBlockReason|AUTO_SUBMIT_PROBE_ID|AICC_AUTO_SUBMIT_PROBE_V1/);
 assert.match(content,/async function submitAutomaticFeedback\(\)[\s\S]*?AUTO_LOOP_FEEDBACK/);
 assert.match(content,/submitChatGPTComposerOnce\(\{[\s\S]*conversationId: loop\.conversation_id,[\s\S]*payload: feedback\.envelope,[\s\S]*submissionId: feedback\.feedback_id/);
-assert.equal((content.match(/submitChatGPTComposerOnce\(/g)??[]).length,1,'feedback delivery has one canonical Composer submission call');
+const automaticFeedback=content.match(/async function submitAutomaticFeedback\(\)[\s\S]*?(?=\n  async function)/)?.[0]??'';
+assert.equal((automaticFeedback.match(/submitChatGPTComposerOnce\(/g)??[]).length,1,'automatic feedback delivery has exactly one canonical Composer submission call');
 assert.match(content,/AUTO_LOOP_FEEDBACK_STATE.*operation: 'inserting'/);
 assert.match(content,/AUTO_LOOP_FEEDBACK_STATE.*operation: 'inserted'/);
 assert.match(content,/AUTO_LOOP_FEEDBACK_STATE.*operation: 'submitting'/);

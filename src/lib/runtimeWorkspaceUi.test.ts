@@ -13,7 +13,7 @@ assert.match(entityWorkspace,/slot name="workflow"/);
 assert.match(entityWorkspace,/StatusTabs/);
 assert.match(entityWorkspace,/StatusTabs active=\{activeTab\}/,'tab underline receives the selected tab state');
 assert.match(entityWorkspace,/active-tab-content/);
-assert.match(main,/mount\(App, \{ target: document\.getElementById\('app'\)! \}\)/,'App is mounted through the real browser entry point');
+assert.match(main,/const target=document\.getElementById\('app'\)!;[\s\S]*mount\(App, \{ target \}\)/,'App is mounted through the real browser entry point');
 assert.match(app,/from '\.\/lib\/runtimeSelection\.ts'/,'App mount path uses a browser-safe runtime selector');
 assert.doesNotMatch(app,/from '\.\/lib\/runtimeManager\.ts'/,'App mount path does not import Node-only runtime manager code');
 assert.match(app,/WORKSPACE_TABS=\['运行','UAT','概览','证据','授权'\]/,'WP tabs use the canonical order');
@@ -47,6 +47,7 @@ assert.match(workspace,/RuntimeMonitor runtime=\{focused\}/,'Runtime Monitor ret
 assert.match(app,/class="status panel"[\s\S]*EntityEvidencePanel[\s\S]*<\/aside>/);
 assert.doesNotMatch(app,/class="status panel"[\s\S]*bridge-core-card/);
 assert.doesNotMatch(app,/RuntimeMonitor[\s\S]*StatusTabs/);
-assert.match(app,/recoveryToastTimer=window\.setTimeout/);
-assert.match(css,/\.recovery-toast/);
+assert.match(app,/title:'本地服务已恢复'[\s\S]*code:'SERVICE_RECOVERED'/,'service recovery publishes through the global feedback authority');
+assert.doesNotMatch(app,/recoveryToastTimer|service-recovery-toast/,'module-local recovery toast authority remains removed');
+assert.doesNotMatch(css,/\.recovery-toast/,'legacy recovery toast CSS remains removed');
 console.log('runtime workspace UI contract tests passed');

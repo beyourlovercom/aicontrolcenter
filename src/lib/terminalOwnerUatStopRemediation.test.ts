@@ -27,6 +27,11 @@ function expectedRoundThreeTurn(kind: string) {
   return {conversationId, controlLoopId, expectedTurn: readExpectedControlTurn(conversationId)!};
 }
 
+
+function terminalConsumeInput(turn: ReturnType<typeof expectedRoundThreeTurn>, assistant_message_id: string, response: string) {
+  return {conversation_id: turn.conversationId, assistant_message_id, response, control_loop_id: turn.controlLoopId, binding_epoch: turn.expectedTurn.binding_epoch, feedback_key: turn.expectedTurn.feedback_key, expected_gpt_turn_id: turn.expectedTurn.expected_gpt_turn_id, projectId, repositoryIdentity};
+}
+
 assert.equal(classifyControlContract('AICC_EXECUTION_V1'), 'EXECUTABLE_CONTROL');
 assert.equal(classifyControlContract('AICC_OWNER_UAT_V1'), 'TERMINAL_OWNER_UAT');
 assert.equal(classifyControlContract('AICC_WP_COMPLETE_V1'), 'TERMINAL_COMPLETE');
@@ -34,7 +39,7 @@ assert.equal(classifyControlContract('AICC_BLOCKED_V1'), 'TERMINAL_BLOCKED');
 
 const owner = expectedRoundThreeTurn('owner-uat');
 const ownerResponse = 'AICC_OWNER_UAT_V1\nCONTROL_LOOP_TEST: PASS\nREASON: THREE_AUTOMATIC_ROUNDS_COMPLETED';
-const ownerResult = consumeGptControl({conversation_id: owner.conversationId, assistant_message_id: `assistant-owner-${suffix}`, response: ownerResponse}, submit, launch);
+const ownerResult = consumeGptControl(terminalConsumeInput(owner, `assistant-owner-${suffix}`, ownerResponse), submit, launch);
 assert.equal(ownerResult.ok, true);
 assert.equal(ownerResult.contract?.class, 'TERMINAL_OWNER_UAT');
 assert.equal(ownerResult.expected_turn?.feedback_key, owner.expectedTurn.feedback_key, 'terminal response correlates to the exact preceding feedback turn');
@@ -44,22 +49,22 @@ assert.equal(readControlLoop(owner.controlLoopId)?.status, 'WAITING_OWNER_UAT');
 assert.equal(projectAutoLoopStatus(readControlLoop(owner.controlLoopId)).state, 'WAITING_OWNER_UAT');
 assert.equal(submitCount, 0); assert.equal(launchCount, 0, 'Owner UAT creates no Inbox, Task, Execution, Run, or fourth Luna launch');
 
-const replay = consumeGptControl({conversation_id: owner.conversationId, assistant_message_id: `assistant-owner-${suffix}`, response: ownerResponse}, submit, launch);
+const replay = consumeGptControl(terminalConsumeInput(owner, `assistant-owner-${suffix}`, ownerResponse), submit, launch);
 assert.equal(replay.ok, true); assert.equal(replay.duplicate, true); assert.equal(replay.contract?.type, 'AICC_OWNER_UAT_V1');
-const rerenderReplay = consumeGptControl({conversation_id: owner.conversationId, assistant_message_id: `assistant-owner-rerender-${suffix}`, response: ownerResponse}, submit, launch);
+const rerenderReplay = consumeGptControl(terminalConsumeInput(owner, `assistant-owner-rerender-${suffix}`, ownerResponse), submit, launch);
 assert.equal(rerenderReplay.ok, true); assert.equal(rerenderReplay.duplicate, true, 'message hash is exactly once across rerender identity drift');
 const fourthExecution = `AICC_EXECUTION_V1\nINSTRUCTION_ID: forbidden-round-4-${suffix}\nENTITY_TYPE: WORK_PACKAGE\nENTITY_ID: ${wpId}\nEXECUTION_TYPE: READ_ONLY_AUDIT\nREPOSITORY: /Users/a/AI/007/AIcontrolcenter\nBRANCH: rebuild/aicc-v2\nSANDBOX: read-only\nREQUIRES_AUTHORIZATION: false\n\nINSTRUCTION_BEGIN\nForbidden fourth run.\nINSTRUCTION_END`;
-assert.equal(consumeGptControl({conversation_id: owner.conversationId, assistant_message_id: `assistant-fourth-${suffix}`, response: fourthExecution}, submit, launch).code, 'AUTO_LOOP_STOPPED');
+assert.equal(consumeGptControl({conversation_id: owner.conversationId, assistant_message_id: `assistant-fourth-${suffix}`, response: fourthExecution, control_loop_id: owner.controlLoopId, projectId, repositoryIdentity}, submit, launch).code, 'AUTO_LOOP_STOPPED');
 assert.equal(submitCount, 0); assert.equal(launchCount, 0);
 
 const complete = expectedRoundThreeTurn('complete');
-const completeResult = consumeGptControl({conversation_id: complete.conversationId, assistant_message_id: `assistant-complete-${suffix}`, response: 'AICC_WP_COMPLETE_V1\nRESULT: PASS'}, submit, launch);
+const completeResult = consumeGptControl(terminalConsumeInput(complete, `assistant-complete-${suffix}`, 'AICC_WP_COMPLETE_V1\nRESULT: PASS'), submit, launch);
 assert.equal(completeResult.contract?.class, 'TERMINAL_COMPLETE');
 assert.equal(completeResult.expected_turn?.state, 'CONSUMED');
 assert.equal(readControlLoop(complete.controlLoopId)?.status, 'COMPLETE');
 
 const blocked = expectedRoundThreeTurn('blocked');
-const blockedResult = consumeGptControl({conversation_id: blocked.conversationId, assistant_message_id: `assistant-blocked-${suffix}`, response: 'AICC_BLOCKED_V1\nBLOCKER_CODE: OWNER_DECISION_REQUIRED'}, submit, launch);
+const blockedResult = consumeGptControl(terminalConsumeInput(blocked, `assistant-blocked-${suffix}`, 'AICC_BLOCKED_V1\nBLOCKER_CODE: OWNER_DECISION_REQUIRED'), submit, launch);
 assert.equal(blockedResult.contract?.class, 'TERMINAL_BLOCKED');
 assert.equal(blockedResult.expected_turn?.state, 'CONSUMED');
 assert.equal(readControlLoop(blocked.controlLoopId)?.status, 'BLOCKED');
@@ -70,10 +75,11 @@ assert.equal(submitCount, 0); assert.equal(launchCount, 0);
 
 const content = readFileSync(join(process.cwd(), 'web-adapter/chrome-extension-current/content.js'), 'utf8');
 const consumeUi = content.match(/async function consumeNewAssistantControl\(\)[\s\S]*?(?=\n  async function sendInstruction)/)?.[0] ?? '';
-assert.match(consumeUi, /parsed\.class === 'EXECUTABLE_CONTROL' && !followsExpectedFeedbackTurn/, 'terminal controls reach canonical server correlation despite unstable DOM identity');
-assert.doesNotMatch(consumeUi, /if \(!followsExpectedFeedbackTurn\(current\.message, status\.expected_turn\)\)/, 'terminal controls cannot trigger the historical false correlation failure');
+assert.match(consumeUi, /expectedAssistantCandidates\(status\.expected_turn\)/, 'all automatic controls are selected only from the exact canonical feedback turn');
+assert.match(consumeUi, /if \(!followsExpectedFeedbackTurn\(current\.message, status\.expected_turn\)\) return null/, 'terminal and executable controls retain the same exact-turn DOM safety gate before canonical server correlation');
 assert.match(consumeUi, /clearStatus\(\); lastErrorSignature = ''/, 'successful terminal consumption clears stale failure presentation');
-assert.match(content, /data-aicc-runtime-auto-loop/); assert.match(content, /data-aicc-runtime-gpt-return/);
-assert.match(content, /terminalState \? 'CONFIRMED' : ''/, 'unified Runtime Result projects confirmed GPT terminal return');
+assert.match(content, /data-aicc-auto-loop-status/); assert.match(content, /data-aicc-auto-loop-details/);
+assert.match(content, /autoLoop\.control_loop_state\?\.control_loop_status/, 'canonical Auto Loop summary projects terminal control-loop state');
+assert.match(content, /autoLoop\.expected_turn\?\.expected_gpt_turn_id/, 'terminal projection retains exact expected-turn evidence');
 
 console.log('M8.2.1.8.9 terminal Owner UAT stop remediation regression passed');

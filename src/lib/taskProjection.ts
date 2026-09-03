@@ -4,7 +4,7 @@ import type {AiccGlobalStateReadModel} from './globalStateReadModel.ts';
 
 export const TASK_PROJECTION_SCHEMA_VERSION='aicc.task.projection.v1';
 export const TASK_PROJECTION_CACHE_KEY='aicc.task.snapshot.v1';
-export type TaskProjectionItem=CanonicalTaskRecord & {runtimeStatus:string|null;canonicalResult:CanonicalExecutionResult|null;resultId:string|null;resultHash:string|null};
+export type TaskProjectionItem=Omit<CanonicalTaskRecord,'canonicalResult'|'resultId'|'resultHash'> & {runtimeStatus:string|null;canonicalResult:CanonicalExecutionResult|null;resultId:string|null;resultHash:string|null};
 export type TaskProjection={schemaVersion:typeof TASK_PROJECTION_SCHEMA_VERSION;generatedAt:string;items:TaskProjectionItem[];legacyCount:number;projectId?:string;repositoryIdentity?:string;projectContextRevision?:number;globalProjectionRevision?:number;entityRevisions?:AiccGlobalStateReadModel['entityRevisions']};
 export function buildTaskProjection(registry:TaskRegistryProjection,runtimes:RuntimeRecord[]=[]):TaskProjection{
   const scopedKey=(value:{projectId?:string;repositoryIdentity?:string},runId?:string)=>value.projectId&&value.repositoryIdentity&&runId?`${value.projectId}\x00${value.repositoryIdentity}\x00${runId}`:null;

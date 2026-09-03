@@ -134,7 +134,11 @@ function mergeTaskStoreRecords(previous:ProjectTaskStoreRecord|undefined,incomin
   if(previous.taskId!==incoming.taskId||!sameScope(previous,recordScope(incoming)))throw new Error('TASK_IDENTITY_MISMATCH');
   const byRun=new Map<string,ProjectTaskRunRecord>();
   for(const run of normalizedRuns(previous))byRun.set(run.runId,run);
-  for(const next of normalizedRuns(incoming)){const prior=byRun.get(next.runId);assertResultImmutable(prior?.canonicalResult,next.canonicalResult);byRun.set(next.runId,{...prior,...definedRecordFields(next),canonicalResult:next.canonicalResult??prior?.canonicalResult,resultAvailability:next.canonicalResult||prior?.canonicalResult?'AVAILABLE':'NOT_AVAILABLE'})}
+  for(const next of normalizedRuns(incoming)){
+    const prior=byRun.get(next.runId);assertResultImmutable(prior?.canonicalResult,next.canonicalResult);
+    const mergedRun:ProjectTaskRunRecord={...prior,...definedRecordFields(next),runId:next.runId,executionId:next.executionId,instructionId:next.instructionId,status:next.status,canonicalResult:next.canonicalResult??prior?.canonicalResult,resultAvailability:next.canonicalResult||prior?.canonicalResult?'AVAILABLE':'NOT_AVAILABLE'};
+    byRun.set(next.runId,mergedRun);
+  }
   const runs=[...byRun.values()];
   const latestRunId=incoming.latestRunId??incoming.runId??previous.latestRunId??previous.runId;
   const latestRun=latestRunId?runs.find(run=>run.runId===latestRunId):undefined;

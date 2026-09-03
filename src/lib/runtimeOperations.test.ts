@@ -11,7 +11,7 @@ const selection=readFileSync(new URL('./runtimeSelection.ts',import.meta.url),'u
 assert.match(monitor,/运行结果/,'main result panel is owned by Runtime Monitor');
 assert.equal((workspace.match(/class="runtime-run-actions"/g)??[]).length,0,'Run history no longer owns competing row actions');
 assert.doesNotMatch(workspace,/runtime-disclosures/,'Work Package current panel has no shared action toolbar');
-assert.match(workspace,/exactResultForRun\(lifecycleProjection,run\.runId\)\?\.canonical\?\.rawResult/,'result availability is read from the exact Phase 5 RUN_TO_RESULT projection');
+assert.match(workspace,/canonicalTaskResultForRun\(task,run\.runId\)\?\.rawResult/,'result availability is read from the exact Project Task Registry result authority');
 assert.doesNotMatch(workspace,/canonicalResult\?\.rawResult/,'Runtime Workspace does not reintroduce raw Runtime canonicalResult authority');
 assert.match(workspace,/onCopyResult\(runId\)/,'copy delegates on explicit Owner click');
 assert.match(monitor,/runtime-result-content/,'result body is expandable');

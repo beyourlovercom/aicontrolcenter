@@ -60,8 +60,8 @@ assert.ok(readExpectedControlTurns().some(turn=>turn.feedback_key===feedback.fee
 
 const content=readFileSync(join(process.cwd(),'web-adapter/chrome-extension-current/content.js'),'utf8');
 const worker=readFileSync(join(process.cwd(),'web-adapter/chrome-extension-current/service-worker.js'),'utf8');
-const consumeUi=content.match(/async function consumeNewAssistantControl\(\)[\s\S]*?(?=\n  async function sendInstruction)/)?.[0]??'';
-const consumeWorker=worker.match(/async function autoLoopControl\(message\)[\s\S]*?(?=\nfunction returnEnvelope)/)?.[0]??'';
+const consumeUi=content.match(/async function consumeNewAssistantControl\(\)[\s\S]*?(?=\n  function addPanelStyle)/)?.[0]??'';
+const consumeWorker=worker.match(/async function autoLoopControl\(message\)[\s\S]*?(?=\nasync function autoLoopCorrelationRecover)/)?.[0]??'';
 assert.doesNotMatch(consumeUi,/control_loop_id: status\.loop|binding_epoch: status\.loop|feedback_key: autoLoop/,'panel/default loop identity is absent from control consume');
 assert.match(consumeUi,/conversation_id: currentConversationId\(\), assistant_message_id: current\.id, response: current\.text/);
 assert.match(consumeWorker,/const evidence = \{ conversation_id: message\.conversation_id, assistant_message_id: message\.assistant_message_id, response: message\.response/);

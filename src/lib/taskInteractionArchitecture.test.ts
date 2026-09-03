@@ -35,7 +35,7 @@ assert.match(app,/tasks=\{scopedTaskRecords\} \{selectedTaskId\} onSelectTask=\{
 assert.match(feed,/CanonicalTaskFeedRow/,'WP Task feed reuses one shared row');
 assert.match(feedRow,/TaskTitleTrigger taskId=\{row\.taskId\}[\s\S]*onSelect=\{onSelectTask\}/,'shared row delegates canonical task_id');
 assert.doesNotMatch(selectionAuthority,/setGlobalTab|selectedEntity=/,'Task inspection preserves the current page');
-assert.match(app,/<aside[^\n]*class="status panel">\{#if activeGlobalTab==='TASK'&&selectedTask\}<TaskRightContextInspector/,'one selected Task owns the existing right rail only in Task workspace');
+assert.match(app,/\{:else if activeGlobalTab==='TASK'&&selectedTask\}<TaskRightContextInspector/,'one selected Task owns the existing right rail only in Task workspace');
 assert.match(app,/function clearSelectedTask\(\)\{selectedTaskId=null;/,'close deselects the Task without route mutation');
 assert.match(app,/\{:else\}<div class="panel-header">[\s\S]*EntityEvidencePanel/,'close restores the prior page right-side projection');
 assert.equal((app.match(/<TaskRightContextInspector/g)??[]).length,1,'one Inspector mount point');
@@ -50,7 +50,7 @@ assert.doesNotMatch(app,/scrollIntoView[\s\S]{0,120}selectCanonicalTask|selectCa
 
 assert.doesNotMatch(roadmap,/TaskTitleTrigger|onSelectTask|selectCanonicalTask/,'Roadmap does not fabricate Task links without canonical Task records');
 assert.doesNotMatch(globalPr,/TaskTitleTrigger|onSelectTask|selectCanonicalTask/,'PR projection does not infer task_id from PR text');
-assert.match(runtime,/focusedTask=focused\?tasks\.find\(task=>task\?\.runId===focused\.runId\|\|task\?\.executionId===focused\.runId\)/,'Current Execution uses exact canonical Task correlation');
+assert.match(runtime,/focusedTask=focused\?tasks\.find\(task=>\(task\?\.latestRunId\?\?task\?\.runId\?\?task\?\.executionId\)===focused\.runId\|\|task\?\.runs\?\.some\(\(run:any\)=>run\?\.runId===focused\.runId\)\)\?\?null:null/,'Current Execution uses explicit canonical Task↔Run identities, including durable run history');
 assert.doesNotMatch(runtime,/runtime-history-card|runtime-outbox/,'execution history and Outbox do not become competing Task lists');
 
 const componentFiles=readdirSync(new URL('../components/',import.meta.url),{recursive:true}).filter(file=>typeof file==='string'&&file.endsWith('.svelte')) as string[];

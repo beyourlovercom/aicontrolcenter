@@ -26,7 +26,7 @@ assert.doesNotMatch(workspace,/runtime-history-card|runtime-outbox|bridge-inbox-
 assert.match(workspace,/bridgeInbox:any\[\]=\[\]/,'Inbox data contract remains available to runtime integration');
 assert.match(workspace,/bridgeOutbox:any\[\]=\[\]/,'Outbox data contract remains available to runtime integration');
 assert.match(workspace,/RuntimeMonitor runtime={focused}/,'canonical Result remains projected through Runtime Monitor');
-assert.match(workspace,/focusedTask=focused\?tasks\.find\(task=>task\?\.runId===focused\.runId\|\|task\?\.executionId===focused\.runId\)/,'Current Execution links only an exact Task correlation');
+assert.match(workspace,/focusedTask=focused\?tasks\.find\(task=>\(task\?\.latestRunId\?\?task\?\.runId\?\?task\?\.executionId\)===focused\.runId\|\|task\?\.runs\?\.some\(\(run:any\)=>run\?\.runId===focused\.runId\)\)\?\?null:null/,'Current Execution links only explicit canonical Task↔Run identities, including durable run history');
 assert.match(workspace,/Canonical Task[\s\S]*<TaskTitleTrigger taskId={focusedTask\.taskId}/,'Current Execution reuses the shared trigger');
 assert.match(row,/min-height:36px/,'rows have stable compact height');
 assert.match(row,/text-overflow:ellipsis/,'row fields are overflow safe');

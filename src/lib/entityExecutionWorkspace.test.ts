@@ -7,12 +7,12 @@ const runtime=readFileSync(new URL('./runtimeManager.ts',import.meta.url),'utf8'
 const bridge=readFileSync(new URL('./bridgeCore.ts',import.meta.url),'utf8');
 const model=readFileSync(new URL('./model/entityTypes.ts',import.meta.url),'utf8');
 
-assert(app.includes('RuntimeWorkspace runtime={displayRuntime}'),'WP uses the shared execution workspace');
-assert(app.includes('RuntimeWorkspace entityType="pull_request"'),'PR uses the shared execution workspace');
-assert.match(app,/RuntimeWorkspace entityType=\{selectedTaskWorkPackageContext\?'work_package':'global_task'\}[\s\S]*runtime=\{selectedTaskRuntime\}/,'selected Task uses the shared execution workspace');
+assert.match(app,/RuntimeWorkspace projectContext=\{activeRoadmapProject\} runtime=\{displayRuntime\}/,'WP uses the shared execution workspace with canonical project context');
+assert.match(app,/RuntimeWorkspace projectContext=\{activeRoadmapProject\} entityType="pull_request"/,'PR uses the shared execution workspace with canonical project context');
+assert.match(app,/RuntimeWorkspace projectContext=\{activeRoadmapProject\} entityType=\{selectedTaskWorkPackageContext\?'work_package':'global_task'\}[\s\S]*runtime=\{selectedTaskRuntime\}/,'selected Task uses the shared execution workspace');
 assert.equal((app.match(/<RuntimeWorkspace/g)??[]).length,3,'one shared runtime implementation is composed for selected Task, WP, and PR');
 assert(workspace.includes('粘贴指令')&&workspace.includes('发送到 AICC 执行'),'shared workspace exposes the single explicit submission action');
-assert(workspace.includes('当前执行')&&workspace.includes('运行监控 / 实时活动')&&workspace.includes('CanonicalTaskFeed'),'shared workspace exposes canonical Task, execution, and monitor surfaces');
+assert(workspace.includes('当前执行')&&workspace.includes('运行摘要')&&workspace.includes('Runtime Monitor')&&workspace.includes('CanonicalTaskFeed'),'shared workspace exposes canonical Task, execution, and monitor surfaces');
 assert(!workspace.includes('结果发件箱')&&!workspace.includes('runtime-history-card'),'Outbox and Run records are not competing Task lists');
 assert(runtime.includes("entityType?: 'global_task'|'work_package'|'pull_request'")&&runtime.includes('entityId?: string'),'runtime state has explicit global, WP and PR entity binding');
 assert(runtime.includes('item.entityType === entityType && item.entityId === entityId'),'runtime reads are entity scoped');

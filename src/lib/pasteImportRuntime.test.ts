@@ -13,8 +13,8 @@ assert(workspace.includes('instructionState'),'runtime instruction state is visi
 assert(app.includes('async function pasteInstruction()'),'paste handler exists');
 const pasteHandler=app.match(/async function pasteInstruction\(\)[\s\S]*?\n  async function importInstruction/)?.[0]??'';
 assert(!pasteHandler.includes('importBridge'),'paste does not invoke import');
-assert(app.includes('async function importInstruction()'),'explicit import handler exists');
-assert(app.includes('const item=await importBridge(bridgePayload)'),'import action invokes the canonical import path');
+assert(app.includes('async function importInstruction(launchMetadata?:{model?:string;reasoning?:string})'),'explicit import handler exists with launch profile metadata');
+assert(app.includes('const item=await importBridge(bridgePayload,launchMetadata)'),'import action invokes the canonical import path with launch profile metadata');
 assert(!app.includes("instructionState='IMPORTED_PENDING'"),'explicit import does not leave a manual execution gate');
 assert(!app.includes("if(autoExecute)return"),'Auto Execute does not gate explicit submission');
 assert(app.includes('EMPTY_CLIPBOARD'),'empty clipboard has an actionable error');

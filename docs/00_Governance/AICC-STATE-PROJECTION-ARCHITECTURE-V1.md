@@ -154,10 +154,10 @@ this startup reconciliation is allowed and is not an external truth sync.
 The AICC V2 projection family is:
 
 ```text
-/Users/a/.aicc-v2/roadmap-projection.json
-/Users/a/.aicc-v2/blueprint-projection.json
-/Users/a/.aicc-v2/pr-projection.json
-/Users/a/.aicc-v2/task-projection.json
+~/.aicc-v2/roadmap-projection.json
+~/.aicc-v2/blueprint-projection.json
+~/.aicc-v2/pr-projection.json
+~/.aicc-v2/task-projection.json
 ```
 
 The standard browser cache keys are:

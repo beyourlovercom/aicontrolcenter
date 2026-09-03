@@ -796,7 +796,7 @@ export function consumeGptControl(input: {conversation_id: string; assistant_mes
   const consumedFeedbackTurnCandidates = input.feedback_key ? state.controls.filter(item => item.conversation_id === input.conversation_id && item.feedback_key === input.feedback_key && (!input.control_loop_id || item.control_loop_id === input.control_loop_id) && (!input.binding_epoch || item.binding_epoch === input.binding_epoch) && (!input.expected_gpt_turn_id || item.expected_gpt_turn_id === input.expected_gpt_turn_id)) : [];
   const consumedFeedbackTurn = scopeFilter(consumedFeedbackTurnCandidates, scope, 'AMBIGUOUS_FEEDBACK_TURN')[0];
   if (consumedFeedbackTurn) return {ok: true, claimGranted: false, duplicate: true, claim: consumedFeedbackTurn};
-  if (input.control_loop_id) { const suppliedLoopCandidates = state.loops.filter(item => item.control_loop_id === input.control_loop_id); const suppliedLoop = scopeFilter(suppliedLoopCandidates, scope, 'AMBIGUOUS_CONTROL_LOOP_ID')[0]; if (suppliedLoop && suppliedLoop.conversation_id !== input.conversation_id) return {ok: false, claimGranted: false, code: 'CROSS_CONVERSATION_ISOLATION', reason: 'The Assistant response belongs to another conversation.'}; }
+  if (input.control_loop_id) { const suppliedLoopCandidates = state.loops.filter(item => item.control_loop_id === input.control_loop_id); const suppliedLoop = scopeFilter(suppliedLoopCandidates, scope, 'AMBIGUOUS_CONTROL_LOOP_ID')[0]; if (suppliedLoop && suppliedLoop.conversation_id !== input.conversation_id) return {ok: false, claimGranted: false, code: 'CROSS_CONVERSATION_ISOLATION', reason: 'The Assistant response belongs to another conversation.'}; if (suppliedLoop && !suppliedLoop.binding_active) return {ok: false, claimGranted: false, code: 'CONTROL_LOOP_NOT_BOUND', reason: 'Automatic control is disabled until the Conversation is explicitly locked again.'}; }
   const candidates = scopeFilter(state.expected_turns.filter(turn => turn.conversation_id === input.conversation_id && ['PENDING', 'GPT_CONTROL_RECEIVED', 'SUBMITTING_AICC'].includes(turn.state)), scope, 'AMBIGUOUS_EXPECTED_TURN');
   const expectedTurn = input.expected_gpt_turn_id ? candidates.find(turn => turn.expected_gpt_turn_id === input.expected_gpt_turn_id && (!input.control_loop_id || turn.control_loop_id === input.control_loop_id) && (!input.binding_epoch || turn.binding_epoch === input.binding_epoch)) : undefined;
   if (!expectedTurn) {
@@ -850,16 +850,17 @@ export function consumeGptControl(input: {conversation_id: string; assistant_mes
 
 export function recordExecutionResult(control_loop_id: string, report: BridgeReport): FeedbackRecord | null {
   if (!report.runId || !report.projectId || !report.repositoryIdentity) return null;
-  const resolved=readProjectTaskResult({projectId:report.projectId,repositoryIdentity:report.repositoryIdentity},report.runId);
-  const result=resolved?.canonicalResult??null;
-  if (!result || !result.resultId || !result.resultHash) return null;
-  const loop = readControlLoop(control_loop_id, {projectId: report.projectId, repositoryIdentity: report.repositoryIdentity});
+  const scope={projectId:report.projectId,repositoryIdentity:report.repositoryIdentity};
+  const loop = readControlLoop(control_loop_id, scope);
   if (!loop) {
     let existsElsewhere = false;
     try { existsElsewhere = Boolean(readControlLoop(control_loop_id)); } catch { existsElsewhere = true; }
     if (existsElsewhere) throw new Error('FOREIGN_EXECUTION_RESULT_PROJECT_SCOPE');
     return null;
   }
+  const resolved=readProjectTaskResult(scope,report.runId);
+  const result=resolved?.canonicalResult??null;
+  if (!result || !result.resultId || !result.resultHash) return null;
   return buildFeedbackRecord({control_loop_id, projectId: report.projectId, repositoryIdentity: report.repositoryIdentity, formal_wp_id: loop.formal_wp_id, binding_epoch: loop.binding_epoch, current_pr_id: report.entityType === 'PULL_REQUEST' ? report.entityId : null, task_id: resolved!.task.taskId, instruction_id: result.instructionId, execution_id: result.executionId, run_id: report.runId, source: GPT_AUTO_CONTROL_LOOP, runtime: 'CODEX_CLI', model: report.model, result_id: result.resultId, result_hash: result.resultHash, execution_result: result.rawResult, conversation_id: loop.conversation_id});
 }
 

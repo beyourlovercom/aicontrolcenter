@@ -11,7 +11,7 @@ assert.match(monitor,/技术详情[\s\S]*运行结果/,'Runtime Result follows t
 assert.match(monitor,/resultText/,'panel consumes a resolved result');
 assert.match(monitor,/等待 Codex 结果…/,'missing-result state is truthful and never projects empty success');
 assert.match(monitor,/runtime-result-copy/,'copy control is compact and visible');
-assert.match(workspace,/focused\?exactResultForRun\(lifecycleProjection,focused\.runId\)/,'exact selected Run binding resolves the Layer 2 Result source');
+assert.match(workspace,/focused&&focusedTask\?canonicalTaskResultForRun\(focusedTask,focused\.runId\)\?\.rawResult/,'exact selected Run binding resolves the Project Task Registry Result source');
 assert.match(workspace,/onCopyResult\(runId\)/,'copy delegates to the canonical action');
 assert.equal((workspace.match(/runtime-result-detail/g)??[]).length,0,'no second inline historical result implementation');
 assert.doesNotMatch(workspace,/runtime-history-card|runtime-run-actions/,'historical Run browsing does not duplicate Result detail');

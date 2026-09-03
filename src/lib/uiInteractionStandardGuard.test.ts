@@ -20,7 +20,7 @@ const canonicalTaskFeedRow=readFileSync(new URL('../components/CanonicalTaskFeed
 const runtimeWorkspace=readFileSync(new URL('../components/entity/RuntimeWorkspace.svelte',import.meta.url),'utf8');
 const bridgeCore=readFileSync(new URL('./bridgeCore.ts',import.meta.url),'utf8');
 
-assert.match(standard,/Version: `1\.3`/);
+assert.match(standard,/Version: `1\.5`/);
 assert.match(standard,/Owner Action Zone is contextual, not a command toolbar/i);
 assert.match(standard,/PRIMARY OWNER ACTION <= 1/);
 assert.match(standard,/当前操作区/);
@@ -30,12 +30,13 @@ assert.match(standard,/Stop appears only while/);
 assert.match(standard,/Retry appears[\s\S]*only after/);
 assert.match(standard,/action surface consumes canonical state and remains a projection/i);
 assert.match(standard,/Owner blocked status single source/i);
-assert.match(registry,/AICC-V2-UI-INTERACTION-STANDARD-001 \| 1\.3 \| FROZEN \/ APPROVED_BASELINE/);
+assert.match(registry,/AICC-V2-UI-INTERACTION-STANDARD-001 \| 1\.5(?: \(`AICC_ROADMAP_CONTEXT_UI_BASELINE = V1\.0`\))? \| FROZEN \/ APPROVED_BASELINE/);
 assert.match(wpActions,/context\.availableActions/);
 assert.match(prActions,/context\.availableActions/);
 assert.match(app,/resolveOwnerStatusProjection\(context,bridgeOutbox\)/);
 assert.match(app,/resolveOwnerWorkflowStages\(context,bridgeOutbox\)/);
-assert.match(app,/projectOwnerRoadmapNodes\(snapshot\.roadmap\.value\?\?\[\],selectedEntity,ownerStatus\)/);
+assert.match(app,/projectWpRoadmapNodes\(roadmapProjection\?\.nodes\?\?\[\],wpProjection\)/,'Roadmap state consumes canonical WP Layer 2');
+assert.doesNotMatch(app,/projectOwnerRoadmapNodes\(/,'Owner status must not override canonical Roadmap projection');
 assert.match(header,/statusOverride/);
 assert.match(workflow,/getStatusPresentationMeta\(stage\.status\)/);
 assert.match(roadmap,/mapRoadmapStatusToVisualFamily/);

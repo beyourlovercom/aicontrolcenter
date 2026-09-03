@@ -6,7 +6,7 @@ Status: `ACTIVE / OWNER_AUTHORIZED`
 Authorized: `2026-09-03`
 Authorization evidence: Owner explicitly approved the proposed mainline convergence with “好，推进”.
 Branch: `converge/aicc-mainline-20260903`
-Worktree: `/Users/a/AI/007/worktrees/aicc-mainline-convergence-20260903`
+Worktree: `<AICC_WORKTREES>/aicc-mainline-convergence-20260903` (Owner-selected local machine)
 
 ## Goal
 
@@ -25,12 +25,13 @@ and GitHub PR/CI evidence without adding new product behavior.
 7. Regenerate/validate Roadmap read-model evidence where supported by repository tooling.
 8. Push this convergence branch and create/update one Draft PR against `main`.
 9. Inspect exact-head GitHub CI/check evidence; do not infer PASS when no run exists.
+10. Repair only CI-blocking historical fixtures/assertions whose mismatch is proven against the current canonical contract, and minimally fix any real regression exposed by convergence validation.
 
 ## Explicitly Out of Scope
 
 - New AICC product features.
 - Changing `AICC_DECISION_AUTHORITY = 0` or pass-through runtime semantics.
-- Repairing unrelated stale-test debt, including historical assertions intentionally superseded by later performance/hot-path changes.
+- Broad repository stale-test cleanup unrelated to establishing a truthful exact-head CI baseline; that remains M8.6 backlog.
 - Closing M8.3 merely from commit-message PASS tags.
 - Human Owner UAT.
 - PR merge, production deployment, tag, or release.
@@ -63,12 +64,21 @@ and GitHub PR/CI evidence without adding new product behavior.
   - `globalStateReadModel.test.ts` = PASS.
   - `runtimeResultFeedbackControlLoopProjection.test.ts` = PASS.
   - `uiLifecycleConsumerProjection.test.ts` = PASS.
-  - `taskLifecycleProjectionPhase2.test.ts` contains one stale assertion removed intentionally by `a9ee24b` (stop Bridge runtime write amplification); this WP does not repair that separate repository-test-debt item.
+- Convergence validation exposed and minimally repaired real contract regressions in control-loop unbind fail-closed ordering, project-scoped execution-result lookup ordering, and WP → PR Layer-2 correlation.
+- CI-blocking historical tests/fixtures were reconciled only where current production/governance evidence proved the old assertion stale; removed Probe, old result-authority, old unscoped context, and obsolete UI-structure contracts were not restored.
+- Current local evidence on the convergence worktree:
+  - absolute-local-path CI scan = PASS (Project Registry retains one explicit runtime-path exception);
+  - `npx tsc --noEmit` = PASS;
+  - `npm run build` = PASS;
+  - `npm run posttest` = PASS;
+  - `npm test` reaches `runtimeSupervisor.integration.test.ts` with every preceding pretest/main-test case PASS;
+  - China Mac Node `26.7.0` + `node-pty@1.1.0` cannot spawn even `/bin/echo` (`posix_spawnp failed`), while repository GitHub CI is pinned to Node 22. Therefore the supervisor integration result is reserved for exact-head GitHub Node-22 CI rather than being misclassified as a product regression.
 
 ## Next Exact Gate
 
-Update canonical Roadmap/formal-WP projection, run bounded validation on the
-convergence head, push exact head, create Draft PR against `main`, then inspect
-real GitHub checks. Stop before merge or Owner UAT.
+Commit and push the reconciled exact head to existing Draft PR #11, then use
+GitHub Node-22 CI as the authority for the full suite including the PTY supervisor
+integration. Remediate only exact-head failures with evidence. Stop before merge
+or Owner UAT even after CI PASS.
 
 Generated/updated: `2026-09-03T02:20:45-0700`

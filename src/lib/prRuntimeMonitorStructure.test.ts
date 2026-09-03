@@ -9,7 +9,7 @@ assert.equal((app.match(/<RuntimeWorkspace/g)??[]).length,3,'selected Task, WP, 
 assert.equal((workspace.match(/<RuntimeMonitor/g)??[]).length,1,'the canonical RuntimeMonitor has one implementation');
 assert(workspace.includes('emptyTitle'), 'runtime workspace preserves empty-state inputs');
 assert.match(app,/entityType="pull_request"[\s\S]*bridgePayload=\{bridgePayload\}/,'PR uses the shared executable workspace contract');
-assert.match(app,/runtime=\{selectedTaskRuntime\} history=\{selectedTaskRuntimeHistory\} selectedRunId=\{selectedTask\.runId\?\?null\}/,'selected Task uses exact canonical Run binding');
+assert.match(app,/runtime=\{selectedTaskRuntime\} history=\{selectedTaskRuntimeHistory\} selectedRunId=\{selectedTaskRuntimeId\}/,'selected Task uses exact canonical Run binding');
 assert.doesNotMatch(app,/entityType="pull_request"[\s\S]{0,800}showInbox=\{false\}/,'PR execution workspace is not disabled');
 assert(actions.includes("'PR_CREATE_DRAFT'"),'Draft PR action remains available through contextual resolver');
 assert(eligibility.includes("action('PR_CREATE_DRAFT'"),'Draft PR action is owned by the explicit Owner action path');

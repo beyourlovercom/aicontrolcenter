@@ -1,6 +1,6 @@
 import type {AiccStatus,RoadmapNode} from '../workflow.ts';
 import {resolveRoadmapSyncState} from './roadmapSync.ts';
-import type {AiccProjectSnapshot,AuthorizationRecord,FormalWorkPackage,HumanUatRecord,LifecycleEvidenceRecord,PullRequestRecord,RepositoryState,RuntimeRecord,SourceValue,WorkPackagePhaseProgress,WorkPackagePhaseStatus} from './entityTypes.ts';
+import type {AiccProjectSnapshot,AuthorizationRecord,CanonicalExecutionResult,FormalWorkPackage,HumanUatRecord,LifecycleEvidenceRecord,PullRequestRecord,RepositoryState,RuntimeRecord,SourceValue,WorkPackagePhaseProgress,WorkPackagePhaseStatus} from './entityTypes.ts';
 import {resolveProgressTruthState} from './progressTruth.ts';
 import type {CiEvidence,ReviewEvidence} from '../exactHeadEvidence.ts';
 import {extractRoadmapMilestoneWorkPackageIds,extractRoadmapWorkPackageTitle} from '../taskEntityBinding.ts';

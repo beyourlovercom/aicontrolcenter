@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import {bindControlLoop, rebindControlLoop, unlockControlLoop, enableControlLoop, stopControlLoopByOwner, readControlLoop, readControlLoopByConversation, claimFeedback, markFeedbackInserting, markFeedbackInserted, markFeedbackSubmitting, markFeedbackSubmitted, completeFeedback, consumeGptControl, recordExecutionResult} from './gptAutoControlLoop.ts';
 import type {InboxItem, BridgeReport} from './bridgeCore.ts';
+import {persistRuntimeTaskState} from './projectTaskStore.ts';
 
 const controlLoopId = 'colliding-control-loop-id';
 const conversationId = 'colliding-conversation-id';
@@ -94,9 +95,11 @@ assert.equal(readControlLoop(controlLoopId, scopeB)?.conversation_id, conversati
 
 // recordExecutionResult must resolve loop-by-scope before any project validation, and fail closed for a third unrelated project.
 const scopeC = {projectId: 'project-scope-isolation-c', repositoryIdentity: 'repo-scope-isolation-c'};
-const report: BridgeReport = {inboxId: 'inbox-1', executionId: 'execution-record', runId: 'run-record', entityType: 'work_package', entityId: wpId, workPackageId: wpId, executionType: 'READ_ONLY_AUDIT', branch: 'rebuild/aicc-v2', expectedHead: 'head', currentHead: 'head', worktree: '/tmp', status: 'COMPLETED', canonicalResult: {version: 'AICC_EXECUTION_RESULT_V1', executionId: 'execution-record', projectId: scopeC.projectId, repositoryIdentity: scopeC.repositoryIdentity, rawResult: 'RESULT', receivedAt: new Date().toISOString(), resultId: 'result-record', resultHash: 'hash-record'}};
+const report: BridgeReport = {inboxId: 'inbox-1', projectId: scopeC.projectId, repositoryIdentity: scopeC.repositoryIdentity, executionId: 'execution-record', runId: 'run-record', entityType: 'work_package', entityId: wpId, workPackageId: wpId, executionType: 'READ_ONLY_AUDIT', branch: 'rebuild/aicc-v2', expectedHead: 'head', currentHead: 'head', worktree: '/tmp', status: 'COMPLETED', canonicalResult: {version: 'AICC_EXECUTION_RESULT_V1', executionId: 'execution-record', projectId: scopeC.projectId, repositoryIdentity: scopeC.repositoryIdentity, rawResult: 'RESULT', receivedAt: new Date().toISOString(), resultId: 'result-record', resultHash: 'hash-record'}};
 assert.throws(() => recordExecutionResult(controlLoopId, report), /FOREIGN_EXECUTION_RESULT_PROJECT_SCOPE/, 'a colliding raw control_loop_id owned by A and B must not silently accept a result scoped to project C');
-const reportForB: BridgeReport = {...report, canonicalResult: {...report.canonicalResult!, projectId: scopeB.projectId, repositoryIdentity: scopeB.repositoryIdentity}};
+const resultForB={...report.canonicalResult!, projectId: scopeB.projectId, repositoryIdentity: scopeB.repositoryIdentity};
+persistRuntimeTaskState({...scopeB,runId:'run-record',taskId:'task-record-b',inboxId:'inbox-record-b',instructionId:'instruction-record-b',instructionText:'record result scope isolation',entityType:'work_package',entityId:wpId,workPackageId:wpId,branch:'rebuild/aicc-v2',phase:'COMPLETED',canonicalResult:resultForB});
+const reportForB: BridgeReport = {...report, projectId: scopeB.projectId, repositoryIdentity: scopeB.repositoryIdentity, canonicalResult: resultForB};
 const recorded = recordExecutionResult(controlLoopId, reportForB);
 assert.equal(recorded?.projectId, scopeB.projectId, 'result scoped to B resolves to B\'s loop, never A\'s, despite the colliding raw control_loop_id');
 

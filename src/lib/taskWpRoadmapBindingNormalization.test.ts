@@ -43,7 +43,7 @@ const family=[legacyTask,task('task-result','m8.2.1.4-codex-result-insert-reliab
 const first=reconcileTaskBindingRecords(family,registry),second=reconcileTaskBindingRecords(first,registry);
 assert.deepEqual(second,first,'binding reconciliation is idempotent');
 assert.equal(new Set(first.map(item=>item.formal_wp_id)).size,1,'multiple Bridge tasks project under one formal WP');
-assert.equal(scopeTasksToEntity(first,{type:'work_package',id:FORMAL_BRIDGE_WP_ID}).length,2,'WP detail finds tasks through normalized ownership');
+assert.equal(scopeTasksToEntity(first,{type:'work_package',id:FORMAL_BRIDGE_WP_ID},FIXTURE_SCOPE).length,2,'WP detail finds tasks through normalized project-scoped ownership');
 assert.equal(buildGlobalTaskGroups(first).recentCompleted.length,2,'normalized tasks remain globally visible without duplicate rows');
 assert.equal(projectCanonicalTaskRegistry([...first,{...first[0]}]).items.filter(item=>item.taskId==='task-model-selector').length,1,'canonical task identity still prevents duplicate rows');
 

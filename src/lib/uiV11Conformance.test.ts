@@ -9,7 +9,8 @@ const standard=readFileSync(new URL('../../docs/00_Governance/AICC-V2-UI-INTERAC
 
 assert(!app.includes('class="service-action-feedback"'),'normal service status is not a floating persistent pill');
 assert(app.includes('本地服务：{serviceState}'),'header remains the persistent service status location');
-assert(app.includes('recoveryToastTimer=window.setTimeout'),'service recovery feedback is transient');
+assert(app.includes("code:'SERVICE_RECOVERED'"),'service recovery feedback is published through the global feedback island');
+assert(!app.includes('recoveryToastTimer')&&!app.includes('service-recovery-toast'),'module-local recovery toast authority remains removed');
 assert.equal((app.match(/let [^;]*activeTab=/g)??[]).length,1,'one tab selection authority exists');
 assert(!app.includes('displayTab')&&!app.includes('contentTab')&&!app.includes('underlineTab'),'no competing tab state exists');
 assert(tabs.includes('class:active={active===tab}')&&tabs.includes('onSelect(tab)'),'tab indicator and content use the same selected tab');
