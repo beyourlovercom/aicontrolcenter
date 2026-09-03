@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import {applyHealthObservation,beginRecoveryEpoch,classifyLocalService,HEALTH_FAILURE_THRESHOLD,isCanonicalListener,manualRestart,MAX_RECOVERY_ATTEMPTS,reconnectEffect,recoveryActions,type ServiceObservation,type SupervisorHealthState} from './localServiceRecovery.ts';
 
-const root='/Users/a/AI/007/AIcontrolcenter';
+const root=process.cwd();
 const canonical={pid:101,command:`node ${root}/node_modules/.bin/vite --host 127.0.0.1`,cwd:root};
 const observe=(overrides:Partial<ServiceObservation>={}):ServiceObservation=>({listener:canonical,health:{responded:true,canonicalIdentity:true,ok:true},consecutiveHealthFailures:0,repositoryRoot:root,...overrides});
 const state=(overrides:Partial<SupervisorHealthState>={}):SupervisorHealthState=>({state:'PROCESS_ALIVE_HEALTHY',managedPid:101,consecutiveFailures:0,recoveryEpoch:0,recoveryAttempts:0,...overrides});
