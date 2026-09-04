@@ -52,6 +52,26 @@ Add the smallest trustworthy Codex execution core to AICC V3 while preserving Pr
 - no UI inference of execution state;
 - exact-head V3 CI passes before Owner UAT.
 
+## Frozen V3.5 contract
+
+- Authority: `docs/40_Architecture/AICC-V3-CODEX-RUN-CONTRACT.md`.
+- One project-scoped executor lease; second concurrent start is rejected.
+- One durable Run ID bound to ProjectContext + existing Task/WP.
+- Codex cwd comes only from `ProjectContext.repository.path`.
+- Initial invocation: `codex exec --json --strict-config -C <repo> -s workspace-write --disable multi_agent -`.
+- Dangerous sandbox/approval bypass is forbidden.
+- Detached AICC executor worker owns Codex and append-only events.
+- Run transport states never imply semantic PASS/FAIL/BLOCKED.
+- V3.5 has no resume/retry/result rewrite/PR/GPT-return behavior.
+
+## Runtime preflight evidence
+
+- CN Mac Codex path: `/opt/homebrew/bin/codex`.
+- Codex CLI: `0.149.0`.
+- `codex login status`: ChatGPT login present.
+- `codex doctor --json`: overall status `ok`; provider and WebSocket reachability `ok`.
+- `codex exec --json`, explicit `-C`, `workspace-write`, feature disable, and session resume are supported by this CLI.
+
 ## Next exact gate
 
-Freeze the executor/run persistence and API contract before invoking Codex or adding execution UI.
+Implement executor worker + project-scoped lease/Run persistence + the five frozen runtime APIs with focused tests. Do not add execution UI or invoke Codex for implementation UAT until the runtime/API layer passes locally.

@@ -1,6 +1,6 @@
 # AICC V3 Living Roadmap
 
-Roadmap-Revision: 9
+Roadmap-Revision: 10
 Updated-At: 2026-09-04
 Status: `ACTIVE`
 
@@ -9,7 +9,7 @@ Status: `ACTIVE`
 `V3.5 — Codex Execution`
 
 Current Work Package: `AICC-V3-CODEX-EXECUTION-001`
-Current implementation phase: `V3.5.0 — executor contract and runtime gate`
+Current implementation phase: `V3.5.1 — executor worker and runtime API implementation`
 
 ## Milestones
 
@@ -56,4 +56,4 @@ Total implementation budget: `55–70h` including bounded rework.
 
 ## Next exact gate
 
-Freeze the V3.5 Codex executor contract on CN Mac: one executor lease, one Run identity, explicit start/stop, append-only event stream, and ProjectContext-bound execution. Do not invoke Codex or add UI before that contract is committed and CI passes.
+Commit/push the frozen V3.5 Codex Run contract and require exact-head V3 CI PASS. Then implement the executor worker, lease/Run persistence, and frozen runtime APIs on CN Mac before adding any execution UI.
