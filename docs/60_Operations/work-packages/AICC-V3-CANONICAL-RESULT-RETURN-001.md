@@ -1,6 +1,6 @@
 # AICC-V3-CANONICAL-RESULT-RETURN-001
 
-Status: `ACTIVE / OWNER_AUTHORIZED`
+Status: `CLOSED / OWNER_UAT_PASS`
 
 ## Objective
 
@@ -64,6 +64,6 @@ Add the smallest canonical Result layer for AICC V3 so one completed Run can pro
 - Browser has no Result write/edit/delete/semantic-status control and does not derive PASS from Result presence or exitCode.
 - CN Mac Node 22 suite: `35/35 PASS`.
 
-## Next exact gate
+## Closure
 
-Commit/push the V3.6.2 UI checkpoint, require exact-head V3 CI PASS, restart CN Mac 1420 on that exact head, verify the prior real V3.5 Run materializes and reloads the exact Result, and stop at Owner Human UAT. Do not begin V3.7 before explicit Owner pass.
+V3.6 is closed by explicit Human Owner UAT pass. No further V3.6 implementation is authorized.

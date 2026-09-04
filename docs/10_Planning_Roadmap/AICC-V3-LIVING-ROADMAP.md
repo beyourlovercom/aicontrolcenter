@@ -1,15 +1,15 @@
 # AICC V3 Living Roadmap
 
-Roadmap-Revision: 16
+Roadmap-Revision: 17
 Updated-At: 2026-09-04
 Status: `ACTIVE`
 
 ## Current milestone
 
-`V3.6 — Canonical Result Return`
+`V3.7 — PR Delivery`
 
-Current Work Package: `AICC-V3-CANONICAL-RESULT-RETURN-001`
-Current implementation phase: `V3.6.3 — exact-head CI and Owner UAT`
+Current Work Package: `AICC-V3-PR-DELIVERY-001`
+Current implementation phase: `V3.7.0 — PR delivery contract and GitHub facts gate`
 
 ## Milestones
 
@@ -56,4 +56,4 @@ Total implementation budget: `55–70h` including bounded rework.
 
 ## Next exact gate
 
-Implement only the frozen V3.6 Result persistence/materialization layer and `GET /api/runs/:id/result` with focused tests. Require exact content preservation, one Run→one Result, source-event linkage, project/worktree isolation, reload-safe retrieval, and fail-closed missing-source behavior. Do not add Result UI until this gate passes.
+Freeze the V3.7 PR Delivery contract: repository/branch/head authority, existing-PR lookup, Draft PR create semantics, exact-head CI facts, and no automatic merge. Do not create or mutate any PR in this gate.

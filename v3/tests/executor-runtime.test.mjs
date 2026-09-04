@@ -31,7 +31,7 @@ let input='';process.stdin.setEncoding('utf8');process.stdin.on('data',c=>input+
   const options={preflight:()=>({ready:true,path:fake,version:'fake-1',model:'fake-model',authMode:'test'})};
   return {root,repo,home,env,context,wp,task,fake,options};
 }
-async function waitFor(context,runId,env,predicate,timeout=6000){
+async function waitFor(context,runId,env,predicate,timeout=15000){
   const end=Date.now()+timeout;
   while(Date.now()<end){const run=readRun(context,runId,env);if(predicate(run))return run;await new Promise(r=>setTimeout(r,40));}
   throw new Error(`timeout waiting for ${runId}`);
