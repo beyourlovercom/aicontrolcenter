@@ -1,15 +1,15 @@
 # AICC V3 Living Roadmap
 
-Roadmap-Revision: 8
+Roadmap-Revision: 9
 Updated-At: 2026-09-04
 Status: `ACTIVE`
 
 ## Current milestone
 
-`V3.4 — WP + Task Core`
+`V3.5 — Codex Execution`
 
-Current Work Package: `AICC-V3-WP-TASK-CORE-001`
-Current implementation phase: `V3.4.3 — exact-head CI and Owner UAT`
+Current Work Package: `AICC-V3-CODEX-EXECUTION-001`
+Current implementation phase: `V3.5.0 — executor contract and runtime gate`
 
 ## Milestones
 
@@ -56,4 +56,4 @@ Total implementation budget: `55–70h` including bounded rework.
 
 ## Next exact gate
 
-Commit/push the minimal WP/Task UI, require exact-head V3 CI PASS, restart the CN Mac 1420 service on that exact head, then stop at Owner Human UAT. Do not begin V3.5 before explicit Owner pass.
+Freeze the V3.5 Codex executor contract on CN Mac: one executor lease, one Run identity, explicit start/stop, append-only event stream, and ProjectContext-bound execution. Do not invoke Codex or add UI before that contract is committed and CI passes.

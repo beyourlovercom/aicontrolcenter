@@ -1,6 +1,6 @@
 # AICC-V3-WP-TASK-CORE-001
 
-Status: `ACTIVE / OWNER_AUTHORIZED`
+Status: `CLOSED / OWNER_UAT_PASS`
 
 ## Objective
 
@@ -68,3 +68,12 @@ Commit/push this store/API checkpoint, require exact-head V3 CI PASS, then imple
 - Successful mutations always reload `/api/work`; browser does not invent persisted state.
 - Delete, rebind, bulk mutation, title-edit, Codex, GPT Bridge, and PR behavior remain absent.
 - CN Mac Node 22 focused suite: `20/20 PASS`.
+
+## Owner UAT closure
+
+- Result: `PASS`.
+- Owner decision: explicit `pass` on 2026-09-04.
+- Exact implementation head under UAT: `91e1067aa4ab25b7da9cc5c7bdade0e38e35ac7f`.
+- V3 CI Run #8: `PASS`.
+- CN Mac runtime used the same exact head with project-scoped work store available.
+- Closure: `AICC-V3-WP-TASK-CORE-001 = CLOSED`.
