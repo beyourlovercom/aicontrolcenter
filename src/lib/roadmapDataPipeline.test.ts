@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
-import {compileRoadmapProjection,deserializeRoadmapProjection,serializeRoadmapProjection,selectRoadmapProjection} from './roadmapProjection.ts';
+import {canonicalRoadmapEntitySelection,compileRoadmapProjection,deserializeRoadmapProjection,serializeRoadmapProjection,selectRoadmapProjection} from './roadmapProjection.ts';
 
 const body=(revision:number,extra='')=>`Roadmap-Revision: ${revision}\nUpdated-At: 2026-08-17T00:00:00.000Z\n## Current milestone\n\n\`M8 — Lifecycle\`\n\nCurrent Work Package: \`AICC-PIPELINE-001\`\nCurrent implementation phase: \`8.3 — Canonical Focus\`\n\n## Active V2 Milestones\n### M1 — Pipeline\nStatus: ACTIVE\nProgress: 10%\nWork Packages: \`AICC-PIPELINE-001\`\n${extra}`;
 const local={source:'LOCAL' as const,content:body(3)};
@@ -15,6 +15,9 @@ assert.equal(persisted.roadmap_revision,3);
 assert.equal(persisted.source_hash,projection.contentHash);
 assert.equal(deserializeRoadmapProjection(persisted)?.nodes[0]?.id,'M1');
 assert.deepEqual({milestone:deserializeRoadmapProjection(persisted)?.currentMilestone,workPackage:deserializeRoadmapProjection(persisted)?.currentWorkPackage,phase:deserializeRoadmapProjection(persisted)?.currentPhase},{milestone:'M8 — Lifecycle',workPackage:'AICC-PIPELINE-001',phase:'8.3 — Canonical Focus'},'canonical current focus survives compile/serialize/deserialize');
+const accepted=deserializeRoadmapProjection(persisted)!;
+assert.deepEqual(canonicalRoadmapEntitySelection(accepted),{type:'work_package',id:'AICC-PIPELINE-001'},'canonical current WP restores temporary unavailable UI selection');
+assert.deepEqual(canonicalRoadmapEntitySelection({...accepted,currentWorkPackage:'MISSING-WP',currentMilestone:'M1 — Pipeline'}),{type:'milestone',id:'M1'},'canonical milestone is the safe fallback when current WP is absent');
 assert.equal(deserializeRoadmapProjection({...persisted,source_hash:'wrong'})?.contentHash,'wrong','stored source hash remains explicit projection metadata');
 const app=readFileSync(new URL('../App.svelte',import.meta.url),'utf8');
 assert.doesNotMatch(app,/aicc\.roadmap\.snapshot\.v1|ROADMAP_CACHE_KEY/,'browser cache is not a Roadmap authority');

@@ -56,6 +56,7 @@ and GitHub PR/CI evidence without adding new product behavior.
 - Draft PR exists with exact convergence head and current CI/check evidence recorded.
 
 ## Current Evidence
+- Human UAT regression: after active Project binding, UI kept the temporary `PROJECT_ROADMAP_UNAVAILABLE` selection even after canonical Roadmap projection became AVAILABLE. Fixed by restoring selection from canonical `current_work_package`, with `current_milestone` as a safe fallback; existing user selections are not overwritten. Targeted Roadmap/project-scope tests, typecheck, production build, and posttest PASS. China Mac full suite still reaches the known Node 26 `node-pty` supervisor boundary with no new pre-boundary failures.
 
 - Governance preservation commit: `2df6fcc`.
 - Historical-main convergence merge: `26113a2`.

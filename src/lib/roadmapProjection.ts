@@ -6,6 +6,15 @@ export type RoadmapSource={source:RoadmapSourceName;content:string};
 export type RoadmapProjection={revision:number|null;source:RoadmapSourceName;contentHash:string;nodes:RoadmapNode[];nodeIds:Set<string>;currentMilestone?:string;currentWorkPackage?:string;currentPhase?:string};
 export type PersistedRoadmapProjection={schema_version:'aicc.roadmap.projection.v1';roadmap_revision:number;source:RoadmapSourceName;source_hash:string;accepted_at:string;nodes:RoadmapNode[];current_milestone?:string;current_work_package?:string;current_phase?:string};
 export type RoadmapSelectionResult={status:'SELECTED'|'EQUAL'|'CONFLICT'|'NO_VALID_REVISION';projection?:RoadmapProjection;reason?:string};
+export type CanonicalRoadmapEntitySelection={type:'milestone'|'work_package';id:string};
+
+export function canonicalRoadmapEntitySelection(projection:RoadmapProjection):CanonicalRoadmapEntitySelection|null{
+  const workPackage=projection.currentWorkPackage?.trim();
+  if(workPackage&&projection.nodeIds.has(workPackage))return {type:'work_package',id:workPackage};
+  const milestoneId=projection.currentMilestone?.trim().match(/^(M\d+(?:\.\d+)?)/)?.[1];
+  if(milestoneId&&projection.nodeIds.has(milestoneId))return {type:'milestone',id:milestoneId};
+  return null;
+}
 
 export function parseRoadmapRevision(content:string):number|null{
   const value=content.match(/^Roadmap-Revision:\s*(\d+)\s*$/mi)?.[1];
