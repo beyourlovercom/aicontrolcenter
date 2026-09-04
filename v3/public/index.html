@@ -21,15 +21,38 @@
     <section class="roadmap" id="roadmap" hidden>
       <div class="roadmap-status" id="roadmap-status">正在读取 canonical Roadmap…</div>
       <div class="section-heading"><div><span>Canonical Roadmap</span><h2>当前执行焦点</h2></div><strong id="roadmap-revision"></strong></div>
-      <div class="current-grid">
-        <article><span>Milestone</span><strong id="current-milestone"></strong></article>
+      <div class="current-grid">        <article><span>Milestone</span><strong id="current-milestone"></strong></article>
         <article><span>Work Package</span><strong id="current-wp"></strong></article>
         <article><span>Phase</span><strong id="current-phase"></strong></article>
       </div>
       <div class="roadmap-meta" id="roadmap-authority"></div>
       <div class="milestone-list" id="milestone-list"></div>
     </section>
-    <footer>V3.3 · canonical Roadmap · no V2 fallback · no browser inference</footer>
+    <section class="work" id="work" hidden>
+      <div class="work-status" id="work-status">正在读取 project-scoped work store…</div>
+      <div class="section-heading"><div><span>WP + Task Core</span><h2>显式工作状态</h2></div><strong id="work-revision"></strong></div>
+      <div class="work-forms">
+        <form id="wp-form" class="work-form">
+          <h3>创建 Work Package</h3>
+          <label>Title<input id="wp-title" name="title" required maxlength="160"></label>
+          <label>Status<select id="wp-create-status" name="status" required><option value="OPEN">OPEN</option><option value="ACTIVE">ACTIVE</option><option value="BLOCKED">BLOCKED</option><option value="DONE">DONE</option></select></label>
+          <button type="submit">创建 WP</button>
+        </form>
+        <form id="task-form" class="work-form">
+          <h3>创建 Task</h3>
+          <label>Work Package<select id="task-wp" name="workPackageId" required></select></label>
+          <label>Title<input id="task-title" name="title" required maxlength="160"></label>          <label>Status<select id="task-create-status" name="status" required><option value="TODO">TODO</option><option value="IN_PROGRESS">IN_PROGRESS</option><option value="BLOCKED">BLOCKED</option><option value="DONE">DONE</option><option value="CANCELLED">CANCELLED</option></select></label>
+          <button type="submit">创建 Task</button>
+        </form>
+      </div>
+      <div class="work-message" id="work-message" role="status"></div>
+      <div class="work-columns">
+        <div><h3>Work Packages</h3><div class="entity-list" id="wp-list"></div></div>
+        <div><h3>Tasks</h3><div class="entity-list" id="task-list"></div></div>
+      </div>
+      <div class="roadmap-meta" id="work-authority"></div>
+    </section>
+    <footer>V3.4 · explicit WP/Task state · no V2 fallback · no browser inference</footer>
   </main>
   <script type="module" src="/app.js"></script>
 </body>

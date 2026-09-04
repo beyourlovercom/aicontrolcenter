@@ -60,3 +60,11 @@ Add the smallest durable Work Package + Task core to AICC V3, scoped only to the
 ## Next exact gate
 
 Commit/push this store/API checkpoint, require exact-head V3 CI PASS, then implement the minimal WP/Task UI over these APIs only.
+
+## V3.4.2 checkpoint
+
+- Minimal WP/Task UI implemented over the frozen five APIs only.
+- UI creates WP/Task, renders persisted lists, and sends explicit status changes.
+- Successful mutations always reload `/api/work`; browser does not invent persisted state.
+- Delete, rebind, bulk mutation, title-edit, Codex, GPT Bridge, and PR behavior remain absent.
+- CN Mac Node 22 focused suite: `20/20 PASS`.

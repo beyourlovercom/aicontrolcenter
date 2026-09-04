@@ -1,6 +1,6 @@
 # AICC V3 Living Roadmap
 
-Roadmap-Revision: 7
+Roadmap-Revision: 8
 Updated-At: 2026-09-04
 Status: `ACTIVE`
 
@@ -9,7 +9,7 @@ Status: `ACTIVE`
 `V3.4 — WP + Task Core`
 
 Current Work Package: `AICC-V3-WP-TASK-CORE-001`
-Current implementation phase: `V3.4.2 — minimal WP/Task UI integration`
+Current implementation phase: `V3.4.3 — exact-head CI and Owner UAT`
 
 ## Milestones
 
@@ -56,4 +56,4 @@ Total implementation budget: `55–70h` including bounded rework.
 
 ## Next exact gate
 
-Add the minimal WP/Task UI over the frozen V3.4 APIs only after the exact-head V3.4.1 checkpoint CI passes. Do not add Codex, GPT Bridge, PR delivery, delete, rebind, bulk mutation, or title-edit behavior.
+Commit/push the minimal WP/Task UI, require exact-head V3 CI PASS, restart the CN Mac 1420 service on that exact head, then stop at Owner Human UAT. Do not begin V3.5 before explicit Owner pass.
