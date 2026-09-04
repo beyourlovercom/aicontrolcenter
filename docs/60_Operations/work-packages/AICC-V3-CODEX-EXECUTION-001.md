@@ -81,6 +81,15 @@ Add the smallest trustworthy Codex execution core to AICC V3 while preserving Pr
 - Restart reconciliation and same-repo/different-worktree isolation are covered.
 - LaunchAgent-minimal PATH regression is covered; executor child PATH is repaired locally without global environment mutation.
 
+## V3.5.2 checkpoint
+
+- Minimal execution UI implemented over only the five frozen executor APIs.
+- UI selects an existing Task, accepts exact instruction, starts one Run, shows durable Run transport facts and append-only events, and stops only the exact displayed Run.
+- Active Run polling reloads server transport state; browser does not invent semantic state.
+- UI explicitly states `EXITED does not mean PASS`.
+- Resume, retry, result rewrite, PR, GPT-return, semantic PASS/FAIL controls remain absent.
+- CN Mac Node 22 suite: `28/28 PASS`; real Codex was not invoked by implementation tests.
+
 ## Next exact gate
 
-Commit/push this V3.5.1 runtime/API checkpoint and require exact-head V3 CI PASS. Then add only the minimal execution UI over these frozen APIs; no resume/retry/result rewrite/PR/GPT-return behavior.
+Commit/push the V3.5.2 UI checkpoint, require exact-head V3 CI PASS, restart CN Mac 1420 on that exact head, and stop at Owner Human UAT. Do not begin V3.6 before explicit Owner pass.

@@ -52,7 +52,29 @@
       </div>
       <div class="roadmap-meta" id="work-authority"></div>
     </section>
-    <footer>V3.4 · explicit WP/Task state · no V2 fallback · no browser inference</footer>
+    <section class="executor" id="executor" hidden>
+      <div class="executor-status" id="executor-status">正在读取 Codex readiness…</div>
+      <div class="section-heading"><div><span>Codex Execution</span><h2>显式 Run 传输状态</h2></div><strong id="executor-readiness"></strong></div>
+      <form id="run-form" class="run-form">
+        <label>Task<select id="run-task" name="taskId" required></select></label>
+        <label>Exact Instruction<textarea id="run-instruction" name="instruction" required maxlength="60000" rows="7"></textarea></label>
+        <button id="start-run" type="submit">Start Run</button>
+      </form>
+      <div class="work-message" id="executor-message" role="status"></div>
+      <div class="run-panel" id="run-panel" hidden>
+        <div class="run-facts">
+          <article><span>Run ID</span><strong id="run-id"></strong></article>
+          <article><span>State</span><strong id="run-state"></strong></article>
+          <article><span>Task</span><strong id="run-task-id"></strong></article>
+          <article><span>Codex Session</span><strong id="run-session"></strong></article>
+        </div>
+        <button id="stop-run" class="stop-run" type="button">Stop Exact Run</button>
+        <div class="transport-note">Transport only: EXITED does not mean PASS. AICC does not infer semantic result.</div>
+        <h3>Append-only Events</h3>
+        <pre class="event-stream" id="run-events"></pre>
+      </div>
+    </section>
+    <footer>V3.5 · explicit Run transport · no V2 fallback · no browser semantic inference</footer>
   </main>
   <script type="module" src="/app.js"></script>
 </body>

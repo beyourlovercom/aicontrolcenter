@@ -1,6 +1,8 @@
 const $=id=>document.getElementById(id);
 const WP_STATUSES=['OPEN','ACTIVE','BLOCKED','DONE'];
 const TASK_STATUSES=['TODO','IN_PROGRESS','BLOCKED','DONE','CANCELLED'];
+const RUN_TERMINAL_STATES=['EXITED','STOPPED','ORPHANED','SPAWN_ERROR'];
+let executorReady=false;let executorLease=null;let currentRunId=null;let eventAfter=0;let eventRows=[];let runPoll=null;
 
 async function api(path,{method='GET',body}={}){
   const options={method,cache:'no-store',headers:{}};
@@ -123,6 +125,7 @@ function renderWork(store){
   for(const wp of store.workPackages)wpRoot.append(entityCard('wp',wp));
 
   const byId=new Map(store.workPackages.map(wp=>[wp.id,wp.title]));
+  renderRunTaskOptions(store,byId);
   const taskRoot=$('task-list');taskRoot.replaceChildren();
   if(store.tasks.length===0){const empty=document.createElement('p');empty.className='empty';empty.textContent='暂无 Task';taskRoot.append(empty);}
   for(const task of store.tasks)taskRoot.append(entityCard('task',task,byId.get(task.workPackageId)));
@@ -156,6 +159,76 @@ $('task-form').addEventListener('submit',async event=>{
   }catch(error){setWorkMessage(`创建 Task 失败 · ${error.message}`,'error');}
 });
 
+function setExecutorMessage(message,state=''){
+  $('executor-message').textContent=message;$('executor-message').dataset.state=state;
+}
+function renderRunTaskOptions(store,byId){
+  const select=$('run-task');const previous=select.value;select.replaceChildren();
+  if(store.tasks.length===0){select.append(option('','暂无可执行 Task'));select.disabled=true;}
+  else{
+    select.disabled=false;select.append(option('','选择明确 Task…'));select.firstElementChild.disabled=true;
+    for(const task of store.tasks)select.append(option(task.id,`${byId.get(task.workPackageId)||task.workPackageId} / ${task.title} · ${task.status}`));
+    if([...select.options].some(item=>item.value===previous))select.value=previous;
+  }
+  updateStartAvailability();
+}
+function updateStartAvailability(){
+  const button=$('start-run');if(!button)return;
+  button.disabled=!executorReady||Boolean(executorLease)||$('run-task').disabled;
+}
+function renderExecutorStatus(executor){
+  executorReady=Boolean(executor.readiness?.ready);executorLease=executor.activeLease||null;
+  const readiness=executor.readiness||{};
+  $('executor-readiness').textContent=executorReady?`${readiness.version||'Codex'} · READY`:`NOT READY · ${readiness.errorCode||'UNKNOWN'}`;
+  $('executor-status').textContent=executorReady?'CODEX EXECUTOR READY':'CODEX EXECUTOR NOT READY';
+  $('executor-status').dataset.state=executorReady?'ok':'error';$('executor').hidden=false;updateStartAvailability();
+}
+function stopPolling(){if(runPoll){clearInterval(runPoll);runPoll=null;}}
+function renderRun(run){
+  currentRunId=run.runId;$('run-panel').hidden=false;$('run-id').textContent=run.runId;$('run-state').textContent=run.state;
+  $('run-task-id').textContent=run.taskId;$('run-session').textContent=run.codexSessionId||'NOT IDENTIFIED';
+  $('stop-run').disabled=RUN_TERMINAL_STATES.includes(run.state);
+  if(RUN_TERMINAL_STATES.includes(run.state)){executorLease=null;updateStartAvailability();stopPolling();}
+}
+function renderEvents(){
+  $('run-events').textContent=eventRows.length?eventRows.map(event=>JSON.stringify(event)).join('\n'):'暂无 Run event';
+}
+async function loadRun(runId,{reset=false}={}){
+  if(reset||currentRunId!==runId){currentRunId=runId;eventAfter=0;eventRows=[];}
+  const runBody=await api(`/api/runs/${encodeURIComponent(runId)}`);renderRun(runBody.run);
+  const eventBody=await api(`/api/runs/${encodeURIComponent(runId)}/events?after=${eventAfter}`);
+  if(eventBody.events.length){eventRows.push(...eventBody.events);eventAfter=eventRows.at(-1).seq;}renderEvents();
+  return runBody.run;
+}
+function startPolling(runId){
+  stopPolling();runPoll=setInterval(async()=>{
+    try{const run=await loadRun(runId);if(RUN_TERMINAL_STATES.includes(run.state))stopPolling();}
+    catch(error){stopPolling();setExecutorMessage(`Run 刷新失败 · ${error.message}`,'error');}
+  },1000);
+}
+async function loadExecutor(){
+  const body=await api('/api/executor');renderExecutorStatus(body.executor);
+  if(body.executor.latestRun){
+    const run=await loadRun(body.executor.latestRun.runId,{reset:true});
+    if(body.executor.activeLease&&!RUN_TERMINAL_STATES.includes(run.state))startPolling(run.runId);
+  }else{$('run-panel').hidden=true;currentRunId=null;eventAfter=0;eventRows=[];}
+}
+$('run-form').addEventListener('submit',async event=>{
+  event.preventDefault();const taskId=$('run-task').value;const instruction=$('run-instruction').value;
+  try{
+    const body=await api('/api/runs',{method:'POST',body:{taskId,instruction}});
+    executorLease={runId:body.run.runId};updateStartAvailability();setExecutorMessage(`Run 已创建 · ${body.run.runId}`,'ok');
+    await loadRun(body.run.runId,{reset:true});startPolling(body.run.runId);
+  }catch(error){setExecutorMessage(`Start 失败 · ${error.message}`,'error');}
+});
+$('stop-run').addEventListener('click',async()=>{
+  if(!currentRunId)return;const exact=currentRunId;
+  try{
+    await api(`/api/runs/${encodeURIComponent(exact)}/stop`,{method:'POST'});
+    setExecutorMessage(`Stop 已发送给 exact Run · ${exact}`,'ok');await loadRun(exact);startPolling(exact);
+  }catch(error){setExecutorMessage(`Stop 失败 · ${error.message}`,'error');}
+});
+
 async function boot(){
   try{
     const projectBody=await api('/api/project');renderProject(projectBody.context);
@@ -166,6 +239,8 @@ async function boot(){
   catch(error){$('roadmap').hidden=false;$('roadmap-status').textContent=`ROADMAP ${error.status||'NOT_AVAILABLE'} · ${error.message}`;$('roadmap-status').dataset.state='error';}
   try{await loadWork();}
   catch(error){$('work').hidden=false;$('work-status').textContent=`WORK STORE NOT AVAILABLE · ${error.message}`;$('work-status').dataset.state='error';}
+  try{await loadExecutor();}
+  catch(error){$('executor').hidden=false;$('executor-status').textContent=`EXECUTOR NOT AVAILABLE · ${error.message}`;$('executor-status').dataset.state='error';}
 }
 
 boot();
