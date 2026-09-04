@@ -5,6 +5,7 @@ import {dirname,join} from 'node:path';
 import {loadProjectContext,stateRoot} from './lib/project-context.mjs';
 import {loadCanonicalRoadmap} from './lib/roadmap.mjs';
 import {createTask,createWorkPackage,readWorkStore,updateTaskStatus,updateWorkPackageStatus} from './lib/work-store.mjs';
+import {executorStatus,runEvents,runProjection,startRun,stopRun} from './lib/executor-runtime.mjs';
 
 const root=dirname(fileURLToPath(import.meta.url));
 const publicRoot=join(root,'public');
@@ -30,6 +31,17 @@ function workError(res,error){
   const errorCode=error?.code||'WORK_UNAVAILABLE';
   return json(res,workErrorStatus(errorCode),{ok:false,errorCode});
 }
+function executorErrorStatus(code){
+  if(['RUN_NOT_FOUND','RUN_TASK_NOT_FOUND'].includes(code))return 404;
+  if(['RUN_INSTRUCTION_INVALID'].includes(code))return 400;
+  if(['EXECUTOR_LEASE_ACTIVE','EXECUTOR_LEASE_MISMATCH','RUN_PROJECT_MISMATCH','RUN_ALREADY_TERMINAL','RUN_STOP_TARGET_MISMATCH'].includes(code))return 409;
+  return 503;
+}
+function executorError(res,error){
+  const errorCode=error?.code||'EXECUTOR_NOT_READY';
+  const body={ok:false,errorCode};if(error?.runId)body.runId=error.runId;
+  return json(res,executorErrorStatus(errorCode),body);
+}
 async function readJson(req){
   let body='';
   for await(const chunk of req){
@@ -43,6 +55,7 @@ async function readJson(req){
 export function createAiccV3Server(options={}){
   const env=options.env||process.env;
   const storeOptions=options.workStoreOptions||{};
+  const executorOptions=options.executorOptions||{};
   return createHttpServer(async(req,res)=>{
     const url=new URL(req.url||'/',`http://${req.headers.host||'localhost'}`);
     if(req.method==='GET'&&url.pathname==='/api/health'){
@@ -93,6 +106,34 @@ export function createAiccV3Server(options={}){
         const input=await readJson(req);const context=loadProjectContext(env);
         return json(res,200,{ok:true,...updateTaskStatus(context,decodeURIComponent(taskStatus[1]),input?.status,env,storeOptions)});
       }catch(error){return workError(res,error);}
+    }
+
+    if(req.method==='GET'&&url.pathname==='/api/executor'){
+      try{const context=loadProjectContext(env);return json(res,200,{available:true,executor:executorStatus(context,env,executorOptions)});}
+      catch(error){return executorError(res,error);}
+    }
+    if(req.method==='POST'&&url.pathname==='/api/runs'){
+      try{const input=await readJson(req);const context=loadProjectContext(env);return json(res,201,{ok:true,run:startRun(context,input,env,executorOptions)});}
+      catch(error){return executorError(res,error);}
+    }
+    const runEventsMatch=url.pathname.match(/^\/api\/runs\/([^/]+)\/events$/);
+    if(req.method==='GET'&&runEventsMatch){
+      try{
+        const afterText=url.searchParams.get('after')||'0';const after=Number(afterText);
+        if(!Number.isInteger(after)||after<0){const error=new Error('RUN_EVENT_STREAM_INVALID');error.code='RUN_EVENT_STREAM_INVALID';throw error;}
+        const context=loadProjectContext(env);const runId=decodeURIComponent(runEventsMatch[1]);
+        return json(res,200,{available:true,runId,events:runEvents(context,runId,after,env)});
+      }catch(error){return executorError(res,error);}
+    }
+    const runStopMatch=url.pathname.match(/^\/api\/runs\/([^/]+)\/stop$/);
+    if(req.method==='POST'&&runStopMatch){
+      try{const context=loadProjectContext(env);const runId=decodeURIComponent(runStopMatch[1]);return json(res,200,{ok:true,...stopRun(context,runId,env,executorOptions)});}
+      catch(error){return executorError(res,error);}
+    }
+    const runMatch=url.pathname.match(/^\/api\/runs\/([^/]+)$/);
+    if(req.method==='GET'&&runMatch){
+      try{const context=loadProjectContext(env);const runId=decodeURIComponent(runMatch[1]);return json(res,200,{available:true,run:runProjection(context,runId,env,executorOptions)});}
+      catch(error){return executorError(res,error);}
     }
 
     if(req.method==='GET'){

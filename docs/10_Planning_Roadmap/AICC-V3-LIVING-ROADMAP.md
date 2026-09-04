@@ -1,6 +1,6 @@
 # AICC V3 Living Roadmap
 
-Roadmap-Revision: 10
+Roadmap-Revision: 11
 Updated-At: 2026-09-04
 Status: `ACTIVE`
 
@@ -9,7 +9,7 @@ Status: `ACTIVE`
 `V3.5 — Codex Execution`
 
 Current Work Package: `AICC-V3-CODEX-EXECUTION-001`
-Current implementation phase: `V3.5.1 — executor worker and runtime API implementation`
+Current implementation phase: `V3.5.2 — minimal Codex execution UI integration`
 
 ## Milestones
 
@@ -56,4 +56,4 @@ Total implementation budget: `55–70h` including bounded rework.
 
 ## Next exact gate
 
-Commit/push the frozen V3.5 Codex Run contract and require exact-head V3 CI PASS. Then implement the executor worker, lease/Run persistence, and frozen runtime APIs on CN Mac before adding any execution UI.
+Commit/push the V3.5.1 executor worker + runtime API checkpoint and require exact-head V3 CI PASS. Only after that CI gate may the minimal V3.5 execution UI be added; do not invoke real Codex for Owner UAT until the UI checkpoint itself is exact-head green.

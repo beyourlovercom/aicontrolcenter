@@ -72,6 +72,14 @@ Add the smallest trustworthy Codex execution core to AICC V3 while preserving Pr
 - `codex doctor --json`: overall status `ok`; provider and WebSocket reachability `ok`.
 - `codex exec --json`, explicit `-C`, `workspace-write`, feature disable, and session resume are supported by this CLI.
 
+## V3.5.1 checkpoint
+
+- Detached executor worker, durable Run/Lease store, append-only events, and five frozen runtime APIs implemented.
+- Worker launches only its bound executor from the Run snapshot and owns exact stop handling.
+- Runtime/API suite uses fake Codex only; no real Codex implementation Run was started.
+- CN Mac Node 22 suite: `25/25 PASS`.
+- Restart reconciliation and same-repo/different-worktree isolation are covered.
+
 ## Next exact gate
 
-Implement executor worker + project-scoped lease/Run persistence + the five frozen runtime APIs with focused tests. Do not add execution UI or invoke Codex for implementation UAT until the runtime/API layer passes locally.
+Commit/push this V3.5.1 runtime/API checkpoint and require exact-head V3 CI PASS. Then add only the minimal execution UI over these frozen APIs; no resume/retry/result rewrite/PR/GPT-return behavior.

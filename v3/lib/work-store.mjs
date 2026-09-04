@@ -13,7 +13,7 @@ function fail(code,detail=''){
   throw error;
 }
 
-function projectIdentity(context){
+export function projectBinding(context){
   const id=context?.project?.id;
   const repositoryIdentity=context?.repository?.identity;
   if(!id||!repositoryIdentity)fail('WORK_PROJECT_CONTEXT_INVALID');
@@ -21,12 +21,15 @@ function projectIdentity(context){
 }
 
 export function workStorePath(context,env=process.env){
-  const project=projectIdentity(context);
-  const key=createHash('sha256').update(project.id).update('\0').update(project.repositoryIdentity).digest('hex');
+  const key=projectStateKey(context);
   return join(stateRoot(env),'projects',key,'work-store.v1.json');
 }
+export function projectStateKey(context){
+  const project=projectBinding(context);
+  return createHash('sha256').update(project.id).update('\0').update(project.repositoryIdentity).digest('hex');
+}
 function emptyStore(context){
-  const project=projectIdentity(context);
+  const project=projectBinding(context);
   return {schema:WORK_STORE_SCHEMA,revision:1,project,workPackages:[],tasks:[]};
 }
 
@@ -49,7 +52,7 @@ function validateEntityArrays(store){
   }
 }
 function validateStore(store,context){
-  const project=projectIdentity(context);
+  const project=projectBinding(context);
   if(!store||store.schema!==WORK_STORE_SCHEMA||!Number.isInteger(store.revision)||store.revision<1)fail('WORK_STORE_INVALID');
   if(store.project?.id!==project.id||store.project?.repositoryIdentity!==project.repositoryIdentity)fail('WORK_STORE_PROJECT_MISMATCH');
   validateEntityArrays(store);
