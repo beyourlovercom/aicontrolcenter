@@ -38,6 +38,16 @@ Add the smallest canonical Result layer for AICC V3 so one completed Run can pro
 `AICC_DECISION_AUTHORITY = 0`
 `AICC_RESULT_REWRITE = 0`
 
+## Frozen V3.6 contract
+
+- Authority: `docs/40_Architecture/AICC-V3-CANONICAL-RESULT-CONTRACT.md`.
+- Exactly one immutable Result may exist for one exact Run.
+- Only persisted `EXITED` Runs are Result-eligible; exitCode is transport metadata, not a semantic gate.
+- Content is the exact `item.text` from the highest-seq valid executor `item.completed / agent_message` event before `PROCESS_EXITED`.
+- No trimming, summarization, translation, status inference, browser-authored Result content, or fallback source is allowed.
+- Result storage is project-scoped inside the bound Run directory and validates current ProjectContext/worktree identity.
+- Public V3.6 API is read-only: `GET /api/runs/:id/result`.
+
 ## Next exact gate
 
-Freeze the canonical Result schema, Run binding, persistence paths, source-evidence rules, and fail-closed behavior before implementing any Result API or UI.
+Implement the frozen Result persistence/materialization layer and read-only Result API with focused tests. Prove one Run→one Result, exact content/hash preservation, source-event linkage, project/worktree isolation, reload-safe retrieval, and fail-closed missing-source behavior before adding any Result UI.

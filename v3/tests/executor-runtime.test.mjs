@@ -34,6 +34,11 @@ async function waitFor(context,runId,env,predicate,timeout=6000){
   while(Date.now()<end){const run=readRun(context,runId,env);if(predicate(run))return run;await new Promise(r=>setTimeout(r,40));}
   throw new Error(`timeout waiting for ${runId}`);
 }
+async function waitForLeaseRelease(context,env,timeout=2000){
+  const end=Date.now()+timeout;
+  while(Date.now()<end){if(readLease(context,env)===null)return;await new Promise(r=>setTimeout(r,20));}
+  assert.equal(readLease(context,env),null);
+}
 test('preflight repairs launchd-minimal PATH locally without global mutation',()=>{
   const root=mkdtempSync(join(tmpdir(),'aicc-v3-preflight-'));const fake=join(root,'codex');
   const script=`#!/usr/bin/env node
@@ -49,7 +54,7 @@ test('detached worker binds exact cwd, args, session and append-only events',asy
   const run=await waitFor(f.context,created.runId,f.env,r=>r.state==='EXITED');
   assert.equal(run.exitCode,0);assert.equal(run.codexSessionId,'fake-session');
   assert.equal(run.repositoryPath,f.repo);assert.equal(readFileSync(run.instructionPath,'utf8'),instruction);
-  assert.equal(readLease(f.context,f.env),null);
+  await waitForLeaseRelease(f.context,f.env);
   const events=readRunEvents(f.context,run.runId,0,f.env);
   assert.deepEqual(events.map(e=>e.seq),events.map((_,i)=>i+1));
   assert.ok(events.some(e=>e.type==='RUN_CREATED'));

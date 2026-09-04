@@ -1,6 +1,6 @@
 # AICC V3 Living Roadmap
 
-Roadmap-Revision: 13
+Roadmap-Revision: 14
 Updated-At: 2026-09-04
 Status: `ACTIVE`
 
@@ -9,7 +9,7 @@ Status: `ACTIVE`
 `V3.6 — Canonical Result Return`
 
 Current Work Package: `AICC-V3-CANONICAL-RESULT-RETURN-001`
-Current implementation phase: `V3.6.0 — result contract and persistence gate`
+Current implementation phase: `V3.6.1 — result persistence and API implementation`
 
 ## Milestones
 
@@ -56,4 +56,4 @@ Total implementation budget: `55–70h` including bounded rework.
 
 ## Next exact gate
 
-Freeze the V3.6 canonical Result contract: exact Run→Result binding, immutable result identity, durable persistence, reload-safe retrieval, and no AICC semantic rewrite. Do not implement GPT return, PR delivery, or retry/resume behavior in this gate.
+Implement only the frozen V3.6 Result persistence/materialization layer and `GET /api/runs/:id/result` with focused tests. Require exact content preservation, one Run→one Result, source-event linkage, project/worktree isolation, reload-safe retrieval, and fail-closed missing-source behavior. Do not add Result UI until this gate passes.
