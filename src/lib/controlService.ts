@@ -226,8 +226,10 @@ export function validateFormalWorkPackage(workPackage:WorkPackage,requestedId=wo
   return errors;
 }
 
-function git(args: string[]): string { return execFileSync('git', args, { cwd: REPOSITORY_ROOT, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim(); }
-function safeGit(args: string[]): string { try { return git(args); } catch { return 'unavailable'; } }
+function gitAt(repositoryRoot:string,args:string[]):string{return execFileSync('git',args,{cwd:repositoryRoot,encoding:'utf8',stdio:['ignore','pipe','pipe']}).trim()}
+function safeGitAt(repositoryRoot:string,args:string[]):string{try{return gitAt(repositoryRoot,args)}catch{return 'unavailable'}}
+function git(args: string[]): string { return gitAt(REPOSITORY_ROOT,args); }
+function safeGit(args: string[]): string { return safeGitAt(REPOSITORY_ROOT,args); }
 function launchctl(args: string[]): string { return execFileSync('/bin/launchctl', args, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim(); }
 async function asyncGit(args:string[]):Promise<string>{try{const result=await execFileAsync('git',args,{cwd:REPOSITORY_ROOT,encoding:'utf8',maxBuffer:1024*1024});return String(result.stdout).trim()}catch{return 'unavailable'}}
 async function asyncProcessCommand(pid:string,timeout=HEALTH_CHILD_PROCESS_TIMEOUT_MS):Promise<string>{try{const result=await execFileAsync('/bin/ps',['-p',pid,'-o','command='],{encoding:'utf8',timeout});return String(result.stdout).trim().slice(0,240)}catch{return 'unavailable'}}
@@ -288,6 +290,11 @@ export function readLocalServiceLogs(){const base=join(homedir(),'Library/Logs/A
 export function readRepository(): RepositoryModel {
   return repositorySnapshot??fallbackRepository();
 }
+export function readRepositoryAt(repositoryRoot:string):RepositoryModel{
+  const head=safeGitAt(repositoryRoot,['rev-parse','HEAD']),branch=safeGitAt(repositoryRoot,['branch','--show-current']),localMain=safeGitAt(repositoryRoot,['rev-parse','refs/heads/main']),remoteMain=safeGitAt(repositoryRoot,['rev-parse','refs/remotes/origin/main']),status=safeGitAt(repositoryRoot,['status','--porcelain']),lastCommit=safeGitAt(repositoryRoot,['log','-1','--format=%h %s']);
+  return {repository:repositoryRoot,branch,head,localMain,remoteMain,worktree:status==='unavailable'?'UNAVAILABLE':status===''?'CLEAN':'DIRTY',lastCommit};
+}
+export function readActiveProjectRepository(registryFile?:string):RepositoryModel{const project=createProjectRegistryAuthority(registryFile).getActiveProject();return readRepositoryAt(project.repositoryPath)}
 export function readAuthorization(): Authorization | null { try { const record = JSON.parse(readFileSync(AUTH_FILE, 'utf8')) as Authorization; return record.status === 'SUPERSEDED' ? null : record; } catch { return null; } }
 export function readAuthorizationHistory(): Authorization[] { try { return JSON.parse(readFileSync(AUTH_HISTORY_FILE, 'utf8')) as Authorization[]; } catch { return []; } }
 function readStoredAuthorization(): Authorization | null { try { return JSON.parse(readFileSync(AUTH_FILE, 'utf8')) as Authorization; } catch { return null; } }

@@ -93,3 +93,13 @@ integration. Remediate only exact-head failures with evidence. Stop before merge
 or Owner UAT even after CI PASS.
 
 Generated/updated: `2026-09-03T02:20:45-0700`
+
+### 2026-09-04 Human UAT runtime split-brain remediation
+
+- Owner screenshot proved the UAT page still projected `M6 — Autonomous PR Delivery / READY_FOR_OWNER_UAT` while the canonical Roadmap current authority is M8. This UAT attempt is recorded as **FAIL**, not PASS.
+- First remediation (`399304a`) preserved `current_milestone / current_work_package / current_phase` through the Roadmap projection and made Global Blueprint Current Focus consume those canonical fields. GitHub CI Run #74 passed on that exact head.
+- Follow-up runtime forensics proved `/api/roadmap` and `/api/project-context` were project-scoped, while `/api/repository` still called legacy `readRepository()` bound to the hard-coded AICC `REPOSITORY_ROOT`; browser snapshot therefore mixed two repository authorities.
+- Remediation adds a project-scoped repository reader and binds browser `/api/repository` to the active Project Registry repositoryPath. Existing local-service/legacy `readRepository()` authority remains unchanged.
+- Added regression coverage proving active Project switches change repository projection without falling back to AICC `REPOSITORY_ROOT`.
+- Local evidence: project-scoped Roadmap test PASS; Project Registry authority PASS; control service contract PASS; Current Focus regression PASS; Roadmap data pipeline PASS; Typecheck PASS; build PASS; posttest PASS; full `npm test` passes through all pre-supervisor tests and stops only at the already-classified China Mac Node26/node-pty `posix_spawnp failed` environment boundary. GitHub Node22 exact-head CI remains the authoritative supervisor/full-chain gate.
+- Human Owner UAT remains **NOT PASSED** pending a fresh exact-head browser recheck.
