@@ -37,6 +37,14 @@ Add the smallest trustworthy PR Delivery layer for AICC V3 so GitHub PR facts, D
 `AUTO_MERGE = 0`
 `PR_CREATE_MODE = DRAFT_ONLY`
 
+## Frozen V3.7 contract
+
+- Authority: `docs/40_Architecture/AICC-V3-PR-DELIVERY-CONTRACT.md`.
+- ProjectContext exclusively supplies local repository path, branch, HEAD, and dirty state.
+- GitHub supplies remote repository, remote branch SHA, PR facts, default branch, and exact-head check-run facts.
+- Draft PR creation requires clean worktree, exact pushed remote HEAD, explicit base/title/body, and no existing open PR for the exact head/base pair.
+- AICC never auto-pushes, never creates a non-Draft PR, and exposes no merge/close/edit/ready/release/deploy action.
+
 ## Next exact gate
 
-Freeze the PR Delivery contract and GitHub fact model before implementing any PR API or UI. Do not create, close, merge, or edit a PR in this gate.
+Implement the frozen GitHub fact reader plus `GET /api/pr-delivery` and `POST /api/prs/draft` with focused tests. Do not add UI until exact-head CI passes for the runtime/API checkpoint.
