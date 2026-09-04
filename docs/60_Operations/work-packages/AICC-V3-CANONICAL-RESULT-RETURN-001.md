@@ -48,6 +48,15 @@ Add the smallest canonical Result layer for AICC V3 so one completed Run can pro
 - Result storage is project-scoped inside the bound Run directory and validates current ProjectContext/worktree identity.
 - Public V3.6 API is read-only: `GET /api/runs/:id/result`.
 
+## V3.6.1 checkpoint
+
+- Shared Result persistence/materialization is implemented and used by both executor worker completion and GET reconciliation.
+- Result file is immutable create-only and appears atomically after a complete temp write.
+- `GET /api/runs/:id/result` is the only public Result API; browser Result writes remain absent.
+- Exact final executor agent-message content, content/raw hashes, source event sequence, one Run→one Result idempotence, project/worktree isolation, and missing-source fail-closed behavior are covered.
+- Detached worker integration proves normal `EXITED` completion materializes Result without browser involvement.
+- CN Mac Node 22 suite: `33/33 PASS`.
+
 ## Next exact gate
 
-Implement the frozen Result persistence/materialization layer and read-only Result API with focused tests. Prove one Run→one Result, exact content/hash preservation, source-event linkage, project/worktree isolation, reload-safe retrieval, and fail-closed missing-source behavior before adding any Result UI.
+Commit/push this V3.6.1 persistence/API checkpoint and require exact-head V3 CI PASS. Then add only the read-only canonical Result UI and stop at final Owner UAT after exact-head CI and CN Mac runtime verification.

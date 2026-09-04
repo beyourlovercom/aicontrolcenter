@@ -5,6 +5,7 @@ import {join} from 'node:path';
 import {stateRoot} from './lib/project-context.mjs';
 import {projectStateKey} from './lib/work-store.mjs';
 import {appendRunEvent,readLease,readRun,readStopRequest,releaseLease,updateRun} from './lib/run-store.mjs';
+import {materializeResult} from './lib/result-store.mjs';
 
 function arg(name){const prefix=`--${name}=`;return process.argv.find(v=>v.startsWith(prefix))?.slice(prefix.length)||null;}
 const runId=arg('run-id');const projectKey=arg('project-key');
@@ -72,6 +73,7 @@ async function main(){
     }else{
       event('PROCESS_EXITED','EXECUTOR_WORKER',{exitCode:code,signal:signal||null});
       patch({state:'EXITED',exitCode:code});
+      try{materializeResult(context,runId,process.env);}catch{}
     }
     release();
   });

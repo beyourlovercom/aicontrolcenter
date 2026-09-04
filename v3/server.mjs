@@ -6,6 +6,7 @@ import {loadProjectContext,stateRoot} from './lib/project-context.mjs';
 import {loadCanonicalRoadmap} from './lib/roadmap.mjs';
 import {createTask,createWorkPackage,readWorkStore,updateTaskStatus,updateWorkPackageStatus} from './lib/work-store.mjs';
 import {executorStatus,runEvents,runProjection,startRun,stopRun} from './lib/executor-runtime.mjs';
+import {readOrMaterializeResult} from './lib/result-store.mjs';
 
 const root=dirname(fileURLToPath(import.meta.url));
 const publicRoot=join(root,'public');
@@ -41,6 +42,16 @@ function executorError(res,error){
   const errorCode=error?.code||'EXECUTOR_NOT_READY';
   const body={ok:false,errorCode};if(error?.runId)body.runId=error.runId;
   return json(res,executorErrorStatus(errorCode),body);
+}
+function resultErrorStatus(code){
+  if(['RESULT_NOT_FOUND'].includes(code))return 404;
+  if(['RESULT_NOT_READY','RESULT_PROJECT_MISMATCH','RESULT_RUN_MISMATCH','RESULT_CONFLICT'].includes(code))return 409;
+  if(['RESULT_SOURCE_NOT_FOUND','RESULT_SOURCE_EVENT_INVALID','RESULT_INVALID'].includes(code))return 422;
+  return 503;
+}
+function resultError(res,error){
+  const errorCode=error?.code||'RESULT_INVALID';
+  return json(res,resultErrorStatus(errorCode),{available:false,errorCode});
 }
 async function readJson(req){
   let body='';
@@ -124,6 +135,13 @@ export function createAiccV3Server(options={}){
         const context=loadProjectContext(env);const runId=decodeURIComponent(runEventsMatch[1]);
         return json(res,200,{available:true,runId,events:runEvents(context,runId,after,env)});
       }catch(error){return executorError(res,error);}
+    }
+    const runResultMatch=url.pathname.match(/^\/api\/runs\/([^/]+)\/result$/);
+    if(req.method==='GET'&&runResultMatch){
+      try{
+        const context=loadProjectContext(env);const runId=decodeURIComponent(runResultMatch[1]);
+        return json(res,200,{available:true,result:readOrMaterializeResult(context,runId,env)});
+      }catch(error){return resultError(res,error);}
     }
     const runStopMatch=url.pathname.match(/^\/api\/runs\/([^/]+)\/stop$/);
     if(req.method==='POST'&&runStopMatch){

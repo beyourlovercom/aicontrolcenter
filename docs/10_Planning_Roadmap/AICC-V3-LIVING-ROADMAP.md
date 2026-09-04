@@ -1,6 +1,6 @@
 # AICC V3 Living Roadmap
 
-Roadmap-Revision: 14
+Roadmap-Revision: 15
 Updated-At: 2026-09-04
 Status: `ACTIVE`
 
@@ -9,7 +9,7 @@ Status: `ACTIVE`
 `V3.6 — Canonical Result Return`
 
 Current Work Package: `AICC-V3-CANONICAL-RESULT-RETURN-001`
-Current implementation phase: `V3.6.1 — result persistence and API implementation`
+Current implementation phase: `V3.6.2 — minimal canonical Result UI integration`
 
 ## Milestones
 

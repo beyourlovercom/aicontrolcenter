@@ -7,6 +7,7 @@ import {join} from 'node:path';
 import {loadProjectContext} from '../lib/project-context.mjs';
 import {createTask,createWorkPackage} from '../lib/work-store.mjs';
 import {readLease,readRun,readRunEvents} from '../lib/run-store.mjs';
+import {readResult} from '../lib/result-store.mjs';
 import {preflightCodex,reconcileExecutor,startRun,stopRun} from '../lib/executor-runtime.mjs';
 
 function git(cwd,...args){return execFileSync('git',args,{cwd,encoding:'utf8'}).trim();}
@@ -19,6 +20,7 @@ function fixture(mode='exit'){
   const script=`#!/usr/bin/env node
 let input='';process.stdin.setEncoding('utf8');process.stdin.on('data',c=>input+=c);process.stdin.on('end',()=>{
   console.log(JSON.stringify({type:'thread.started',thread_id:'fake-session',cwd:process.cwd(),argv:process.argv.slice(2),input}));
+  console.log(JSON.stringify({type:'item.completed',item:{type:'agent_message',text:'FAKE EXECUTOR RESULT\\n'}}));
   if(process.env.AICC_FAKE_MODE==='wait')setInterval(()=>{},1000);else setTimeout(()=>process.exit(0),60);
 });
 `;
@@ -53,6 +55,7 @@ test('detached worker binds exact cwd, args, session and append-only events',asy
   const created=startRun(f.context,{taskId:f.task.id,instruction},f.env,f.options);
   const run=await waitFor(f.context,created.runId,f.env,r=>r.state==='EXITED');
   assert.equal(run.exitCode,0);assert.equal(run.codexSessionId,'fake-session');
+  const result=readResult(f.context,run.runId,f.env);assert.equal(result.content,'FAKE EXECUTOR RESULT\n');assert.equal(result.runId,run.runId);
   assert.equal(run.repositoryPath,f.repo);assert.equal(readFileSync(run.instructionPath,'utf8'),instruction);
   await waitForLeaseRelease(f.context,f.env);
   const events=readRunEvents(f.context,run.runId,0,f.env);
