@@ -3,9 +3,10 @@ function assert(condition: unknown, message: string): asserts condition { if (!c
 assert(validWorkPackageId('AICC-CODEX-ONLY-MIGRATION-001'), 'valid WP selection');
 assert(!validWorkPackageId('../secret') && !validWorkPackageId('/tmp/x') && !validWorkPackageId('AICC-X/../Y'), 'path traversal WP rejected');
 const repo = await readRepositoryAsync();
-assert(repo.branch.length > 0 && repo.branch !== 'unavailable', 'branch read');
-assert(repo.head.length >= 40, 'HEAD read');
-assert(repo.worktree === 'CLEAN' || repo.worktree === 'DIRTY', 'worktree read');
+assert(typeof repo.branch==='string'&&typeof repo.head==='string','repository facts have stable string shape');
+assert(['CLEAN','DIRTY','UNAVAILABLE'].includes(repo.worktree),'worktree truth is explicit');
+if(repo.branch==='unavailable')assert(repo.head==='unavailable'&&repo.worktree==='UNAVAILABLE','missing canonical local repository fails closed without fabricated Git facts');
+else{assert(repo.head.length>=40,'available repository exposes an exact HEAD');assert(repo.worktree==='CLEAN'||repo.worktree==='DIRTY','available repository exposes real worktree state')}
 assert(!('runtime' in repo) && !('authorization' in repo), 'no fake runtime');
 let eventLoopTicked=false;
 const tick=new Promise<void>(resolve=>setImmediate(()=>{eventLoopTicked=true;resolve();}));
