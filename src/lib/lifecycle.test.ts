@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import {createProjectSnapshot} from './model/projectModel.ts';
 import {resolveEntityContext} from './context/entityContext.ts';
-import {readWorkPackage} from './controlService.ts';
+import {readCheckoutWorkPackage} from './checkoutWorkPackage.testFixture.ts';
 import {createEmptyGlobalStateReadModel} from './globalStateReadModel.ts';
 import {projectWpLayer2} from './wpCanonicalProjection.ts';
 const fixtureScope=(snapshot:any)=>({projectId:'lifecycle-fixture',repositoryIdentity:snapshot.repository.value?.repository??'fixture/repo',projectContextRevision:0} as const);
@@ -48,7 +48,7 @@ const lifecyclePassed=createProjectSnapshot({roadmap:{source:'test',content:life
 console.log('work package lifecycle projection matrix passed');
 const closedIds=['AICC-V2-AUTO-EXECUTE-MODE-001','AICC-V2-RUNTIME-OPERATIONS-001','AICC-V2-WORKSPACE-CONTEXT-001'];
 for(const closedId of closedIds){
-  const closedFormal=readWorkPackage(closedId);
+  const closedFormal=readCheckoutWorkPackage(closedId);
   const closedSnapshot=createProjectSnapshot({roadmap:{source:'test',content:`## Active V2 Milestones\n### M3 — Lifecycle\nWork Packages: \`${closedId}\`\n## Legacy Historical Milestones`},repository:lifecycleFixtureRepo,formalWorkPackages:{[closedId]:closedFormal}});
   const closedContext=resolveWp(closedSnapshot,closedId);
   assert.equal(closedContext.type,'work_package');if(closedContext.type!=='work_package')throw new Error('closed fixture context required');
@@ -58,7 +58,7 @@ for(const closedId of closedIds){
   assert.equal(closedContext.progress,null,`${closedId} progress remains UNKNOWN without canonical Roadmap progress evidence`);
   assert.equal(closedContext.availableActions.find(action=>action.id==='START_CODEX')?.enabled,false,`${closedId} no start action`);
 }
-const currentFormal=readWorkPackage('AICC-V2-WORK-PACKAGE-LIFECYCLE-001');
+const currentFormal=readCheckoutWorkPackage('AICC-V2-WORK-PACKAGE-LIFECYCLE-001');
 const currentSnapshot=createProjectSnapshot({roadmap:{source:'test',content:'## Active V2 Milestones\n### M3 — Lifecycle\nWork Packages: `AICC-V2-WORK-PACKAGE-LIFECYCLE-001`\n## Legacy Historical Milestones'},repository:lifecycleFixtureRepo,formalWorkPackages:{'AICC-V2-WORK-PACKAGE-LIFECYCLE-001':currentFormal}});
 const currentContext=resolveWp(currentSnapshot,'AICC-V2-WORK-PACKAGE-LIFECYCLE-001');assert.equal(currentContext.type,'work_package');if(currentContext.type!=='work_package')throw new Error('current lifecycle context required');assert.equal(currentContext.lifecycle.currentStage,'CLOSED');assert.equal(currentContext.lifecycle.effectiveStatus,'COMPLETE');assert.equal(currentContext.lifecycle.stages.find(stage=>stage.id==='IMPLEMENTATION')?.status,'COMPLETE');assert.equal(currentContext.lifecycle.stages.find(stage=>stage.id==='VALIDATION')?.status,'COMPLETE');assert.equal(currentContext.lifecycle.stages.find(stage=>stage.id==='HUMAN_UAT')?.status,'PASS');
 assert.equal(currentContext.availableActions.find(action=>action.id==='START_CODEX')?.enabled,false,'closed lifecycle WP has no execution primary action');
