@@ -41,6 +41,15 @@ Add the smallest durable Work Package + Task core to AICC V3, scoped only to the
 - browser reflects persisted facts rather than inferred status;
 - exact-head V3 CI passes before Owner UAT.
 
+## Frozen V3.4 contract
+
+- Authority: `docs/40_Architecture/AICC-V3-WP-TASK-STORE-CONTRACT.md`.
+- Store: one project-scoped `work-store.v1.json` under `~/.aicc-v3/projects/<project-key>/`.
+- WP status: `OPEN | ACTIVE | BLOCKED | DONE`.
+- Task status: `TODO | IN_PROGRESS | BLOCKED | DONE | CANCELLED`.
+- Task binding to `workPackageId` is immutable.
+- No delete, rebind, bulk mutation, title-edit, Codex, GPT Bridge, or PR behavior in V3.4 core.
+
 ## Next exact gate
 
-Freeze the V3.4 data model and storage contract before adding UI behavior.
+Implement the project-scoped store and minimal read/create/status APIs with focused tests. Do not add UI until the store/API layer passes locally.

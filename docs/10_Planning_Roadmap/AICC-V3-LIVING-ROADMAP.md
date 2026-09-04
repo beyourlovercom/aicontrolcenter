@@ -1,6 +1,6 @@
 # AICC V3 Living Roadmap
 
-Roadmap-Revision: 5
+Roadmap-Revision: 6
 Updated-At: 2026-09-04
 Status: `ACTIVE`
 
@@ -9,7 +9,7 @@ Status: `ACTIVE`
 `V3.4 — WP + Task Core`
 
 Current Work Package: `AICC-V3-WP-TASK-CORE-001`
-Current implementation phase: `V3.4.0 — scope and data-model gate`
+Current implementation phase: `V3.4.1 — project-scoped store and API implementation`
 
 ## Milestones
 
@@ -56,4 +56,4 @@ Total implementation budget: `55–70h` including bounded rework.
 
 ## Next exact gate
 
-Commit/push `AICC-V3-CANONICAL-ROADMAP-001`, require exact-head V3 CI PASS, restart the CN Mac 1420 service on that exact head, then stop at Owner Human UAT.
+Implement the frozen V3.4 project-scoped store and minimal APIs on CN Mac, pass focused Node-22 tests, then commit/push exact head before any UI work.
