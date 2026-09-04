@@ -20,7 +20,12 @@ execFileSync('git',['init','-b','test',fixtureRepository],{stdio:'ignore'});
 execFileSync('git',['-C',fixtureRepository,'remote','add','origin','https://github.com/beyourlovercom/aicontrolcenter.git']);
 const registryDir=join(registryRoot,'docs/10_Planning_Roadmap');mkdirSync(registryDir,{recursive:true});
 writeFileSync(join(registryDir,'04_AICC_PROJECT_REGISTRY.json'),JSON.stringify({schema:'aicc.project-registry.v1',activeProjectId:'aicc',projectContextRevision:0,projects:[{projectId:'aicc',displayName:'AICC V2',repositoryPath:fixtureRepository,repositoryIdentity:'beyourlovercom/aicontrolcenter',remoteOrigin:'https://github.com/beyourlovercom/aicontrolcenter.git',currentBranch:'test',defaultBranch:'main',roadmapPath:'docs/10_Planning_Roadmap/01_LIVING_ROADMAP.md'}]},null,2)+'\n');
-process.on('exit',()=>{try{process.chdir(root)}catch{};rmSync(registryRoot,{recursive:true,force:true})});
+const codexHome=join(registryRoot,'codex-home');mkdirSync(codexHome,{recursive:true});
+writeFileSync(join(codexHome,'models_cache.json'),JSON.stringify({models:[{slug:'fixture-codex',display_name:'Fixture Codex',visibility:'public',default_reasoning_level:'low',supported_reasoning_levels:[{effort:'low'}]}]}));
+writeFileSync(join(codexHome,'config.toml'),'model = "fixture-codex"\nmodel_reasoning_effort = "low"\n');
+const originalPath=process.env.PATH,originalCodexHome=process.env.CODEX_HOME;
+process.env.CODEX_HOME=codexHome;process.env.PATH='/usr/bin:/bin';
+process.on('exit',()=>{try{process.chdir(root)}catch{};if(originalPath===undefined)delete process.env.PATH;else process.env.PATH=originalPath;if(originalCodexHome===undefined)delete process.env.CODEX_HOME;else process.env.CODEX_HOME=originalCodexHome;rmSync(registryRoot,{recursive:true,force:true})});
 process.chdir(registryRoot);
 
 const inputs=[
