@@ -41,6 +41,11 @@ async function waitForLeaseRelease(context,env,timeout=2000){
   while(Date.now()<end){if(readLease(context,env)===null)return;await new Promise(r=>setTimeout(r,20));}
   assert.equal(readLease(context,env),null);
 }
+async function waitForResult(context,runId,env,timeout=3000){
+  const end=Date.now()+timeout;
+  while(Date.now()<end){try{return readResult(context,runId,env);}catch(error){if(error?.code!=='RESULT_NOT_FOUND')throw error;}await new Promise(r=>setTimeout(r,20));}
+  return readResult(context,runId,env);
+}
 test('preflight repairs launchd-minimal PATH locally without global mutation',()=>{
   const root=mkdtempSync(join(tmpdir(),'aicc-v3-preflight-'));const fake=join(root,'codex');
   const script=`#!/usr/bin/env node
@@ -55,7 +60,7 @@ test('detached worker binds exact cwd, args, session and append-only events',asy
   const created=startRun(f.context,{taskId:f.task.id,instruction},f.env,f.options);
   const run=await waitFor(f.context,created.runId,f.env,r=>r.state==='EXITED');
   assert.equal(run.exitCode,0);assert.equal(run.codexSessionId,'fake-session');
-  const result=readResult(f.context,run.runId,f.env);assert.equal(result.content,'FAKE EXECUTOR RESULT\n');assert.equal(result.runId,run.runId);
+  const result=await waitForResult(f.context,run.runId,f.env);assert.equal(result.content,'FAKE EXECUTOR RESULT\n');assert.equal(result.runId,run.runId);
   assert.equal(run.repositoryPath,f.repo);assert.equal(readFileSync(run.instructionPath,'utf8'),instruction);
   await waitForLeaseRelease(f.context,f.env);
   const events=readRunEvents(f.context,run.runId,0,f.env);
@@ -78,7 +83,7 @@ test('one lease rejects second start and exact stop reaches only owned worker',a
   assert.throws(()=>stopRun(f.context,'missing-run',f.env,f.options),e=>e.code==='RUN_NOT_FOUND');
   const stopped=stopRun(f.context,first.runId,f.env,f.options);assert.equal(stopped.stopRequested,true);
   const final=await waitFor(f.context,first.runId,f.env,r=>r.state==='STOPPED');
-  assert.equal(final.state,'STOPPED');assert.equal(readLease(f.context,f.env),null);
+  assert.equal(final.state,'STOPPED');await waitForLeaseRelease(f.context,f.env);
   const types=readRunEvents(f.context,first.runId,0,f.env).map(e=>e.type);
   assert.ok(types.includes('STOP_REQUESTED'));assert.ok(types.includes('PROCESS_STOPPED'));
 });

@@ -47,4 +47,11 @@ Add the smallest trustworthy PR Delivery layer for AICC V3 so GitHub PR facts, D
 
 ## Next exact gate
 
-Implement the frozen GitHub fact reader plus `GET /api/pr-delivery` and `POST /api/prs/draft` with focused tests. Do not add UI until exact-head CI passes for the runtime/API checkpoint.
+Commit and push the V3.7.1 GitHub facts / Draft-only API checkpoint and require exact-head V3 CI PASS. Then implement only the minimal PR Delivery UI: read-only repository/remote/check/PR facts plus one explicit Create Draft PR form. No merge, close, edit, ready, release, or deploy controls.
+
+## V3.7.1 implementation evidence
+
+- `GET /api/pr-delivery` and Draft-only `POST /api/prs/draft` implemented.
+- Local Node 22 suite reached `41/41 PASS` before checkpoint hardening.
+- Real CN Mac read-only reconciliation: repository identity PASS; local/remote HEAD exact match PASS; exact-head `verify-v3` check fact PASS; V3 open PR count = 0; no credential fields exposed.
+- Real Draft PR mutation was not invoked in this gate.

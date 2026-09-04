@@ -1,6 +1,6 @@
 # AICC V3 Living Roadmap
 
-Roadmap-Revision: 18
+Roadmap-Revision: 19
 Updated-At: 2026-09-04
 Status: `ACTIVE`
 
@@ -9,7 +9,7 @@ Status: `ACTIVE`
 `V3.7 — PR Delivery`
 
 Current Work Package: `AICC-V3-PR-DELIVERY-001`
-Current implementation phase: `V3.7.1 — GitHub facts and Draft PR API implementation`
+Current implementation phase: `V3.7.2 — minimal PR Delivery UI integration`
 
 ## Milestones
 
@@ -56,4 +56,4 @@ Total implementation budget: `55–70h` including bounded rework.
 
 ## Next exact gate
 
-Implement the frozen V3.7 GitHub fact reader and Draft-only PR API with focused tests. Prove exact repository/head reconciliation, dirty-worktree refusal, existing PR lookup, exact-head check-run transport, Draft-only creation, duplicate refusal, and no merge/close/edit endpoints before adding PR UI.
+Commit and push the V3.7.1 GitHub facts / Draft-only API checkpoint and require exact-head V3 CI PASS. Then add only the minimal PR Delivery UI: read-only repository/remote/check/PR facts plus one explicit Create Draft PR form. No merge, close, edit, ready, release, or deploy controls.

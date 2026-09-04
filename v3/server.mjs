@@ -7,6 +7,7 @@ import {loadCanonicalRoadmap} from './lib/roadmap.mjs';
 import {createTask,createWorkPackage,readWorkStore,updateTaskStatus,updateWorkPackageStatus} from './lib/work-store.mjs';
 import {executorStatus,runEvents,runProjection,startRun,stopRun} from './lib/executor-runtime.mjs';
 import {readOrMaterializeResult} from './lib/result-store.mjs';
+import {createDraftPr,readPrDeliveryFacts} from './lib/github-delivery.mjs';
 
 const root=dirname(fileURLToPath(import.meta.url));
 const publicRoot=join(root,'public');
@@ -53,6 +54,16 @@ function resultError(res,error){
   const errorCode=error?.code||'RESULT_INVALID';
   return json(res,resultErrorStatus(errorCode),{available:false,errorCode});
 }
+function prErrorStatus(code){
+  if(['PR_INPUT_INVALID','REQUEST_JSON_INVALID'].includes(code))return 400;
+  if(['PR_ALREADY_EXISTS','PR_LOCAL_WORKTREE_DIRTY','PR_HEAD_IS_DEFAULT_BRANCH','PR_REMOTE_HEAD_NOT_FOUND','PR_REMOTE_HEAD_MISMATCH','PR_BASE_NOT_FOUND','PR_BASE_EQUALS_HEAD'].includes(code))return 409;
+  return 503;
+}
+function prError(res,error){
+  const errorCode=error?.code||'GITHUB_NOT_READY';const body={ok:false,errorCode};
+  if(error?.existingPr)body.existingPr=error.existingPr;return json(res,prErrorStatus(errorCode),body);
+}
+
 async function readJson(req){
   let body='';
   for await(const chunk of req){
@@ -67,6 +78,7 @@ export function createAiccV3Server(options={}){
   const env=options.env||process.env;
   const storeOptions=options.workStoreOptions||{};
   const executorOptions=options.executorOptions||{};
+  const prDeliveryOptions=options.prDeliveryOptions||{};
   return createHttpServer(async(req,res)=>{
     const url=new URL(req.url||'/',`http://${req.headers.host||'localhost'}`);
     if(req.method==='GET'&&url.pathname==='/api/health'){
@@ -117,6 +129,15 @@ export function createAiccV3Server(options={}){
         const input=await readJson(req);const context=loadProjectContext(env);
         return json(res,200,{ok:true,...updateTaskStatus(context,decodeURIComponent(taskStatus[1]),input?.status,env,storeOptions)});
       }catch(error){return workError(res,error);}
+    }
+
+    if(req.method==='GET'&&url.pathname==='/api/pr-delivery'){
+      try{const context=loadProjectContext(env);return json(res,200,{available:true,delivery:readPrDeliveryFacts(context,env,prDeliveryOptions)});}
+      catch(error){return prError(res,error);}
+    }
+    if(req.method==='POST'&&url.pathname==='/api/prs/draft'){
+      try{const input=await readJson(req);const context=loadProjectContext(env);return json(res,201,{ok:true,pullRequest:createDraftPr(context,input,env,prDeliveryOptions)});}
+      catch(error){return prError(res,error);}
     }
 
     if(req.method==='GET'&&url.pathname==='/api/executor'){
