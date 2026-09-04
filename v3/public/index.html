@@ -72,9 +72,21 @@
         <div class="transport-note">Transport only: EXITED does not mean PASS. AICC does not infer semantic result.</div>
         <h3>Append-only Events</h3>
         <pre class="event-stream" id="run-events"></pre>
+        <section class="result-panel" id="result-panel" hidden>
+          <div class="result-status" id="result-status">正在读取 Canonical Result…</div>
+          <div class="section-heading"><div><span>Canonical Result</span><h3>Executor-provided Result</h3></div><strong id="result-source"></strong></div>
+          <div class="result-facts">
+            <article><span>Result ID</span><strong id="result-id"></strong></article>
+            <article><span>Bound Run</span><strong id="result-run-id"></strong></article>
+            <article><span>Content SHA-256</span><strong id="result-content-sha"></strong></article>
+            <article><span>Raw SHA-256</span><strong id="result-raw-sha"></strong></article>
+          </div>
+          <div class="transport-note">Executor-provided exact content. AICC does not rewrite, summarize, translate, or infer PASS from Result presence.</div>
+          <pre class="result-content" id="result-content"></pre>
+        </section>
       </div>
     </section>
-    <footer>V3.5 · explicit Run transport · no V2 fallback · no browser semantic inference</footer>
+    <footer>V3.6 · canonical Result display · no V2 fallback · no browser semantic inference</footer>
   </main>
   <script type="module" src="/app.js"></script>
 </body>

@@ -193,12 +193,27 @@ function renderRun(run){
 function renderEvents(){
   $('run-events').textContent=eventRows.length?eventRows.map(event=>JSON.stringify(event)).join('\n'):'暂无 Run event';
 }
+function clearResult(message='RESULT NOT READY'){
+  $('result-panel').hidden=false;$('result-status').textContent=message;$('result-status').dataset.state='';
+  $('result-id').textContent='—';$('result-run-id').textContent=currentRunId||'—';$('result-source').textContent='';
+  $('result-content-sha').textContent='—';$('result-raw-sha').textContent='—';$('result-content').textContent='';
+}
+function renderResult(result){
+  $('result-panel').hidden=false;$('result-status').textContent='CANONICAL RESULT AVAILABLE';$('result-status').dataset.state='ok';
+  $('result-id').textContent=result.resultId;$('result-run-id').textContent=result.runId;$('result-source').textContent=`Source event #${result.sourceEventSeq}`;
+  $('result-content-sha').textContent=result.contentSha256;$('result-raw-sha').textContent=result.sourceRawSha256;$('result-content').textContent=result.content;
+}
+async function loadResult(run){
+  if(run.state!=='EXITED'){clearResult(`RESULT NOT READY · transport state ${run.state}`);return null;}
+  try{const body=await api(`/api/runs/${encodeURIComponent(run.runId)}/result`);renderResult(body.result);return body.result;}
+  catch(error){clearResult(`RESULT NOT AVAILABLE · ${error.message}`);$('result-status').dataset.state='error';return null;}
+}
 async function loadRun(runId,{reset=false}={}){
   if(reset||currentRunId!==runId){currentRunId=runId;eventAfter=0;eventRows=[];}
   const runBody=await api(`/api/runs/${encodeURIComponent(runId)}`);renderRun(runBody.run);
   const eventBody=await api(`/api/runs/${encodeURIComponent(runId)}/events?after=${eventAfter}`);
   if(eventBody.events.length){eventRows.push(...eventBody.events);eventAfter=eventRows.at(-1).seq;}renderEvents();
-  return runBody.run;
+  await loadResult(runBody.run);return runBody.run;
 }
 function startPolling(runId){
   stopPolling();runPoll=setInterval(async()=>{
@@ -211,7 +226,7 @@ async function loadExecutor(){
   if(body.executor.latestRun){
     const run=await loadRun(body.executor.latestRun.runId,{reset:true});
     if(body.executor.activeLease&&!RUN_TERMINAL_STATES.includes(run.state))startPolling(run.runId);
-  }else{$('run-panel').hidden=true;currentRunId=null;eventAfter=0;eventRows=[];}
+  }else{$('run-panel').hidden=true;$('result-panel').hidden=true;currentRunId=null;eventAfter=0;eventRows=[];}
 }
 $('run-form').addEventListener('submit',async event=>{
   event.preventDefault();const taskId=$('run-task').value;const instruction=$('run-instruction').value;

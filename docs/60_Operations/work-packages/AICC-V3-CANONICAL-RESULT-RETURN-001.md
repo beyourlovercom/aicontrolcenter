@@ -57,6 +57,13 @@ Add the smallest canonical Result layer for AICC V3 so one completed Run can pro
 - Detached worker integration proves normal `EXITED` completion materializes Result without browser involvement.
 - CN Mac Node 22 suite: `33/33 PASS`.
 
+## V3.6.2 checkpoint
+
+- Read-only Canonical Result UI is implemented over the exact Run Result GET endpoint.
+- UI displays Result ID, bound Run, source event sequence, content/raw hashes, and executor-provided exact content.
+- Browser has no Result write/edit/delete/semantic-status control and does not derive PASS from Result presence or exitCode.
+- CN Mac Node 22 suite: `35/35 PASS`.
+
 ## Next exact gate
 
-Commit/push this V3.6.1 persistence/API checkpoint and require exact-head V3 CI PASS. Then add only the read-only canonical Result UI and stop at final Owner UAT after exact-head CI and CN Mac runtime verification.
+Commit/push the V3.6.2 UI checkpoint, require exact-head V3 CI PASS, restart CN Mac 1420 on that exact head, verify the prior real V3.5 Run materializes and reloads the exact Result, and stop at Owner Human UAT. Do not begin V3.7 before explicit Owner pass.
