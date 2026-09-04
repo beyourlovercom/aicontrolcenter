@@ -1,5 +1,8 @@
 import assert from 'node:assert/strict';
-import {readFileSync} from 'node:fs';
+import {mkdirSync,mkdtempSync,readFileSync,rmSync,writeFileSync} from 'node:fs';
+import {execFileSync} from 'node:child_process';
+import {tmpdir} from 'node:os';
+import {join} from 'node:path';
 import {createCanonicalExecutionRequest, submitExecution} from './bridgeCore.ts';
 import {buildPassThroughPrompt} from './runtimeManager.ts';
 
@@ -9,6 +12,16 @@ const app=readFileSync(`${root}/src/App.svelte`,'utf8');
 const server=readFileSync(`${root}/vite.config.ts`,'utf8');
 const runtime=readFileSync(`${root}/src/lib/runtimeManager.ts`,'utf8');
 const launcher=readFileSync(`${root}/src/lib/codexRuntimeLauncher.ts`,'utf8');
+
+const registryRoot=mkdtempSync(join(tmpdir(),'aicc-phase3-registry-'));
+const fixtureRepository=join(registryRoot,'repository');
+mkdirSync(fixtureRepository,{recursive:true});
+execFileSync('git',['init','-b','test',fixtureRepository],{stdio:'ignore'});
+execFileSync('git',['-C',fixtureRepository,'remote','add','origin','https://github.com/beyourlovercom/aicontrolcenter.git']);
+const registryDir=join(registryRoot,'docs/10_Planning_Roadmap');mkdirSync(registryDir,{recursive:true});
+writeFileSync(join(registryDir,'04_AICC_PROJECT_REGISTRY.json'),JSON.stringify({schema:'aicc.project-registry.v1',activeProjectId:'aicc',projectContextRevision:0,projects:[{projectId:'aicc',displayName:'AICC V2',repositoryPath:fixtureRepository,repositoryIdentity:'beyourlovercom/aicontrolcenter',remoteOrigin:'https://github.com/beyourlovercom/aicontrolcenter.git',currentBranch:'test',defaultBranch:'main',roadmapPath:'docs/10_Planning_Roadmap/01_LIVING_ROADMAP.md'}]},null,2)+'\n');
+process.on('exit',()=>{try{process.chdir(root)}catch{};rmSync(registryRoot,{recursive:true,force:true})});
+process.chdir(registryRoot);
 
 const inputs=[
   'phase3-中文-检查仓库状态',
