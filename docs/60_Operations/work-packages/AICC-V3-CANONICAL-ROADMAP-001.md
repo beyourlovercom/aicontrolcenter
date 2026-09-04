@@ -1,6 +1,6 @@
 # AICC-V3-CANONICAL-ROADMAP-001
 
-Status: `ACTIVE / OWNER_AUTHORIZED`
+Status: `CLOSED / OWNER_UAT_PASS`
 
 ## Objective
 
@@ -55,4 +55,12 @@ Add one read-only canonical Roadmap projection to AICC V3, derived only from the
 
 ## Next exact gate
 
-Commit/push the implementation, require exact-head V3 CI PASS, restart CN Mac 1420 on that exact head, then stop at Owner Human UAT.
+Closed. Successor authority: `AICC-V3-WP-TASK-CORE-001`.
+
+## Owner UAT closure
+
+- Result: `PASS`
+- Owner decision: explicit `pass` on 2026-09-04.
+- Exact implementation head under UAT: `3cbf3feb07b35eda3a3833b52ae084f7cc8aab31`.
+- V3 CI Run #4: `PASS`.
+- Closure: `AICC-V3-CANONICAL-ROADMAP-001 = CLOSED`.

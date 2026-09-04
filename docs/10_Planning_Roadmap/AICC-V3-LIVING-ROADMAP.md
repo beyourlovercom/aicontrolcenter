@@ -1,15 +1,15 @@
 # AICC V3 Living Roadmap
 
-Roadmap-Revision: 4
+Roadmap-Revision: 5
 Updated-At: 2026-09-04
 Status: `ACTIVE`
 
 ## Current milestone
 
-`V3.3 — Canonical Roadmap`
+`V3.4 — WP + Task Core`
 
-Current Work Package: `AICC-V3-CANONICAL-ROADMAP-001`
-Current implementation phase: `V3.3.2 — exact-head CI and Owner UAT`
+Current Work Package: `AICC-V3-WP-TASK-CORE-001`
+Current implementation phase: `V3.4.0 — scope and data-model gate`
 
 ## Milestones
 
