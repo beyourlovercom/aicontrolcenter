@@ -1,0 +1,12 @@
+import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
+import {join} from 'node:path';
+const source=readFileSync(join(process.cwd(),'src/App.svelte'),'utf8');
+assert.match(source,/entityContextReady=Boolean\(activeRoadmapProject&&prLayer2&&wpProjection\)/);
+assert.match(source,/prTab=entityContextReady&&context\.type==='pull_request'/);
+assert.match(source,/ownerWorkflowStages=entityContextReady\?resolveOwnerWorkflowStages/);
+assert.match(source,/tabStatuses=entityContextReady&&context\.type==='work_package'/);
+assert.match(source,/if\(entityContextReady&&context\.type==='work_package'\)/);
+assert.match(source,/\{:else if !entityContextReady\}[\s\S]*data-testid="entity-context-loading"[\s\S]*\{:else if centerViewMode==='MILESTONE_OVERVIEW'/);
+assert.match(source,/\{#if !entityContextReady\}<div data-testid="entity-context-loading-inspector"/);
+console.log('App boot context guard matrix passed');

@@ -1,0 +1,13 @@
+import assert from 'node:assert/strict';
+import {buildRuntimeObserver,normalizeRuntimeEvent,resolveCurrentActivity} from './runtimeObserver.ts';
+const base={runId:'run-test',projectId:'aicc',repositoryIdentity:'aicc-repo',workPackageId:'AICC-V2-RUNTIME-OBSERVER-001',authorizationId:'auth',authoritySha:'sha',branch:'rebuild/aicc-v2',startingHeadSha:'head',pid:42,pidAlive:true,threadId:'thread',phase:'RUNNING',currentTask:'正在执行命令',latestEvent:'item.started',startedAt:'2026-01-01T00:00:00.000Z',lastActivityAt:'2026-01-01T00:00:01.000Z',events:['item.started:command_execution'],commandExecutionCount:2};
+assert.equal(resolveCurrentActivity(base),'执行');
+assert.equal(normalizeRuntimeEvent('item.completed:file_change').label,'修改');
+assert.equal(normalizeRuntimeEvent('vendor.future_signal').kind,'unknown');assert.equal(normalizeRuntimeEvent('vendor.future_signal').label,'技术事件');
+const active=buildRuntimeObserver(base,null,{status:'HELD',scope:'repository'},Date.parse('2026-01-01T00:00:02.000Z'));
+assert.equal(active.process,'ALIVE');assert.equal(active.writerLock.status,'HELD');assert.equal(active.metrics.commands,2);assert.equal(active.events.length,1);
+const terminal=buildRuntimeObserver({...base,phase:'COMPLETED',pidAlive:false,completedAt:'2026-01-01T00:01:00.000Z',implementationResult:'CODE_CHANGE_PRESENT'},null,{status:'NOT_HELD',scope:'repository'});
+assert.equal(terminal.process,'DEAD');assert.equal(terminal.health,'HEALTHY');assert.equal(terminal.writerLock.status,'NOT_HELD');
+assert.equal(buildRuntimeObserver({...base,phase:'FAILED',pidAlive:false,stderr:'diagnostic',finalAgentMessage:'blocked'},null,{status:'NOT_HELD',scope:'repository'}).terminal,'diagnostic\nblocked');
+const empty=buildRuntimeObserver(null,null,{status:'NOT_HELD',scope:'repository'});assert.equal(empty.activity,'不可用');assert.equal(empty.acceptance.items.length,0);
+console.log('runtime observer contract tests passed');

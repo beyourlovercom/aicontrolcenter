@@ -1,0 +1,15 @@
+import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
+const app=readFileSync(new URL('../App.svelte',import.meta.url),'utf8');
+const progress=readFileSync(new URL('../components/entity/MilestoneProgress.svelte',import.meta.url),'utf8');
+const inspector=readFileSync(new URL('../components/entity/WpRightContextInspector.svelte',import.meta.url),'utf8');
+assert.match(app,/function openSelectedWorkPackageWorkspace\(\)/,'one canonical Open Workspace routing function exists');
+assert.match(app,/centerViewMode='ENTITY_WORKSPACE'/,'view mode changes only central routing');
+assert.match(app,/selectedEntity\.type!=='work_package'/,'routing uses the existing canonical WP selection');
+assert.match(progress,/event\.stopPropagation\(\);onOpen\(item\.child\.id\)/,'arrow open prevents the row inspect action');
+assert.match(progress,/onclick=\{\(\)=>onSelect\(item\.child\.id\)\}/,'row click remains inspect-only');
+assert.match(inspector,/onclick=\{onOpen\}/,'right Open action uses the supplied canonical route');
+assert.match(app,/WpRightContextInspector \{context\}[^]*?onOpen=\{openSelectedWorkPackageWorkspace\}/,'right inspector remains present in WP workspace mode');
+assert.match(app,/centerViewMode==='MILESTONE_OVERVIEW'&&milestoneOverviewContext/,'Milestone Overview remains a distinct center mode');
+assert.doesNotMatch(app,/openedWpId|workspaceWpId|activeDetailWp|selectedWorkspaceWp/,'no duplicate WP selection authority exists');
+console.log('Milestone WP workspace routing tests passed');

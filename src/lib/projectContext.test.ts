@@ -1,0 +1,18 @@
+import {strict as assert} from 'node:assert';
+import {defaultProjectRegistry,detectDuplicateWork,getProjectRegistry,matchProject,projectContextGovernance,PROJECT_CONTEXT_READ_MODEL_AUTHORITY,validateRegisteredRepository} from './projectContext.ts';
+const registry=getProjectRegistry();
+assert.equal(registry.list().length,2);
+assert.equal(registry.get('aicc')?.projectId,'aicc');
+assert.equal(registry.get('erpbeyourlovercom')?.projectId,'erpbeyourlovercom');
+assert.equal(PROJECT_CONTEXT_READ_MODEL_AUTHORITY,'NONE');
+assert.equal(registry.get('aicc')?.repositoryPath,'/Users/a/AI/007/AIcontrolcenter');
+assert.equal(registry.get('erpbeyourlovercom')?.repositoryPath,'/Users/a/AI/007/erpbeyourlovercom');
+assert.equal(registry.get('aicc')?.currentBranch,'rebuild/aicc-v2');
+assert.equal(registry.get('erpbeyourlovercom')?.currentBranch,'docs/mvp1-uat-page-by-page-transition-001');
+assert.equal(registry.get('erpbeyourlovercom')?.roadmapPath,'NOT_CONFIGURED');
+assert.equal(validateRegisteredRepository(registry.get('aicc')!),true);
+assert.throws(()=>{const invalid={...registry.get('aicc')!,repositoryExists:false};defaultProjectRegistry.register(invalid)},/INVALID_REPOSITORY/);
+assert.equal(matchProject('增加 ERP 库存预警').project?.projectId,'erpbeyourlovercom');
+assert.equal(detectDuplicateWork('erpbeyourlovercom','inventory',{completed_wp:['inventory alert'],active_wp:[],failed_wp:[],dependencies:{}}),'DUPLICATE_RISK');
+assert.equal(projectContextGovernance().canChangeOwnership,false);
+console.log('external project registry and active context matrix passed');

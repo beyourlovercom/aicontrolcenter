@@ -1,0 +1,12 @@
+import assert from 'node:assert/strict';
+import {lockExecutionContext,persistExecutionContextLock,readExecutionContextLock,resolveExecutionContext,unlockExecutionContext} from './executionContext.ts';
+const values=new Map<string,string>();const storage={getItem:(key:string)=>values.get(key)??null,setItem:(key:string,value:string)=>{values.set(key,value)}};
+const wpA={type:'work_package' as const,id:'WP-A'},wpB={type:'work_package' as const,id:'WP-B'};
+const locked=lockExecutionContext(wpA);persistExecutionContextLock(locked,storage);assert.deepEqual(readExecutionContextLock(storage),locked);
+assert.deepEqual(resolveExecutionContext(null,locked),wpA,'explicit Owner lock binds unscoped work');
+assert.deepEqual(resolveExecutionContext(wpB,locked),wpB,'explicit entity overrides Owner lock');
+assert.deepEqual(resolveExecutionContext(null,unlockExecutionContext()),null,'unlock does not bind current view');
+assert.deepEqual(lockExecutionContext({type:'pull_request',id:'PR-A'}).entity,{type:'pull_request',id:'PR-A'});
+assert.deepEqual(lockExecutionContext({type:'milestone',id:'M4'}).entity,{type:'milestone',id:'M4'});
+assert.deepEqual(lockExecutionContext({type:'task',id:'task-1',workPackageId:'WP-A'}).entity,{type:'task',id:'task-1',workPackageId:'WP-A'});
+console.log('execution context lock matrix passed');

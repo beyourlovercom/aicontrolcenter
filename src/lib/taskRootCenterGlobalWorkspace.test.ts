@@ -1,0 +1,35 @@
+import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
+
+const app=readFileSync(new URL('../App.svelte',import.meta.url),'utf8');
+const center=readFileSync(new URL('../components/GlobalTaskView.svelte',import.meta.url),'utf8');
+const left=readFileSync(new URL('../components/TaskQuickList.svelte',import.meta.url),'utf8');
+const presentation=readFileSync(new URL('./taskPresentation.ts',import.meta.url),'utf8');
+
+assert.match(app,/else if\(tab==='TASK'\)\{selectedTaskId=null;globalWorkspace=true;\}/,'TOP_TASK_CLICK_SELECTED_TASK = NONE');
+assert.match(app,/GlobalTaskView center groups=\{globalTaskGroups\}/,'TOP_TASK_CLICK_SHOWS_GLOBAL_TASK_WORKSPACE = PASS');
+assert.match(center,/全局任务/,'GLOBAL_TASK_SUMMARY = PASS');
+for(const label of ['All Tasks','Running','Waiting Owner','Completed','Failed','Global'])assert.match(center,new RegExp(label),`GLOBAL_TASK_${label.replace(/ /g,'_')} = PASS`);
+for(const heading of ['任务名称','状态','结果','Entity / WP','PR binding','Branch','Run ID','Created time','Completed time','Source'])assert.match(center,new RegExp(heading),`CENTER_COLUMN_${heading} = PASS`);
+assert.match(center,/taskDisplayName\(task\)/,'CENTER_TASK_NAME_PRESENTATION = PASS');
+assert.match(center,/taskStatusIcon\(status\)/,'CENTER_STATUS_PRESENTATION = PASS');
+assert.match(center,/taskStatusLabel\(status\)/,'CENTER_REAL_STATUS_TOOLTIP = PASS');
+assert.match(center,/taskHasCanonicalResult\(task\)/,'CENTER_RESULT_PRESENTATION = PASS');
+for(const icon of ['✅','🟡','⏭️','🔴'])assert.match(presentation,new RegExp(icon),`CENTER_STATUS_ICON_${icon} = PASS`);
+assert.match(center,/>📋</,'CENTER_RESULT_AVAILABLE = PASS');
+assert.match(center,/>🈚</,'CENTER_RESULT_UNAVAILABLE = PASS');
+assert.match(center,/onclick=\{\(\)=>onCopyTaskResult\(task\)\}/,'CENTER_ROW_RESULT_AUTHORITY = ROW_TASK_CANONICAL_RESULT');
+assert.match(app,/onCopyTaskResult=\{copyTaskRowResult\}/,'CENTER_COPY_USES_ROW_TASK_HANDLER = PASS');
+const copy=app.match(/async function copyTaskRowResult\(task:any\)\{([^}]*)\}/)?.[1]??'';
+assert.match(copy,/task\?\.canonicalResult\?\.rawResult/,'ROW_TASK_CANONICAL_RESULT = PASS');
+assert.doesNotMatch(copy,/(?:globalRuntime|composerSubmittedRunId|selectedRunId)/,'GLOBAL_RESULT_FALLBACK = NONE; COMPOSER_RESULT_FALLBACK = NONE');
+assert.match(left,/taskStatusIcon/,'LEFT_CENTER_STATUS_PRESENTATION_MATCH = PASS');
+assert.match(left,/taskHasCanonicalResult/,'LEFT_CENTER_RESULT_PRESENTATION_MATCH = PASS');
+assert.match(app,/\{#if selectedTask\}<EntityOperationsWorkspace entityType="work_package"/,'TASK_OPERATIONS_ROUTING_IMPLEMENTED = YES');
+assert.match(app,/TaskQuickList tasks=\{taskRecords\}/,'LEFT_TASK_QUICK_LIST_LAYOUT_MODIFIED = NO');
+assert.match(app,/TaskRightContextInspector/,'RIGHT_TASK_PANEL_MODIFIED = NO');
+assert.match(app,/GlobalExecutionComposerDock/,'GLOBAL_COMPOSER_MODIFIED = NO');
+assert.match(app,/GlobalPrWorkspace/,'PR_WORKSPACE_REGRESSION = PASS');
+assert.match(app,/GlobalWpWorkspace/,'WP_WORKSPACE_REGRESSION = PASS');
+assert.match(app,/GlobalBlueprintWorkspace/,'BLUEPRINT_WORKSPACE_REGRESSION = PASS');
+console.log('Task Root center Global Task Workspace contract passed');

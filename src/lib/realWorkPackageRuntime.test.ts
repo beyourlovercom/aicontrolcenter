@@ -1,0 +1,11 @@
+import assert from 'node:assert/strict';
+import {ExecutionProviderRegistry} from './executionProviderRegistry.ts';
+import {createCodexExecutionProvider} from './codexExecutionProvider.ts';
+import {startRealWorkPackageRuntime} from './realWorkPackageRuntime.ts';
+const packages=new Map<string,any>(),contexts=new Map<string,any>(),bindings=new Map<string,any>(),branches=new Set<string>(),worktrees=new Set<string>();
+const git={head:()=> 'abcdef0123456789',worktreeExists:(p:string)=>worktrees.has(p),branchExists:(b:string)=>branches.has(b),createWorktree:(p:string,b:string)=>{worktrees.add(p);branches.add(b)}};
+const provider=createCodexExecutionProvider({available:true,spawnProcess:()=>({pid:42}) as any});const registry=new ExecutionProviderRegistry('codex');registry.register(provider,{provider_id:'codex',display_name:'Codex',capabilities:['implementation'],status:'active',version:'1'});
+const input={workPackageId:'AICC-M6-REAL-WP-001',repository:'/repo',baseBranch:'rebuild/aicc-v2',worktreeRoot:'/tmp/m6-real',executionId:'exec-1',executionType:'IMPLEMENTATION',sandbox:'workspace-write' as const,workPackages:{get:(id:string)=>packages.get(id)??null,put:(v:any)=>packages.set(v.id,v)},store:{get:(id:string)=>contexts.get(id)??null,put:(v:any)=>contexts.set(v.workPackageId,v)},bindings:{get:(id:string)=>bindings.get(id)??null,put:(v:any)=>bindings.set(v.work_package_id,v)},git,providers:registry,now:'now'};
+const first=startRealWorkPackageRuntime(input);assert.equal(first.workPackage.status,'CREATED');assert.equal(first.deliveryContext.workPackageId,input.workPackageId);assert.equal(first.deliveryContext.deliveryBranch,'delivery/aicc-m6-real-wp-001');assert.equal(first.executionBinding.provider_id,'codex');assert.equal(first.executionContext.worktree_path,first.deliveryContext.worktreePath);assert.equal(first.executionContext.branch,first.deliveryContext.deliveryBranch);
+const second=startRealWorkPackageRuntime({...input,executionId:'exec-2',now:'later'});assert.equal(second.reusedWorkPackage,true);assert.equal(second.reusedBinding,true);assert.equal(worktrees.size,1);assert.equal(branches.size,1);
+assert.equal(registry.validate('codex',first.executionContext),null);console.log('real work package runtime matrix passed');

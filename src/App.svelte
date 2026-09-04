@@ -1,492 +1,514 @@
 <script lang="ts">
-  import { onDestroy, onMount } from 'svelte';
-  import { cancelSync as cancelledSync, authorizeWorkPackage, controlCodex, createCodexRuntimePoller, emptyState, loadControlLoop, ownerBlocker, readCodexRuntime, repositoryStatusEvidence, requestSync, runtimePhaseCopy, runtimeSupportsControl, syncAllowed, syncOutcome, syncState as getSyncState, syncWorkspace, type CodexControlAction, type ControlLoopState, type RoadmapEntry, type SyncState } from './lib/controlLoop';
+  import {onDestroy,onMount,setContext,tick} from 'svelte';
+  import RoadmapTree from './components/RoadmapTree.svelte';
+  import GlobalTaskView from './components/GlobalTaskView.svelte';
+  import TaskQuickList from './components/TaskQuickList.svelte';
+  import GlobalPrWorkspace from './components/GlobalPrWorkspace.svelte';
+  import TaskRightContextInspector from './components/TaskRightContextInspector.svelte';
+  import PrNavigation from './components/PrNavigation.svelte';
+  import GlobalBlueprintWorkspace from './components/GlobalBlueprintWorkspace.svelte';
+  import GlobalWpWorkspace from './components/GlobalWpWorkspace.svelte';
+  import StatusTabs from './components/StatusTabs.svelte';
+  import WorkflowTimeline from './components/WorkflowTimeline.svelte';
+  import EntityHeader from './components/entity/EntityHeader.svelte';
+  import EntityEvidencePanel from './components/entity/EntityEvidencePanel.svelte';
+  import PrEvidencePanel from './components/entity/PrEvidencePanel.svelte';
+  import MilestoneView from './components/entity/MilestoneView.svelte';
+  import WpRightContextInspector from './components/entity/WpRightContextInspector.svelte';
+  import OwnerActionZone from './components/entity/OwnerActionZone.svelte';
+  import PrOwnerActionZone from './components/entity/PrOwnerActionZone.svelte';
+  import CurrentContextLocator from './components/CurrentContextLocator.svelte';
+  import RuntimeWorkspace from './components/entity/RuntimeWorkspace.svelte';
+  import HumanUatWorkspace from './components/entity/HumanUatWorkspace.svelte';
+  import EntityOperationsWorkspace from './components/entity/EntityOperationsWorkspace.svelte';
+  import AuthorizationWorkspace from './components/entity/AuthorizationWorkspace.svelte';
+  import DeliveryContextPanel from './components/entity/DeliveryContextPanel.svelte';
+  import GlobalExecutionComposerDock from './components/GlobalExecutionComposerDock.svelte';
+  import GlobalFeedbackIsland from './components/GlobalFeedbackIsland.svelte';
+  import {canonicalFeedbackCopyText,copyFailureFeedback,copySuccessFeedback,feedbackPresentationKey,isCopyableFeedback,type GlobalFeedbackState} from './lib/globalFeedbackInteraction.ts';
+  import {recordAppMount} from './lib/runtimeLifecycleInstrumentation.ts';
+  import {createProjectSnapshot,type EntityDisplayMetadata,type RawProjectSources} from './lib/model/projectModel';
+  import {projectGlobalFocus,projectGlobalMilestones,projectGlobalWorkPackages} from './lib/globalWorkspaceProjection.ts';
+  import {resolveEntityContext} from './lib/context/entityContext';
+  import {resolveOwnerStatusProjection,resolveOwnerWorkflowStages} from './lib/context/ownerStatusProjection';
+  import {resolvePrTabView} from './lib/context/prTabContent';
+  import {prLifecycleStateLabel} from './lib/prLifecycleWorkspace.ts';
+  import {selectCanonicalCurrentRuntime} from './lib/runtimeSelection.ts';
+  import {isActiveRuntime,projectRuntimeFeedback,shouldContinueRuntimePolling} from './lib/runtimeLiveProjection.ts';
+  import {canonicalTaskResultForRun,projectTaskResult,taskResultNeedsReconciliation} from './lib/taskResultProjection.ts';
+  import {scopeInboxToEntity,scopeTasksToEntity} from './lib/entityScope.ts';
+  import {buildGlobalTaskGroups} from './lib/globalTaskView.ts';
+  import {lockExecutionContext,persistExecutionContextLock,readExecutionContextLock,unlockExecutionContext,type ExecutionContextLock} from './lib/executionContext.ts';
+  import {allRoadmapExpanded,expandableRoadmapIds,expandRoadmapAncestors,roadmapEntityLabel,roadmapPath,toggleCollapsedNode,type CollapsedNodeIds} from './lib/roadmapUiBaseline.ts';
+  import {canonicalRoadmapEntitySelection,deserializeRoadmapProjection,preserveRoadmapUiState,type RoadmapProjection} from './lib/roadmapProjection.ts';
+  import {deserializePrNavigationSnapshot,toPullRequestRecordLike,type PrNavigationSnapshot} from './lib/prNavigationSnapshot.ts';
+  import {createEmptyGlobalStateReadModel,type AiccGlobalStateReadModel} from './lib/globalStateReadModel.ts';
+  import {projectTaskLayer2ReadModel} from './lib/taskCanonicalProjection.ts';
+  import {projectPrLayer2,type PrLayer2Projection} from './lib/prCanonicalProjection.ts';
+  import {projectWpLayer2,projectWpRoadmapNodes,type WpLayer2Projection} from './lib/wpCanonicalProjection.ts';
+  import {projectPhase5Lifecycle} from './lib/runtimeResultFeedbackControlLoopProjection.ts';
+  import {projectHumanUatLayer2,type HumanUatLayer2Projection} from './lib/humanUatCanonicalProjection.ts';
+  import {composeUiLifecycleReadModel,presentationStatus,projectTaskUiRecords,projectedLifecycleText} from './lib/uiLifecycleConsumerProjection.ts';
+  import {createLayer2ChangeNotifier} from './lib/globalStateConsistency.ts';
+  import type {RoadmapNode} from './lib/workflow.ts';
+  import type {ActionEligibility,FormalWorkPackage,HumanUatRecord,SelectedEntityRef,WorkPackageEntityContext} from './lib/model/entityTypes';
+  import {createExecutionActionLayer,registerMacShortcuts,type ExecutionActionLayer} from './lib/executionActionLayer';
+  import {resolveComposerCanonicalResult} from './lib/composerCopyResult.ts';
+  import {persistComposerDraft,readComposerDraft} from './lib/composerDraft.ts';
+  import {persistComposerRunBinding,readComposerRunBinding} from './lib/composerRunBinding.ts';
+  import {scopeBridgeRecords} from './lib/projectScopedBridgeCollections.ts';
+  import type {DeliveryContextProjection} from './lib/deliveryContextProjection.ts';
 
-  type Tab = 'overview' | 'openspec' | 'codex' | 'validation';
+  type Drawer='roadmap'|'status'|null;
+  type Feedback=GlobalFeedbackState;
+  const HEALTH_FAILURE_THRESHOLD=2,HEALTH_RECOVERY_THRESHOLD=2,TASK_RESULT_RECONCILIATION_MAX_ATTEMPTS=6,TASK_RESULT_RECONCILIATION_INTERVAL_MS=500,DEFAULT_BOUNDED_REQUEST_TIMEOUT_MS=3000,ROADMAP_SYNC_TIMEOUT_MS=15000,SERVICE_STATE_STORAGE_KEY='aicc-local-service-last-state',EXECUTION_PROVIDER_STORAGE_KEY='aicc-selected-execution-provider';
+  const readLastServiceState=(): '检查中'|'正常'|'降级'|'已断开'|'正在重连'|'异常' => {const value=typeof localStorage==='undefined'?null:localStorage.getItem(SERVICE_STATE_STORAGE_KEY);return value&&['正常','降级','已断开','正在重连','异常'].includes(value)?value as any:'检查中'};
+  const readExecutionProvider=(): 'LOCAL_CODEX'|'REMOTE_CLAUDE' => {const value=typeof localStorage==='undefined'?null:localStorage.getItem(EXECUTION_PROVIDER_STORAGE_KEY);return value==='REMOTE_CLAUDE'?'REMOTE_CLAUDE':'LOCAL_CODEX'};
+  let drawer:Drawer=null,leftWidth=320,rightWidth=320,leftCollapsed=false,rightCollapsed=false,busy=false,codexInfo:any=null,selectionRequest=0,runtimeTimer:number|undefined,serviceTimer:number|undefined,bridgeTimer:number|undefined,feedbackCopyTimer:number|undefined,runtimePollInFlight=false,runtimeProjectionRefreshInFlight:Promise<any>|null=null,resultPendingPolls=0,bridgePollInFlight=false,healthPollInFlight=false,healthVerificationVisible=false,healthPollGeneration=0,healthRecoveryInFlight=false,bridgeInboxInitialized=false,bridgeSeenInboxIds=new Set<string>(),bridgeNotificationInitialized=false,bridgeSeenNotificationIds=new Set<string>(),selectedInboxId:string|null=null,pendingInstructionId:string|null=null,instructionState:'TEXT_READY'|'IMPORTED_PENDING'|'RUN_STARTED'|'RESULT_RECEIVED'='TEXT_READY',globalSelectedInboxId:string|null=null,globalPendingInstructionId:string|null=null,globalInstructionState:'TEXT_READY'|'IMPORTED_PENDING'|'RUN_STARTED'|'RESULT_RECEIVED'='TEXT_READY',globalBridgePayload='',globalSelectedRunId:string|null=null,serviceState:'检查中'|'正常'|'降级'|'已断开'|'正在重连'|'异常'=readLastServiceState(),serviceDetails:any=null,serviceLogs:any=null,serviceActionMessage='正在检查本地服务状态…',refreshInFlight:Promise<void>|null=null,snapshotRefreshRequestedGeneration=0,snapshotRefreshCompletedGeneration=0,snapshotRefreshShowFeedback=false,snapshotRefreshCiEvidence=false,bridgeInbox:any[]=[],bridgeOutbox:any[]=[],taskRecords:any[]=[],legacyTaskCount=0,bridgePayload=readComposerDraft(typeof localStorage==='undefined'?undefined:localStorage),runtimeHistory:any[]=[],selectedRunId:string|null=null,composerSubmittedRunId=readComposerRunBinding(typeof localStorage==='undefined'?undefined:localStorage),composerExactRuntime=null,composerCopyResult:string|null=null,healthFailures=0,healthSuccesses=0,globalWorkspace=false,composerHeight=0,lastCurrentStageFeedbackKey='',executionProvider:'LOCAL_CODEX'|'REMOTE_CLAUDE'=readExecutionProvider();
+  $: if(typeof localStorage!=='undefined'&&serviceState!=='检查中')localStorage.setItem(SERVICE_STATE_STORAGE_KEY,serviceState);
+  let descriptions:EntityDisplayMetadata[]=[];
+  let deliveryProjection:DeliveryContextProjection|null=null;
+  let selectedTaskExactRuntime:any=null,selectedTaskResultReconciliationPending=false,selectedTaskResultReconciliationToken=0;
+  let runtimeFeedbackRunId:string|null=null,runtimeFeedbackScope:'ENTITY'|'GLOBAL'='ENTITY',runtimeFeedbackLastPresentation='',runtimeFeedbackAcceptedAt=0,runtimeLifecycleFeedback:Feedback|null=null;
+  function readSelection():SelectedEntityRef|null{try{const stored=JSON.parse(localStorage.getItem('aicc-v2-workspace-navigation')||'{}').entity;if(stored&&['milestone','work_package','phase','pull_request'].includes(stored.type)&&typeof stored.id==='string')return stored as SelectedEntityRef}catch{}return null}
+  const WORKSPACE_NAVIGATION_KEY='aicc-v2-workspace-navigation';
+  type GlobalTab='BLUEPRINT'|'WP'|'PR'|'TASK';
+  type WorkspaceNavigation={entity?:SelectedEntityRef;activeTab?:string;selectedInboxId?:string|null;selectedRunId?:string|null;selectedTaskId?:string|null;activeGlobalTab?:GlobalTab};
+  const WORKSPACE_TABS=['运行','UAT','概览','证据','授权'];
+  function readWorkspaceNavigation():WorkspaceNavigation{try{return JSON.parse(localStorage.getItem(WORKSPACE_NAVIGATION_KEY)||'{}')}catch{return {}}}
+  const initialWorkspace=readWorkspaceNavigation();
+  let selectedEntity:SelectedEntityRef=initialWorkspace.entity??readSelection()??{type:'milestone',id:'M1'};
+  type CenterViewMode='ENTITY_WORKSPACE'|'MILESTONE_OVERVIEW';
+  let centerViewMode:CenterViewMode=selectedEntity.type==='milestone'?'MILESTONE_OVERVIEW':'ENTITY_WORKSPACE';
+  let milestoneOverviewId:string|null=selectedEntity.type==='milestone'?selectedEntity.id:null;
+  let executionContextLock:ExecutionContextLock=readExecutionContextLock();
+  let collapsedNodeIds:CollapsedNodeIds=new Set();
+  selectedInboxId=initialWorkspace.selectedInboxId??null;
+  selectedRunId=initialWorkspace.selectedRunId??null;
+  let selectedTaskId=initialWorkspace.selectedTaskId??null;
+  let activeGlobalTab:GlobalTab=initialWorkspace.activeGlobalTab??'BLUEPRINT';
+  if(['PR','TASK','WP'].includes(activeGlobalTab))globalWorkspace=true;
+  // Canonical WP selection is the existing App-level selectedEntity. The WP
+  // root deliberately represents no concrete Work Package selection.
+  if(activeGlobalTab==='WP'&&selectedEntity.type==='work_package')selectedEntity={type:'milestone',id:'M1'};
+  let raw:RawProjectSources={formalWorkPackages:{},entityDescriptions:[],localDevelopment:false};
+  const TASK_CACHE_KEY='aicc.task.snapshot.v1';
+  let prNavigationSnapshot:PrNavigationSnapshot|null=null,selectedPrNavigationId:string|null=null;
+  let prLayer2:PrLayer2Projection|null=null;
+  let wpLayer2:WpLayer2Projection|null=null;
+  let humanUatLayer2:HumanUatLayer2Projection|null=null;
+  let uiLifecycleReadModel:AiccGlobalStateReadModel|null=null;
+  const uiLayer2Changes=createLayer2ChangeNotifier();let uiLifecycleRevision=0;
+  const stopUiLayer2Changes=uiLayer2Changes.subscribe(change=>{uiLifecycleRevision=change.globalProjectionRevision});
+  setContext('AICC_UI_LIFECYCLE_READ_MODEL',{humanUatStatus:(entityType:'work_package'|'pull_request',entityId:string)=>uiLifecycleReadModel?uiLifecycleText('HUMAN_UAT',`${entityType}:${entityId}`,'humanUat.lifecycle'):'UNKNOWN',lifecycleStatus:(kind:any,id:string,dimension:any)=>uiLifecycleReadModel?uiLifecycleText(kind,id,dimension):'UNKNOWN',lifecycleRevision:()=>uiLifecycleRevision});
+  function rebuildWpLayer2(snapshot:any,tasks:any[]){if(!activeRoadmapProject){wpLayer2=null;return null;}const previous=wpLayer2?.model??createEmptyGlobalStateReadModel(activeRoadmapProject);wpLayer2=projectWpLayer2(previous,snapshot,tasks,activeRoadmapProject);return wpLayer2;}
+  function readTaskCache(){try{const cached=JSON.parse(localStorage.getItem(TASK_CACHE_KEY)||'null');return cached?.schemaVersion==='aicc.task.projection.v1'&&Array.isArray(cached.items)?cached:null}catch{return null}}
+  function acceptTaskProjection(projection:any){if(!activeRoadmapProject||projection?.schemaVersion!=='aicc.task.projection.v1'||!Array.isArray(projection.items))return;if(projection.projectId!==activeRoadmapProject.projectId||projection.repositoryIdentity!==activeRoadmapProject.repositoryIdentity||projection.projectContextRevision!==activeRoadmapProject.projectContextRevision)return;taskRecords=projection.items;legacyTaskCount=projection.legacyCount??0;try{localStorage.setItem(TASK_CACHE_KEY,JSON.stringify(projection))}catch{}}
+  function acceptPrNavigationSnapshot(accepted:PrNavigationSnapshot){if(!activeRoadmapProject||!prLayer2)return;prNavigationSnapshot=accepted;const pullRequests=accepted.records.map(record=>toPullRequestRecordLike(record));raw={...raw,pullRequests};prLayer2=projectPrLayer2(prLayer2.model,pullRequests,String(accepted.snapshot_version),activeRoadmapProject);if(selectedPrNavigationId&&!(prLayer2?.records??[]).some(record=>record.selectionId===selectedPrNavigationId)){selectedPrNavigationId=null;globalWorkspace=true;}}
+  async function loadPrNavigationSnapshot(){const data=await boundedRequest('/api/pr-navigation');const accepted=deserializePrNavigationSnapshot(data?.snapshot);if(!accepted)throw new Error('PR_NAVIGATION_READ_MODEL_INVALID');acceptPrNavigationSnapshot(accepted);}
+  async function refreshPrNavigationSnapshot(){if(busy)return;busy=true;setFeedback({state:'RUNNING',title:'正在刷新 PR…',message:'正在读取 GitHub PR 事实并持久化本地 Read Model。',code:'REFRESH_PR'});try{const data=await request('/api/pr-navigation',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({})});const accepted=deserializePrNavigationSnapshot(data?.snapshot);if(!accepted)throw new Error('PR_NAVIGATION_SNAPSHOT_INVALID');acceptPrNavigationSnapshot(accepted);setFeedback({state:'SUCCESS',title:'PR 已刷新',message:'GitHub PR 事实、本地 Read Model 与全局状态投影已更新。',code:'REFRESH_PR_SUCCESS'})}catch(error){const message=error instanceof Error?error.message:'PR_NAVIGATION_REFRESH_FAILED';setFeedback({state:'ERROR',title:'PR 刷新失败',message,code:message.split(':')[0]})}finally{busy=false}}
+  function formatPrNavigationLastUpdated(value:string|undefined){if(!value)return '尚未刷新';const time=new Date(value);return Number.isFinite(time.getTime())?new Intl.DateTimeFormat('zh-CN',{dateStyle:'short',timeStyle:'medium'}).format(time):'时间不可用'}
+  let roadmapProjection:RoadmapProjection|null=null,roadmapSyncState='未同步';
+  let activeRoadmapProject:{projectId:string;repositoryIdentity:string;projectContextRevision:number}|null=null;
+  const projectQuery=()=>activeRoadmapProject?`projectId=${encodeURIComponent(activeRoadmapProject.projectId)}&repositoryIdentity=${encodeURIComponent(activeRoadmapProject.repositoryIdentity)}&projectContextRevision=${activeRoadmapProject.projectContextRevision}`:'';
+  function taskForRun(runId?:string|null){if(!runId)return null;return taskRecords.find((task:any)=>(task.latestRunId??task.runId??task.executionId)===runId||task.runs?.some((run:any)=>run?.runId===runId))??null}
+  function taskResultForRun(runId?:string|null){const task=taskForRun(runId);return task&&runId?canonicalTaskResultForRun(task,runId):null}
+  function taskResultTextForRun(runId?:string|null){return taskResultForRun(runId)?.rawResult??null}
+  function runtimeStatusOnly(run:any){if(!run)return run;const {canonicalResult:_ignored,...status}=run;return status}
+  function phase5ResultsFromTasks(tasks:any[]){const values:any[]=[];for(const task of tasks){for(const run of task?.runs??[])if(run?.runId&&run?.canonicalResult)values.push({result:run.canonicalResult,runId:run.runId});const latest=task?.latestRunId??task?.runId;if(latest&&task?.canonicalResult&&!values.some(item=>item.runId===latest&&item.result?.resultId===task.canonicalResult.resultId))values.push({result:task.canonicalResult,runId:latest})}return values}
+  function bindActiveRoadmapProject(data:any){const next=data&&typeof data.projectId==='string'&&typeof data.repositoryIdentity==='string'&&Number.isSafeInteger(data.projectContextRevision)?{projectId:data.projectId,repositoryIdentity:data.repositoryIdentity,projectContextRevision:data.projectContextRevision}:null;if(!next)throw new Error('PROJECT_CONTEXT_INVALID');const changed=activeRoadmapProject===null||activeRoadmapProject.projectId!==next.projectId||activeRoadmapProject.repositoryIdentity!==next.repositoryIdentity||activeRoadmapProject.projectContextRevision!==next.projectContextRevision;activeRoadmapProject=next;if(changed){selectedEntity={type:'milestone',id:'PROJECT_ROADMAP_UNAVAILABLE'};milestoneOverviewId=null;centerViewMode='ENTITY_WORKSPACE';executionContextLock=unlockExecutionContext();collapsedNodeIds=new Set();taskRecords=[];runtimeHistory=[];selectedTaskId=null;selectedPrNavigationId=null;prNavigationSnapshot=null;raw={formalWorkPackages:{},entityDescriptions:[],localDevelopment:false};const empty=createEmptyGlobalStateReadModel(next);prLayer2=projectPrLayer2(empty,[]);wpLayer2={model:empty,records:[]};humanUatLayer2=projectHumanUatLayer2(empty,[]);uiLifecycleReadModel=empty;persistWorkspaceNavigation();}}
+  function acceptRoadmapProjection(accepted:RoadmapProjection,_persisted:unknown,state='已加载',data?:any){bindActiveRoadmapProject(data);if(selectedEntity.id==='PROJECT_ROADMAP_UNAVAILABLE'){const canonical=canonicalRoadmapEntitySelection(accepted);if(canonical)selectedEntity=canonical;}roadmapProjection=accepted;roadmapSyncState=`${state} r${accepted.revision}`;raw={...raw,roadmapNodes:accepted.nodes,sourceErrors:{...raw.sourceErrors,roadmap:undefined}}}
+  function acceptRoadmapNotConfigured(data:any){bindActiveRoadmapProject(data);roadmapProjection=null;roadmapSyncState='未配置';raw={...raw,roadmapNodes:undefined,sourceErrors:{...raw.sourceErrors,roadmap:'ROADMAP_NOT_CONFIGURED'}}}
+  async function loadAcceptedRoadmapProjection(){try{const data=await boundedRequest('/api/roadmap');if(data?.availability==='NOT_CONFIGURED'){acceptRoadmapNotConfigured(data);return}const accepted=deserializeRoadmapProjection(data?.projection);if(!accepted)throw new Error('ROADMAP_READ_MODEL_INVALID');acceptRoadmapProjection(accepted,data.projection,'已加载',data);}catch{roadmapProjection=null;roadmapSyncState='不可用';raw={...raw,roadmapNodes:undefined,sourceErrors:{...raw.sourceErrors,roadmap:'ROADMAP_READ_MODEL_BUILD_FAILED'}}}}
+  let feedback:Feedback={state:'IDLE',title:'',message:''};
+  let activeTab=WORKSPACE_TABS.includes(initialWorkspace.activeTab??'')?initialWorkspace.activeTab!:'运行';
+  function persistWorkspaceNavigation(value:WorkspaceNavigation={entity:selectedEntity,activeTab,selectedInboxId,selectedRunId,selectedTaskId,activeGlobalTab}){try{localStorage.setItem(WORKSPACE_NAVIGATION_KEY,JSON.stringify(value))}catch{}}
+  $: persistWorkspaceNavigation({entity:selectedEntity,activeTab,selectedInboxId,selectedRunId,selectedTaskId,activeGlobalTab});
+  $: snapshot=createProjectSnapshot(raw,taskRecords);
+  const uiLifecycleText=(kind:any,id:string,dimension:any)=>uiLifecycleReadModel?projectedLifecycleText(uiLifecycleReadModel,kind,id,dimension):'UNKNOWN';
+  $: wpProjection=rebuildWpLayer2(snapshot,taskRecords);
+  const unavailableEntityContext=(selected:any)=>({entity:selected,type:selected.type,id:selected.id,title:'未绑定项目',displayTitle:'未绑定项目',status:'UNKNOWN',statusLabel:'UNKNOWN',progress:null,breadcrumb:'Control Center',evidence:['Project scope unavailable'],availableActions:[],children:[],roadmapGroups:[],parentWorkPackageId:null,record:null,prProjection:null,runtime:null,stages:[],currentStage:'UNAVAILABLE',tabs:['概览'],exactHeadValidation:null,lifecycleWorkspace:null});
+  $: if(activeRoadmapProject&&prLayer2&&wpProjection){const empty=createEmptyGlobalStateReadModel(activeRoadmapProject);humanUatLayer2=projectHumanUatLayer2(empty,(snapshot.humanUat.value??[]).map((record:any)=>({entityType:record.entityType,entityId:record.entityId??record.workPackageId,status:record.status,updatedAt:record.updatedAt,record})));const taskModel=projectTaskLayer2ReadModel(empty,taskRecords,runtimeHistory);const phase5=projectPhase5Lifecycle(empty,{runs:runtimeHistory.map(runtimeStatusOnly),results:phase5ResultsFromTasks(taskRecords)}).model;uiLifecycleReadModel=composeUiLifecycleReadModel(uiLifecycleReadModel??empty,[taskModel,prLayer2.model,wpProjection.model,phase5,humanUatLayer2.model],{tasks:taskRecords,runtimeHistory,results:taskRecords});}else{humanUatLayer2=null;uiLifecycleReadModel=null;}
+  $: if(uiLifecycleReadModel)uiLayer2Changes.publish(uiLifecycleReadModel);
+  $: globalTasks=uiLifecycleReadModel?.scopedTasks??[];
+  $: entityContextReady=Boolean(activeRoadmapProject&&prLayer2&&wpProjection);
+  $: context=entityContextReady?resolveEntityContext(snapshot,selectedEntity,prLayer2!,wpProjection!,activeRoadmapProject!):unavailableEntityContext(selectedEntity);
+  $: milestoneOverviewContextCandidate=milestoneOverviewId&&prLayer2&&wpProjection?resolveEntityContext(snapshot,{type:'milestone',id:milestoneOverviewId},prLayer2,wpProjection,activeRoadmapProject??undefined):null;
+  $: milestoneOverviewContext=milestoneOverviewContextCandidate?.type==='milestone'?milestoneOverviewContextCandidate:null;
+  $: centerContext=centerViewMode==='MILESTONE_OVERVIEW'&&milestoneOverviewContext?milestoneOverviewContext:context;
+  $: prTab=entityContextReady&&context.type==='pull_request'?resolvePrTabView(context,activeTab):null;
+  $: prUatRecord=context.type==='pull_request'?snapshot.humanUat.value?.find(item=>item.entityType==='pull_request'&&(item.entityId===context.id||item.prIdentity===context.id))??null:null;
+  $: roadmapNodes=wpProjection?projectWpRoadmapNodes(roadmapProjection?.nodes??[],wpProjection):[];
+  $: roadmapFullyExpanded=allRoadmapExpanded(roadmapNodes,collapsedNodeIds);
+  $: navigationRoadmapNode=findRoadmapNode(roadmapNodes,selectedEntity.id);
+  $: lockedRoadmapNode=executionContextLock.locked&&executionContextLock.entity?findRoadmapNode(roadmapNodes,executionContextLock.entity.type==='task'?(executionContextLock.entity.workPackageId??''):executionContextLock.entity.id):null;
+  $: currentContextPrimaryLabel=executionContextLock.locked?(executionContextLock.entity?.type==='task'?`Task ${executionContextLock.entity.id}`:lockedRoadmapNode?roadmapDisplayLabel(lockedRoadmapNode):executionContextLock.entity?.id??selectedEntity.id):(selectedTask?`Task ${selectedTask.taskId}`:navigationRoadmapNode?roadmapDisplayLabel(navigationRoadmapNode):context.displayTitle);
+  $: currentContextSecondaryLabel=executionContextLock.locked&&executionContextLock.entity?.id!==selectedEntity.id?(navigationRoadmapNode?roadmapDisplayLabel(navigationRoadmapNode):context.displayTitle):'';
+  $: descriptionKey=`${snapshot.repository.value?.repository??'local'}|${selectedEntity.type}|${selectedEntity.id}`;
+  $: selectedDescription=descriptions.find(item=>`${item.repositoryKey}|${item.entityType}|${item.entityId}`===descriptionKey)?.description??context.title;
+  $: ownerStatus=resolveOwnerStatusProjection(context,bridgeOutbox);
+  $: ownerWorkflowStages=entityContextReady?resolveOwnerWorkflowStages(context,bridgeOutbox):[];
+  $: displayRuntime=selectCanonicalCurrentRuntime(context.runtime,runtimeHistory,selectedRunId);
+  $: composerCopyResult=resolveComposerCanonicalResult(composerSubmittedRunId,taskRecords);
+  $: scopedRuntimeHistory=uiLifecycleReadModel?.scopedRuntimeHistory??[];
+  $: scopedBridgeInbox=scopeInboxToEntity(bridgeInbox,selectedEntity,activeRoadmapProject??undefined);
+  $: scopedTaskRecords=scopeTasksToEntity(globalTasks,selectedEntity,activeRoadmapProject??undefined);
+  $: globalTaskGroups=buildGlobalTaskGroups(globalTasks);
+  $: globalRuntimeHistory=runtimeHistory.filter((item:any)=>item.entityType==='global_task'&&item.entityId==='GLOBAL_TASK');
+  $: globalRuntime=selectCanonicalCurrentRuntime(null,globalRuntimeHistory,globalSelectedRunId);
+  $: globalBridgeInbox=bridgeInbox.filter((item:any)=>item.instruction?.entityScope==='GLOBAL_TASK');
+  $: globalWorkPackages=wpProjection?projectGlobalWorkPackages(snapshot,globalTasks,wpProjection):[];
+  $: globalMilestones=wpProjection?projectWpRoadmapNodes(projectGlobalMilestones(snapshot),wpProjection):[];
+  $: globalOwnerWaiting=globalTasks.filter((item:any)=>['READY','WAITING_OWNER'].includes(String(item.status??item.runtimeState??item.state??'').toUpperCase())).length;
+  $: globalFocus=wpProjection?projectGlobalFocus(snapshot,wpProjection,roadmapProjection):null;
+  $: globalCurrentMilestone=globalFocus?.milestone??null;
+  $: globalCurrentWorkPackage=globalFocus?.workPackage??null;
+  $: globalCurrentPhase=globalFocus?.phase??null;
+  $: selectedTask=globalTasks.find(item=>item.taskId===selectedTaskId)??null;
+  $: selectedTaskWorkPackageId=selectedTask&&wpProjection?wpProjection.records.find(record=>record.taskIds.includes(selectedTask.taskId))?.id??null:null;
+  $: selectedTaskWorkPackageContextCandidate=selectedTaskWorkPackageId&&activeRoadmapProject&&prLayer2&&wpProjection?resolveEntityContext(snapshot,{type:'work_package',id:selectedTaskWorkPackageId},prLayer2,wpProjection,activeRoadmapProject):null;
+  $: selectedTaskWorkPackageContext=selectedTaskWorkPackageContextCandidate?.type==='work_package'?selectedTaskWorkPackageContextCandidate:null;
+  $: selectedTaskRuntimeId=selectedTask?.latestRunId??selectedTask?.runId??selectedTask?.executionId??null;
+  $: selectedTaskRuntime=selectedTaskRuntimeId?(selectedTaskExactRuntime?.runId===selectedTaskRuntimeId?selectedTaskExactRuntime:uiLifecycleReadModel?.scopedRuntimeHistory.find((item:any)=>item.runId===selectedTaskRuntimeId)??null):null;
+  $: selectedTaskRuntimeHistory=selectedTaskRuntimeId?(uiLifecycleReadModel?.scopedRuntimeHistory.filter((item:any)=>item.runId===selectedTaskRuntimeId)??[]):[];
+  $: selectedTaskReport=selectedTaskRuntimeId?(uiLifecycleReadModel?.scopedResults.find((item:any)=>item.runId===selectedTaskRuntimeId)?.report??null):null;
+  $: selectedTaskResultProjection=projectTaskResult({task:selectedTask,reconciliationPending:selectedTaskResultReconciliationPending});
+  $: selectedTaskResultKey=selectedTask?`${selectedTask.taskId}|${selectedTaskRuntimeId??''}|${selectedTask.globalProjectionRevision??0}|${selectedTask.status??''}`:'';
+  $: if(selectedTaskResultKey)void reconcileSelectedTaskResult(selectedTaskResultKey);else resetSelectedTaskResultProjection();
+  $: selectedTaskActiveTab=WORKSPACE_TABS.includes(activeTab)?activeTab:'运行';
+  $: selectedTaskRunLifecycle=selectedTaskRuntimeId?uiLifecycleText('RUN',selectedTaskRuntimeId,'run.lifecycle'):'UNKNOWN';
+  $: selectedTaskUatLifecycle=selectedTaskWorkPackageId?uiLifecycleText('HUMAN_UAT',`work_package:${selectedTaskWorkPackageId}`,'humanUat.lifecycle'):'UNKNOWN';
+  $: selectedTaskWpLifecycle=selectedTaskWorkPackageId?uiLifecycleText('WORK_PACKAGE',selectedTaskWorkPackageId,'wp.lifecycle'):'UNKNOWN';
+  $: selectedTaskTabStatuses={运行:presentationStatus(selectedTaskRunLifecycle),UAT:presentationStatus(selectedTaskUatLifecycle),概览:presentationStatus(selectedTaskWpLifecycle),证据:'NOT_STARTED',授权:selectedTaskWorkPackageContext?.authorization.state==='VALID'?'PASS':'NOT_STARTED'};
+  $: displayRunLifecycle=displayRuntime?.runId?uiLifecycleText('RUN',displayRuntime.runId,'run.lifecycle'):'UNKNOWN';
+  $: contextUatLifecycle=context.type==='work_package'?uiLifecycleText('HUMAN_UAT',`work_package:${context.id}`,'humanUat.lifecycle'):context.type==='pull_request'?uiLifecycleText('HUMAN_UAT',`pull_request:${context.id}`,'humanUat.lifecycle'):'UNKNOWN';
+  $: contextWpLifecycle=context.type==='work_package'?uiLifecycleText('WORK_PACKAGE',context.id,'wp.lifecycle'):'UNKNOWN';
+  $: contextHeaderLifecycle=context.type==='milestone'?uiLifecycleText('MILESTONE',context.id,'milestone.lifecycle'):context.type==='work_package'?contextWpLifecycle:context.type==='pull_request'&&context.prProjection?uiLifecycleText('PULL_REQUEST',context.prProjection.identityKey,'pr.lifecycle'):'UNKNOWN';
+  $: tabStatuses=entityContextReady&&context.type==='work_package'?{运行:presentationStatus(displayRunLifecycle),UAT:presentationStatus(contextUatLifecycle),概览:presentationStatus(contextWpLifecycle),证据:'NOT_STARTED',授权:context.authorization.state==='VALID'?'PASS':'NOT_STARTED'}:{};
 
-  type WorkItem = RoadmapEntry & { key: string; summary: string; gate: string; progress: string; progressPercent: number; parent: string; dependency: string; change: string; path: string; spec: string; task: string; run: string; criteria: string[] };
-  let selected: WorkItem = { key: 'loading', id: 'LOADING', title: '正在读取正式路线图', summary: '正在读取仓库证据。', status: 'CURRENT', authorization: 'CHECKING', gate: 'CHECKING', progress: '0 / 0', progressPercent: 0, parent: '项目路线图', dependency: 'unknown', change: 'unknown', path: 'docs/10_Planning_Roadmap/01_LIVING_ROADMAP.md', spec: 'unknown', task: 'unknown', run: 'unknown', criteria: [] };
-  let activeTab: Tab = 'overview';
-  let query = '';
-  let refreshing = false;
-  let toast = '';
-  let controlLoop: ControlLoopState = emptyState;
-  let syncState: SyncState = { kind: 'idle' };
-  let authorizationConfirming = false;
-  let controlPending = false;
-  let runtimeObservationError = '';
-  $: syncCode = controlLoop.evaluation?.blockers[0] ?? getSyncState(controlLoop.evaluation);
-  $: syncCopy = ownerBlocker(syncCode);
-  $: repositoryStatus = repositoryStatusEvidence(controlLoop);
-  $: codexRuntime = controlLoop.codexRuntime;
-
-  const runtimePoller = createCodexRuntimePoller({
-    read: readCodexRuntime,
-    onRuntime: (runtime) => {
-      controlLoop = { ...controlLoop, codexRuntime: runtime };
-      runtimeObservationError = '';
-    },
-    onError: (message) => {
-      runtimeObservationError = message;
+  function scheduleFeedbackRestore(overlay:Feedback,fallback?:Feedback){if(feedbackCopyTimer)clearTimeout(feedbackCopyTimer);feedbackCopyTimer=window.setTimeout(()=>{if(feedback!==overlay)return;const current=runtimeLifecycleFeedback??fallback;if(current)setFeedback(current,current===runtimeLifecycleFeedback?'EXACT_RUN':'GENERAL')},1500)}
+  function setFeedback(value:Feedback,source:'GENERAL'|'EXACT_RUN'='GENERAL'){if(feedbackCopyTimer){clearTimeout(feedbackCopyTimer);feedbackCopyTimer=undefined}feedback=value;if(source==='GENERAL'&&runtimeLifecycleFeedback&&value!==runtimeLifecycleFeedback&&value.state!=='IDLE')scheduleFeedbackRestore(value)}
+  function beginRuntimeFeedbackBridge(runId:string,scope:'ENTITY'|'GLOBAL'){runtimeFeedbackRunId=runId;runtimeFeedbackScope=scope;runtimeFeedbackLastPresentation='';runtimeFeedbackAcceptedAt=Date.now();runtimeLifecycleFeedback=null;resultPendingPolls=0}
+  function restorePersistedRuntimeFeedbackBridge(){if(composerSubmittedRunId)beginRuntimeFeedbackBridge(composerSubmittedRunId,'ENTITY')}
+  function publishRuntimeFeedback(runtime:any){if(!runtimeFeedbackRunId||runtime?.runId!==runtimeFeedbackRunId)return;if(!activeRoadmapProject)return;const next:Feedback=projectRuntimeFeedback(runtime,activeRoadmapProject,taskResultForRun(runtime.runId));resultPendingPolls=0;if(runtimeLifecycleFeedback?.title==='已提交执行'&&next.title!=='已提交执行'&&Date.now()-runtimeFeedbackAcceptedAt<400)return;runtimeLifecycleFeedback=next;const presentation=feedbackPresentationKey(next);if(presentation!==runtimeFeedbackLastPresentation){runtimeFeedbackLastPresentation=presentation;setFeedback(next,'EXACT_RUN')}if(next.terminal){if(runtimeFeedbackScope==='GLOBAL')globalInstructionState='RESULT_RECEIVED';else instructionState='RESULT_RECEIVED'}}
+  async function copyGlobalFeedback(){
+    const original=feedback;
+    if(!isCopyableFeedback(original))return;
+    try{
+      if(!navigator.clipboard?.writeText)throw new Error('CLIPBOARD_WRITE_UNAVAILABLE');
+      await navigator.clipboard.writeText(canonicalFeedbackCopyText(original));
+      if(feedback!==original)return;
+      const overlay=copySuccessFeedback();
+      setFeedback(overlay);
+      if(!runtimeLifecycleFeedback)scheduleFeedbackRestore(overlay,original);
+    }catch(error){
+      if(feedback!==original)return;
+      if(feedbackCopyTimer)clearTimeout(feedbackCopyTimer);
+      setFeedback(copyFailureFeedback(error));
     }
-  });
-
-  const evidence = [
-    ['C', '项目章程 Project Charter', 'docs/00_Governance/01_PROJECT_CHARTER.md'],
-    ['R', '在用路线图 Living Roadmap', 'docs/10_Planning_Roadmap/01_LIVING_ROADMAP.md'],
-    ['W', '当前工作包 Current Work Package', 'docs/60_Operations/work-packages/AICC-CODEX-ONLY-MIGRATION-001.md'],
-    ['P', 'OpenSpec 提案 Proposal', 'openspec/changes/aicc-visible-slice-001/proposal.md'],
-    ['T', 'OpenSpec 任务 Tasks', 'openspec/changes/aicc-visible-slice-001/tasks.md'],
-    ['CX', 'Codex App Server 配置 Config', 'Codex profile: sol']
-  ];
-
-  $: formalItems = (controlLoop.roadmap?.entries ?? []).map((entry) => ({
-    ...entry,
-    key: entry.id,
-    summary: `${entry.status} / ${entry.authorization}`,
-    gate: entry.status,
-    progress: `${entry.status}`,
-    progressPercent: entry.status === 'CLOSED' ? 100 : 0,
-    parent: entry.milestone ?? 'UNASSIGNED',
-    dependency: 'Formal Work Package evidence',
-    change: entry.id.toLowerCase(),
-    path: `docs/60_Operations/work-packages/${entry.id}.md`,
-    spec: 'formal', task: 'formal', run: 'read-only', criteria: []
-  } satisfies WorkItem));
-  $: filteredRoadmap = formalItems.filter((item) => {
-    const needle = query.trim().toLowerCase();
-    return !needle || `${item.id} ${item.title} ${item.summary}`.toLowerCase().includes(needle);
-  });
-  $: if (selected.key === 'loading') {
-    const current = formalItems.find((item) => item.id === controlLoop.roadmap?.currentWorkPackage);
-    if (current) selected = current;
   }
-
-  function choose(item: WorkItem) {
-    selected = item;
+  function currentStageMessage(stage:string){return stage==='HUMAN_UAT'?'等待 Owner 完成真实 UI Human UAT。':'当前阶段由统一生命周期解析器确定。'}
+  $: if(entityContextReady&&context.type==='work_package'){
+    const stageKey=`${context.id}:${context.lifecycle.currentStage}`;
+    if(stageKey!==lastCurrentStageFeedbackKey){lastCurrentStageFeedbackKey=stageKey;setFeedback({state:'INFO',title:`当前阶段：${context.lifecycle.currentStage}`,message:currentStageMessage(context.lifecycle.currentStage),code:'WP_CURRENT_STAGE'});}
+  }else lastCurrentStageFeedbackKey='';
+  function updateComposerHeight(height:number){composerHeight=Math.max(0,Math.ceil(height))}
+  function toggleExecutionContextLock(){const target=selectedTask?{type:'task' as const,id:selectedTask.taskId,workPackageId:selectedTaskWorkPackageId}:selectedEntity;executionContextLock=executionContextLock.locked?unlockExecutionContext():lockExecutionContext(target);persistExecutionContextLock(executionContextLock);setFeedback({state:'SUCCESS',title:executionContextLock.locked?'执行上下文已锁定':'执行上下文已解锁',message:executionContextLock.locked?`新任务默认绑定：${executionContextLock.entity?.id??'当前实体'}`:'未锁定默认上下文，未声明实体的任务保持 UNKNOWN。',code:executionContextLock.locked?'EXECUTION_CONTEXT_LOCKED':'EXECUTION_CONTEXT_UNLOCKED'})}
+  const toggleExecutionContextContextLock=toggleExecutionContextLock;
+  function enterWorkPackageRoot(){
+    activeGlobalTab='WP';
+    globalWorkspace=true;
+    selectedEntity={type:'milestone',id:roadmapNodes[0]?.id??'M1'};
+    activeTab='概览';
+    selectedInboxId=null;
+    drawer=null;
+    selectionRequest+=1;
+    persistSelection(selectedEntity);
   }
-
-  function announce(message: string) {
-    toast = message;
-    window.setTimeout(() => {
-      if (toast === message) toast = '';
-    }, 1900);
+  function setGlobalTab(tab:GlobalTab){
+    if(tab==='WP'){enterWorkPackageRoot();return}
+    activeGlobalTab=tab;
+    if(tab==='PR'){selectedPrNavigationId=null;globalWorkspace=true;}
+    else if(tab==='TASK'){selectedTaskId=null;globalWorkspace=true;}
+    else{globalWorkspace=selectedEntity.type!=='pull_request'||!prNavigationSnapshot?.records.some(record=>record.id===selectedEntity.id);}
+    drawer=null;
+    persistWorkspaceNavigation();
   }
-
-  async function refresh() {
-    refreshing = true;
-    controlLoop = await loadControlLoop();
-    refreshing = false;
-    if (controlLoop.codexRuntime) runtimeObservationError = '';
-    runtimePoller.start(controlLoop.codexRuntime);
-    announce(controlLoop.status === 'VERIFIED' ? '远端 Authority 已验证；未执行 fetch。' : `Authority 状态：${controlLoop.status}`);
+  function openGlobalWorkspace(){setGlobalTab('TASK')}
+  function selectCanonicalTask(taskId:string){if(!taskRecords.some(item=>item.taskId===taskId))return;selectedTaskId=taskId;if(window.matchMedia('(max-width: 900px)').matches)drawer='status';else rightCollapsed=false;persistWorkspaceNavigation()}
+  function clearSelectedTask(){selectedTaskId=null;persistWorkspaceNavigation()}
+  function resetSelectedTaskResultProjection(){selectedTaskResultReconciliationToken+=1;selectedTaskExactRuntime=null;selectedTaskResultReconciliationPending=false}
+  async function reconcileSelectedTaskResult(_key:string){selectedTaskExactRuntime=null;selectedTaskResultReconciliationPending=false;}
+  function openGlobalPrWorkspace(){setGlobalTab('PR')}
+  function selectPrNavigationRecord(id:string){if(!prLayer2?.records.some(record=>record.selectionId===id))return;activeGlobalTab='PR';selectedPrNavigationId=id;globalWorkspace=false;selectedEntity={type:'pull_request',id};activeTab='概览';selectedInboxId=null;selectionRequest+=1;persistSelection(selectedEntity)}
+  function selectPrCenterRecord(id:string){selectPrNavigationRecord(id);globalWorkspace=true}
+  async function navigateGlobalEntity(entity:SelectedEntityRef){if(entity.type==='pull_request'){selectPrNavigationRecord(entity.id);return}globalWorkspace=false;selectedEntity=entity;activeTab=entity.type==='work_package'?'运行':'概览';selectedInboxId=null;selectionRequest+=1;persistSelection(entity);if(entity.type==='work_package'){await readFormalWorkPackage(entity.id,selectionRequest);await refreshRuntimeProjection();}}
+  async function request(url:string,options?:RequestInit){const response=await fetch(url,options);const data=await response.json();if(!response.ok){const value=typeof data.error==='object'?data.error:{code:data.error,message:data.error};throw new Error(`${value.code??'ACTION_ERROR'}: ${value.message??'操作失败'}`)}return data}
+  async function boundedRequest(url:string,options?:RequestInit,timeoutMs=DEFAULT_BOUNDED_REQUEST_TIMEOUT_MS){return Promise.race([request(url,options),new Promise<never>((_,reject)=>window.setTimeout(()=>reject(new Error('SOURCE_TIMEOUT')),timeoutMs))])}
+  async function pollService(refresh=true){
+    if(healthPollInFlight)return;
+    const generation=++healthPollGeneration;
+    healthPollInFlight=true;
+    healthVerificationVisible=!refresh;
+    try{
+      const data=await boundedRequest('/api/health');
+      if(generation!==healthPollGeneration)return;
+      serviceDetails=data.status;
+      const healthy=Boolean(data.ok&&data.service==='aicc-local-control');
+      if(healthy){
+        healthFailures=0;healthSuccesses+=1;
+        if(healthSuccesses>=HEALTH_RECOVERY_THRESHOLD){
+          const wasUnavailable=serviceState==='已断开'||serviceState==='异常'||serviceState==='正在重连';
+          serviceState='正常';serviceActionMessage='本地服务正常';healthRecoveryInFlight=false;
+          if(wasUnavailable){setFeedback({state:'SUCCESS',title:'本地服务已恢复',message:'本地服务健康检查已恢复正常。',code:'SERVICE_RECOVERED'});if(refresh){await refreshRuntimeProjection();await loadBridge()}}
+        }
+      }else{
+        healthSuccesses=0;healthFailures+=1;
+        serviceState='降级';serviceActionMessage='本地服务健康检查失败';
+        if(healthFailures>=HEALTH_FAILURE_THRESHOLD&&!healthRecoveryInFlight){const recoveryFailed=data.status?.supervisor?.state==='RECOVERY_FAILED';serviceState=recoveryFailed?'异常':'已断开';serviceActionMessage=recoveryFailed?'本地服务恢复失败':'本地服务不可达';}
+      }
+    }catch{
+      if(generation!==healthPollGeneration)return;
+      healthSuccesses=0;healthFailures+=1;serviceDetails=null;
+      serviceState='降级';serviceActionMessage='本地服务健康检查失败';
+      if(healthFailures>=HEALTH_FAILURE_THRESHOLD&&!healthRecoveryInFlight){serviceState='已断开';serviceActionMessage='本地服务不可达';}
+    }finally{if(generation===healthPollGeneration){healthPollInFlight=false;healthVerificationVisible=false;}}
   }
-
-  function requestAuthorization() {
-    authorizationConfirming = true;
+  async function restartService(){if(!window.confirm('AICC 将暂时断开连接，launchd 会重启本地服务，页面随后自动重连。确定继续吗？'))return;healthVerificationVisible=true;healthRecoveryInFlight=true;serviceState='正在重连';serviceActionMessage='本地服务正在重新连接…';setFeedback({state:'RUNNING',title:'正在重启本地服务…',message:'页面将自动重新连接，不会修改项目证据。',code:'SERVICE_RESTARTING'});void request('/api/service/restart',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({confirmed:true})}).catch(error=>{healthRecoveryInFlight=false;healthVerificationVisible=false;const message=error instanceof Error?error.message:'SUPERVISOR_RESTART_FAILED';serviceState='异常';serviceActionMessage='本地服务重启失败';setFeedback({state:'ERROR',title:'本地服务重启失败',message,code:message.split(':')[0]})});}
+  async function viewServiceLogs(){serviceLogs={loading:true,stdout:'正在加载…',stderr:''};serviceActionMessage='正在读取服务日志…';try{serviceLogs=await request('/api/service/logs');serviceActionMessage='服务日志已加载'}catch(error){const code=error instanceof Error?error.message:'SERVICE_LOG_READ_FAILED';serviceLogs={loading:false,stdout:'',stderr:`服务日志读取失败\n${code}`};serviceActionMessage='服务日志读取失败';}}
+  async function loadBridge(){const cached=readTaskCache();if(cached)acceptTaskProjection(cached);try{const [inbox,tasks,outbox,notifications]=await Promise.all([request('/api/gpt-bridge/inbox'),request('/api/task-projection'),request('/api/gpt-bridge/outbox'),request('/api/gpt-bridge/notifications')]);const items=scopeBridgeRecords(inbox.items??[],activeRoadmapProject);bridgeInbox=items;acceptTaskProjection(tasks);bridgeOutbox=scopeBridgeRecords(outbox.items??[],activeRoadmapProject);await refreshComposerCanonicalResult();const notificationItems=scopeBridgeRecords(notifications.items??[],activeRoadmapProject);if(!bridgeNotificationInitialized){bridgeSeenNotificationIds=new Set(notificationItems.map((item:any)=>item.id));bridgeNotificationInitialized=true}else{const feedbackOwnerRunId=runtimeFeedbackRunId??selectedRunId;const incoming=notificationItems.find((item:any)=>!bridgeSeenNotificationIds.has(item.id)&&(!feedbackOwnerRunId||item.runId===feedbackOwnerRunId));if(incoming){bridgeSeenNotificationIds.add(incoming.id);setFeedback({state:incoming.phase==='FAILED'?'ERROR':incoming.phase==='STOPPED'?'BLOCKED':'SUCCESS',title:incoming.title,message:incoming.message,code:`TERMINAL_${incoming.phase}`})}}notificationItems.forEach((item:any)=>bridgeSeenNotificationIds.add(item.id));if(!bridgeInboxInitialized){bridgeSeenInboxIds=new Set(items.map((item:any)=>item.id));if(selectedInboxId&&!items.some((item:any)=>item.id===selectedInboxId))selectedInboxId=null;bridgeInboxInitialized=true}}catch{/* bridge state is shown as unavailable by the service status */}}
+  async function refreshComposerCanonicalResult(){const runId=composerSubmittedRunId;if(!runId)return null;const pq=projectQuery();if(!pq)return null;try{const response=await request(`/api/codex/runtime?runId=${encodeURIComponent(runId)}&${pq}`);if(composerSubmittedRunId===runId&&response.runtime?.runId===runId){composerExactRuntime=response.runtime;publishRuntimeFeedback(response.runtime);return response.runtime}}catch{/* retain the last accepted result for the Composer-owned Run */}return null}
+  async function refreshFeedbackOwnedRuntime(){const runId=runtimeFeedbackRunId;if(!runId)return null;if(runId===composerSubmittedRunId)return refreshComposerCanonicalResult();const pq=projectQuery();if(!pq)return null;try{const response=await request(`/api/codex/runtime?runId=${encodeURIComponent(runId)}&${pq}`);if(runtimeFeedbackRunId===runId&&response.runtime?.runId===runId){publishRuntimeFeedback(response.runtime);return response.runtime}}catch{/* exact Run binding remains authoritative while polling retries */}return null}
+  function incomingEntity(item:any):SelectedEntityRef|null{const type=String(item?.instruction?.entityType??'').toLowerCase();const id=item?.instruction?.entityId;if(!id||!['milestone','work_package','pull_request'].includes(type))return null;return {type,id} as SelectedEntityRef}
+  async function focusIncomingInbox(item:any){const target=incomingEntity(item),task=taskRecords.find(record=>record.inboxId===item.id||record.taskId===item.taskId||record.instructionId===item.instruction?.instructionId)??null;if(!target){setGlobalTab('TASK');globalSelectedInboxId=item.id;if(task)selectCanonicalTask(task.taskId);return}selectedEntity=target;activeTab='运行';drawer=null;selectionRequest+=1;persistSelection(target);if(target.type==='work_package'){await readFormalWorkPackage(target.id,selectionRequest);await refreshRuntimeProjection();}selectedInboxId=item.id;if(task)selectCanonicalTask(task.taskId)}
+  async function pollIncomingInbox(){if(bridgePollInFlight)return;bridgePollInFlight=true;try{const response=await request('/api/gpt-bridge/inbox');const items=scopeBridgeRecords(response.items??[],activeRoadmapProject);const incoming=bridgeInboxInitialized?items.find((item:any)=>!bridgeSeenInboxIds.has(item.id)&&item.instruction?.sourceType==='WEB_BRIDGE'):null;bridgeInbox=items;items.forEach((item:any)=>bridgeSeenInboxIds.add(item.id));bridgeInboxInitialized=true;await Promise.all([acceptTaskProjection(await request('/api/task-projection')),refreshComposerCanonicalResult()]);if(incoming)await focusIncomingInbox(incoming)}catch{/* live incoming detection preserves the last truthful inbox projection */}finally{bridgePollInFlight=false}}
+  function startIncomingInboxPolling(){if(bridgeTimer)return;bridgeTimer=window.setInterval(()=>void pollIncomingInbox(),1000)}
+  function updateBridgePayload(value:string){bridgePayload=value;persistComposerDraft(value,typeof localStorage==='undefined'?undefined:localStorage);pendingInstructionId=null;instructionState='TEXT_READY'}
+  function clearComposerDraft(){bridgePayload='';persistComposerDraft('',typeof localStorage==='undefined'?undefined:localStorage)}
+  function bindComposerSubmittedRun(runId:string|undefined){if(!runId)return;composerSubmittedRunId=runId;composerExactRuntime=null;persistComposerRunBinding(runId,typeof localStorage==='undefined'?undefined:localStorage)}
+  function updateGlobalBridgePayload(value:string){globalBridgePayload=value;globalPendingInstructionId=null;globalInstructionState='TEXT_READY'}
+  function beginComposerExecution(){setFeedback({state:'RUNNING',title:'正在提交执行',message:'正在创建执行',code:'EXECUTION_SUBMITTING'})}
+  function setExecutionProvider(provider:'LOCAL_CODEX'|'REMOTE_CLAUDE'){executionProvider=provider;try{localStorage.setItem(EXECUTION_PROVIDER_STORAGE_KEY,provider)}catch{}}
+  async function syncGlobalExecutionProfile(profile:{model:string;reasoning:string}){await request('/api/execution-profile',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(profile)})}
+  async function importBridge(value=bridgePayload,launchMetadata?:{model?:string;reasoning?:string;executionProvider?:'LOCAL_CODEX'|'REMOTE_CLAUDE';runnerId?:string}){if(!value.trim())throw new Error('INSTRUCTION_TEXT_REQUIRED');const lockedTarget=executionContextLock.locked?executionContextLock.entity??undefined:undefined;const executionTarget=lockedTarget??selectedEntity;const workPackageId=executionTarget.type==='work_package'?executionTarget.id:executionTarget.type==='task'?executionTarget.workPackageId??undefined:undefined;const currentProvider=readExecutionProvider();const selectedLaunchMetadata={...launchMetadata,executionProvider:launchMetadata?.executionProvider??currentProvider,runnerId:launchMetadata?.runnerId??(currentProvider==='REMOTE_CLAUDE'?'US-WAREHOUSE-01':undefined)};const result=await request('/api/gpt-bridge/inbox',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({payload:value,sourceType:'CLIPBOARD',originContext:{executionContext:executionTarget},executionContext:executionTarget,workPackageId,createCanonicalTask:true,...selectedLaunchMetadata})});bridgeInbox=[result.item,...bridgeInbox.filter(item=>item.id!==result.item?.id)];await loadBridge();return result.item;}
+  async function importGlobalBridge(value=globalBridgePayload){if(!value.trim())throw new Error('INSTRUCTION_TEXT_REQUIRED');const result=await request('/api/gpt-bridge/inbox',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({payload:value,sourceType:'CLIPBOARD',createCanonicalTask:true})});bridgeInbox=[result.item,...bridgeInbox.filter(item=>item.id!==result.item?.id)];await loadBridge();return result.item;}
+  function bindLaunchedExecution(item:any){pendingInstructionId=null;instructionState='RUN_STARTED';selectedInboxId=item?.id??selectedInboxId;if(item?.runId){selectedRunId=item.runId;beginRuntimeFeedbackBridge(item.runId,'ENTITY')}const accepted:Feedback={state:'RUNNING',title:'已提交执行',message:item?.runId??'等待执行身份',code:'EXECUTION_SENT'};if(item?.runId){runtimeLifecycleFeedback=accepted;runtimeFeedbackLastPresentation=feedbackPresentationKey(accepted);setFeedback(accepted,'EXACT_RUN')}else setFeedback(accepted);startRuntimePolling()}
+  function bindGlobalLaunchedExecution(item:any){globalPendingInstructionId=null;globalInstructionState='RUN_STARTED';globalSelectedInboxId=item?.id??globalSelectedInboxId;if(item?.runId){globalSelectedRunId=item.runId;beginRuntimeFeedbackBridge(item.runId,'GLOBAL')}const accepted:Feedback={state:'RUNNING',title:'已提交执行',message:item?.runId??'等待执行身份',code:'GLOBAL_EXECUTION_SENT'};if(item?.runId){runtimeLifecycleFeedback=accepted;runtimeFeedbackLastPresentation=feedbackPresentationKey(accepted);setFeedback(accepted,'EXACT_RUN')}else setFeedback(accepted);startRuntimePolling(true)}
+  async function importInstruction(launchMetadata?:{model?:string;reasoning?:string}){if(!bridgePayload.trim()){setFeedback({state:'ERROR',title:'导入失败',message:'请先粘贴或输入一条非空指令。',code:'INSTRUCTION_TEXT_REQUIRED'});return null}try{const item=await importBridge(bridgePayload,launchMetadata);if(item?.runId||item?.state==='LAUNCHED'){bindComposerSubmittedRun(item?.runId);clearComposerDraft();bindLaunchedExecution(item)}else{pendingInstructionId=null;instructionState='TEXT_READY';setFeedback({state:'ERROR',title:'指令未启动',message:item?.launchError??'AICC 已尝试转发，但 Runtime 未能启动。',code:'EXPLICIT_SUBMISSION_DISPATCH_FAILED'})}return item}catch(error){pendingInstructionId=null;instructionState='TEXT_READY';const message=error instanceof Error?error.message:'IMPORT_INSTRUCTION_FAILED';setFeedback({state:'ERROR',title:'指令导入失败',message,code:message.split(':')[0]});return null}}
+  async function importGlobalInstruction(){if(!globalBridgePayload.trim()){setFeedback({state:'ERROR',title:'导入失败',message:'请先粘贴或输入一条非空指令。',code:'INSTRUCTION_TEXT_REQUIRED'});return null}try{const item=await importGlobalBridge(globalBridgePayload);if(item?.runId||item?.state==='LAUNCHED'){if(item.instruction?.entityScope==='GLOBAL_TASK')bindGlobalLaunchedExecution(item)}else{globalPendingInstructionId=null;globalInstructionState='TEXT_READY';setFeedback({state:'ERROR',title:'任务未启动',message:item?.launchError??'AICC 已尝试转发，但 Runtime 未能启动。',code:'EXPLICIT_SUBMISSION_DISPATCH_FAILED'})}return item}catch(error){globalPendingInstructionId=null;globalInstructionState='TEXT_READY';const message=error instanceof Error?error.message:'IMPORT_GLOBAL_FAILED';setFeedback({state:'ERROR',title:'全局任务导入失败',message,code:message.split(':')[0]});return null}}
+  async function pasteInstruction(){let text='';try{text=await navigator.clipboard.readText()}catch{setFeedback({state:'ERROR',title:'无法读取系统剪贴板',message:'请检查浏览器剪贴板权限后重试。',code:'CLIPBOARD_READ_FAILED'});return}updateBridgePayload(text);if(!text.trim())setFeedback({state:'ERROR',title:'剪贴板为空',message:'请先复制一条指令，再点击“粘贴指令”。',code:'EMPTY_CLIPBOARD'});else setFeedback({state:'SUCCESS',title:'指令已粘贴',message:'内容已填入执行框，请点击“导入指令”继续。',code:'TEXT_READY'})}
+  async function pasteGlobalInstruction(){let text='';try{text=await navigator.clipboard.readText()}catch{setFeedback({state:'ERROR',title:'无法读取系统剪贴板',message:'请检查浏览器剪贴板权限后重试。',code:'CLIPBOARD_READ_FAILED'});return}globalBridgePayload=text;globalPendingInstructionId=null;globalInstructionState='TEXT_READY';if(!text.trim())setFeedback({state:'ERROR',title:'剪贴板为空',message:'请先复制一条指令，再点击“粘贴指令”。',code:'EMPTY_CLIPBOARD'});else setFeedback({state:'SUCCESS',title:'指令已粘贴',message:'内容已填入 Global Task 执行框。',code:'TEXT_READY'})}
+  async function executeInstruction(){return undefined}
+  async function executeGlobalInstruction(){return undefined}
+  async function launchBridge(id:string){try{const result=await request('/api/gpt-bridge/launch',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({inboxId:id})});bridgeInbox=bridgeInbox.map(item=>item.id===id?result.item:item);const route=result.item?.instruction;if(route?.entityScope==='GLOBAL_TASK')bindGlobalLaunchedExecution(result.item);else if(route?.entityType?.toLowerCase()===selectedEntity.type&&route.entityId===selectedEntity.id)bindLaunchedExecution(result.item);else setFeedback({state:'RUNNING',title:'已提交',message:`已绑定 ${route?.entityId??'目标实体'}；Task 列表会显示此 Run。`,code:'EXECUTION_SENT'});await loadBridge();return result.item}catch(error){const message=error instanceof Error?error.message:'BRIDGE_LAUNCH_ERROR';setFeedback({state:'ERROR',title:'Bridge 执行未启动',message,code:message.split(':')[0],next:'检查 AICC 本地服务与 Runtime 可用性后重试。'});try{const latest=await request('/api/gpt-bridge/inbox');bridgeInbox=scopeBridgeRecords(latest.items??[],activeRoadmapProject);}catch{/* visible feedback remains authoritative */}return null}}
+  async function canonicalImportInstruction(payload=bridgePayload){return importInstruction(payload)}
+  async function canonicalImportAndRun(payload=bridgePayload){try{const item=await importInstruction(payload);if(!item)return null;return item?.runId?item:await launchBridge(item.id)}catch(error){const message=error instanceof Error?error.message:'IMPORT_AND_RUN_FAILED';const code=message.split(':')[0];setFeedback({state:'ERROR',title:'导入并执行失败',message,code,next:'检查指令格式与当前本地服务状态。'});return null}}
+  function canonicalResultText(runId?:string|null){return taskResultTextForRun(runId)}
+  async function canonicalCopyResult(runId?:string){const targetRunId=runId??displayRuntime?.runId??null,result=canonicalResultText(targetRunId);if(result)await navigator.clipboard?.writeText(result);return result}
+  async function copyTaskRowResult(task:any){const result=task?.canonicalResult?.rawResult;if(typeof result!=='string')return null;await navigator.clipboard?.writeText(result);return result}
+  async function copyComposerResult(){const result=resolveComposerCanonicalResult(composerSubmittedRunId,taskRecords);if(!result){setFeedback({state:'ERROR',title:'运行结果尚未可复制',message:'当前执行框提交的运行尚未产生 canonical result。',code:'COMPOSER_RESULT_UNAVAILABLE'});return null}try{await navigator.clipboard?.writeText(result);setFeedback({state:'SUCCESS',title:'已复制运行结果',message:'已复制当前执行框最近一次提交运行的 canonical result。',code:'COMPOSER_RESULT_COPIED'});return result}catch(error){const message=error instanceof Error?error.message:'CLIPBOARD_WRITE_FAILED';setFeedback({state:'ERROR',title:'复制运行结果失败',message,code:'CLIPBOARD_WRITE_FAILED'});return null}}
+  async function copyGlobalResult(runId?:string){const result=canonicalResultText(runId??globalRuntime?.runId??null);if(result)await navigator.clipboard?.writeText(result);return result}
+  let executionActions:ExecutionActionLayer;
+  $: executionActions=createExecutionActionLayer({pasteInstruction,importInstruction:canonicalImportInstruction,executeCurrentInstruction:executeInstruction,copyResult:canonicalCopyResult,getExecution:(id)=>runtimeHistory.find(item=>item.runId===id)??null,getResult:(id)=>canonicalResultText(id),executeImported:async(item)=>launchBridge(item.id)});
+  async function refreshRuntimeProjection(){if(runtimeProjectionRefreshInFlight)return runtimeProjectionRefreshInFlight;const cycle=(async()=>{const pq=projectQuery();const query=pq?`?entityType=${encodeURIComponent(selectedEntity.type)}&entityId=${encodeURIComponent(selectedEntity.id)}&${pq}`:'';const [runtimeResult,inboxResult,tasksResult,outboxResult]=await Promise.allSettled([query?request(`/api/codex/runtime${query}`):Promise.resolve({info:null,runtime:null,history:[],availability:'NOT_AVAILABLE'}),request('/api/gpt-bridge/inbox'),request('/api/tasks'),request('/api/gpt-bridge/outbox')]);if(inboxResult.status==='fulfilled'&&Array.isArray(inboxResult.value.items))bridgeInbox=scopeBridgeRecords(inboxResult.value.items,activeRoadmapProject);if(tasksResult.status==='fulfilled'&&Array.isArray(tasksResult.value.items)){taskRecords=tasksResult.value.items;legacyTaskCount=tasksResult.value.legacyCount??legacyTaskCount}if(outboxResult.status==='fulfilled'&&Array.isArray(outboxResult.value.items))bridgeOutbox=scopeBridgeRecords(outboxResult.value.items,activeRoadmapProject);if(runtimeResult.status==='rejected'){const message=runtimeResult.reason instanceof Error?runtimeResult.reason.message:'RUNTIME_PROJECTION_FAILED';if(instructionState==='RUN_STARTED')setFeedback({state:'ERROR',title:'运行状态更新失败',message,code:'RUNTIME_PROJECTION_FAILED',next:'AICC 将继续保留当前 Run 绑定；检查本地服务后重试。'});return null}const data=runtimeResult.value;const nextRuntime=data.runtime&&typeof data.runtime==='object'?data.runtime:null;raw={...raw,runtime:nextRuntime};if(Array.isArray(data.history))runtimeHistory=data.history.filter((item:any)=>item&&typeof item==='object'&&typeof item.runId==='string');const candidates=[nextRuntime,...runtimeHistory].filter(Boolean);if(!selectedRunId||!candidates.some((item:any)=>item.runId===selectedRunId)){if(nextRuntime)selectedRunId=nextRuntime.runId}codexInfo=data.info;return selectCanonicalCurrentRuntime(nextRuntime,runtimeHistory,selectedRunId)})();runtimeProjectionRefreshInFlight=cycle;try{return await cycle}finally{if(runtimeProjectionRefreshInFlight===cycle)runtimeProjectionRefreshInFlight=null}}
+  async function refreshGlobalRuntimeProjection(){if(runtimeProjectionRefreshInFlight)return runtimeProjectionRefreshInFlight;const cycle=(async()=>{const pq=projectQuery();const [runtimeResult,inboxResult,tasksResult,outboxResult]=await Promise.allSettled([pq?request(`/api/codex/runtime?entityType=global_task&entityId=GLOBAL_TASK&${pq}`):Promise.resolve({info:null,runtime:null,history:[],availability:'NOT_AVAILABLE'}),request('/api/gpt-bridge/inbox'),request('/api/tasks'),request('/api/gpt-bridge/outbox')]);if(inboxResult.status==='fulfilled'&&Array.isArray(inboxResult.value.items))bridgeInbox=scopeBridgeRecords(inboxResult.value.items,activeRoadmapProject);if(tasksResult.status==='fulfilled'&&Array.isArray(tasksResult.value.items)){taskRecords=tasksResult.value.items;legacyTaskCount=tasksResult.value.legacyCount??legacyTaskCount}if(outboxResult.status==='fulfilled'&&Array.isArray(outboxResult.value.items))bridgeOutbox=scopeBridgeRecords(outboxResult.value.items,activeRoadmapProject);if(runtimeResult.status==='rejected')return null;const data=runtimeResult.value;if(Array.isArray(data.history)){const retained=runtimeHistory.filter((item:any)=>!(item.entityType==='global_task'&&item.entityId==='GLOBAL_TASK'));runtimeHistory=[...data.history.filter((item:any)=>item&&typeof item==='object'&&typeof item.runId==='string'),...retained]}const nextRuntime=data.runtime&&typeof data.runtime==='object'?data.runtime:null;if(nextRuntime&&!globalSelectedRunId)globalSelectedRunId=nextRuntime.runId;codexInfo=data.info;const followed=selectCanonicalCurrentRuntime(nextRuntime,globalRuntimeHistory,globalSelectedRunId);if(followed&&followed.runId===globalSelectedRunId&&globalInstructionState==='RUN_STARTED'&&activeRoadmapProject&&projectRuntimeFeedback(followed,activeRoadmapProject,taskResultForRun(followed.runId)).terminal)globalInstructionState='RESULT_RECEIVED';return followed})();runtimeProjectionRefreshInFlight=cycle;try{return await cycle}finally{if(runtimeProjectionRefreshInFlight===cycle)runtimeProjectionRefreshInFlight=null}}
+  async function copyBridgeExample(){const result=await request('/api/gpt-bridge/example');if(result.payload)await navigator.clipboard?.writeText(result.payload);}
+  async function readFormalWorkPackage(id:string,token:number){try{const workPackage=await boundedRequest(`/api/work-packages/${encodeURIComponent(id)}`) as FormalWorkPackage;if(workPackage.id!==id)throw new Error('FORMAL_WP_ID_MISMATCH');if(token===selectionRequest)raw={...raw,formalWorkPackages:{...raw.formalWorkPackages,[id]:workPackage},sourceErrors:{...raw.sourceErrors,formalWorkPackageRead:undefined,formalWorkPackages:undefined}}}catch(error){if(token===selectionRequest)raw={...raw,sourceErrors:{...raw.sourceErrors,formalWorkPackageRead:error instanceof Error?error.message.split(':')[0]:'FORMAL_WP_READ_FAILED'}}}}
+  async function performLoadSnapshot(showFeedback=true,refreshCiEvidence=false){
+    await loadAcceptedRoadmapProjection();
+    if(activeRoadmapProject?.projectId!=='aicc')return;
+    if(showFeedback)setFeedback({state:'RUNNING',title:'正在刷新状态…',message:'正在重建项目快照与当前实体上下文。',code:'REFRESHING'});
+    const selectedAtStart=selectedEntity;
+    const pq=projectQuery();const runtimeQuery=pq?(['work_package','pull_request'].includes(selectedAtStart.type)?`?entityType=${encodeURIComponent(selectedAtStart.type)}&entityId=${encodeURIComponent(selectedAtStart.id)}&${pq}`:`?${pq}`):'';
+    const [repositoryResult,authorizationResult,runtimeResult,descriptionResult,uatResult,lifecycleEvidenceResult,formalPackagesResult,allUatResult,allEvidenceResult]=await Promise.allSettled([boundedRequest('/api/repository'),boundedRequest(`/api/authorization?workPackageId=${encodeURIComponent(selectedAtStart.type==='work_package'?selectedAtStart.id:'')}`),runtimeQuery?boundedRequest(`/api/codex/runtime${runtimeQuery}`):Promise.resolve({info:null,runtime:null,history:[],availability:'NOT_AVAILABLE'}),boundedRequest('/api/entity-descriptions'),selectedAtStart.type==='work_package'?boundedRequest(`/api/human-uat?workPackageId=${encodeURIComponent(selectedAtStart.id)}`):Promise.resolve({record:null}),selectedAtStart.type==='work_package'?boundedRequest(`/api/lifecycle-evidence?workPackageId=${encodeURIComponent(selectedAtStart.id)}`):Promise.resolve({record:null}),boundedRequest('/api/work-packages'),boundedRequest('/api/human-uat'),boundedRequest('/api/lifecycle-evidence')]);
+    const sourceErrors:RawProjectSources['sourceErrors']={};
+    const next:RawProjectSources={...raw,sourceErrors};
+    next.roadmapNodes=roadmapProjection?.nodes??undefined;
+    if(repositoryResult.status==='fulfilled')next.repository=repositoryResult.value;else sourceErrors.repository='REPOSITORY_UNAVAILABLE';
+    if(authorizationResult.status==='fulfilled')next.authorization=authorizationResult.value.record??null;else sourceErrors.authorizations='AUTHORIZATION_UNAVAILABLE';
+    if(runtimeResult.status==='fulfilled'){next.runtime=runtimeResult.value.runtime&&typeof runtimeResult.value.runtime==='object'?runtimeResult.value.runtime:null;runtimeHistory=Array.isArray(runtimeResult.value.history)?runtimeResult.value.history.filter((item:any)=>item&&typeof item==='object'&&typeof item.runId==='string'):[];const persistedRun=selectedRunId&&runtimeHistory.some((item:any)=>item.runId===selectedRunId)?selectedRunId:null;selectedRunId=next.runtime&&['STARTING','RUNNING','STOPPING'].includes(next.runtime.phase)?next.runtime.runId:persistedRun;codexInfo=runtimeResult.value.info}else sourceErrors.runtime='RUNTIME_UNAVAILABLE';
+    if(descriptionResult.status==='fulfilled'){descriptions=descriptionResult.value.records??[];next.entityDescriptions=descriptions;}
+    if(uatResult.status==='fulfilled'&&selectedAtStart.type==='work_package')next.humanUat=uatResult.value.record?[uatResult.value.record]:[];
+    if(lifecycleEvidenceResult.status==='fulfilled'&&selectedAtStart.type==='work_package')next.lifecycleEvidence=lifecycleEvidenceResult.value.record?[lifecycleEvidenceResult.value.record]:[];
+    if(formalPackagesResult.status==='fulfilled'&&Array.isArray(formalPackagesResult.value.items))next.formalWorkPackages=Object.fromEntries(formalPackagesResult.value.items.map((item:FormalWorkPackage)=>[item.id,item]));
+    if(allUatResult.status==='fulfilled'&&Array.isArray(allUatResult.value.records))next.humanUat=allUatResult.value.records;
+    if(allEvidenceResult.status==='fulfilled'&&Array.isArray(allEvidenceResult.value.records))next.lifecycleEvidence=allEvidenceResult.value.records;
+    if(refreshCiEvidence){const ciEvidenceResult=await boundedRequest('/api/ci-evidence').catch(()=>null);if(ciEvidenceResult&&Array.isArray(ciEvidenceResult.items))next.ciEvidence=ciEvidenceResult.items;}
+    if(selectedAtStart.type==='work_package'){try{const projectionResult=await boundedRequest(`/api/delivery-context-projection?workPackageId=${encodeURIComponent(selectedAtStart.id)}`);deliveryProjection=projectionResult.projection??null}catch{deliveryProjection=null}}else deliveryProjection=null;
+    raw=next;
+    const formalTarget=selectedEntity.type==='work_package'?selectedEntity.id:null;
+    if(formalTarget)await readFormalWorkPackage(formalTarget,selectionRequest);
+    if(showFeedback)setFeedback({state:'SUCCESS',title:'状态已刷新',message:'项目快照与当前实体上下文已重新构建。',code:'REFRESH_SUCCESS'});
   }
-
-  function cancelAuthorization() {
-    authorizationConfirming = false;
+  async function loadSnapshot(showFeedback=true,refreshCiEvidence=false){
+    snapshotRefreshRequestedGeneration+=1;
+    snapshotRefreshShowFeedback=snapshotRefreshShowFeedback||showFeedback;
+    snapshotRefreshCiEvidence=snapshotRefreshCiEvidence||refreshCiEvidence;
+    if(refreshInFlight)return refreshInFlight;
+    refreshInFlight=(async()=>{
+      while(snapshotRefreshCompletedGeneration<snapshotRefreshRequestedGeneration){
+        const generation=snapshotRefreshRequestedGeneration,show=snapshotRefreshShowFeedback,withCi=snapshotRefreshCiEvidence;
+        snapshotRefreshShowFeedback=false;snapshotRefreshCiEvidence=false;
+        try{await performLoadSnapshot(show,withCi)}catch(error){const message=error instanceof Error?error.message:'REFRESH_FAILED';setFeedback({state:'ERROR',title:'状态刷新失败',message,code:message.split(':')[0]})}
+        snapshotRefreshCompletedGeneration=generation;
+      }
+    })().finally(()=>{refreshInFlight=null});
+    return refreshInFlight;
   }
-
-  async function confirmAuthorization() {
-    const workPackageId = controlLoop.roadmap?.currentWorkPackage;
-    if (!workPackageId) return;
-    try {
-      controlLoop = { ...controlLoop, authorization: await authorizeWorkPackage(workPackageId, true) };
-      authorizationConfirming = false;
-      await refresh();
-    } catch (error) {
-      authorizationConfirming = false;
-      announce(`授权被阻止：${error instanceof Error ? error.message : String(error)}`);
+  async function saveDescription(value:string){const target={...selectedEntity};const repositoryKey=snapshot.repository.value?.repository??'local';const response=await request('/api/entity-descriptions',{method:value.trim()?'POST':'DELETE',headers:{'Content-Type':'application/json'},body:JSON.stringify({repositoryKey,entityType:target.type,entityId:target.id,description:value})});if(target.type!==selectedEntity.type||target.id!==selectedEntity.id)throw new Error('DESCRIPTION_TARGET_MISMATCH');const nextDescriptions=value.trim()?[...descriptions.filter(item=>!(item.repositoryKey===repositoryKey&&item.entityType===target.type&&item.entityId===target.id)),response.record]:descriptions.filter(item=>!(item.repositoryKey===repositoryKey&&item.entityType===target.type&&item.entityId===target.id));descriptions=nextDescriptions;raw={...raw,entityDescriptions:nextDescriptions};setFeedback({state:'SUCCESS',title:value.trim()?'描述已保存':'已恢复默认描述',message:'Owner 本地描述元数据已更新。',code:value.trim()?'DESCRIPTION_SAVED':'DESCRIPTION_OVERRIDE_CLEARED'});}
+  async function saveHumanUat(record:HumanUatRecord){try{const target=selectedEntity;if(target.type!==record.entityType||target.id!==(record.entityId??record.workPackageId))throw new Error('UAT_TARGET_MISMATCH');const payload={...record,repository:snapshot.repository.value?.repository??record.repository};const response=await request(`/api/human-uat?entityType=${encodeURIComponent(record.entityType)}&entityId=${encodeURIComponent(record.entityId??record.workPackageId)}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});raw={...raw,humanUat:[response.record,...(raw.humanUat??[]).filter(item=>!(item.entityType===record.entityType&&(item.entityId??item.workPackageId)===(record.entityId??record.workPackageId)))]};await loadSnapshot(false);const override=record.decisionMode==='OWNER_OVERRIDE_PASS';setFeedback({state:'SUCCESS',title:override?'人工 UAT 已直接通过':'UAT 进度已保存',message:override?'Owner 直接通过已持久化，未逐项验收事实已保留。':'Owner Human UAT 记录已持久化。',code:override?'OWNER_OVERRIDE_PASS':record.status==='PASS'?'UAT_PASS_SAVED':'UAT_PROGRESS_SAVED'});}catch(error){const message=error instanceof Error?error.message:'UAT_OVERRIDE_ERROR';setFeedback({state:'ERROR',title:record.decisionMode==='OWNER_OVERRIDE_PASS'?'人工 UAT 直接通过失败':'UAT 保存失败',message,code:message.split(':')[0],next:'检查当前实体与本地服务状态。'});}}
+  async function saveSelectedTaskHumanUat(record:HumanUatRecord){try{const workPackageId=selectedTaskWorkPackageId;if(!workPackageId||record.entityType!=='work_package'||(record.entityId??record.workPackageId)!==workPackageId)throw new Error('TASK_UAT_TARGET_MISMATCH');const payload={...record,repository:snapshot.repository.value?.repository??record.repository};const response=await request(`/api/human-uat?entityType=work_package&entityId=${encodeURIComponent(workPackageId)}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});raw={...raw,humanUat:[response.record,...(raw.humanUat??[]).filter(item=>!(item.entityType==='work_package'&&(item.entityId??item.workPackageId)===workPackageId))]};setFeedback({state:'SUCCESS',title:'UAT 进度已保存',message:`已保存 ${workPackageId} 的 Owner Human UAT。`,code:record.status==='PASS'?'UAT_PASS_SAVED':'UAT_PROGRESS_SAVED'});}catch(error){const message=error instanceof Error?error.message:'TASK_UAT_SAVE_FAILED';setFeedback({state:'ERROR',title:'Task UAT 保存失败',message,code:message.split(':')[0],next:'检查当前 Task 的 Work Package 绑定。'});}}
+  function startRuntimePolling(global=false){if(runtimeTimer)clearInterval(runtimeTimer);const poll=async()=>{if(runtimePollInFlight)return;runtimePollInFlight=true;try{const [nextRuntime,exactRuntime]=await Promise.all([global?refreshGlobalRuntimeProjection():refreshRuntimeProjection(),refreshFeedbackOwnedRuntime()]);const selectedId=runtimeFeedbackRunId??(global?globalSelectedRunId:selectedRunId);const followed=exactRuntime??nextRuntime;const pendingInbox=bridgeInbox.some(item=>(item.state==='READY'||item.state==='LAUNCHED')&&(!selectedId||item.runId===selectedId)&&(!global||item.instruction?.entityScope==='GLOBAL_TASK'));if(!shouldContinueRuntimePolling(followed,pendingInbox,selectedId,taskResultForRun(selectedId))){if(runtimeTimer)clearInterval(runtimeTimer);runtimeTimer=undefined}}finally{runtimePollInFlight=false}};void poll();runtimeTimer=window.setInterval(()=>void poll(),1000)}
+  function findRoadmapNode(nodes:RoadmapNode[],id:string):RoadmapNode|null{for(const node of nodes){if(node.id===id)return node;const found=findRoadmapNode(node.children??[],id);if(found)return found}return null}
+  function roadmapDisplayLabel(node:RoadmapNode):string{return roadmapEntityLabel(node)}
+  function resolveHydratedSelection(nodes:any[]):SelectedEntityRef{const persisted=readSelection();if(persisted&&findRoadmapNode(nodes,persisted.id))return persisted;const active:any[]=[];const walk=(items:any[],parent:any=null)=>{for(const node of items){if(node.type==='work_package'&&['IN_PROGRESS','WAITING_OWNER','WAITING_UAT'].includes(node.status))active.push({node,parent});walk(node.children??[],node)}};walk(nodes);if(active.length===1)return {type:'work_package',id:active[0].node.id};if(active.length>1){const parents=[...new Set(active.map(item=>item.parent?.id).filter(Boolean))];return {type:'milestone',id:parents.length===1?parents[0]:(nodes[0]?.id??'M1')}}return {type:'milestone',id:nodes[0]?.id??'M1'};}
+  function persistSelection(selection:SelectedEntityRef){selectedEntity=selection;persistWorkspaceNavigation()}
+  function toggleRoadmapNode(id:string){
+    if(expandableRoadmapIds(roadmapNodes).includes(id))collapsedNodeIds=toggleCollapsedNode(collapsedNodeIds,id);
+  }
+  function toggleEntireRoadmap(){
+    const collapsed=roadmapFullyExpanded;
+    collapsedNodeIds=collapsed?new Set(expandableRoadmapIds(roadmapNodes)):new Set();
+    setFeedback({state:'INFO',title:collapsed?'已折叠左侧面板':'已展开左侧面板',message:currentRoadmapSurfaceName(),code:collapsed?'ROADMAP_COLLAPSED':'ROADMAP_EXPANDED'});
+  }
+  async function syncRoadmap(){
+    if(activeGlobalTab==='TASK'){await refreshTaskRecords();return}
+    const container=document.querySelector('.roadmap-scroll-region') as HTMLElement|null;
+    const scrollTop=container?.scrollTop??0;
+      roadmapSyncState='同步中';
+    try{
+      const data=await boundedRequest('/api/roadmap',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({selectedId:selectedEntity.id,lockedId:executionContextLock.locked&&executionContextLock.entity?.type!=='task'?executionContextLock.entity?.id??null:null})},ROADMAP_SYNC_TIMEOUT_MS);
+      if(data?.availability==='NOT_CONFIGURED'){acceptRoadmapNotConfigured(data);return}
+      const result=deserializeRoadmapProjection(data?.projection);
+      if(!result||!preserveRoadmapUiState(result,selectedEntity.id,executionContextLock.locked&&executionContextLock.entity?.type!=='task'?executionContextLock.entity?.id??null:null))throw new Error('ROADMAP_UI_STATE_TARGET_MISSING');
+      acceptRoadmapProjection(result,data.projection,'已同步',data);
+      await tick();
+      if(container)container.scrollTop=scrollTop;
+      setFeedback({state:'SUCCESS',title:'Roadmap 已同步',message:'仅更新左侧 Roadmap，当前工作区与导航状态保持不变。',code:'ROADMAP_SYNC_SUCCESS'});
+    }catch(error){
+      roadmapSyncState='同步失败';
+      const message=error instanceof Error?error.message:'ROADMAP_SYNC_FAILED';
+      setFeedback({state:'ERROR',title:'Roadmap 同步未完成',message,code:message});
     }
   }
-
-  async function runCodexControl(action: CodexControlAction) {
-    if (controlPending) return;
-    controlPending = true;
-    try {
-      const runtime = await controlCodex(action);
-      controlLoop = { ...controlLoop, codexRuntime: runtime };
-      runtimeObservationError = '';
-      runtimePoller.start(runtime);
-    } catch (error) {
-      announce(`Codex 操作被阻止：${error instanceof Error ? error.message : String(error)}`);
-    } finally {
-      controlPending = false;
+  async function locateSelectedEntity(){const contextTarget=executionContextLock.locked&&executionContextLock.entity?executionContextLock.entity:selectedEntity;const targetId=contextTarget.type==='task'?contextTarget.workPackageId??'':contextTarget.id;if(!targetId){setFeedback({state:'BLOCKED',title:'暂无当前 Work Package',message:'请选择一个具体 Work Package',code:'LOCATE_TARGET_UNAVAILABLE'});return}const path=roadmapPath(roadmapNodes,targetId);if(!path.length){setFeedback({state:'BLOCKED',title:'暂无当前 Work Package',message:'请选择一个具体 Work Package',code:'LOCATE_TARGET_UNAVAILABLE'});return}collapsedNodeIds=expandRoadmapAncestors(roadmapNodes,targetId,collapsedNodeIds);if(targetId!==selectedEntity.id)await select(targetId);await tick();const target=document.querySelector('[data-roadmap-node="'+CSS.escape(targetId)+'"]') as HTMLElement|null;const container=document.querySelector('.roadmap-scroll-region') as HTMLElement|null;if(target&&container){const top=target.getBoundingClientRect().top-container.getBoundingClientRect().top+container.scrollTop;container.scrollTo({top:Math.max(0,top-container.clientHeight/2),behavior:'smooth'});target.classList.add('locate-highlight');window.setTimeout(()=>target.classList.remove('locate-highlight'),900)}const type=contextTarget.type==='work_package'?'Work Package':contextTarget.type==='pull_request'?'PR':contextTarget.type==='milestone'?'Milestone':'上下文';const detail=contextTarget.type==='pull_request'?'PR #'+(context.record?.number??targetId):targetId;setFeedback({state:'INFO',title:'已定位到当前 '+type,message:detail,code:'CURRENT_CONTEXT_LOCATED'})}
+  async function locateSelectedTask(){if(!selectedTaskId){setFeedback({state:'BLOCKED',title:'暂无当前 Task',message:'请选择一个具体 Task',code:'LOCATE_TASK_UNAVAILABLE'});return}await tick();const target=document.querySelector('[data-testid="task-quick-row-'+CSS.escape(selectedTaskId)+'"]') as HTMLElement|null;target?.scrollIntoView({block:'nearest',behavior:'smooth'});setFeedback({state:'INFO',title:'已定位到当前 Task',message:selectedTaskId,code:'CURRENT_TASK_LOCATED'})}
+  async function refreshTaskRecords(){const persistedTaskId=selectedTaskId;try{const projection=await boundedRequest('/api/task-projection');acceptTaskProjection(projection);if(persistedTaskId&&!taskRecords.some(item=>item.taskId===persistedTaskId))selectedTaskId=null;persistWorkspaceNavigation();setFeedback({state:'SUCCESS',title:'Task 清单已刷新',message:'已同步 '+taskRecords.length+' 个 Task。',code:'TASK_REFRESH_SUCCESS'})}catch(error){const message=error instanceof Error?error.message:'TASK_REFRESH_FAILED';setFeedback({state:'ERROR',title:'任务清单刷新失败',message,code:message.split(':')[0]})}}
+  async function refreshWorkPackageProjection(){await loadSnapshot(false);}
+  function inspectMilestoneWorkPackage(milestoneId:string,workPackageId:string){
+    const milestone=findRoadmapNode(roadmapNodes,milestoneId),workPackage=findRoadmapNode(roadmapNodes,workPackageId);
+    if(milestone?.type!=='milestone'||workPackage?.type!=='work_package'||workPackage.parentId!==milestoneId)return;
+    globalWorkspace=false;selectedEntity={type:'work_package',id:workPackageId};centerViewMode='MILESTONE_OVERVIEW';milestoneOverviewId=milestoneId;
+    activeTab='概览';selectedInboxId=null;drawer=null;selectionRequest+=1;persistSelection(selectedEntity);
+  }
+  function openSelectedWorkPackageWorkspace(){
+    if(selectedEntity.type!=='work_package')return;
+    globalWorkspace=false;centerViewMode='ENTITY_WORKSPACE';activeTab='运行';selectedInboxId=null;drawer=null;selectionRequest+=1;persistSelection(selectedEntity);
+  }
+  async function select(value:string|RoadmapNode){
+    const node=typeof value==='string'?findRoadmapNode(roadmapNodes,value):value;
+    if(!node)return;
+    if(node.type==='work_package'&&centerViewMode==='MILESTONE_OVERVIEW'&&milestoneOverviewId&&node.parentId===milestoneOverviewId){inspectMilestoneWorkPackage(milestoneOverviewId,node.id);return}
+    if(node.type==='milestone'){centerViewMode='MILESTONE_OVERVIEW';milestoneOverviewId=node.id;}else{centerViewMode='ENTITY_WORKSPACE';milestoneOverviewId=null;}
+    globalWorkspace=false;selectedEntity={type:node.type,id:node.id} as SelectedEntityRef;activeTab=selectedEntity.type==='work_package'?'运行':'概览';selectedInboxId=null;drawer=null;selectionRequest+=1;persistSelection(selectedEntity);
+    if(selectedEntity.type==='work_package'){await readFormalWorkPackage(selectedEntity.id,selectionRequest);await refreshRuntimeProjection();}else if(selectedEntity.type==='pull_request'){await refreshRuntimeProjection();}
+  }
+  function currentRoadmapSurfaceName(){return activeGlobalTab==='TASK'?'Task Quick List':activeGlobalTab==='PR'?'PR Navigation':'Roadmap'}
+  function toggleSidebar(side:'roadmap'|'status'){
+    const surface=side==='roadmap'?currentRoadmapSurfaceName():'状态栏';
+    if(window.matchMedia('(max-width: 900px)').matches){const expanded=drawer!==side;drawer=expanded?side:null;setFeedback({state:'INFO',title:expanded?`已展开${side==='roadmap'?'左侧':'右侧'}面板`:`已折叠${side==='roadmap'?'左侧':'右侧'}面板`,message:surface,code:expanded?'SIDEBAR_EXPANDED':'SIDEBAR_COLLAPSED'});return}
+    const expanded=side==='roadmap'?leftCollapsed:rightCollapsed;
+    if(side==='roadmap')leftCollapsed=!leftCollapsed;else rightCollapsed=!rightCollapsed;
+    setFeedback({state:'INFO',title:expanded?`已展开${side==='roadmap'?'左侧':'右侧'}面板`:`已折叠${side==='roadmap'?'左侧':'右侧'}面板`,message:surface,code:expanded?'SIDEBAR_EXPANDED':'SIDEBAR_COLLAPSED'});
+  }
+  function eligibility(id:ActionEligibility['id']){return context.availableActions.find(action=>action.id===id)}
+  async function post(url:string,body:unknown){return request(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)})}
+  async function stopExactRuntime(runId:string){
+    if(!runId)throw new Error('RUN_ID_REQUIRED');
+    setFeedback({state:'RUNNING',title:'正在停止执行',message:runId,code:'CANCELLED_BY_OWNER_REQUESTED'});
+    if(!activeRoadmapProject)throw new Error('PROJECT_CONTEXT_REQUIRED');try{await post('/api/codex/stop',{runId,projectId:activeRoadmapProject.projectId,repositoryIdentity:activeRoadmapProject.repositoryIdentity});setFeedback({state:'SUCCESS',title:'已停止执行',message:`${runId} · Owner cancelled`,code:'CANCELLED_BY_OWNER'})}catch(error){const message=error instanceof Error?error.message:'STOP_FAILED';setFeedback({state:'ERROR',title:'停止执行失败',message:`${runId} · ${message}`,code:'CANCELLED_BY_OWNER_FAILED'});throw error}
+  }
+  async function resumeExactRuntime(runId:string){
+    if(!runId)throw new Error('RUN_ID_REQUIRED');
+    const resumeSource=[raw.runtime,...runtimeHistory].find(item=>item?.runId===runId);
+    const resumeContext=resumeSource?.controlLoopId??resumeSource?.currentTask??'exact stopped control loop';
+    setFeedback({state:'RUNNING',title:'正在继续自动循环',message:resumeContext,code:'RESUME_CONTROL_LOOP_REQUESTED'});
+    if(!activeRoadmapProject)throw new Error('PROJECT_CONTEXT_REQUIRED');try{const result=await post('/api/codex/resume',{runId,projectId:activeRoadmapProject.projectId,repositoryIdentity:activeRoadmapProject.repositoryIdentity});const newRunId=result?.newRunId;if(typeof newRunId!=='string'||newRunId===runId)throw new Error('RESUME_NEW_RUN_ID_INVALID');selectedRunId=newRunId;beginRuntimeFeedbackBridge(newRunId,'ENTITY');const accepted={state:'RUNNING' as const,title:'已继续执行',message:newRunId,code:'RESUME_EXECUTION_STARTED'};runtimeLifecycleFeedback=accepted;runtimeFeedbackLastPresentation=feedbackPresentationKey(accepted);setFeedback(accepted,'EXACT_RUN');startRuntimePolling();return result}catch(error){const message=error instanceof Error?error.message:'RESUME_FAILED';setFeedback({state:'ERROR',title:'继续执行失败',message:`${runId} · ${message}`,code:'RESUME_FAILED'});throw error}
+  }
+  setContext('aicc-stop-exact-runtime',stopExactRuntime);
+  setContext('aicc-resume-exact-runtime',resumeExactRuntime);
+  async function runAction(id:ActionEligibility['id']){
+    // Execution is a live operation: refresh the bounded read model before
+    // evaluating its button state so a stale browser snapshot never becomes
+    // an accidental authorization or execution blocker.
+    if((id==='START_CODEX'||id==='RETRY')&&selectedEntity.type==='work_package'){
+      setFeedback({state:'RUNNING',title:id==='RETRY'?'正在重新读取运行状态…':'正在读取运行状态…',message:'只更新当前运行、Inbox 和报告，不重建整个页面。',code:'RUNTIME_PROJECTION_REFRESH'});
+      await refreshRuntimeProjection();
+      await tick();
     }
+    const available=eligibility(id);
+    if(!available?.enabled){setFeedback({state:'BLOCKED',title:'当前操作不可用',message:available?.reasonLabel??'当前实体或状态不允许此操作。',code:available?.reasonCode??'ACTION_NOT_AVAILABLE'});return}
+    busy=true;
+    const running:Record<string,[string,string,string]>={REFRESH:['正在刷新状态…','正在重建项目快照。','REFRESHING'],AUTHORIZE:['正在验证授权条件…','正在检查仓库状态与正式 Work Package。','AUTHORIZING'],START_CODEX:['正在启动 Codex…','正在验证匹配授权、仓库状态和 Writer Lock。','CODEX_STARTING'],STOP_CODEX:['正在停止 Codex…','正在请求当前 WP 的受管进程停止。','CODEX_STOPPING'],SAFE_MAIN_SYNC:['正在同步本地 main…','正在执行安全 fast-forward 检查。','SYNCING'],RETRY:['正在重新启动 Codex…','正在复用当前 WP Execution Lease 并执行实时预检。','RETRYING'],PR_CREATE_DRAFT:['正在准备 Draft PR…','将请求 Codex 基于实际仓库事实创建 Draft PR。','PR_DRAFT_CREATING'],PR_OPEN:['正在打开 PR…','正在读取真实 PR 身份。','PR_OPENING']};
+    const copy=running[id];setFeedback({state:'RUNNING',title:copy[0],message:copy[1],code:copy[2]});
+    let resultMessage='最新结果已写入当前实体上下文。';try{
+      if(id==='REFRESH')await loadSnapshot(false,true);
+      if(id==='AUTHORIZE'&&selectedEntity.type==='work_package'){const requestedId=selectedEntity.id;const result=await post('/api/authorization',{workPackageId:requestedId,selectedEntityId:requestedId,confirmed:true});if(result.record?.workPackageId!==requestedId)throw new Error('AUTHORIZATION_PERSISTENCE_INTEGRITY_FAILED');await loadSnapshot(false);await tick();const refreshedSnapshot=createProjectSnapshot(raw,taskRecords);const refreshed=resolveEntityContext(refreshedSnapshot,selectedEntity,prLayer2,wpProjection,activeRoadmapProject??undefined);if(refreshed.type!=='work_package'||refreshed.id!==requestedId||refreshed.authorization.state!=='VALID'||refreshed.authorization.record?.workPackageId!==requestedId||refreshed.authorization.record?.headShaAtAuthorization!==refreshedSnapshot.repository.value?.head)throw new Error('AUTHORIZATION_POSTCONDITION_FAILED');if(result.warning)resultMessage=result.warning;}
+      if(id==='START_CODEX'&&selectedEntity.type==='work_package'){await post('/api/codex/start',{workPackageId:selectedEntity.id});startRuntimePolling();}
+      if(id==='RETRY'&&selectedEntity.type==='work_package'){await post('/api/codex/retry',{workPackageId:selectedEntity.id});startRuntimePolling();}
+      if(id==='PR_CREATE_DRAFT'&&selectedEntity.type==='pull_request'){const parent=(context.type==='pull_request'?context.parentWorkPackageId:null);if(!parent)throw new Error('PR_PARENT_WP_UNKNOWN');await post('/api/pr-runner/create-draft',{workPackageId:parent,prId:selectedEntity.id});startRuntimePolling();}
+      if(id==='PR_OPEN'&&context.type==='pull_request'&&context.record?.url)window.open(context.record.url,'_blank','noopener');
+      if(id==='STOP_CODEX'){if(!displayRuntime?.runId)throw new Error('RUN_ID_REQUIRED');if(!activeRoadmapProject)throw new Error('PROJECT_CONTEXT_REQUIRED');await post('/api/codex/stop',{runId:displayRuntime.runId,projectId:activeRoadmapProject.projectId,repositoryIdentity:activeRoadmapProject.repositoryIdentity});}
+      if(id==='SAFE_MAIN_SYNC')await post('/api/repository/sync-main',{});
+      if(!['START_CODEX','RETRY','REFRESH'].includes(id))await loadSnapshot(false); else if(id!=='REFRESH')await refreshRuntimeProjection();
+      const success:Record<string,[string,string]>={REFRESH:['状态已刷新','REFRESH_SUCCESS'],AUTHORIZE:['Owner 授权已创建','AUTHORIZATION_SUCCESS'],START_CODEX:['Codex 已启动','CODEX_STARTED'],STOP_CODEX:['Codex 已停止','CODEX_STOPPED'],SAFE_MAIN_SYNC:['本地 main 已同步','SYNC_SUCCESS'],RETRY:['重试完成','RETRY_SUCCESS'],PR_CREATE_DRAFT:['Draft PR 创建执行已启动','PR_DRAFT_EXECUTION_STARTED'],PR_OPEN:['PR 已打开','PR_OPENED']};
+      setFeedback({state:'SUCCESS',title:success[id][0],message:resultMessage,code:success[id][1]});
+    }catch(error){const message=error instanceof Error?error.message:'ACTION_ERROR';const code=message.split(':')[0];setFeedback({state:'ERROR',title:'Owner 操作未完成',message,code,next:code==='UNKNOWN_OR_CONFLICTING_DIRTY'?'处理列出的冲突文件后重试授权。':'检查当前实体证据与安全门。'})}finally{busy=false}
   }
-
-  async function syncLocalMain() {
-    if (!syncAllowed(controlLoop.evaluation)) return;
-    syncState = requestSync(controlLoop.evaluation);
-  }
-
-  function cancelSync() {
-    syncState = cancelledSync();
-  }
-
-  async function confirmSync() {
-    syncState = { kind: 'loading' };
-    try {
-      const result = await syncWorkspace();
-      syncState = syncOutcome(result);
-      if (!result.success) return;
-      await refresh();
-    } catch (error) {
-      syncState = { kind: 'failure', message: `同步被阻止：${error instanceof Error ? error.message : String(error)}` };
-    }
-  }
-
-  onMount(() => {
-    void refresh();
-  });
-  onDestroy(() => runtimePoller.stop());
+  function resize(side:'left'|'right',event:PointerEvent){const startX=event.clientX,start=side==='left'?leftWidth:rightWidth;const move=(next:PointerEvent)=>{const value=Math.max(side==='left'?240:260,Math.min(420,start+(side==='left'?next.clientX-startX:startX-next.clientX)));if(side==='left')leftWidth=value;else rightWidth=value};const up=()=>{removeEventListener('pointermove',move);removeEventListener('pointerup',up);localStorage.setItem(`aicc-v2-${side}-width`,String(side==='left'?leftWidth:rightWidth))};addEventListener('pointermove',move);addEventListener('pointerup',up)}
+  onMount(()=>{recordAppMount();restorePersistedRuntimeFeedbackBridge();const removeShortcuts=registerMacShortcuts(executionActions);leftWidth=+localStorage.getItem('aicc-v2-left-width')!||320;rightWidth=+localStorage.getItem('aicc-v2-right-width')!||320;void loadSnapshot(false).then(()=>loadPrNavigationSnapshot()).then(()=>loadBridge()).then(()=>{if(isActiveRuntime(raw.runtime)||Boolean(raw.runtime&&raw.runtime.runId===selectedRunId&&!taskResultForRun(raw.runtime.runId)))startRuntimePolling();startIncomingInboxPolling()});void pollService(false);serviceTimer=window.setInterval(()=>void pollService(true),1500);return removeShortcuts});onDestroy(()=>{stopUiLayer2Changes();selectedTaskResultReconciliationToken+=1;if(runtimeTimer)clearInterval(runtimeTimer);if(serviceTimer)clearInterval(serviceTimer);if(bridgeTimer)clearInterval(bridgeTimer);if(feedbackCopyTimer)clearTimeout(feedbackCopyTimer)});
 </script>
 
+<svelte:head><title>AICC V2 · Control Center</title><meta name="viewport" content="width=device-width, initial-scale=1"/></svelte:head>
 <div class="app-shell">
-  <header class="topbar">
-    <div class="brand-cell">
-      <div class="brand-mark">✓</div>
-      <div>
-        <div class="brand-name">AI Control Center</div>
-        <div class="brand-subtitle">Authority · OpenSpec · Codex App Server</div>
-      </div>
-    </div>
+  <GlobalFeedbackIsland {feedback} onCopy={copyGlobalFeedback}/>
+  <header class="global-header"><div class="brand"><div class="brand-icon">A</div><div><strong>AI Control Center</strong><span>V2 · Local Web First</span></div></div><div class="header-context"><span class:warning={serviceState!=='正常'} class="status-dot"></span>本地服务：{serviceState}{healthVerificationVisible&&healthPollInFlight&&serviceState!=='检查中'?' · 检查中':''}</div><div class="header-actions"><button class="service-action" onclick={restartService}>重启本地服务</button><button class="service-action" onclick={viewServiceLogs}>查看服务日志</button><label class="header-execution-selector"><span>Execution</span><select aria-label="Execution Provider" value={executionProvider} onchange={(event)=>setExecutionProvider((event.currentTarget as HTMLSelectElement).value as 'LOCAL_CODEX'|'REMOTE_CLAUDE')}><option value="REMOTE_CLAUDE">US-Claude</option><option value="LOCAL_CODEX">CN-Codex</option></select></label><button class="sidebar-toggle" data-tooltip={leftCollapsed?'打开左侧 Roadmap':'关闭左侧 Roadmap'} aria-label={leftCollapsed?'打开左侧 Roadmap':'关闭左侧 Roadmap'} onclick={()=>toggleSidebar('roadmap')}>{leftCollapsed?'》':'《'}</button><span class="branch-badge">{snapshot.repository.value?.branch??'repository unavailable'}</span><button class="sidebar-toggle" data-tooltip={rightCollapsed?'打开右侧状态栏':'关闭右侧状态栏'} aria-label={rightCollapsed?'打开右侧状态栏':'关闭右侧状态栏'} onclick={()=>toggleSidebar('status')}>{rightCollapsed?'《':'》'}</button></div></header>
+  {#if serviceLogs}<section class="service-log-card"><div><strong>本地服务日志</strong><button class="service-log-close" onclick={()=>serviceLogs=null}>关闭</button></div><h4>Supervisor / 启动状态</h4><p>{serviceState} · {serviceDetails?.binding??'127.0.0.1'}:{serviceDetails?.port??1420}</p><p>最近健康失败：{serviceDetails?.supervisor?.lastHealthFailure??'无'}</p><h4>标准输出</h4><pre>{serviceLogs.stdout}</pre><h4>错误输出</h4><pre>{serviceLogs.stderr}</pre></section>{/if}
+  <div class:left-collapsed={leftCollapsed} class:right-collapsed={rightCollapsed} class:task-workspace-active={globalWorkspace && activeGlobalTab==='TASK'} class="workspace" style={`--left-width:${leftWidth}px;--right-width:${rightWidth}px`}>
+  <aside class:drawer-open={drawer==='roadmap'} class="roadmap panel"><nav class="global-tab-switcher" data-testid="global-top-tab-switcher" aria-label="全局工作区"><button class:active={activeGlobalTab==='BLUEPRINT'} onclick={()=>setGlobalTab('BLUEPRINT')}>蓝图</button><button class:active={activeGlobalTab==='WP'} onclick={()=>setGlobalTab('WP')}>WP</button><button class:active={activeGlobalTab==='PR'} onclick={()=>setGlobalTab('PR')}>PR</button><button class:active={activeGlobalTab==='TASK'} onclick={()=>setGlobalTab('TASK')}>Task</button></nav><CurrentContextLocator context={context} primaryLabel={currentContextPrimaryLabel} secondaryLabel={currentContextSecondaryLabel} roadmapExpanded={roadmapFullyExpanded} executionContextLock={executionContextLock} onToggleRoadmap={toggleEntireRoadmap} onToggleExecutionContextLock={toggleExecutionContextContextLock} onLocate={locateSelectedEntity} onLocateTask={locateSelectedTask} onSyncRoadmap={syncRoadmap} onRefreshTasks={refreshTaskRecords} selectedTaskId={selectedTaskId} workspace={activeGlobalTab} onRefreshPr={refreshPrNavigationSnapshot} roadmapSyncState={roadmapSyncState}/><div class="roadmap-scroll-region"><div class="roadmap-scroll-content">{#if activeGlobalTab==='PR'}<div data-testid="pr-navigation-sidebar"><PrNavigation records={(prLayer2?.records??[])} selectedId={selectedPrNavigationId} onSelect={selectPrNavigationRecord}/></div>{:else if activeGlobalTab==='TASK'}<TaskQuickList tasks={globalTasks} selectedTaskId={selectedTaskId} onSelect={selectCanonicalTask} onCopyResult={copyTaskRowResult}/>{:else if snapshot.roadmap.availability==='AVAILABLE'}<RoadmapTree nodes={roadmapNodes} selectedId={selectedEntity.id} {collapsedNodeIds} onSelect={select} onToggle={id=>toggleRoadmapNode(id)}/>{:else}<section class="roadmap-source-error" data-testid="roadmap-read-error"><strong>路线图暂时不可用</strong><p>无法读取或解析正式 Roadmap。</p><code>{snapshot.roadmap.errorCode??'ROADMAP_READ_FAILED'}</code></section>{/if}</div></div>{#if activeGlobalTab==='PR'}<footer class="roadmap-footer pr-navigation-footer" data-testid="pr-navigation-footer"><span>数据来源：PR 事实快照 → Global State Read Model</span><span>手动刷新：最后更新：{formatPrNavigationLastUpdated(prNavigationSnapshot?.last_updated)}</span><button aria-label="刷新PR" title="刷新PR" onclick={refreshPrNavigationSnapshot}>↻</button></footer>{:else}<footer class="roadmap-footer"><span title={roadmapSyncState}>数据来源：01_LIVING_ROADMAP.md · Roadmap Projection · {roadmapSyncState}</span></footer>{/if}</aside>
+    <div class="resize-handle" onpointerdown={(event)=>resize('left',event)} role="separator" aria-label="调整路线图宽度"></div>
+    <main class="center-workspace-shell center panel"><div class="center-workspace-scroll" data-testid="center-workspace-scroll-viewport"><div class="center-inner">
+      {#if !(globalWorkspace&&['PR','TASK'].includes(activeGlobalTab))}<EntityHeader context={centerContext} statusOverride={presentationStatus(centerContext.type==='milestone'?uiLifecycleText('MILESTONE',centerContext.id,'milestone.lifecycle'):contextHeaderLifecycle)} statusLabelOverride={centerContext.type==='milestone'?uiLifecycleText('MILESTONE',centerContext.id,'milestone.lifecycle'):contextHeaderLifecycle} description={selectedDescription} onSave={saveDescription}/>{/if}
+      {#if globalWorkspace && activeGlobalTab==='PR'}
+        <GlobalPrWorkspace records={(prLayer2?.records??[])} selectedId={selectedPrNavigationId} onSelect={selectPrCenterRecord}/>
+      {:else if globalWorkspace && activeGlobalTab==='TASK'}
+        {#if selectedTask}<EntityOperationsWorkspace entityType="work_package" activeTab={selectedTaskActiveTab} statuses={selectedTaskTabStatuses} tabs={WORKSPACE_TABS} onSelect={(tab)=>activeTab=tab}>{#if selectedTaskActiveTab==='运行'}<RuntimeWorkspace projectContext={activeRoadmapProject} entityType={selectedTaskWorkPackageContext?'work_package':'global_task'} entityId={selectedTaskWorkPackageId??selectedTask.taskId} runtime={selectedTaskRuntime} history={selectedTaskRuntimeHistory} selectedRunId={selectedTaskRuntimeId} selectedInboxId={null} workPackage={selectedTaskWorkPackageContext?.formalWorkPackage??null} writerLock={selectedTaskWorkPackageContext?.writerLock??{status:'NOT_HELD',scope:'repository'}} bridgeInbox={[]} bridgeOutbox={bridgeOutbox} bridgePayload="" instructionState="TEXT_READY" tasks={[selectedTask]} {selectedTaskId} onSelectTask={selectCanonicalTask} showInbox={false} showComposer={false} onCopyResult={canonicalCopyResult}/>{:else if selectedTaskActiveTab==='UAT'}{#if selectedTaskWorkPackageContext}<HumanUatWorkspace context={selectedTaskWorkPackageContext} repository={snapshot.repository.value?.repository??'local'} record={selectedTaskWorkPackageContext.humanUat} onSave={saveSelectedTaskHumanUat} onNavigate={(tab)=>activeTab=tab}/>{:else}<section class="tab-error" data-testid="task-uat-unmapped"><strong>当前 Task 未绑定 Work Package</strong><p>无法投影 Work Package UAT。</p></section>{/if}{:else if selectedTaskActiveTab==='概览'}{#if selectedTaskWorkPackageContext}<section class="overview" data-testid="task-overview-content"><OwnerActionZone context={{...selectedTaskWorkPackageContext,availableActions:[]}} ownerStatusCode={selectedTaskWorkPackageContext.status} busy={false} codexAvailable={false} bridgeOutbox={bridgeOutbox} onNavigate={(tab)=>activeTab=tab}/></section>{:else}<section class="tab-error" data-testid="task-overview-unmapped"><strong>当前 Task 未绑定 Work Package</strong><p>仅保留 canonical Task 与 Run 上下文。</p></section>{/if}{:else if selectedTaskActiveTab==='证据'}{#if selectedTaskWorkPackageContext}<section data-testid="task-evidence-content"><EntityEvidencePanel context={selectedTaskWorkPackageContext} repository={snapshot.repository.value} {codexInfo} runtimeOverride={selectedTaskRuntime}/></section>{:else}<section class="tab-error" data-testid="task-evidence-unmapped"><strong>无映射实体证据</strong><p>{selectedTaskRuntimeId??'当前 Task 尚未绑定 Run'}</p></section>{/if}{:else if selectedTaskActiveTab==='授权'}{#if selectedTaskWorkPackageContext}<AuthorizationWorkspace context={selectedTaskWorkPackageContext} repository={snapshot.repository.value?.repository??'不可用'}/>{:else}<section class="tab-error" data-testid="task-authorization-unmapped"><strong>当前 Task 未绑定 Work Package</strong><p>没有可投影的 Work Package 授权。</p></section>{/if}{/if}</EntityOperationsWorkspace>{#if selectedTaskWorkPackageContext}<section class="wp-delivery-section" data-testid="task-delivery-section"><div class="section-label"><span>Delivery</span><small>Task-bound Work Package context</small></div><DeliveryContextPanel context={selectedTaskWorkPackageContext} repository={snapshot.repository.value?.repository??'UNAVAILABLE'} projection={selectedTaskWorkPackageId===selectedEntity.id?deliveryProjection:null}/></section>{/if}{:else}<GlobalTaskView center groups={globalTaskGroups} {legacyTaskCount} {selectedTaskId} onSelectTask={selectCanonicalTask} onCopyTaskResult={copyTaskRowResult} onOpenWorkspace={openGlobalWorkspace} onOpenPrWorkspace={openGlobalPrWorkspace}/>{/if}
+      {:else if globalWorkspace && activeGlobalTab==='WP'}
+        <GlobalWpWorkspace records={globalWorkPackages} nodes={globalMilestones} selectedId={selectedEntity.type==='work_package'?selectedEntity.id:null} onSelect={navigateGlobalEntity} onRefresh={refreshWorkPackageProjection}/>
+      {:else if globalWorkspace && activeGlobalTab==='BLUEPRINT'}
+        <GlobalBlueprintWorkspace milestones={globalMilestones} workPackages={globalWorkPackages} pullRequests={snapshot.pullRequests.value??[]} tasks={globalTasks} currentMilestone={globalCurrentMilestone} currentWorkPackage={globalCurrentWorkPackage} currentPhase={globalCurrentPhase} ownerWaiting={globalOwnerWaiting}/>
+      {:else if !entityContextReady}
+        <section class="entity-context-loading" data-testid="entity-context-loading"><strong>正在加载项目上下文…</strong><p>等待 canonical Project / Roadmap projection。</p></section>
+      {:else if centerViewMode==='MILESTONE_OVERVIEW'&&milestoneOverviewContext}
+        <MilestoneView context={milestoneOverviewContext} selectedWorkPackageId={selectedEntity.type==='work_package'?selectedEntity.id:null} onSelect={(id)=>inspectMilestoneWorkPackage(milestoneOverviewContext.id,id)} onOpen={(id)=>{inspectMilestoneWorkPackage(milestoneOverviewContext.id,id);openSelectedWorkPackageWorkspace()}}/>
+      {:else if context.type==='milestone'}
+        <MilestoneView context={context} onSelect={select}/>
+      {:else if context.type==='phase'}
+        <section class="phase-context-workspace" data-testid="phase-context-workspace"><div class="section-label"><span>{context.displayTitle}</span><small>{context.statusLabel}</small></div><p>所属 Work Package：{context.parentWorkPackageId??'未绑定'}</p>{#if context.parentWorkPackageId}<button class="service-action" onclick={()=>select(context.parentWorkPackageId!)}>打开所属 WP</button>{/if}</section>
+      {:else if context.type==='work_package'}
+          <EntityOperationsWorkspace entityType="work_package" activeTab={activeTab} statuses={tabStatuses} tabs={WORKSPACE_TABS} onSelect={(tab)=>activeTab=tab}>
+          <div slot="workflow" class="workflow-section"><div class="section-label"><span>Workflow</span><small>WP 9-stage lifecycle</small></div><WorkflowTimeline stages={ownerWorkflowStages} currentStage={context.lifecycle.currentStage}/></div>
+          {#if activeTab==='运行'}<RuntimeWorkspace projectContext={activeRoadmapProject} runtime={displayRuntime} history={runtimeHistory} selectedRunId={selectedRunId} selectedInboxId={selectedInboxId} workPackage={context.formalWorkPackage} writerLock={context.writerLock} bridgeInbox={scopedBridgeInbox} bridgeOutbox={bridgeOutbox} bridgePayload={bridgePayload} instructionState={instructionState} tasks={scopedTaskRecords} {selectedTaskId} onSelectTask={selectCanonicalTask} showComposer={false} onCopyResult={executionActions.copyResult} onCopyExample={copyBridgeExample} onLaunch={launchBridge} onCopyReport={(report)=>navigator.clipboard?.writeText(JSON.stringify(report,null,2))} onSelectRun={(id)=>selectedRunId=id}/>{:else if activeTab==='UAT'}<HumanUatWorkspace context={context} repository={snapshot.repository.value?.repository??'local'} record={context.humanUat} onSave={saveHumanUat} onNavigate={(tab)=>activeTab=tab}/>{:else if activeTab==='概览'}<section class="overview" data-testid="wp-overview-content"><OwnerActionZone context={context} ownerStatusCode={ownerStatus.status} {busy} codexAvailable={Boolean(codexInfo?.available)} bridgeOutbox={bridgeOutbox} onAction={runAction} onNavigate={(tab)=>activeTab=tab}/><p class="overview-summary">当前状态：{ownerStatus.label} · {context.formalization}</p></section>{:else if activeTab==='证据'}<section data-testid="wp-evidence-content"><p>{context.evidence.join(' · ')}</p></section>{:else if activeTab==='授权'}<AuthorizationWorkspace context={context} repository={snapshot.repository.value?.repository??'不可用'}/>{:else}<section class="tab-error" data-testid="wp-tab-error"><strong>当前标签不可用</strong><p>请重新选择一个操作标签。</p></section>{/if}
+        </EntityOperationsWorkspace><section class="wp-delivery-section" data-testid="wp-delivery-section"><div class="section-label"><span>Delivery</span><small>Owner-controlled delivery context</small></div><DeliveryContextPanel context={context} repository={snapshot.repository.value?.repository??'UNAVAILABLE'} projection={deliveryProjection}/></section>
 
-    <div class="search-cell">
-      <label class="search-box">
-        <span class="search-icon">⌕</span>
-        <input bind:value={query} type="search" placeholder="搜索 Roadmap、Work Package、Change" aria-label="搜索 Roadmap、Work Package、Change" />
-      </label>
-    </div>
-
-    <div class="authority-cell">
-      <div>
-        <div class="micro-label">远端 Authority</div>
-        <div class="authority-value">origin/main · {controlLoop.status}</div>
-      </div>
-      <button class="primary-button" type="button" onclick={refresh}>{refreshing ? '验证中…' : '刷新状态'}</button>
-    </div>
-  </header>
-
-  <div class="workspace">
-    <aside class="roadmap-pane">
-      <div class="pane-heading">
-        <div class="eyebrow">项目路线图</div>
-        <div class="heading-row">
-          <h2>{controlLoop.roadmap?.project ?? 'AI Control Center'}</h2>
-          <span class="accent-chip">{controlLoop.roadmap?.progressPercent ?? 0}%</span>
-        </div>
-        <p>项目 → 里程碑 → 工作包 · 当前：{controlLoop.roadmap?.currentMilestone ?? 'CHECKING'}</p>
-      </div>
-
-      <div class="roadmap-scroll">
-        {#each controlLoop.roadmap?.milestones ?? [] as milestone}
-          <div class="milestone-summary"><strong>{milestone.id} — {milestone.title}</strong><b>{milestone.progressPercent}%</b></div>
-          {#each filteredRoadmap.filter((item) => item.parent === milestone.id) as item}
-          <button class:active={selected.key === item.key} class="work-row" type="button" onclick={() => choose(item)}>
-            <span class="node-icon">{item.id.slice(-3)}</span>
-            <span class="tree-copy">
-              <span class="tree-name">{item.title}</span>
-              <span class="tree-code">{item.id}</span>
-              <span class="mini-metrics"><span>{item.status}</span><span>{item.authorization}</span></span>
-            </span>
-            <span class:done={item.status === 'CLOSED'} class:current={item.id === controlLoop.roadmap?.currentWorkPackage} class="status-dot"></span>
-          </button>
-          {/each}
-          {#each milestone.futureItems.filter((item) => item.toLowerCase().includes(query.trim().toLowerCase())) as futureItem}
-            <div class="future-work-row" data-kind="future-placeholder">
-              <span class="future-node">○</span>
-              <span class="tree-copy">
-                <span class="tree-name">{futureItem}</span>
-                <span class="tree-code">未来规划 / 尚未正式化</span>
-              </span>
-            </div>
-          {/each}
-        {/each}
-      </div>
-
-      <div class="security-area">
-        <div class="security-card">
-          <div class="security-label">当前安全模式</div>
-          <strong>只读 V1</strong>
-          <p>OpenSpec 只解析；Codex 仅在 Owner 授权和固定能力范围内运行；任意 shell、越权写入和自动授权全部禁用。</p>
-        </div>
-      </div>
-    </aside>
-
-    <main class="detail-pane" aria-live="polite">
-      <div class="detail-hero">
-        <div>
-          <div class="eyebrow">{selected.id}</div>
-          <h1>{selected.title}</h1>
-          <p>{selected.summary}</p>
-        </div>
-        {#if controlLoop.authorization?.valid}
-          <span class="accent-chip">AUTHORIZED_FOR_IMPLEMENTATION</span>
-        {:else}
-          <button class="primary-button" type="button" onclick={requestAuthorization}>授权本工作包</button>
-        {/if}
-      </div>
-
-      {#if authorizationConfirming}
-        <div class="confirm-box authorization-box" role="dialog" aria-label="确认工作包授权">
-          <strong>确认授权本工作包？</strong>
-          <span>授权将绑定 Work Package ID、Authority SHA、当前分支、工作区、范围、允许/禁止能力与时间戳。不会启动 Codex。</span>
-          <div class="confirm-actions">
-            <button class="secondary-button" type="button" onclick={cancelAuthorization}>取消</button>
-            <button class="primary-button" type="button" onclick={confirmAuthorization}>确认授权</button>
-          </div>
-        </div>
-      {/if}
-
-      <nav class="tabs" aria-label="工作包详情">
-        {#each [['overview', '概览'], ['openspec', 'OpenSpec'], ['codex', 'Codex 状态'], ['validation', '验证']] as tab}
-          <button class:active={activeTab === tab[0]} type="button" onclick={() => activeTab = tab[0] as Tab}>{tab[1]}</button>
-        {/each}
-      </nav>
-
-      {#if activeTab === 'overview'}
-        <section class="tab-panel">
-          <div class="metric-grid">
-            <article class="metric-card">
-              <div class="eyebrow">正式 Authority</div>
-              <div class="metric-value">{controlLoop.status}</div>
-              <div class="metric-note mono">origin/main · {controlLoop.authority?.remoteMainSha ?? 'unknown'}</div>
-            </article>
-            <article class="metric-card">
-              <div class="eyebrow">当前关卡</div>
-              <div class="metric-value">{selected.gate}</div>
-              <div class="metric-note">{selected.authorization}</div>
-            </article>
-            <article class="metric-card">
-              <div class="eyebrow">全局进度</div>
-              <div class="metric-value">{controlLoop.roadmap?.progressPercent ?? 0}%</div>
-              <div class="progress-track"><span style={`width:${controlLoop.roadmap?.progressPercent ?? 0}%`}></span></div>
-            </article>
-          </div>
-
-          <article class="content-card">
-            <div class="section-title-row"><h3>正式合同</h3><span class="accent-chip">{selected.status}</span></div>
-            <dl class="contract-grid">
-              <div><dt>正式文件</dt><dd class="mono">{selected.path}</dd></div>
-              <div><dt>授权状态</dt><dd>{selected.authorization}</dd></div>
-              <div><dt>当前里程碑</dt><dd>{controlLoop.roadmap?.currentMilestone ?? selected.parent}</dd></div>
-              <div><dt>路线图 Authority</dt><dd class="mono">{controlLoop.roadmap?.authoritySha ?? 'unknown'}</dd></div>
-              <div><dt>后续工作包</dt><dd>{controlLoop.roadmap?.nextWorkPackages.join(', ') ?? 'unknown'}</dd></div>
-              <div><dt>远端策略</dt><dd>只读查询 remote main，不执行 git fetch</dd></div>
-            </dl>
-          </article>
-
-          <article class="content-card">
-            <div class="section-title-row"><h3>Owner 授权证据</h3><span class="accent-chip">{controlLoop.authorization?.status ?? 'UNKNOWN'}</span></div>
-            <dl class="contract-grid">
-              <div><dt>Work Package</dt><dd class="mono">{controlLoop.authorization?.record?.workPackageId ?? 'UNKNOWN'}</dd></div>
-              <div><dt>Authority SHA</dt><dd class="mono">{controlLoop.authorization?.record?.authoritySha ?? 'UNKNOWN'}</dd></div>
-              <div><dt>分支</dt><dd>{controlLoop.authorization?.record?.branch ?? 'UNKNOWN'}</dd></div>
-              <div><dt>工作区</dt><dd class="mono">{controlLoop.authorization?.record?.worktree ?? 'UNKNOWN'}</dd></div>
-              <div><dt>范围</dt><dd>{controlLoop.authorization?.record?.scope.join(', ') ?? 'UNKNOWN'}</dd></div>
-              <div><dt>允许能力</dt><dd class="mono">{controlLoop.authorization?.record?.allowedCapabilities.join(', ') ?? 'UNKNOWN'}</dd></div>
-              <div><dt>禁止能力</dt><dd class="mono">{controlLoop.authorization?.record?.forbiddenCapabilities.join(', ') ?? 'UNKNOWN'}</dd></div>
-              <div><dt>授权时间</dt><dd>{controlLoop.authorization?.record?.authorizedAt ?? 'UNKNOWN'}</dd></div>
-            </dl>
-            {#if controlLoop.authorization?.blocker}<div class="sync-status failure" role="status">{controlLoop.authorization.blocker}</div>{/if}
-          </article>
-
-          <article class="content-card">
-            <div class="section-title-row"><h3>本地 main 同步状态</h3><span class="accent-chip">{getSyncState(controlLoop.evaluation)}</span></div>
-            <div class="sync-explanation"><strong>{syncCopy.reason}</strong><span class="mono">{syncCode}</span><small>下一步：{syncCopy.nextStep}</small></div>
-            <dl class="contract-grid">
-              <div><dt>远端 Main SHA</dt><dd class="mono">{controlLoop.authority?.remoteMainSha ?? 'unknown'}</dd></div>
-              <div><dt>本地 Main SHA</dt><dd class="mono">{controlLoop.identity?.localMainSha ?? 'unknown'}</dd></div>
-              <div><dt>当前分支</dt><dd>{controlLoop.identity?.currentBranch ?? 'detached / unknown'}</dd></div>
-              <div><dt>当前 HEAD</dt><dd class="mono">{controlLoop.identity?.localHead ?? 'unknown'}</dd></div>
-              <div><dt>工作区</dt><dd>{controlLoop.identity?.worktreeClean ? 'CLEAN' : 'DIRTY'}</dd></div>
-              <div><dt>检查时间</dt><dd>{controlLoop.authority?.checkedAt ?? 'not checked'}</dd></div>
-            </dl>
-            <div class="criteria-grid">
-              {#each controlLoop.evaluation?.blockers ?? ['CHECKING'] as blocker}
-                <div class="criterion"><b>!</b><span>{ownerBlocker(blocker).reason}<small class="mono">{blocker}</small></span></div>
-              {/each}
-            </div>
-            <button class="primary-button" type="button" disabled={!syncAllowed(controlLoop.evaluation) || syncState.kind === 'loading'} onclick={syncLocalMain}>同步本地 main</button>
-            {#if syncState.kind === 'confirming'}
-              <div class="confirm-box" role="dialog" aria-label="确认同步">
-                <strong>确认同步本地 main？</strong>
-                <span>仅执行固定 fetch → revalidate → switch → ff-only merge。</span>
-                <div class="confirm-actions">
-                  <button class="secondary-button" type="button" onclick={cancelSync}>取消</button>
-                  <button class="primary-button" type="button" onclick={confirmSync}>确认同步</button>
-                </div>
-              </div>
-            {:else if syncState.kind === 'loading'}
-              <div class="sync-status" role="status">同步中…</div>
-            {:else if syncState.kind === 'success' || syncState.kind === 'failure' || syncState.kind === 'cancelled'}
-              <div class:success={syncState.kind === 'success'} class:failure={syncState.kind === 'failure'} class="sync-status" role="status">{syncState.message}</div>
-            {/if}
-          </article>
-
-          <article class="content-card">
-            <div class="section-title-row"><h3>下一工作包执行判定</h3><span class="accent-chip">后续工作包关卡</span></div>
-            <div class="resolver-summary"><strong>当前候选工作包</strong><span>{controlLoop.resolver?.workPackage?.id ?? '暂无候选工作包'}</span><strong>执行</strong><span>{controlLoop.resolver?.decision ?? 'UNKNOWN'}</span></div>
-            {#if controlLoop.resolver?.workPackage}
-              <dl class="contract-grid">
-                <div><dt>WP ID</dt><dd class="mono">{controlLoop.resolver.workPackage.id}</dd></div>
-                <div><dt>标题</dt><dd>{controlLoop.resolver.workPackage.title}</dd></div>
-                <div><dt>Authority SHA</dt><dd class="mono">{controlLoop.resolver.workPackage.authoritySha}</dd></div>
-                <div><dt>OpenSpec 变更</dt><dd class="mono">{controlLoop.resolver.workPackage.openspecChange}</dd></div>
-                <div><dt>依赖关系</dt><dd>{controlLoop.resolver.workPackage.dependencies.map((dependency) => `${dependency.id}=${dependency.status}`).join(', ')}</dd></div>
-              </dl>
-            {/if}
-            <div class="criteria-grid">
-              {#each controlLoop.resolver?.blockers ?? ['UNKNOWN'] as blocker}
-                <div class="criterion"><b>!</b><span>{blocker === 'WORK_PACKAGE_NOT_AUTHORIZED' ? '等待 Owner 授权' : '存在执行阻塞'}<small class="mono">{blocker}</small><small>下一步：完成当前 Post-UAT Closure / Owner Authorization</small></span></div>
-              {/each}
-            </div>
-          </article>
-
-          <article class="content-card">
-            <div class="section-title-row"><h3>正式路线图证据</h3><span class="secondary-note">{controlLoop.roadmap?.entries.length ?? 0} 个工作包</span></div>
-            <div class="criteria-grid">
-              {#each controlLoop.roadmap?.entries ?? [] as item, index}
-                <div class="criterion"><b>{String(index + 1).padStart(2, '0')}</b><span>{item.id}: {item.status} / {item.authorization}</span></div>
-              {/each}
-            </div>
-          </article>
-        </section>
-      {:else if activeTab === 'openspec'}
-        <section class="tab-panel">
-          <article class="content-card no-top-margin">
-            <div class="section-title-row">
-              <div><h3>OpenSpec 工件图</h3><span class="secondary-note mono">Change: {selected.change}</span></div>
-              <span class="accent-chip">只读</span>
-            </div>
-            <div class="artifact-grid">
-              {#each [['01','Proposal','COMPLETE'],['02','Specs','COMPLETE'],['03','Design','COMPLETE'],['04','Tasks',selected.task],['05','Validation','NOT STARTED']] as artifact, index}
-                <div class:ready={index < 3} class:current={index === 3} class="artifact-card">
-                  <div class="eyebrow">{artifact[0]}</div>
-                  <strong>{artifact[1]}</strong>
-                  <span>{artifact[2]}</span>
-                </div>
-              {/each}
-            </div>
-          </article>
-
-          <article class="content-card">
-            <div class="section-title-row"><h3>OpenSpec 操作策略</h3><span class="secondary-note">V1 与未来关卡</span></div>
-            <div class="policy-row"><span>读取 Artifacts</span><b class="allow">ALLOW</b></div>
-            <div class="policy-row"><span>Explore / Propose / Update / Verify</span><b class="future">FUTURE GOVERNED ACTION</b></div>
-            <div class="policy-row"><span>Apply</span><b class="deny">OWNER AUTHORIZATION REQUIRED</b></div>
-            <div class="policy-row"><span>Sync</span><b class="deny">PERMANENT DENY</b></div>
-            <div class="policy-row"><span>Archive</span><b class="deny">OWNER CLOSURE ONLY</b></div>
-          </article>
-        </section>
-      {:else if activeTab === 'codex'}
-        <section class="tab-panel">
-          <div class="metric-grid">
-            <article class="metric-card"><div class="eyebrow">Codex 引擎</div><div class="metric-value">{codexRuntime?.engine ?? 'UNKNOWN'}</div><div class="metric-note">profile: {codexRuntime?.profile ?? 'UNKNOWN'}</div></article>
-            <article class="metric-card"><div class="eyebrow">当前运行状态</div><div class="metric-value">{codexRuntime ? runtimePhaseCopy(codexRuntime.currentPhase) : '未知'}</div><div class="metric-note mono">{codexRuntime?.currentPhase ?? 'UNKNOWN'}</div></article>
-            <article class="metric-card"><div class="eyebrow">当前任务</div><div class="metric-value">{codexRuntime?.currentTask ?? 'UNKNOWN'}</div><div class="metric-note mono">{codexRuntime?.currentEvent ?? 'NO_OBSERVED_EVENT'}</div></article>
-          </div>
-
-          <article class="content-card">
-            <div class="section-title-row"><h3>Codex 运行观察</h3><span class="accent-chip">{codexRuntime?.sessionState ?? 'UNKNOWN'}</span></div>
-            {#if runtimeObservationError}
-              <div class="sync-status failure" role="alert">Runtime 观察失败：<span class="mono">{runtimeObservationError}</span>。自动观察已停止，请刷新状态后重试。</div>
-            {/if}
-            <dl class="contract-grid">
-              <div><dt>进程 PID</dt><dd class="mono">{codexRuntime?.processId ?? 'UNKNOWN'}</dd></div>
-              <div><dt>进程状态</dt><dd class="mono">{codexRuntime?.processState ?? 'UNKNOWN'}</dd></div>
-              <div><dt>Session</dt><dd class="mono">{codexRuntime?.sessionId ?? 'UNKNOWN'}</dd></div>
-              <div><dt>Thread</dt><dd class="mono">{codexRuntime?.threadId ?? 'UNKNOWN'}</dd></div>
-              <div><dt>Turn</dt><dd class="mono">{codexRuntime?.turnId ?? 'UNKNOWN'}</dd></div>
-              <div><dt>当前工作包</dt><dd class="mono">{codexRuntime?.activeWorkPackage ?? 'UNKNOWN'}</dd></div>
-              <div><dt>分支</dt><dd>{codexRuntime?.branch ?? 'UNKNOWN'}</dd></div>
-              <div><dt>工作区</dt><dd class="mono">{codexRuntime?.worktree ?? 'UNKNOWN'}</dd></div>
-              <div><dt>最后活动</dt><dd>{codexRuntime?.lastActivity ?? 'UNKNOWN'}</dd></div>
-              <div><dt>Writer Lock</dt><dd class="mono">{codexRuntime ? (codexRuntime.writerLockHeld ? 'HELD' : 'NOT_HELD') : 'UNKNOWN'}</dd></div>
-              <div><dt>退出状态</dt><dd class="mono">{codexRuntime?.exitStatus ?? 'NOT_OBSERVED'}</dd></div>
-              <div><dt>失败证据</dt><dd class="mono">{codexRuntime?.failure ?? 'NONE'}</dd></div>
-              <div><dt>测试状态</dt><dd class="mono">{codexRuntime?.testState ?? 'UNKNOWN'}</dd></div>
-              <div><dt>独立审查</dt><dd class="mono">{codexRuntime?.reviewState ?? 'UNKNOWN'}</dd></div>
-              <div><dt>PR</dt><dd class="mono">{codexRuntime?.pullRequest ?? 'UNKNOWN'}</dd></div>
-              <div><dt>CI 状态</dt><dd class="mono">{codexRuntime?.ciState ?? 'UNKNOWN'}</dd></div>
-              <div><dt>阻塞</dt><dd class="mono">{codexRuntime?.blocker ?? 'NONE'}</dd></div>
-              <div><dt>下一步</dt><dd>{codexRuntime?.nextAction ?? 'UNKNOWN'}</dd></div>
-            </dl>
-            <div class="runtime-controls">
-              {#each [['START','启动 Codex'],['PAUSE','暂停'],['RESUME','恢复'],['STOP_AFTER_CURRENT_STEP','当前步骤后停止'],['RETRY','重试']] as action}
-                <button class="secondary-button" type="button" title={runtimeSupportsControl(codexRuntime, action[0] as CodexControlAction) ? '' : 'UNSUPPORTED_CONTROL'} disabled={controlPending || !runtimeSupportsControl(codexRuntime, action[0] as CodexControlAction)} onclick={() => runCodexControl(action[0] as CodexControlAction)}>{action[1]}{runtimeSupportsControl(codexRuntime, action[0] as CodexControlAction) ? '' : '（不支持）'}</button>
-              {/each}
-            </div>
-          </article>
-
-          <div class="callout"><strong>Codex 能力策略：</strong>Codex App Server 使用固定 profile `sol` 和预定义能力。Owner UI 不接受 shell 文本；任何仓库写入必须保持唯一 Writer Lock、范围绑定和独立审查。</div>
-        </section>
-      {:else}
-        <section class="tab-panel">
-          <article class="content-card no-top-margin">
-            <div class="section-title-row"><h3>受控验证流程</h3><span class="accent-chip">{codexRuntime?.currentPhase ?? 'UNKNOWN'}</span></div>
-            <div class="pipeline">
-              {#each [
-                ['01','Authority 关卡','远端 main 与正式 WP 已检查','PASS','pass'],
-                ['02','OpenSpec 解析','工件与任务图已检测','PASS','pass'],
-                ['03','Owner 授权','Apply 或 Runtime 前必须授权','WAITING','wait'],
-                ['04','Codex 委派计划','并行读取，单一写入通道','LOCKED','locked'],
-                ['05','实现与测试','只读 V1 中已禁用','LOCKED','locked'],
-                ['06','独立审查','独立证据合同','LOCKED','locked'],
-                ['07','Owner 交接','停止于 WAITING_OWNER_ACCEPTANCE','LOCKED','locked']
-              ] as step}
-                <div class="pipeline-step">
-                  <span class="step-number">{step[0]}</span>
-                  <div><strong>{step[1]}</strong><span>{step[2]}</span></div>
-                  <b class={step[4]}>{step[3]}</b>
-                </div>
-              {/each}
-            </div>
-          </article>
-        </section>
-      {/if}
-    </main>
-
-    <aside class="evidence-pane">
-      <div class="section-title-row">
-        <div><div class="eyebrow">仓库状态</div><h3>Authority 健康度</h3></div>
-        <span class="accent-chip">{controlLoop.roadmap?.progressPercent ?? 0}%</span>
-      </div>
-
-      <div class="health-card">
-        <div><span>本地 HEAD</span><b class="mono">{repositoryStatus.localHead}</b></div>
-        <div><span>远端 main</span><b class="mono">{repositoryStatus.remoteMain}</b></div>
-        <div><span>工作区</span><b class:allow={repositoryStatus.worktree === 'CLEAN'} class:deny={repositoryStatus.worktree === 'DIRTY'}>{repositoryStatus.worktree}</b></div>
-        <div><span>Authority</span><b>{repositoryStatus.authority}</b></div>
-        <div><span>当前工作包</span><b class="mono">{repositoryStatus.currentWorkPackage}</b></div>
-        <div><span>后续工作包关卡</span><b>{repositoryStatus.nextWpGate}</b></div>
-      </div>
-
-      <div class="section-title-row stack-heading"><h3>执行状态</h3><span class="secondary-note">只读探测</span></div>
-      <div class="stack-list">
-        {#each [['OS','OpenSpec','已解析正式工件','DETECTED'],['CX','Codex App Server',`profile: ${codexRuntime?.profile ?? 'UNKNOWN'} · PID ${codexRuntime?.processId ?? 'UNKNOWN'}`,codexRuntime?.processState ?? 'UNKNOWN'],['RN','Codex Run',codexRuntime?.threadId ?? 'NO_OBSERVED_THREAD',codexRuntime?.currentPhase ?? 'UNKNOWN'],['WL','Writer Lock',codexRuntime?.activeWorkPackage ?? 'NO_ACTIVE_WORK_PACKAGE',codexRuntime ? (codexRuntime.writerLockHeld ? 'HELD' : 'NOT_HELD') : 'UNKNOWN']] as item}
-          <div class="stack-row"><span class="stack-icon">{item[0]}</span><div><strong>{item[1]}</strong><span>{item[2]}</span></div><b>{item[3]}</b></div>
-        {/each}
-      </div>
-
-      <div class="section-title-row stack-heading"><h3>正式证据</h3><span class="secondary-note">只读来源</span></div>
-      <div class="evidence-list">
-        {#each evidence as file}
-          <button type="button" onclick={() => announce(`原型操作：打开 ${file[1]}`)}>
-            <span class="stack-icon">{file[0]}</span>
-            <span><strong>{file[1]}</strong><small>{file[2]}</small></span>
-            <b>›</b>
-          </button>
-        {/each}
-      </div>
-
-      <div class="callout compact"><strong>Authority first：</strong>OpenSpec 与 Codex Runtime 无权改变正式授权；发生冲突时停止并显示 AUTHORITY_DRIFT。</div>
-    </aside>
+      {:else if prTab}<section class="pr-panel" data-testid="pr-detail" data-pr-state={context.lifecycleWorkspace.prState} data-lifecycle-status={context.lifecycleWorkspace.lifecycleStatus}><EntityOperationsWorkspace entityType="pull_request" activeTab={activeTab} statuses={{}} tabs={context.tabs} currentAction={context.lifecycleWorkspace.currentAction} onSelect={(tab)=>activeTab=tab}><div slot="workflow" class="pr-workflow-header"><div class="pr-header-identity" data-testid="pr-header-identity"><div><span class="pr-header-kicker">PULL REQUEST · {context.record?.repository??'未绑定仓库'}</span><h2>{context.record?.number?`PR #${context.record.number}`:context.id} · {context.record?.title??'PR identity not bound'}</h2></div><div class="pr-header-state"><strong>{context.lifecycleWorkspace.prState}</strong><span>{context.lifecycleWorkspace.prState} / {context.lifecycleWorkspace.lifecycleStatus==='COMPLETE'?'已完成':context.lifecycleWorkspace.lifecycleStatus==='BLOCKED'?'阻塞':'执行中'}</span></div></div><div class="pr-header-facts"><div><span>Repository</span><strong>{context.record?.repository??'未证明'}</strong></div><div><span>Parent WP</span><strong>{context.parentWorkPackageId??'未绑定'}</strong></div><div><span>PR URL</span>{#if context.record?.url}<a href={context.record.url} target="_blank" rel="noreferrer">打开远端 PR</a>{:else}<strong>未证明</strong>{/if}</div></div><section class="pr-lifecycle-strip" data-testid="pr-lifecycle-strip"><div class="section-label"><span>详细生命周期</span><small>Evidence-grounded gates</small></div><div class="pr-lifecycle-gates">{#each context.lifecycleWorkspace.gates as gate,index}<div class="pr-lifecycle-gate state-{gate.state.toLowerCase()}" data-gate-state={gate.state} data-gate-id={gate.id}><span class="pr-lifecycle-marker">{gate.state==='COMPLETE'?'✓':gate.state==='CURRENT'?'●':index+1}</span><strong>{gate.label}</strong><small>{prLifecycleStateLabel(gate.state)}</small></div>{/each}</div></section></div>{#if activeTab==='运行'}<RuntimeWorkspace projectContext={activeRoadmapProject} entityType="pull_request" entityId={context.id} runtime={context.runtime} history={scopedRuntimeHistory} selectedRunId={selectedRunId} selectedInboxId={selectedInboxId} workPackage={null} writerLock={{status:'NOT_HELD',scope:'repository'}} bridgeInbox={scopedBridgeInbox} bridgeOutbox={bridgeOutbox} bridgePayload={bridgePayload} instructionState={instructionState} tasks={scopedTaskRecords} {selectedTaskId} onSelectTask={selectCanonicalTask} showComposer={false} onCopyResult={executionActions.copyResult} onCopyExample={copyBridgeExample} onLaunch={launchBridge} onCopyReport={(report)=>navigator.clipboard?.writeText(JSON.stringify(report,null,2))} onSelectRun={(id)=>selectedRunId=id}/>{:else if activeTab==='UAT'}<HumanUatWorkspace context={context} repository={snapshot.repository.value?.repository??'local'} record={prUatRecord} onSave={saveHumanUat} onNavigate={(tab)=>activeTab=tab}/>{:else if activeTab==='证据'}<PrEvidencePanel context={context}/>{:else}<div class="pr-tab-view" data-testid="pr-tab-content" data-pr-tab={prTab.tab}>{#if prTab.tab==='概览'}<PrOwnerActionZone context={context} {busy} onAction={runAction} onNavigate={(tab)=>activeTab=tab}/>{/if}<div class="section-label"><span>{prTab.title}</span><small>{prTab.tab}</small></div>{#if prTab.description}<p class="pr-tab-description">{prTab.description}</p>{/if}<div class="runtime-list">{#each prTab.rows as row}<div><span>{row[0]}</span><b>{row[1]}</b></div>{/each}</div></div>{/if}</EntityOperationsWorkspace></section>{/if}
+      <div class="composer-overlay-tail-spacer" data-testid="composer-overlay-tail-spacer" aria-hidden="true" style={`--aicc-composer-overlay-height:${composerHeight}px`}></div>
+    </div></div><div class="global-composer-dock-lane" data-testid="global-composer-dock-lane"><GlobalExecutionComposerDock payload={bridgePayload} {instructionState} contextLabel={currentContextPrimaryLabel} copyResultAvailable={Boolean(composerCopyResult)} onPayloadChange={updateBridgePayload} onPaste={pasteInstruction} onSubmitStart={beginComposerExecution} onImport={importInstruction} onProfileChange={syncGlobalExecutionProfile} onCopyResult={copyComposerResult} onHeightChange={updateComposerHeight}/></div></main>
+    <div class="resize-handle" onpointerdown={(event)=>resize('right',event)} role="separator" aria-label="调整状态宽度"></div>
+  <aside class:drawer-open={drawer==='status'} class="status panel">{#if !entityContextReady}<div data-testid="entity-context-loading-inspector"><div class="panel-header"><div><span class="kicker">03 / EVIDENCE</span><h2>状态与证据</h2></div></div><p class="evidence-intro">正在加载项目上下文…</p></div>{:else if milestoneOverviewId&&context.type==='work_package'}<WpRightContextInspector {context} onClear={()=>milestoneOverviewId&&select(milestoneOverviewId)} onOpen={openSelectedWorkPackageWorkspace}/>{:else if activeGlobalTab==='TASK'&&selectedTask}<TaskRightContextInspector task={selectedTask} runtime={selectedTaskRuntime} report={selectedTaskReport} resultProjection={selectedTaskResultProjection} onClose={clearSelectedTask} onViewWorkPackage={(id)=>navigateGlobalEntity({type:'work_package',id})}/>{:else if activeGlobalTab==='PR'&&!selectedPrNavigationId}<div data-testid="pr-evidence-empty"><div class="panel-header"><div><span class="kicker">03 / EVIDENCE</span><h2>状态与证据</h2></div></div><p class="evidence-intro">选择一个 PR 后显示状态与证据。</p></div>{:else if activeGlobalTab==='PR'&&selectedEntity.type==='pull_request'}<div data-testid="pr-selected-right-inspector"><div class="panel-header"><div><span class="kicker">03 / EVIDENCE</span><h2>状态与证据</h2></div></div><EntityEvidencePanel {context} repository={snapshot.repository.value} {codexInfo} runtimeOverride={displayRuntime}/></div>{:else}<div class="panel-header"><div><span class="kicker">03 / EVIDENCE</span><h2>状态与证据</h2></div><div class="status-tools"><button class="service-action" onclick={()=>runAction('REFRESH')}>刷新状态</button>{#if context.type==='work_package'}<button class="service-action" onclick={()=>runAction('SAFE_MAIN_SYNC')}>同步本地 main</button>{/if}</div></div><EntityEvidencePanel {context} repository={snapshot.repository.value} {codexInfo} runtimeOverride={displayRuntime}/>{/if}</aside>
   </div>
-
-  {#if toast}<div class="toast" role="status">{toast}</div>{/if}
 </div>
+
+<style>
+  .header-execution-selector{display:flex;align-items:center;gap:5px;color:var(--text-3);font:10px var(--font-tech);white-space:nowrap}.header-execution-selector select{max-width:118px;padding:4px 5px;border:1px solid var(--border-soft);border-radius:5px;background:var(--surface);color:var(--text-1);font:11px var(--font-ui)}.pr-navigation-footer{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:3px 8px;margin-top:auto;white-space:normal}.pr-navigation-footer span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.pr-navigation-footer span:first-child{grid-column:1 / -1}.pr-navigation-footer button{grid-column:2;grid-row:2;width:22px;height:22px;padding:0;border:0;border-radius:5px;background:transparent;color:var(--text-2);cursor:pointer}.pr-navigation-footer button:hover{background:var(--surface-soft);color:var(--text-1)}.pr-detail-empty{display:grid;gap:12px;padding:24px;border:1px solid var(--border);border-radius:var(--radius-md);background:var(--surface)}.pr-detail-empty p{margin:0;color:var(--text-2);font-size:13px}
+</style>

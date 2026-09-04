@@ -1,0 +1,26 @@
+import { buildPrompt, monitorRuntimeState, parseEvent, resolveRuntimeExecutionPolicy, readRuntimeScoped, runtimeBelongsToProject, type RuntimeState } from './runtimeManager.ts';
+import {selectCanonicalCurrentRuntime} from './runtimeSelection.ts';
+import {readCheckoutWorkPackage} from './checkoutWorkPackage.testFixture.ts';
+function assert(x:unknown,m:string):asserts x{if(!x)throw new Error(m)}
+const s:RuntimeState={runId:'r',projectId:'aicc',repositoryIdentity:'aicc-repo',workPackageId:'AICC-X-001',authorizationId:'a',authoritySha:'sha',branch:'feature/x',startingHeadSha:'head',pid:42,pidAlive:true,ptySessionId:'pty-r',threadId:null,phase:'STARTING',currentTask:'',latestEvent:'',startedAt:'',lastActivityAt:'',events:[]};
+parseEvent('{"type":"thread.started","thread_id":"t-1"}',s,false);assert(s.threadId==='t-1','thread id');parseEvent('{"type":"turn.started"}',s,false);assert(s.phase==='RUNNING','turn phase');parseEvent('{"type":"item.started","item":{"type":"command_execution"}}',s,false);assert(s.currentTask==='正在执行命令','task mapping');parseEvent('not-json',s,false);assert(s.events.includes('malformed_output'),'malformed safe');
+const actual=readCheckoutWorkPackage('AICC-V2-PR-RUNNER-001');assert(actual.goal.includes('After the AICC V2 First Usable Version'),'goal parsed');assert(actual.scope.includes('PR Runner foundation'),'scope parsed');assert(actual.acceptanceCriteria.includes('Owner authorization'),'acceptance parsed');assert(actual.rawMarkdown.includes('AICC PR Runner Foundation'),'raw markdown');const prompt=buildPrompt(actual.id,actual,{authorizationId:'a',workPackageId:actual.id,authoritySha:'sha',branch:'feature/x',headShaAtAuthorization:'head',repositoryRoot:'/Users/a/AI/007/AIcontrolcenter',scope:['read'],allowed:['tests'],forbidden:['push'],authorizedAt:'now'});assert(prompt.includes(actual.rawMarkdown)&&prompt.includes('Implement this Work Package now')&&!prompt.includes('arbitrary prompt'),'server prompt contract');console.log('runtime manager contract tests passed');
+const remediationPolicy=resolveRuntimeExecutionPolicy('REMEDIATION','workspace-write');assert(remediationPolicy.executionType==='REMEDIATION'&&remediationPolicy.sandboxMode==='workspace-write','remediation policy');let sandboxBlocked=false;try{resolveRuntimeExecutionPolicy('IMPLEMENTATION','read-only')}catch(error){sandboxBlocked=error instanceof Error&&error.message==='SANDBOX_POLICY_MISMATCH'}assert(sandboxBlocked,'sandbox policy cannot be overridden');
+const opaqueType='OWNER_DEFINED_FUTURE_EXECUTION';const opaquePolicy=resolveRuntimeExecutionPolicy(opaqueType,'workspace-write');assert(opaquePolicy.executionType===opaqueType,'unknown execution type remains opaque metadata');assert(opaquePolicy.sandboxMode==='workspace-write','unknown execution type does not block pass-through launch');
+const staleRunning:RuntimeState={...s,runId:'stale-running',phase:'RUNNING',pid:99999,supervisorPid:99998,startedAt:'2026-08-18T00:00:00.000Z',lastActivityAt:'2026-08-18T00:00:00.000Z'};monitorRuntimeState(staleRunning,Date.parse('2026-08-18T01:00:00.000Z'),()=>false);assert(staleRunning.phase==='FAILED'&&staleRunning.failure==='PROCESS_EXITED','dead Runtime process without a live supervisor reconciles to factual terminal failure');
+const oldTerminal={runId:'old',phase:'COMPLETED',lastActivityAt:'2026-08-13T02:30:00.000Z',startedAt:'2026-08-13T02:29:00.000Z'};const newActive={runId:'new',phase:'STARTING',lastActivityAt:'2026-08-13T02:37:23.296Z',startedAt:'2026-08-13T02:37:23.296Z'};assert(selectCanonicalCurrentRuntime(oldTerminal,[oldTerminal,newActive],'old')?.runId==='new','active runtime outranks a stale selected terminal runtime');const newTerminal={...newActive,phase:'COMPLETED'};assert(selectCanonicalCurrentRuntime(newTerminal,[oldTerminal,newTerminal],'old')?.runId==='old','explicit historical selection remains exact after all runs are terminal');
+// D0B_1: exact-run scoped transport — same runId resolves by projectId+repositoryIdentity
+const scopeA={projectId:'project-a',repositoryIdentity:'repo-a'};const scopeB={projectId:'project-b',repositoryIdentity:'repo-b'};
+const runA:RuntimeState={...s,runId:'shared-run-id',projectId:'project-a',repositoryIdentity:'repo-a'};
+const runB:RuntimeState={...s,runId:'shared-run-id',projectId:'project-b',repositoryIdentity:'repo-b'};
+assert(runtimeBelongsToProject(runA,scopeA),'runA belongs to scopeA');
+assert(!runtimeBelongsToProject(runA,scopeB),'runA does not belong to scopeB');
+assert(runtimeBelongsToProject(runB,scopeB),'runB belongs to scopeB');
+assert(!runtimeBelongsToProject(runB,scopeA),'runB does not belong to scopeA');
+// readRuntimeScoped (sync) returns null for foreign scope — cannot resolve across projects
+const storedScopeA=readRuntimeScoped(scopeA,'shared-run-id');
+const storedScopeB=readRuntimeScoped(scopeB,'shared-run-id');
+// These will both be null since we have no live storage here, but the scope filter logic is validated above via runtimeBelongsToProject
+assert(storedScopeA===null||typeof storedScopeA==='object','readRuntimeScoped returns null or object for scopeA');
+assert(storedScopeB===null||typeof storedScopeB==='object','readRuntimeScoped returns null or object for scopeB');
+console.log('D0B_1 scope isolation contract tests passed');

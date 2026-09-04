@@ -1,0 +1,34 @@
+<script lang="ts">
+  import type {PullRequestEntityContext} from '../../lib/model/entityTypes';
+  import type {CiEvidence,ReviewEvidence} from '../../lib/exactHeadEvidence.ts';
+  export let context:PullRequestEntityContext;
+  const value=(v:string|number|undefined|null,empty='NOT_BOUND')=>v===undefined||v===null||v===''?empty:String(v);
+  $: validation=context.exactHeadValidation;
+  $: currentHead=context.record?.headSha??'NOT_BOUND';
+  $: reviewHistory=[...(validation?.review.history??[])].sort((a,b)=>b.reviewed_at.localeCompare(a.reviewed_at));
+  $: ciHistory=[...(validation?.ci.history??[])].sort((a,b)=>(b.completed_at??b.started_at).localeCompare(a.completed_at??a.started_at));
+  $: currentReview=reviewHistory.find(item=>item.head_sha===currentHead)??null;
+  $: currentCi=ciHistory.find(item=>item.head_sha===currentHead)??null;
+  $: bindingStatus=context.parentWorkPackageId?'已绑定':'未绑定';
+  $: lifecycle=context.lifecycleWorkspace;
+  const reviewStatus=(item:ReviewEvidence)=>item.head_sha===currentHead?'CURRENT / EXACT HEAD':'STALE';
+  const ciStatus=(item:CiEvidence)=>item.head_sha===currentHead?'CURRENT / EXACT HEAD':'STALE';
+</script>
+
+<div class="pr-evidence-sections" data-testid="pr-right-evidence">
+  <section class="evidence-card pr-header-card" data-testid="pr-workspace-header"><h3>PR Workspace</h3><div class="evidence-fields"><div><span>Repository</span><b>{value(context.record?.repository,'ABSENT')}</b></div><div><span>PR Number</span><b>{value(context.record?.number,'ABSENT')}</b></div><div><span>PR Title</span><b>{value(context.record?.title)}</b></div><div><span>Current Head SHA</span><b data-testid="pr-current-head">{currentHead}</b></div><div><span>Source Branch</span><b>{value(context.record?.sourceBranch,'ABSENT')}</b></div><div><span>Delivery Branch</span><b>{value(context.record?.deliveryBranch)}</b></div><div><span>PR State</span><b>{value(context.record?.state??context.statusLabel)}</b></div><div><span>Lifecycle Status</span><b>{lifecycle.lifecycleStatus}</b></div><div><span>Remote PR Identity</span><b>{lifecycle.remoteIdentityConfirmed?'已确认':'未证明'}</b></div><div><span>Draft</span><b>{context.record?.draft?'YES':'NO'}</b></div></div></section>
+
+  <section class="evidence-card exact-head-card" data-testid="exact-head-validation"><h3>Exact-head Validation</h3><div class="evidence-fields"><div><span>Current Head</span><b>{currentHead}</b></div><div><span>Review</span><b class:current={Boolean(currentReview)} class:stale={Boolean(validation?.review.historical&&!currentReview)}>{currentReview?.review_status??'NO CURRENT-HEAD REVIEW EVIDENCE'}</b></div><div><span>CI</span><b class:current={Boolean(currentCi)} class:stale={Boolean(validation?.ci.historical&&!currentCi)}>{currentCi?.conclusion??'NO CURRENT-HEAD CI EVIDENCE'}</b></div></div><small>事实投影，不生成 AICC 总体 PASS/FAIL。</small></section>
+
+  <section class="evidence-card" data-testid="pr-current-review"><h3>Current Review</h3>{#if currentReview}<div class="evidence-fields"><div><span>Reviewer</span><b>{currentReview.reviewer}</b></div><div><span>Provider</span><b>{currentReview.review_provider}</b></div><div><span>Review Status</span><b class="current">{currentReview.review_status}</b></div><div><span>Reviewed Head</span><b>{currentReview.head_sha}</b></div><div><span>Current Head</span><b>{currentHead}</b></div><div><span>Current for Head</span><b class="current">YES · EXACT HEAD</b></div><div><span>Reviewed At</span><b>{currentReview.reviewed_at}</b></div><div><span>Summary</span><b>{currentReview.review_summary}</b></div></div>{:else}<p class="empty-evidence">No current-head Review evidence</p>{/if}</section>
+
+  <section class="evidence-card" data-testid="pr-current-ci"><h3>Current CI</h3>{#if currentCi}<div class="evidence-fields"><div><span>Provider</span><b>{currentCi.provider}</b></div><div><span>Workflow</span><b>{currentCi.workflow}</b></div><div><span>Status</span><b class="current">{currentCi.status}</b></div><div><span>Conclusion</span><b class="current">{currentCi.conclusion}</b></div><div><span>Validated Head</span><b>{currentCi.head_sha}</b></div><div><span>Current Head</span><b>{currentHead}</b></div><div><span>Current for Head</span><b class="current">YES · EXACT HEAD</b></div><div><span>Started At</span><b>{currentCi.started_at}</b></div><div><span>Completed At</span><b>{value(currentCi.completed_at)}</b></div><div><span>Reference</span><b>{value(currentCi.url,'NOT_AVAILABLE')}</b></div></div>{:else}<p class="empty-evidence">No current-head CI evidence</p>{/if}</section>
+
+  <details class="evidence-card history-card" data-testid="pr-review-history"><summary>Historical Review · {reviewHistory.filter(item=>item.head_sha!==currentHead).length}</summary>{#each reviewHistory.filter(item=>item.head_sha!==currentHead) as item}<div class="history-item stale"><strong>STALE · {reviewStatus(item)}</strong><div>Reviewed Head: {item.head_sha} · Current Head: {currentHead}</div><div>{item.reviewer} · {item.review_provider} · {item.review_status} · {item.reviewed_at}</div></div>{:else}<p class="empty-evidence">No historical Review evidence</p>{/each}</details>
+  <details class="evidence-card history-card" data-testid="pr-ci-history"><summary>Historical CI · {ciHistory.filter(item=>item.head_sha!==currentHead).length}</summary>{#each ciHistory.filter(item=>item.head_sha!==currentHead) as item}<div class="history-item stale"><strong>STALE · {ciStatus(item)}</strong><div>Validated Head: {item.head_sha} · Current Head: {currentHead}</div><div>{item.provider} · {item.workflow} · {item.conclusion} · {item.completed_at??item.started_at}</div></div>{:else}<p class="empty-evidence">No historical CI evidence</p>{/each}</details>
+
+  <section class="evidence-card"><h3>Parent Work Package</h3><div class="evidence-fields"><div><span>绑定状态</span><b>{bindingStatus}</b></div><div><span>Parent WP</span><b>{value(context.parentWorkPackageId,'ABSENT')}</b></div></div></section>
+</div>
+<style>
+  .pr-evidence-sections{display:grid;gap:10px}.evidence-card{border:1px solid var(--border-soft);border-radius:8px;background:var(--surface);padding:10px}.evidence-card h3{margin:0 0 8px;font-size:12px}.evidence-fields{display:grid;grid-template-columns:1fr 1fr;gap:7px 10px}.evidence-fields div{display:grid;gap:2px;min-width:0}.evidence-fields span,.evidence-card small{font-size:10px;color:var(--text-3)}.evidence-fields b{font-size:11px;overflow-wrap:anywhere}.current{color:var(--success,#16803c)}.stale{color:var(--warning,#a15c00)}.empty-evidence{margin:0;color:var(--text-2);font-size:11px}.history-card summary{cursor:pointer;font-size:12px;font-weight:650}.history-item{border-top:1px solid var(--border-soft);margin-top:8px;padding-top:8px;font-size:11px;line-height:1.5}.history-item strong{display:block;margin-bottom:3px}.history-item.stale{border-left:3px solid var(--warning,#a15c00);padding-left:8px}
+</style>

@@ -1,0 +1,1 @@
+import {strict as assert} from 'node:assert';import {GLOBAL_WP_ACTIONS} from './globalWpActionModel.ts';assert.deepEqual(GLOBAL_WP_ACTIONS,['AUTO_CREATE_WP','MANUAL_CREATE_WP','REFRESH']);assert.equal(GLOBAL_WP_ACTIONS.includes('AUTO_CREATE_WP'),true);console.log('global WP action model passed');

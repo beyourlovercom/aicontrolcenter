@@ -1,0 +1,28 @@
+import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
+
+const drawer=readFileSync(new URL('../components/AiccWorkspaceDrawer.svelte',import.meta.url),'utf8');
+const workspace=readFileSync(new URL('../components/entity/RuntimeWorkspace.svelte',import.meta.url),'utf8');
+const feed=readFileSync(new URL('../components/CanonicalTaskFeed.svelte',import.meta.url),'utf8');
+assert.equal((workspace.match(/<AiccWorkspaceDrawer /g)??[]).length,7,'all current first-level workspace modules use the shared drawer');
+assert.match(drawer,/class="workspace-drawer-header"/);
+assert.match(drawer,/aria-expanded=\{open\}/);
+assert.match(drawer,/aria-controls=\{bodyId\}/);
+assert.match(drawer,/workspace-drawer-body-collapsed/);
+assert.doesNotMatch(drawer,/#if open/,'collapse never conditionally destroys the body');
+assert.doesNotMatch(workspace,/class="section-label"><span>当前执行<\/span>/,'current execution does not duplicate drawer title');
+assert.doesNotMatch(workspace,/class="section-label"><span>执行证据<\/span>/,'execution evidence does not duplicate drawer title');
+assert.doesNotMatch(feed,/class="section-label"><span>统一任务列表<\/span>/,'canonical feed does not duplicate drawer title');
+assert.match(feed,/class="canonical-task-feed-count"[^>]*>\{rows\.length\} 条任务/,'canonical task count remains visible');
+assert.match(workspace,/title="统一任务列表"[^>]*defaultExpanded=\{true\}/);
+assert.match(workspace,/title="Codex CLI Live"[^>]*defaultExpanded=\{true\}/);
+assert.match(workspace,/title="运行摘要"[^>]*defaultExpanded=\{false\}/);
+assert.match(workspace,/title="当前执行"[^>]*defaultExpanded=\{false\}/);
+assert.match(workspace,/title="执行证据"[^>]*defaultExpanded=\{false\}/);
+assert.match(workspace,/title="Execution Provider"[^>]*defaultExpanded=\{false\}/);
+assert.match(workspace,/title="故障诊断"[^>]*defaultExpanded=\{false\}/);
+assert.match(workspace,/CodexCliLive runtime=\{focused\}/);
+const provider=readFileSync(new URL('../components/entity/ExecutionProviderPanel.svelte',import.meta.url),'utf8');
+assert.doesNotMatch(provider,/class="section-label"/,'provider panel does not duplicate drawer title');
+assert.match(provider,/class="provider-row"/,'provider horizontal rows remain');
+console.log('AICC workspace drawer contract passed');

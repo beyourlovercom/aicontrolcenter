@@ -1,0 +1,25 @@
+import assert from 'node:assert/strict';
+import {finalizeCanonicalResult,parseEvent,reconcileProcessExit,type RuntimeState} from './runtimeManager.ts';
+import {readFileSync} from 'node:fs';
+
+const base=():RuntimeState=>({runId:'human-run',projectId:'aicc',repositoryIdentity:'aicc-repo',workPackageId:'AICC-X-001',authorizationId:'auth',authoritySha:'sha',branch:'feature/x',startingHeadSha:'head',pid:42,pidAlive:true,processAlive:true,ptySessionId:'pty-human-run',threadId:null,phase:'RUNNING',currentTask:'Codex 进程运行中',latestEvent:'process.spawned',startedAt:'2026-08-18T00:00:00.000Z',lastActivityAt:'2026-08-18T00:00:00.000Z',events:[],outputMode:'human',finalMessagePath:'/tmp/aicc-state/human-run/final-message.txt'});
+const human=base();
+reconcileProcessExit(human,0);
+assert.equal(human.phase,'COMPLETED','a human-mode run completes from actual exit code without thread.started');
+human.finalAgentMessage='Human final message\nCODEX_RESULT: PASS';
+finalizeCanonicalResult(human);
+assert.equal(human.canonicalResult?.rawResult,human.finalAgentMessage,'the exact final-message evidence feeds the canonical result');
+assert.equal(human.agentMessageCount,undefined,'unsourced agent count is unavailable, not a false zero');
+assert.equal(human.commandExecutionCount,undefined,'unsourced command count is unavailable, not a false zero');
+assert.equal(human.fileChangeEventCount,undefined,'unsourced file-change count is unavailable, not a false zero');
+assert.equal(human.toolCallCount,undefined,'unsourced tool-call count is unavailable, not a false zero');
+assert.equal(human.errorEventCount,undefined,'unsourced error count is unavailable, not a false zero');
+const historical:RuntimeState={...base(),outputMode:'json',threadId:null,phase:'STARTING'};
+parseEvent('{"type":"thread.started","thread_id":"historical-thread"}',historical,false);
+assert.equal(historical.threadId,'historical-thread','historical JSON records retain parser compatibility');
+const supervisor=readFileSync(new URL('../../scripts/aicc-run-supervisor.ts',import.meta.url),'utf8');
+assert.match(supervisor,/--output-last-message/,'human launch uses the locally verified final-message flag');
+assert.match(supervisor,/state\.outputMode==='json'\|\|state\.outputMode===undefined/,'only JSON or historical unspecified records enter parseEvent');
+assert.match(supervisor,/state\.outputMode==='human'\).*state\.phase='RUNNING'/s,'human RUNNING state is based on real PTY spawn evidence');
+assert.doesNotMatch(supervisor,/parseEvent\(line,state,false\).*state\.outputMode==='human'/s,'human terminal bytes are never sent to the JSON parser');
+console.log('human output runtime compatibility tests passed');

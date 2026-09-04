@@ -1,0 +1,9 @@
+export type WorkspaceStatus='AVAILABLE'|'ACTIVE'|'LOCKED'|'ARCHIVED';
+export type WorkspaceContext={workspace_id:string;project_id:string;repository_id:string;branch:string;worktree_path:string;active_wp:string|null;execution_context:string|null;status:WorkspaceStatus};
+export type RepositoryWorkspaceBinding={project_id:string;repository_id:string;workspace_id:string};
+export type BranchContext={repository:string;branch:string;purpose:string;active_wp:string|null;created_at:string;status:'MAIN'|'FEATURE'|'RELEASE'|'ARCHIVED'};
+export type WorktreeRecord={repository:string;branch:string;path:string;owner:string;active_execution:string|null;lock_status:'UNLOCKED'|'LOCKED'};
+export class WorktreeRegistry{private items=new Map<string,WorktreeRecord>();register(item:WorktreeRecord){const collision=[...this.items.values()].find(x=>x.path===item.path||x.lock_status==='LOCKED'&&x.repository===item.repository&&x.branch===item.branch);if(collision)throw new Error('WORKTREE_COLLISION');this.items.set(`${item.repository}:${item.branch}`,item);return item}get(repository:string,branch:string){return this.items.get(`${repository}:${branch}`)??null}}
+export function bindWorkPackage(workspace:WorkspaceContext,wp_id:string){if(workspace.status==='LOCKED')throw new Error('WORKSPACE_LOCKED');return {wp_id,workspace_id:workspace.workspace_id,repository_id:workspace.repository_id,branch:workspace.branch,execution_context:workspace.execution_context}}
+export function resolveCodexWorkspace(workspace:WorkspaceContext){return {workspace_id:workspace.workspace_id,repository_id:workspace.repository_id,branch:workspace.branch,worktree_path:workspace.worktree_path}}
+export function workspaceGovernance(){return {canManageMetadata:true,canBindExecution:true,canDisplay:true,canSilentlySwitchRepository:false,canExecuteWrongWorkspace:false,canOverrideBranchPolicy:false}}

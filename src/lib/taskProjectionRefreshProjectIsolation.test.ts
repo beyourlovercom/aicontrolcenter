@@ -1,0 +1,27 @@
+import assert from 'node:assert/strict';
+import {projectTaskProjectionForContext,refreshTaskProjectionForTest,storeTaskProjectionSnapshotForTest,readTaskProjectionAuthorityForTest,type ActiveTaskProjectContext} from './bridgeCore.ts';
+
+const context=(projectId:string,repositoryIdentity:string,projectContextRevision:number):ActiveTaskProjectContext=>({projectId,repositoryIdentity,projectContextRevision});
+const record=(projectId:string,repositoryIdentity:string)=>({taskId:'SAME',projectId,repositoryIdentity,status:'READY'} as any);
+const registry=(r:any)=>({items:[r],legacy:[]});
+const deferreds=new Map<string,{resolve:(value:any)=>void;promise:Promise<any>}>();
+const rebuild=(ctx:ActiveTaskProjectContext)=>{const key=`${ctx.projectId}:${ctx.projectContextRevision}`;let resolve!: (value:any)=>void;const promise=new Promise<any>(r=>{resolve=(value)=>{storeTaskProjectionSnapshotForTest(ctx,value);r(value)}});deferreds.set(key,{resolve,promise});return promise};
+const a1=context('a','repo-a',1),b2=context('b','repo-b',2),a3=context('a','repo-a',3);
+const aPromise=refreshTaskProjectionForTest(a1,rebuild),bPromise=refreshTaskProjectionForTest(b2,rebuild);
+assert.notEqual(aPromise,bPromise);
+deferreds.get('b:2')!.resolve(projectTaskProjectionForContext(b2,registry(record('b','repo-b'))));
+deferreds.get('a:1')!.resolve(projectTaskProjectionForContext(a1,registry(record('a','repo-a'))));
+const [aResult,bResult]=await Promise.all([aPromise,bPromise]);
+assert.deepEqual([aResult.projectId,aResult.repositoryIdentity,aResult.projectContextRevision],['a','repo-a',1]);
+assert.deepEqual([bResult.projectId,bResult.repositoryIdentity,bResult.projectContextRevision],['b','repo-b',2]);
+const aRevision1=refreshTaskProjectionForTest(a1,rebuild);
+const aRevision3=refreshTaskProjectionForTest(a3,rebuild);
+assert.notEqual(aRevision1,aRevision3);
+deferreds.get('a:1')!.resolve(projectTaskProjectionForContext(a1,registry(record('a','repo-a'))));
+deferreds.get('a:3')!.resolve(projectTaskProjectionForContext(a3,registry(record('a','repo-a'))));
+const [,a3Result]=await Promise.all([aRevision1,aRevision3]);
+assert.equal(a3Result.projectContextRevision,3);
+assert.equal(a3Result.items.every(item=>(item as any).projectId==='a'),true);
+assert.equal(readTaskProjectionAuthorityForTest(a3)!.projectContextRevision,3);
+assert.equal(readTaskProjectionAuthorityForTest(a3)!.projection.projectContextRevision,3);
+console.log('Task projection refresh project isolation passed');

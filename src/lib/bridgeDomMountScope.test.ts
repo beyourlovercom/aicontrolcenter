@@ -1,0 +1,23 @@
+import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
+import {join} from 'node:path';
+import vm from 'node:vm';
+
+const domSource=readFileSync(join(process.cwd(),'web-adapter/chatgpt-dom.js'),'utf8');
+const context:any={innerWidth:1440,setTimeout};
+vm.runInNewContext(domSource,context);
+const dom=context.AICCChatGPTDom;
+assert.equal(typeof dom.mountAssistantAiccActions,'undefined','assistant chat-content mount API is removed');
+assert.equal(typeof dom.mountComposerAiccAction,'function','canonical Composer mount API remains');
+assert.equal(typeof dom.removeChatContentFloatingButtons,'function','chat-content cleanup API remains');
+assert.doesNotMatch(domSource,/function mountAssistantAiccActions/,'assistant content is never mounted');
+assert.doesNotMatch(domSource,/function actionSurfaces/,'Writing Block discovery is removed from the mount path');
+assert.match(domSource,/function mountComposerAiccAction/,'Composer maintenance remains supported');
+assert.match(domSource,/removeChatContentFloatingButtons/,'historical chat-content cleanup remains available');
+let removed = 0;
+const oldAssistantRail = {remove(){removed += 1;}};
+const oldComposerRail = {remove(){removed += 1;}};
+const cleanupDocument = {querySelectorAll:(selector:string)=>selector.includes('aicc-executable') || selector.includes('data-aicc-action-rail') ? [oldAssistantRail] : selector.includes('aicc-composer') ? [oldComposerRail] : []};
+assert.equal(dom.removeChatContentFloatingButtons(cleanupDocument),1,'cleanup removes existing chat-content rails only');
+assert.equal(removed,1,'Composer rail is preserved by chat-content cleanup');
+console.log('Bridge DOM mount scope regression tests passed');

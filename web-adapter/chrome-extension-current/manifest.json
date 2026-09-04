@@ -1,0 +1,17 @@
+{
+  "manifest_version": 3,
+  "name": "AICC Web Bridge",
+  "version": "2026.8.14",
+  "version_name": "2026-08-14",
+  "description": "GPT ↔ AICC ↔ Codex browser bridge for Owner-controlled execution and exactly-once result return.",
+  "permissions": ["storage", "clipboardRead", "clipboardWrite"],
+  "host_permissions": ["http://127.0.0.1:1420/*"],
+  "background": { "service_worker": "service-worker.js" },
+  "content_scripts": [
+    {
+      "matches": ["https://chatgpt.com/*"],
+      "js": ["chatgpt-dom.js", "bridge-action-registry.js", "content.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}

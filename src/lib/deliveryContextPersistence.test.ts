@@ -1,0 +1,23 @@
+import assert from 'node:assert/strict';
+import {bindCiExecution,bindPullRequest,bindReviewExecution,createMemoryDeliveryContextRecordStore,deliveryContextRecordFromGit,findDeliveryContextByPR} from './deliveryContextPersistence.ts';
+
+const store=createMemoryDeliveryContextRecordStore();
+const record=deliveryContextRecordFromGit({deliveryContextId:'dc-canary',workPackageId:'AICC-M6.2-REAL-DELIVERY-CANARY-001',repository:'beyourlovercom/aicontrolcenter',baseBranch:'rebuild/aicc-v2',deliveryBranch:'delivery/aicc-m6.2-real-delivery-canary-001',worktreePath:'/tmp/aicc-canary',commitSha:'2f9cc9405c77809d49982ecfc9cbcdb4b822268f',prNumber:9,providerId:'codex',executionId:'exec-canary',now:'2026-08-15T00:00:00.000Z'});
+assert.equal(store.create(record).delivery_context_id,record.delivery_context_id);
+assert.equal(store.create({...record,delivery_context_id:'dc-duplicate'}).delivery_context_id,record.delivery_context_id,'WP/repository/branch is idempotent');
+assert.equal(store.get('dc-canary')?.worktree_path,'/tmp/aicc-canary');
+assert.equal(store.findByWorkPackage(record.work_package_id)?.delivery_context_id,'dc-canary');
+assert.equal(store.findByPR(record.repository,9)?.head_sha,record.commit_sha);
+assert.deepEqual(store.findByHeadSHA(record.head_sha).map(item=>item.delivery_context_id),['dc-canary']);
+const updated=store.update('dc-canary',{lifecycle_state:'PR_CREATED',execution_id:'exec-canary-2'});
+assert.equal(updated.lifecycle_state,'PR_CREATED');assert.equal(updated.execution_id,'exec-canary-2');
+const bound=bindPullRequest(updated,{prNumber:9,prRepository:'beyourlovercom/aicontrolcenter',prUrl:'https://github.com/beyourlovercom/aicontrolcenter/pull/9',prState:'OPEN',prHeadSha:record.head_sha,prBaseBranch:'rebuild/aicc-v2',updatedAt:'2026-08-15T00:01:00.000Z'});
+store.update('dc-canary',bound);assert.equal(bound.pr_head_sha,bound.head_sha);assert.equal(bound.pr_state,'OPEN');assert.equal(findDeliveryContextByPR(store,'beyourlovercom/aicontrolcenter',9)?.pr_url,bound.pr_url);
+assert.throws(()=>bindPullRequest(bound,{prNumber:9,prRepository:bound.pr_repository!,prUrl:bound.pr_url!,prState:'UPDATED',prHeadSha:'stale-head',prBaseBranch:'rebuild/aicc-v2'}),/PR_HEAD_MISMATCH/);
+const reviewed=bindReviewExecution(bound,{reviewExecutionId:'review-dc-canary-head',providerId:'codex',repository:bound.pr_repository!,prNumber:9,headSha:bound.head_sha,status:'PASSED',result:'approved',updatedAt:'2026-08-15T00:02:00.000Z'});
+store.update('dc-canary',reviewed);assert.equal(reviewed.review_provider_id,'codex');assert.equal(reviewed.review_head_sha,reviewed.head_sha);assert.equal(reviewed.review_status,'PASSED');
+assert.throws(()=>bindReviewExecution(reviewed,{reviewExecutionId:'review-stale',providerId:'codex',repository:bound.pr_repository!,prNumber:9,headSha:'stale-head',status:'PASSED'}),/REVIEW_HEAD_MISMATCH/);
+const ci=bindCiExecution(reviewed,{ciExecutionId:'ci-dc-canary-head',providerId:'codex',repository:bound.pr_repository!,prNumber:9,commitSha:bound.commit_sha,headSha:bound.head_sha,status:'PASSED',result:{conclusion:'success'},updatedAt:'2026-08-15T00:03:00.000Z'});
+store.update('dc-canary',ci);assert.equal(ci.ci_provider_id,'codex');assert.equal(ci.ci_commit_sha,ci.commit_sha);assert.equal(ci.ci_head_sha,ci.head_sha);assert.equal(ci.ci_status,'PASSED');
+assert.throws(()=>bindCiExecution(ci,{ciExecutionId:'ci-stale',providerId:'codex',repository:bound.pr_repository!,prNumber:9,commitSha:'stale-head',headSha:'stale-head',status:'PASSED'}),/CI_HEAD_MISMATCH/);
+console.log('delivery context persistence matrix passed');

@@ -3,6 +3,7 @@ dist/
 src-tauri/target/
 .DS_Store
 *.log
+docs/10_Planning_Roadmap/02_AICC_ROADMAP_READ_MODEL.json
 .env
 .env.*
 !.env.example

@@ -33,7 +33,9 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          if git grep -nE '(/Users/|/home/|[A-Za-z]:\\\\Users\\\\)' -- .github docs openspec ':!package-lock.json' ':!.github/workflows/ci.yml'; then
+          # Project Registry is an explicit local-service configuration exception under AICC_CANONICAL_PATH_IDENTITY_V1.
+          # Its repositoryPath values are runtime execution-location data; every other tracked docs/OpenSpec path remains scanned.
+          if git grep -nE '(/Users/|/home/|[A-Za-z]:\\\\Users\\\\)' -- .github docs openspec ':!package-lock.json' ':!.github/workflows/ci.yml' ':!docs/10_Planning_Roadmap/04_AICC_PROJECT_REGISTRY.json'; then
             echo 'Absolute local path detected'
             exit 1
           fi

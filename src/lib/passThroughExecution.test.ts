@@ -1,0 +1,21 @@
+import assert from 'node:assert/strict';
+import {buildPassThroughPrompt, type CanonicalExecutionRequest} from './runtimeManager.ts';
+import {evaluateGates, parseExecutionV1, submitExecution} from './bridgeCore.ts';
+
+const raw='检查当前 AICC 仓库状态，不修改文件';
+const request:CanonicalExecutionRequest={passThrough:true,instructionBody:raw,executionType:'READ_ONLY_AUDIT',sandbox:'read-only'};
+assert.match(buildPassThroughPrompt(raw,'READ_ONLY_AUDIT','read-only'),/BEGIN OWNER TASK/,'raw task reaches Codex');
+assert.doesNotMatch(buildPassThroughPrompt(raw),/FORMAL WORK PACKAGE|Writer Lock|Authorized Branch/,'AICC does not add semantic authority');
+const item=submitExecution(raw,'WEB_BRIDGE','conversation-1',{conversationId:'conversation-1',conversationUrl:'https://chatgpt.com/c/1',messageId:'assistant-1'});
+assert.ok(['LAUNCHED','FAILED'].includes(item.state),'usable raw text is dispatched to Codex');
+assert.equal(item.originContext?.conversationId,'conversation-1','origin conversation is preserved');
+assert.ok(item.instruction,'raw task receives an internal transport envelope');
+assert.ok(item.gates.every(g=>g.state==='PASS'),'gate rows are non-blocking projections');
+assert.deepEqual(evaluateGates(item.instruction!),evaluateGates(item.instruction!), 'gate projection is deterministic');
+const structured=`AICC_EXECUTION_V1\nENTITY_TYPE: WORK_PACKAGE\nENTITY_ID: AICC-V2-UNKNOWN-SCOPE\nEXECUTION_TYPE: READ_ONLY_AUDIT\nREPOSITORY: /missing/repository\nBRANCH: wrong-branch\nEXPECTED_HEAD: wrong-head\nSANDBOX: read-only\n\nINSTRUCTION_BEGIN\nREAD_ONLY_AUDIT\nINSTRUCTION_END`;
+const structuredItem=submitExecution(structured,'WEB_BRIDGE');
+assert.ok(['LAUNCHED','FAILED'].includes(structuredItem.state),'dirty metadata does not pre-block Codex dispatch');
+assert.equal(structuredItem.instruction?.repository,'/missing/repository');
+assert.equal(parseExecutionV1(structured.replace('INSTRUCTION_END','')).expectedHead,'wrong-head','incomplete protocol remains metadata-readable');
+assert.equal(request.passThrough,true,'pass-through is explicit and does not create a second authority');
+console.log('pass-through execution contract tests passed');

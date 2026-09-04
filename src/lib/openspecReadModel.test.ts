@@ -1,4 +1,5 @@
 import { buildReadModel, type RepositorySnapshot } from './openspecReadModel.ts';
+import {normalizeRoadmap} from './model/projectModel.ts';
 
 function assert(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(message);
@@ -61,3 +62,5 @@ assert(JSON.stringify(snapshot) === before, 'snapshot input is not mutated');
 assert(!Object.keys(buildReadModel(snapshot)).some((key) => /shell|fetch|process|write/i.test(key)), 'read model exposes no execution interface');
 
 console.log('openspec read model contract tests passed');
+const extendedRoadmap='## Active V2 Milestones\n### M3 — First Usable Version Closure\nWork Packages: `AICC-V2-SELF-DEVELOPMENT-UAT-001`\n#### 3.5 — GPT Bridge Contract\nWork Packages: `AICC-V2-GPT-BRIDGE-001`\n#### 3.75 — Autopilot Until UAT\nWork Packages: `AICC-V2-AUTOPILOT-UNTIL-UAT-001`\n### M4 — PR Runner Foundation\nWork Packages: `AICC-V2-PR-RUNNER-001`\n## Legacy Historical Milestones';
+const extended=normalizeRoadmap(extendedRoadmap);const ids=extended.flatMap(milestone=>milestone.children.map(child=>child.id));assert(JSON.stringify(extended.map(milestone=>milestone.id))===JSON.stringify(['M3','M4']),'only whole-number milestones are canonical entities');assert(JSON.stringify(ids)===JSON.stringify(['AICC-V2-SELF-DEVELOPMENT-UAT-001','AICC-V2-GPT-BRIDGE-001','AICC-V2-AUTOPILOT-UNTIL-UAT-001','AICC-V2-PR-RUNNER-001']),'new formal WPs discovered');

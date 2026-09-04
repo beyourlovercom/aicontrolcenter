@@ -1,0 +1,1 @@
+import './projectRegistryAuthority.test.ts';

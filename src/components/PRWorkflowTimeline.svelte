@@ -1,0 +1,1 @@
+<script lang="ts">import WorkflowTimeline from './WorkflowTimeline.svelte';import type {LifecycleStage} from '../lib/model/entityTypes';export let stages:LifecycleStage[]=[];export let currentStage='DELIVERY_READY';</script><WorkflowTimeline {stages} {currentStage} />

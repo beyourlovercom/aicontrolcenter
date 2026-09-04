@@ -1,0 +1,66 @@
+import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
+import {join} from 'node:path';
+import vm from 'node:vm';
+import {bindControlLoop,claimFeedback,completeFeedback,consumeGptControl,enableControlLoop,markFeedbackInserted,markFeedbackInserting,markFeedbackSubmitted,markFeedbackSubmitting,readControlLoop,readExpectedControlTurn,rebindControlLoop} from './gptAutoControlLoop.ts';
+import type {InboxItem} from './bridgeCore.ts';
+
+const domContext:{AICCChatGPTDom?:Record<string,any>;Event:typeof Event;setTimeout:typeof setTimeout;URL:typeof URL}={Event,setTimeout,URL};
+vm.runInNewContext(readFileSync(join(process.cwd(),'web-adapter/chatgpt-dom.js'),'utf8'),domContext);
+const dom=domContext.AICCChatGPTDom!;
+assert.equal(dom.resolveConversationId({href:'https://chatgpt.com/c/6a812852-ea4c-83ec-b176-432eb66928a9',pathname:'/c/6a812852-ea4c-83ec-b176-432eb66928a9'}),'6a812852-ea4c-83ec-b176-432eb66928a9');
+assert.equal(dom.resolveConversationId({href:'https://chatgpt.com/',pathname:'/'}),null,'non-conversation pages never fabricate identity');
+
+const loopId=`rebind-loop-${Date.now()}`,wpId='AICC-V2-GPT-CODEX-BRIDGE-001',oldConversation='old-conversation',currentConversation='current-conversation';
+const projectId='project-control-loop-conversation-rebinding',repositoryIdentity='repo-control-loop-conversation-rebinding';
+const staleControl='AICC_EXECUTION_V1\nINSTRUCTION_ID: stale-round-2\nENTITY_TYPE: WORK_PACKAGE\nENTITY_ID: AICC-V2-GPT-CODEX-BRIDGE-001\nEXECUTION_TYPE: READ_ONLY_AUDIT\nREPOSITORY: /Users/a/AI/007/AIcontrolcenter\nBRANCH: rebuild/aicc-v2\nSANDBOX: read-only\nREQUIRES_AUTHORIZATION: false\n\nINSTRUCTION_BEGIN\nHistorical response.\nINSTRUCTION_END';
+bindControlLoop({control_loop_id:loopId,projectId,repositoryIdentity,formal_wp_id:wpId,conversation_id:oldConversation});
+enableControlLoop(loopId,true);
+const before=readControlLoop(loopId)!;
+assert.equal(before.conversation_id,oldConversation);
+const rebound=rebindControlLoop({control_loop_id:loopId,projectId,repositoryIdentity,formal_wp_id:wpId,conversation_id:currentConversation,visible_assistant_controls:[{assistant_message_id:'stale-message-id',response:staleControl}]});
+assert.equal(rebound.conversation_id,currentConversation,'explicit Owner rebind persists current Conversation');
+assert.equal(rebound.binding_epoch,before.binding_epoch+1,'explicit rebind advances durable epoch');
+assert.ok(rebound.bound_at);
+assert.equal(readControlLoop(loopId)?.binding_epoch,rebound.binding_epoch,'read-after-write returns exact epoch');
+assert.equal(readControlLoop(loopId)?.conversation_id,currentConversation,'reload reads exact durable binding');
+const bindingChecked=(current:string|null,durable=readControlLoop(loopId))=>Boolean(current&&durable?.binding_active===true&&durable.conversation_id===current);
+assert.equal(bindingChecked(currentConversation),true,'reload in exact bound Conversation restores checked truth');
+assert.equal(bindingChecked('navigated-conversation'),false,'navigation projects mismatch without changing durable binding');
+assert.equal(bindingChecked(currentConversation),true,'returning to bound Conversation restores usability');
+assert.equal(readControlLoop(loopId)?.binding_epoch,rebound.binding_epoch,'navigation and return do not create another epoch');
+
+const feedbackInput={control_loop_id:loopId,projectId,repositoryIdentity,formal_wp_id:wpId,conversation_id:currentConversation,binding_epoch:rebound.binding_epoch,current_pr_id:null,task_id:'round-1',instruction_id:'round-1',execution_id:'execution-round-1',run_id:'run-round-1',source:'GPT_AUTO_CONTROL_LOOP',runtime:'CODEX_CLI',model:'luna',result_id:'result-round-1',result_hash:'hash-round-1',execution_result:'ROUND_1 = PASS'};
+assert.equal(claimFeedback({...feedbackInput,binding_epoch:before.binding_epoch}).code,'STALE_BINDING_EPOCH','old feedback cannot migrate into new epoch');
+assert.equal(claimFeedback({...feedbackInput,conversation_id:oldConversation}).code,'CROSS_CONVERSATION_ISOLATION','old-conversation feedback cannot leak');
+const feedback=claimFeedback(feedbackInput).record!;
+markFeedbackInserting(loopId,feedback.feedback_key);markFeedbackInserted(loopId,feedback.feedback_key);markFeedbackSubmitting(loopId,feedback.feedback_key);markFeedbackSubmitted(loopId,feedback.feedback_key);completeFeedback(loopId,feedback.feedback_key);
+
+let launches=0;
+const submit=(instruction:any):InboxItem=>({id:instruction.instructionId,state:'READY',instruction,gates:[],createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()} as unknown as InboxItem);
+const launch=(id:string):InboxItem=>{launches+=1;return {id,state:'LAUNCHED',runId:`run-${launches}`,executionId:`execution-${launches}`,gates:[],createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()} as unknown as InboxItem;};
+const expectedTurn=readExpectedControlTurn({conversation_id:currentConversation,control_loop_id:loopId,binding_epoch:rebound.binding_epoch})!;
+const identity={control_loop_id:loopId,conversation_id:currentConversation,binding_epoch:rebound.binding_epoch,feedback_key:feedback.feedback_key,expected_gpt_turn_id:expectedTurn.expected_gpt_turn_id};
+assert.equal(consumeGptControl({...identity,assistant_message_id:'stale-message-id',response:staleControl},submit,launch).code,'STALE_PRE_BIND_CONTROL');
+assert.equal(consumeGptControl({...identity,assistant_message_id:'rerendered-stale-id',response:staleControl},submit,launch).code,'STALE_PRE_BIND_CONTROL','hash boundary survives DOM identity drift');
+assert.equal(launches,0,'historical visible Round 2 never launches');
+const validControl=staleControl.replace('stale-round-2','fresh-round-2').replace('Historical response.','Fresh post-feedback response.');
+assert.equal(consumeGptControl({...identity,assistant_message_id:'fresh-message-id',response:validControl},submit,launch).ok,true,'post-rebind current-epoch control executes');
+assert.equal(launches,1);
+assert.equal(consumeGptControl({...identity,assistant_message_id:'fresh-message-remount',response:validControl},submit,launch).duplicate,true,'observer/remount cannot duplicate control');
+assert.equal(consumeGptControl({...identity,assistant_message_id:'different-control',response:validControl.replace('fresh-round-2','another-round')},submit,launch).duplicate,true,'one feedback turn can consume only one control');
+assert.equal(launches,1);
+assert.equal(consumeGptControl({...identity,conversation_id:oldConversation,assistant_message_id:'wrong-conversation',response:validControl},submit,launch).code,'CROSS_CONVERSATION_ISOLATION');
+assert.equal(readControlLoop(loopId)?.conversation_id,currentConversation,'mismatch never silently rebinds');
+
+const content=readFileSync(join(process.cwd(),'web-adapter/chrome-extension-current/content.js'),'utf8');
+const worker=readFileSync(join(process.cwd(),'web-adapter/chrome-extension-current/service-worker.js'),'utf8');
+assert.match(content,/const bound = Boolean\(autoLoop\.loop\?\.binding_active === true && autoLoop\.loop\?\.conversation_id === currentConversationId\(\)\);[\s\S]*nodes\.bind\.checked = bound/,'checkbox derives from active durable/current equality');
+assert.match(content,/function handleConversationLockChange\(event\)[\s\S]*bindCurrentConversation\(\)[\s\S]*unlockCurrentConversation\(\)/,'Owner interaction uses explicit lock and unlock operations');
+assert.match(worker,/return autoLoopRequest\('bind', \{ formal_wp_id: message\.formal_wp_id, conversation_id/,'worker forwards the canonical explicit bind request to the server authority');
+assert.match(content,/EXACT_CONVERSATION_REQUIRED/,'result insertion fails closed when the exact bound conversation is unavailable');
+assert.doesNotMatch(content,/pushState[\s\S]{0,120}AUTO_LOOP_BIND|popstate[\s\S]{0,120}AUTO_LOOP_BIND/,'navigation cannot silently rebind');
+const five=['clipboard-codex-execute','codex-execute','codex-result','aicc-send','next-step'];
+assert.deepEqual(five.map(key=>content.indexOf(`data-aicc-action-key="${key}"`)),[...five.map(key=>content.indexOf(`data-aicc-action-key="${key}"`))].sort((a,b)=>a-b),'revised five-button order remains unchanged');
+assert.doesNotMatch(content,/data-aicc-action-key="aicc-result"/);
+console.log('M8.2.1.8.5 control loop conversation rebinding matrix passed');

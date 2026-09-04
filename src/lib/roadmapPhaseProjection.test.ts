@@ -1,0 +1,20 @@
+import {readFileSync} from 'node:fs';
+import assert from 'node:assert/strict';
+import {normalizeRoadmap} from './model/projectModel.ts';
+
+const roadmap=readFileSync(new URL('../../docs/10_Planning_Roadmap/01_LIVING_ROADMAP.md',import.meta.url),'utf8');
+const nodes=normalizeRoadmap(roadmap);
+const m5=nodes.find(node=>node.id==='M5')!;
+const m6=nodes.find(node=>node.id==='M6')!;
+const m5wp=m5.children.find(node=>node.id==='AICC-V2-REVIEW-EXACT-HEAD-CI-001')!;
+const m6wp=m6.children.find(node=>node.id==='AICC-V2-AUTONOMOUS-PR-DELIVERY-001')!;
+const m5phases=m5wp.children.filter(node=>node.type==='phase');
+const m6phases=m6wp.children.filter(node=>node.type==='phase');
+assert.equal(m5phases.length,6);
+assert.deepEqual(m5phases.map(node=>node.status),['COMPLETE','COMPLETE','COMPLETE','COMPLETE','COMPLETE','IN_PROGRESS']);
+assert.equal(m6phases.length,8);
+assert.deepEqual(m6phases.map(node=>node.status),['COMPLETE','COMPLETE','IN_PROGRESS','NOT_STARTED','NOT_STARTED','NOT_STARTED','NOT_STARTED','NOT_STARTED']);
+assert.equal(m6wp.phaseProgress?.phases.length,8);
+assert.equal(m5wp.title,'AICC-V2-REVIEW-EXACT-HEAD-CI-001');
+assert(!readFileSync(new URL('../components/RoadmapTree.svelte',import.meta.url),'utf8').includes('AICC-V2-REVIEW-EXACT-HEAD-CI-001'));
+console.log('roadmap phase projection tests passed');

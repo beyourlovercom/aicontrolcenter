@@ -1,0 +1,38 @@
+import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
+
+const app=readFileSync(new URL('../App.svelte',import.meta.url),'utf8');
+const quickList=readFileSync(new URL('../components/TaskQuickList.svelte',import.meta.url),'utf8');
+const globalTask=readFileSync(new URL('../components/GlobalTaskView.svelte',import.meta.url),'utf8');
+const presentation=readFileSync(new URL('./taskPresentation.ts',import.meta.url),'utf8');
+const inspector=readFileSync(new URL('../components/TaskRightContextInspector.svelte',import.meta.url),'utf8');
+const composer=readFileSync(new URL('../components/GlobalExecutionComposerDock.svelte',import.meta.url),'utf8');
+
+assert.match(app,/import TaskQuickList from '\.\/components\/TaskQuickList\.svelte'/,'TASK_QUICK_LIST_COMPONENT = PASS');
+assert.match(app,/else if\(tab==='TASK'\)\{selectedTaskId=null;globalWorkspace=true;\}/,'TOP_TASK_CLICK_SELECTED_TASK = NONE');
+assert.match(app,/activeGlobalTab==='TASK'\}\s*<TaskQuickList tasks=\{taskRecords\}/,'TOP_TASK_CLICK_SHOWS_TASK_QUICK_LIST = PASS');
+assert.match(quickList,/tasks:CanonicalTaskRecord\[\]/,'TASK_QUICK_LIST_USES_CANONICAL_TASKS = PASS');
+assert.match(quickList,/taskDisplayName|taskStatusIcon|taskStatusLabel/,'shared Task presentation remains authoritative');
+assert.match(presentation,/export function taskDisplayName/,'canonical Task display name helper');
+assert.match(quickList,/overflow:hidden[^}]*text-overflow:ellipsis[^}]*white-space:nowrap/,'TASK_NAME_SINGLE_LINE_ELLIPSIS = PASS');
+for(const icon of ['✅','🟡','⏭️','🔴'])assert.match(presentation,new RegExp(icon),`STATUS_ICON_${icon} = PASS`);
+assert.match(quickList,/title=\{taskStatusLabel\(status\)\}/,'REAL_STATUS_TOOLTIP = PASS');
+assert.match(quickList,/taskHasCanonicalResult\(task\)/,'RESULT_ICON_USES_CANONICAL_RESULT = PASS');
+assert.match(quickList,/>📋</,'RESULT_AVAILABLE_ICON = PASS');
+assert.match(quickList,/>🈚</,'RESULT_UNAVAILABLE_ICON = PASS');
+assert.match(quickList,/onclick=\{\(\)=>onCopyResult\(task\)\}/,'ROW_RESULT_AUTHORITY = ROW_TASK_CANONICAL_RESULT');
+assert.match(app,/async function copyTaskRowResult\(task:any\)\{const result=task\?\.canonicalResult\?\.rawResult/,'ROW_COPY_RESULT = PASS');
+const rowCopy=app.match(/async function copyTaskRowResult\(task:any\)\{([^}]*)\}/)?.[1]??'';
+assert.doesNotMatch(rowCopy,/(?:globalRuntime|composerSubmittedRunId|selectedRunId)/,'GLOBAL_RESULT_FALLBACK = NONE; COMPOSER_RESULT_FALLBACK = NONE');
+assert.doesNotMatch(quickList,/onCopyResult\(task\)[\s\S]{0,120}onSelect/,'ROW_COPY_DOES_NOT_SELECT_TASK = PASS');
+assert.match(app,/onSelect=\{selectCanonicalTask\} onCopyResult=\{copyTaskRowResult\}/,'TASK_SELECTION_AUTHORITY_SINGLE = PASS');
+assert.match(app,/GlobalTaskView center groups=\{globalTaskGroups\}/,'CENTER_TASK_WORKSPACE_MODIFIED = NO');
+assert.match(app,/TaskRightContextInspector task=\{selectedTask\}/,'RIGHT_TASK_PANEL_MODIFIED = NO');
+assert.match(app,/GlobalExecutionComposerDock payload=\{bridgePayload\}/,'GLOBAL_COMPOSER_MODIFIED = NO');
+assert.match(app,/activeGlobalTab==='PR'.*PrNavigation/s,'PR_NAV_REGRESSION = PASS');
+assert.match(app,/GlobalBlueprintWorkspace/,'BLUEPRINT_NAV_REGRESSION = PASS');
+assert.match(app,/GlobalWpWorkspace/,'WP_NAV_REGRESSION = PASS');
+assert.match(inspector,/GlobalTaskDetail/,'existing Task right panel remains unchanged');
+assert.match(composer,/copyResultAvailable/,'existing Composer remains mounted');
+assert.doesNotMatch(quickList,/navigator\.clipboard|fetch\(|localStorage/,'quick list has no independent result or source authority');
+console.log('Task Root left quick list contract passed');

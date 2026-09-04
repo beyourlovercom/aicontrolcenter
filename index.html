@@ -5,6 +5,51 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#0d47c7" />
     <title>AI Control Center</title>
+    <script>
+      (() => {
+        const FAILSAFE_STATUS_PATH = '/api/aicc-local-page-status';
+        const FRONTEND_BOOT_TIMEOUT_MS = 45000;
+        let bootReady = false;
+        let failsafeRendered = false;
+        let bootTimer;
+        const cleanError = value => String(value?.message || value?.reason?.message || value?.reason || value || 'NOT_AVAILABLE').replace(/\s+/g, ' ').trim().slice(0, 800) || 'NOT_AVAILABLE';
+        const usableUi = () => { const root = document.getElementById('app'); return Boolean(root && root.childElementCount > 0 && String(root.textContent || '').trim()); };
+        const localOnlyStatus = (frontendBoot, error) => [
+          'AICC_LOCAL_PAGE_STATUS_V1','',
+          'PAGE_RENDER = FAILED',`FRONTEND_BOOT = ${frontendBoot}`,
+          'PORT_1420 = UNKNOWN','PORT_OWNER = NOT_AVAILABLE','HTTP_1420 = UNREACHABLE','API_HEALTH = NOT_AVAILABLE','',
+          'SERVICE_PROCESS_RUNNING = NOT_AVAILABLE','SERVICE_HEALTHY = NOT_AVAILABLE','SUPERVISOR_STATE = NOT_AVAILABLE','MANAGED_PID = NOT_AVAILABLE','',
+          'REPOSITORY_AVAILABLE = NOT_AVAILABLE','CODEX_AVAILABLE = NOT_AVAILABLE','BRANCH = NOT_AVAILABLE','HEAD = NOT_AVAILABLE','WORKTREE = NOT_AVAILABLE','',
+          'RECOVERY_EPOCH = NOT_AVAILABLE','RECOVERY_ATTEMPTS = NOT_AVAILABLE','CONSECUTIVE_FAILURES = NOT_AVAILABLE','LAST_HEALTH_FAILURE = NOT_AVAILABLE','LAST_HEALTH_DETAIL = NOT_AVAILABLE','',
+          `FRONTEND_ERROR = ${cleanError(error)}`,`TIMESTAMP = ${new Date().toISOString()}`,'','END_AICC_LOCAL_PAGE_STATUS_V1'
+        ].join('\n');
+        const renderFailsafe = async (frontendBoot, error) => {
+          if (failsafeRendered) return;
+          failsafeRendered = true;
+          clearTimeout(bootTimer);
+          const params = new URLSearchParams({ pageRender: 'FAILED', frontendBoot, frontendError: cleanError(error) });
+          let text;
+          try {
+            const response = await fetch(`${FAILSAFE_STATUS_PATH}?${params}`, { cache: 'no-store' });
+            if (!response.ok) throw new Error(`STATUS_HTTP_${response.status}`);
+            text = await response.text();
+          } catch (statusError) { text = localOnlyStatus(frontendBoot, error || statusError); }
+          document.body.textContent = text;
+          document.body.style.cssText = 'margin:16px;white-space:pre-wrap;font:13px/1.45 ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace;color:#111;background:#fff;';
+        };
+        window.__AICC_MARK_FRONTEND_READY__ = () => { if (!usableUi()) return false; bootReady = true; clearTimeout(bootTimer); return true; };
+        window.addEventListener('error', event => {
+          const scriptFailure = event.target && event.target.tagName === 'SCRIPT';
+          if (!bootReady && (event.error || scriptFailure)) void renderFailsafe('SCRIPT_ERROR', event.error || event.message || 'MODULE_SCRIPT_LOAD_FAILED');
+          else if (bootReady && event.error) setTimeout(() => { if (!usableUi()) void renderFailsafe('RUNTIME_ERROR', event.error); }, 0);
+        }, true);
+        window.addEventListener('unhandledrejection', event => {
+          if (!bootReady) void renderFailsafe('SCRIPT_ERROR', event.reason);
+          else setTimeout(() => { if (!usableUi()) void renderFailsafe('RUNTIME_ERROR', event.reason); }, 0);
+        });
+        bootTimer = setTimeout(() => { if (!bootReady) void renderFailsafe('TIMEOUT', 'NOT_AVAILABLE'); }, FRONTEND_BOOT_TIMEOUT_MS);
+      })();
+    </script>
   </head>
   <body>
     <div id="app"></div>
