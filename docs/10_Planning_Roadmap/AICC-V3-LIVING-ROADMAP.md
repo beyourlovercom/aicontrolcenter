@@ -1,15 +1,15 @@
 # AICC V3 Living Roadmap
 
-Roadmap-Revision: 2
+Roadmap-Revision: 3
 Updated-At: 2026-09-04
 Status: `ACTIVE`
 
 ## Current milestone
 
-`V3.1 — Single Server Skeleton`
+`V3.3 — Canonical Roadmap`
 
-Current Work Package: `AICC-V3-CUTOVER-UAT-001`
-Current implementation phase: `V3.1.1 — local 1420 + aicc.b cutover UAT`
+Current Work Package: `AICC-V3-CANONICAL-ROADMAP-001`
+Current implementation phase: `V3.3.1 — read-only canonical roadmap projection`
 
 ## Milestones
 
