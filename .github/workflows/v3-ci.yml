@@ -1,0 +1,44 @@
+name: V3 CI
+
+on:
+  push:
+    branches: [rebuild/aicc-v3-clean]
+  pull_request:
+    branches: [main]
+    paths:
+      - 'v3/**'
+      - 'docs/00_Governance/AICC-V3-CONSTITUTION.md'
+      - 'docs/60_Operations/work-packages/AICC-V3-*'
+      - '.github/workflows/v3-ci.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  verify-v3:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Syntax check
+        working-directory: v3
+        run: |
+          node --check server.mjs
+          node --check lib/project-context.mjs
+          node --check public/app.js
+      - name: V3 tests
+        working-directory: v3
+        run: npm test
+      - name: Legacy boundary scan
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git grep -nE '(\.aicc-v2|1422|dev/aicc-external-project-loading-v1|AICC_LOCAL_PAGE_STATUS_V1)' -- v3 ':!v3/tests/*'; then
+            echo 'Legacy V2 dependency leaked into V3 source'
+            exit 1
+          fi
