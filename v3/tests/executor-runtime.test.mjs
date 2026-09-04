@@ -7,7 +7,7 @@ import {join} from 'node:path';
 import {loadProjectContext} from '../lib/project-context.mjs';
 import {createTask,createWorkPackage} from '../lib/work-store.mjs';
 import {readLease,readRun,readRunEvents} from '../lib/run-store.mjs';
-import {reconcileExecutor,startRun,stopRun} from '../lib/executor-runtime.mjs';
+import {preflightCodex,reconcileExecutor,startRun,stopRun} from '../lib/executor-runtime.mjs';
 
 function git(cwd,...args){return execFileSync('git',args,{cwd,encoding:'utf8'}).trim();}
 function fixture(mode='exit'){
@@ -34,6 +34,15 @@ async function waitFor(context,runId,env,predicate,timeout=6000){
   while(Date.now()<end){const run=readRun(context,runId,env);if(predicate(run))return run;await new Promise(r=>setTimeout(r,40));}
   throw new Error(`timeout waiting for ${runId}`);
 }
+test('preflight repairs launchd-minimal PATH locally without global mutation',()=>{
+  const root=mkdtempSync(join(tmpdir(),'aicc-v3-preflight-'));const fake=join(root,'codex');
+  const script=`#!/usr/bin/env node
+if(process.argv[2]==='doctor'){console.log(JSON.stringify({overallStatus:'ok',codexVersion:'fake-2',checks:{installation:{status:'ok'},'auth.credentials':{status:'ok',details:{'stored auth mode':'chatgpt'}},'network.provider_reachability':{status:'ok'},'config.load':{status:'ok',details:{model:'fake-model'}}}}));}else process.exit(2);
+`;
+  writeFileSync(fake,script);chmodSync(fake,0o755);
+  const result=preflightCodex({PATH:'/usr/bin:/bin'},{codexPath:fake});
+  assert.equal(result.ready,true);assert.equal(result.version,'fake-2');assert.equal(result.authMode,'chatgpt');
+});
 test('detached worker binds exact cwd, args, session and append-only events',async()=>{
   const f=fixture('exit');const instruction='Implement only the scoped fixture.\n';
   const created=startRun(f.context,{taskId:f.task.id,instruction},f.env,f.options);

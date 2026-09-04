@@ -77,8 +77,9 @@ Add the smallest trustworthy Codex execution core to AICC V3 while preserving Pr
 - Detached executor worker, durable Run/Lease store, append-only events, and five frozen runtime APIs implemented.
 - Worker launches only its bound executor from the Run snapshot and owns exact stop handling.
 - Runtime/API suite uses fake Codex only; no real Codex implementation Run was started.
-- CN Mac Node 22 suite: `25/25 PASS`.
+- CN Mac Node 22 suite: `26/26 PASS`.
 - Restart reconciliation and same-repo/different-worktree isolation are covered.
+- LaunchAgent-minimal PATH regression is covered; executor child PATH is repaired locally without global environment mutation.
 
 ## Next exact gate
 

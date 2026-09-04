@@ -17,6 +17,12 @@ function exactInstruction(value){
   if(typeof value!=='string'||!value.trim()||Buffer.byteLength(value,'utf8')>60000)fail('RUN_INSTRUCTION_INVALID');
   return value;
 }
+function executorEnvironment(env,codexPath){
+  const inherited={...process.env,...env};
+  const parts=[dirname(process.execPath),dirname(codexPath),...(inherited.PATH||'').split(':')].filter(Boolean);
+  inherited.PATH=[...new Set(parts)].join(':');
+  return inherited;
+}
 function safeExec(path,args,options={}){
   try{return execFileSync(path,args,{encoding:'utf8',stdio:['ignore','pipe','pipe'],...options}).trim();}
   catch(error){return null;}
@@ -31,7 +37,8 @@ export function resolveCodexPath(env=process.env){
 }
 export function preflightCodex(env=process.env,options={}){
   const codexPath=options.codexPath||resolveCodexPath(env);
-  const raw=(options.execFile||safeExec)(codexPath,['doctor','--json'],{env});
+  const commandEnv=executorEnvironment(env,codexPath);
+  const raw=(options.execFile||safeExec)(codexPath,['doctor','--json'],{env:commandEnv});
   if(!raw)fail('EXECUTOR_PREFLIGHT_FAILED');
   let report;try{report=JSON.parse(raw);}catch{fail('EXECUTOR_PREFLIGHT_FAILED');}
   const checks=report.checks||{};
@@ -77,7 +84,7 @@ export function reconcileExecutor(context,env=process.env,options={}){
 function defaultSpawnWorker(context,run,env){
   const child=spawn(process.execPath,[workerFile,`--run-id=${run.runId}`,`--project-key=${projectStateKey(context)}`],{
     detached:true,stdio:'ignore',cwd:run.repositoryPath,
-    env:{...process.env,...env,AICC_V3_HOME:stateRoot(env)}
+    env:{...executorEnvironment(env,run.executorPath),AICC_V3_HOME:stateRoot(env)}
   });
   child.unref();
   if(!child.pid)fail('EXECUTOR_NOT_READY');
