@@ -2,6 +2,7 @@ import {readFileSync} from 'node:fs';
 import assert from 'node:assert/strict';
 import {resolveOwnerStatusProjection} from './context/ownerStatusProjection.ts';
 import {resolveOwnerWorkflowStages} from './context/ownerStatusProjection.ts';
+import {projectGlobalFocus} from './globalWorkspaceProjection.ts';
 const workflow=readFileSync(new URL('../components/WorkflowTimeline.svelte',import.meta.url),'utf8');
 const roadmap=readFileSync(new URL('../components/RoadmapTree.svelte',import.meta.url),'utf8');
 
@@ -20,6 +21,9 @@ assert.match(actions,/label:'查看当前 UAT'/,'UAT navigation remains availabl
 assert.equal((actions.match(/class="action primary"/g)??[]).length,1,'one primary Owner action');
 assert.match(app,/resolveOwnerStatusProjection\(context,bridgeOutbox\)/,'all owner status surfaces use the shared projection');
 assert.match(app,/resolveOwnerWorkflowStages\(context,bridgeOutbox\)/,'workflow uses the shared owner projection');
+assert.match(app,/projectGlobalFocus\(snapshot,wpProjection,roadmapProjection\)/,'Global Blueprint Current Focus consumes canonical Roadmap current authority');
+const canonicalFocus=projectGlobalFocus({} as any,{records:[{id:'WP-M6',milestoneTitle:'M6 — Old',phase:'READY_FOR_OWNER_UAT'}]} as any,{currentMilestone:'M8 — AICC Lifecycle Intelligence',currentWorkPackage:'AICC_GLOBAL_CANONICAL_LIFECYCLE_PROJECTION_V1',currentPhase:'8.3 — round-closure reconciliation on converged mainline'} as any);
+assert.deepEqual(canonicalFocus,{milestone:'M8 — AICC Lifecycle Intelligence',workPackage:'AICC_GLOBAL_CANONICAL_LIFECYCLE_PROJECTION_V1',phase:'8.3 — round-closure reconciliation on converged mainline'},'canonical Roadmap current_* overrides earlier WP phase inference');
 const feedbackIsland=readFileSync(new URL('../components/GlobalFeedbackIsland.svelte',import.meta.url),'utf8');
 assert.equal((app.match(/<GlobalFeedbackIsland/g)??[]).length,1,'one global feedback renderer owns short feedback');
 assert.match(feedbackIsland,/feedback\.state==='IDLE'/,'the global feedback renderer owns idle suppression');

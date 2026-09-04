@@ -160,7 +160,7 @@
   $: globalWorkPackages=wpProjection?projectGlobalWorkPackages(snapshot,globalTasks,wpProjection):[];
   $: globalMilestones=wpProjection?projectWpRoadmapNodes(projectGlobalMilestones(snapshot),wpProjection):[];
   $: globalOwnerWaiting=globalTasks.filter((item:any)=>['READY','WAITING_OWNER'].includes(String(item.status??item.runtimeState??item.state??'').toUpperCase())).length;
-  $: globalFocus=wpProjection?projectGlobalFocus(snapshot,wpProjection):null;
+  $: globalFocus=wpProjection?projectGlobalFocus(snapshot,wpProjection,roadmapProjection):null;
   $: globalCurrentMilestone=globalFocus?.milestone??null;
   $: globalCurrentWorkPackage=globalFocus?.workPackage??null;
   $: globalCurrentPhase=globalFocus?.phase??null;

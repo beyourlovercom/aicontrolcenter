@@ -3,8 +3,8 @@ import {normalizeRoadmap} from './model/projectModel.ts';
 
 export type RoadmapSourceName='LOCAL'|'GITHUB'|'BOOTSTRAP';
 export type RoadmapSource={source:RoadmapSourceName;content:string};
-export type RoadmapProjection={revision:number|null;source:RoadmapSourceName;contentHash:string;nodes:RoadmapNode[];nodeIds:Set<string>};
-export type PersistedRoadmapProjection={schema_version:'aicc.roadmap.projection.v1';roadmap_revision:number;source:RoadmapSourceName;source_hash:string;accepted_at:string;nodes:RoadmapNode[]};
+export type RoadmapProjection={revision:number|null;source:RoadmapSourceName;contentHash:string;nodes:RoadmapNode[];nodeIds:Set<string>;currentMilestone?:string;currentWorkPackage?:string;currentPhase?:string};
+export type PersistedRoadmapProjection={schema_version:'aicc.roadmap.projection.v1';roadmap_revision:number;source:RoadmapSourceName;source_hash:string;accepted_at:string;nodes:RoadmapNode[];current_milestone?:string;current_work_package?:string;current_phase?:string};
 export type RoadmapSelectionResult={status:'SELECTED'|'EQUAL'|'CONFLICT'|'NO_VALID_REVISION';projection?:RoadmapProjection;reason?:string};
 
 export function parseRoadmapRevision(content:string):number|null{
@@ -33,28 +33,31 @@ function collectIds(nodes:RoadmapNode[],ids=new Set<string>()):Set<string>{
 
 export function compileRoadmapProjection(source:RoadmapSource,extraNodes:RoadmapNode[]=[]):RoadmapProjection{
   const nodes=extraNodes.length?extraNodes:normalizeRoadmap(source.content,false,[]);
-  return {revision:parseRoadmapRevision(source.content),source:source.source,contentHash:canonicalRoadmapHash(source.content),nodes,nodeIds:collectIds(nodes)};
+  const currentMilestone=source.content.match(/^## Current milestone\s*\n\s*`([^`]+)`/mi)?.[1]?.trim();
+  const currentWorkPackage=source.content.match(/^Current Work Package:\s*`([^`]+)`/mi)?.[1]?.trim();
+  const currentPhase=source.content.match(/^Current implementation phase:\s*`([^`]+)`/mi)?.[1]?.trim();
+  return {revision:parseRoadmapRevision(source.content),source:source.source,contentHash:canonicalRoadmapHash(source.content),nodes,nodeIds:collectIds(nodes),...(currentMilestone?{currentMilestone}:{}),...(currentWorkPackage?{currentWorkPackage}:{}),...(currentPhase?{currentPhase}:{})};
 }
 
 export function serializeRoadmapProjection(projection:RoadmapProjection,acceptedAt=new Date().toISOString()):PersistedRoadmapProjection{
   if(projection.revision===null)throw new Error('ROADMAP_REVISION_REQUIRED');
-  return {schema_version:'aicc.roadmap.projection.v1',roadmap_revision:projection.revision,source:projection.source,source_hash:projection.contentHash,accepted_at:acceptedAt,nodes:projection.nodes};
+  return {schema_version:'aicc.roadmap.projection.v1',roadmap_revision:projection.revision,source:projection.source,source_hash:projection.contentHash,accepted_at:acceptedAt,nodes:projection.nodes,...(projection.currentMilestone?{current_milestone:projection.currentMilestone}:{}),...(projection.currentWorkPackage?{current_work_package:projection.currentWorkPackage}:{}),...(projection.currentPhase?{current_phase:projection.currentPhase}:{})};
 }
 
 export function deserializeRoadmapProjection(value:unknown):RoadmapProjection|null{
   if(!value||typeof value!=='object')return null;
-  const readModel=value as {schema?:unknown;read_only?:unknown;source?:unknown;source_hash?:unknown;projection_revision?:unknown;milestones?:unknown};
+  const readModel=value as {schema?:unknown;read_only?:unknown;source?:unknown;source_hash?:unknown;projection_revision?:unknown;current_milestone?:unknown;current_work_package?:unknown;current_phase?:unknown;milestones?:unknown};
   if(readModel.schema==='AICC_ROADMAP_READ_MODEL_V1'){
-    if(readModel.read_only!==true||readModel.source!=='docs/10_Planning_Roadmap/01_LIVING_ROADMAP.md'||typeof readModel.source_hash!=='string'||!Number.isSafeInteger(readModel.projection_revision)||Number(readModel.projection_revision)<=0||!Array.isArray(readModel.milestones))return null;
-    return {revision:Number(readModel.projection_revision),source:'LOCAL',contentHash:readModel.source_hash,nodes:readModel.milestones as RoadmapNode[],nodeIds:collectIds(readModel.milestones as RoadmapNode[])};
+    if(readModel.read_only!==true||readModel.source!=='docs/10_Planning_Roadmap/01_LIVING_ROADMAP.md'||typeof readModel.source_hash!=='string'||!Number.isSafeInteger(readModel.projection_revision)||Number(readModel.projection_revision)<=0||typeof readModel.current_milestone!=='string'||typeof readModel.current_work_package!=='string'||typeof readModel.current_phase!=='string'||!Array.isArray(readModel.milestones))return null;
+    return {revision:Number(readModel.projection_revision),source:'LOCAL',contentHash:readModel.source_hash,nodes:readModel.milestones as RoadmapNode[],nodeIds:collectIds(readModel.milestones as RoadmapNode[]),currentMilestone:readModel.current_milestone,currentWorkPackage:readModel.current_work_package,currentPhase:readModel.current_phase};
   }
   const candidate=value as Partial<PersistedRoadmapProjection>;
-  if(candidate.schema_version!=='aicc.roadmap.projection.v1'||typeof candidate.roadmap_revision!=='number'||!Number.isSafeInteger(candidate.roadmap_revision)||candidate.roadmap_revision<=0||!['LOCAL','GITHUB','BOOTSTRAP'].includes(candidate.source??'')||typeof candidate.source_hash!=='string'||typeof candidate.accepted_at!=='string'||!Array.isArray(candidate.nodes))return null;
+  if(candidate.schema_version!=='aicc.roadmap.projection.v1'||typeof candidate.roadmap_revision!=='number'||!Number.isSafeInteger(candidate.roadmap_revision)||candidate.roadmap_revision<=0||!['LOCAL','GITHUB','BOOTSTRAP'].includes(candidate.source??'')||typeof candidate.source_hash!=='string'||typeof candidate.accepted_at!=='string'||!Array.isArray(candidate.nodes)||candidate.current_milestone!==undefined&&typeof candidate.current_milestone!=='string'||candidate.current_work_package!==undefined&&typeof candidate.current_work_package!=='string'||candidate.current_phase!==undefined&&typeof candidate.current_phase!=='string')return null;
   const revision=candidate.roadmap_revision;
   const source=candidate.source;
   const nodes=candidate.nodes;
   if(revision===undefined||source===undefined||nodes===undefined)return null;
-  return {revision,source,contentHash:candidate.source_hash!,nodes,nodeIds:collectIds(nodes)};
+  return {revision,source,contentHash:candidate.source_hash!,nodes,nodeIds:collectIds(nodes),...(candidate.current_milestone?{currentMilestone:candidate.current_milestone}:{}),...(candidate.current_work_package?{currentWorkPackage:candidate.current_work_package}:{}),...(candidate.current_phase?{currentPhase:candidate.current_phase}:{})};
 }
 
 export function selectRoadmapProjection(local:RoadmapSource,github:RoadmapSource|null):RoadmapSelectionResult{
