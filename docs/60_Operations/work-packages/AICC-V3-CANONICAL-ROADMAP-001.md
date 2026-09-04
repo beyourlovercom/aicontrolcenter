@@ -41,6 +41,18 @@ Add one read-only canonical Roadmap projection to AICC V3, derived only from the
 - browser shows the canonical V3 current milestone/WP/phase;
 - V3 CI passes on exact pushed head.
 
+## Implementation evidence
+
+- CN Mac is the local development/runtime authority.
+- V3 runtime is pinned to Node 22 while global Node 26 remains unchanged.
+- focused V3 tests: `9/9 PASS`.
+- `/api/roadmap`: canonical current state + milestone list PASS.
+- Roadmap authority binds project id, repository identity, repository HEAD, and fixed repo-relative source.
+- missing/invalid Roadmap returns explicit `NOT_AVAILABLE`.
+- browser performs no Markdown parsing and no current-state inference.
+- CN Mac browser DOM precheck: Revision 4 / V3.3 / current WP / V3.3.2 / milestone list PASS.
+- production legacy-boundary scan PASS; old V2 status/branch markers absent from rendered DOM.
+
 ## Next exact gate
 
-Implement the minimal parser/API/UI with focused tests, then commit/push and require exact-head V3 CI PASS before Owner UAT.
+Commit/push the implementation, require exact-head V3 CI PASS, restart CN Mac 1420 on that exact head, then stop at Owner Human UAT.

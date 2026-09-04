@@ -1,6 +1,6 @@
 # AICC V3 Living Roadmap
 
-Roadmap-Revision: 3
+Roadmap-Revision: 4
 Updated-At: 2026-09-04
 Status: `ACTIVE`
 
@@ -9,7 +9,7 @@ Status: `ACTIVE`
 `V3.3 — Canonical Roadmap`
 
 Current Work Package: `AICC-V3-CANONICAL-ROADMAP-001`
-Current implementation phase: `V3.3.1 — read-only canonical roadmap projection`
+Current implementation phase: `V3.3.2 — exact-head CI and Owner UAT`
 
 ## Milestones
 
@@ -56,4 +56,4 @@ Total implementation budget: `55–70h` including bounded rework.
 
 ## Next exact gate
 
-Commit/push `AICC-V3-CUTOVER-UAT-001`, require exact-head V3 CI PASS, then cut over the China Mac local port 1420 and `aicc.b` to the single V3 service and stop at Owner Human UAT.
+Commit/push `AICC-V3-CANONICAL-ROADMAP-001`, require exact-head V3 CI PASS, restart the CN Mac 1420 service on that exact head, then stop at Owner Human UAT.

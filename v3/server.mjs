@@ -3,6 +3,7 @@ import {readFileSync} from 'node:fs';
 import {fileURLToPath} from 'node:url';
 import {dirname,join} from 'node:path';
 import {loadProjectContext,stateRoot} from './lib/project-context.mjs';
+import {loadCanonicalRoadmap} from './lib/roadmap.mjs';
 
 const root=dirname(fileURLToPath(import.meta.url));
 const publicRoot=join(root,'public');
@@ -23,6 +24,10 @@ function projectError(error){
   return {available:false,errorCode:error?.code||'PROJECT_CONTEXT_UNAVAILABLE'};
 }
 
+function roadmapError(error){
+  return {available:false,status:'NOT_AVAILABLE',errorCode:error?.code||'ROADMAP_UNAVAILABLE'};
+}
+
 export function createAiccV3Server(options={}){
   const env=options.env||process.env;
   return createHttpServer((req,res)=>{
@@ -41,6 +46,15 @@ export function createAiccV3Server(options={}){
     if(url.pathname==='/api/project'){
       try{return json(res,200,{available:true,context:loadProjectContext(env)});}
       catch(error){return json(res,503,projectError(error));}
+    }
+
+    if(url.pathname==='/api/roadmap'){
+      try{
+        const context=loadProjectContext(env);
+        return json(res,200,{available:true,roadmap:loadCanonicalRoadmap(context)});
+      }catch(error){
+        return json(res,503,roadmapError(error));
+      }
     }
 
     const asset=assets.get(url.pathname);
