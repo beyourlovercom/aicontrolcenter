@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import {canonicalExecutionDecision} from './fastExecution.ts';
 
-const repo={repository:'/Users/a/AI/007/AIcontrolcenter',branch:'feature/x',head:'sha',localMain:'main',remoteMain:'main',worktree:'CLEAN',lastCommit:'sha'} as const;
+const repo={repository:process.cwd(),branch:'feature/x',head:'sha',localMain:'main',remoteMain:'main',worktree:'CLEAN',lastCommit:'sha'} as const;
 const auth={workPackageId:'WP-1',branch:'feature/x',repositoryRoot:repo.repository,authoritySha:'main'};
 const decide=(options:Parameters<typeof canonicalExecutionDecision>[5]={})=>canonicalExecutionDecision(repo,'WP-1',['src/allowed.ts'],[],[],options);
 assert.equal(decide().decision,'CONTINUE');

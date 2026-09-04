@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import {classifyWorktree,classifyWorktreeFiles,fastPreflight,executionScopeExpansion} from './fastExecution.ts';
+const repository=process.cwd();
 const repo={repository:'/repo',branch:'feature/x',head:'sha',localMain:'main',remoteMain:'main',worktree:'DIRTY',lastCommit:'x'} as const;
 assert.equal(classifyWorktree({...repo,worktree:'CLEAN'},[],[]),'CLEAN');
 assert.equal(classifyWorktree(repo,['runtime/evidence.json'],['runtime/evidence.json']),'KNOWN_IN_SCOPE_DIRTY');
@@ -7,13 +8,13 @@ assert.equal(classifyWorktree(repo,['notes.txt'],['src/allowed.ts'],[],['notes.t
 assert.equal(classifyWorktree(repo,['src/unknown.ts'],['src/allowed.ts']),'UNKNOWN_OR_CONFLICTING_DIRTY');
 assert.equal(classifyWorktree(repo,['src/allowed.ts','src/paused.ts'],['src/allowed.ts'],[],['src/paused.ts']),'KNOWN_NON_CONFLICTING_DIRTY','mixed known WIP warns without generic dirty block');
 assert.deepEqual(classifyWorktreeFiles(['src/allowed.ts','src/paused.ts'],['src/allowed.ts'],[],['src/paused.ts']).map(item=>item.provenance),['KNOWN_IN_SCOPE_DIRTY','KNOWN_NON_CONFLICTING_DIRTY']);
-assert.equal(fastPreflight({...repo,repository:'/Users/a/AI/007/AIcontrolcenter',worktree:'CLEAN'},'WP-1',[]).canContinue,true);
-assert.equal(fastPreflight({...repo,repository:'/Users/a/AI/007/AIcontrolcenter'},'WP-1',['src/allowed.ts'],['src/allowed.ts']).canContinue,true,'known in-scope dirty authorizes');
-assert.equal(fastPreflight({...repo,repository:'/Users/a/AI/007/AIcontrolcenter'},'WP-1',['src/allowed.ts'],['notes.txt'],['notes.txt']).severity,'WARN','known non-conflicting dirty warns');
-assert.equal(fastPreflight({...repo,repository:'/Users/a/AI/007/AIcontrolcenter'},'WP-1',['src/allowed.ts'],['src/unknown.ts']).canContinue,false,'unknown conflict fails closed');
-assert.equal(fastPreflight({...repo,repository:'/Users/a/AI/007/AIcontrolcenter'},'WP-1',['src/allowed.ts'],[],[],{humanUatHardStop:true}).reasonCode,'HUMAN_UAT_HARD_STOP');
-assert.equal(fastPreflight({...repo,repository:'/Users/a/AI/007/AIcontrolcenter',branch:'main'},'WP-1',[]).reasonCode,'FEATURE_BRANCH_REQUIRED');
-const auth={workPackageId:'WP-1',branch:'feature/x',repositoryRoot:'/Users/a/AI/007/AIcontrolcenter',authoritySha:'main'};
+assert.equal(fastPreflight({...repo,repository,worktree:'CLEAN'},'WP-1',[]).canContinue,true);
+assert.equal(fastPreflight({...repo,repository},'WP-1',['src/allowed.ts'],['src/allowed.ts']).canContinue,true,'known in-scope dirty authorizes');
+assert.equal(fastPreflight({...repo,repository},'WP-1',['src/allowed.ts'],['notes.txt'],['notes.txt']).severity,'WARN','known non-conflicting dirty warns');
+assert.equal(fastPreflight({...repo,repository},'WP-1',['src/allowed.ts'],['src/unknown.ts']).canContinue,false,'unknown conflict fails closed');
+assert.equal(fastPreflight({...repo,repository},'WP-1',['src/allowed.ts'],[],[],{humanUatHardStop:true}).reasonCode,'HUMAN_UAT_HARD_STOP');
+assert.equal(fastPreflight({...repo,repository,branch:'main'},'WP-1',[]).reasonCode,'FEATURE_BRANCH_REQUIRED');
+const auth={workPackageId:'WP-1',branch:'feature/x',repositoryRoot:repository,authoritySha:'main'};
 const live={...repo,repository:auth.repositoryRoot};
 assert.equal(fastPreflight({...live,worktree:'CLEAN'},'WP-1',[],[],[],{requireAuthorization:true,authorization:auth}).decision,'CONTINUE');
 assert.equal(fastPreflight(live,'WP-1',['src/a'],['src/a'],[],{requireAuthorization:true,authorization:auth}).decision,'CONTINUE');
