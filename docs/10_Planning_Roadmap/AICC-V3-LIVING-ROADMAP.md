@@ -1,15 +1,15 @@
 # AICC V3 Living Roadmap
 
-Roadmap-Revision: 1
+Roadmap-Revision: 2
 Updated-At: 2026-09-04
 Status: `ACTIVE`
 
 ## Current milestone
 
-`V3.0 — Freeze & Bootstrap`
+`V3.1 — Single Server Skeleton`
 
-Current Work Package: `AICC-V3-CLEAN-BOOTSTRAP-001`
-Current implementation phase: `V3.0.1 — single-service skeleton`
+Current Work Package: `AICC-V3-CUTOVER-UAT-001`
+Current implementation phase: `V3.1.1 — local 1420 + aicc.b cutover UAT`
 
 ## Milestones
 
@@ -56,4 +56,4 @@ Total implementation budget: `55–70h` including bounded rework.
 
 ## Next exact gate
 
-Complete V3.0/V3.1 machine verification on an isolated development port. Do not cut over `aicc.b` or port 1420 until the single-service skeleton and single-project authority tests pass.
+Commit/push `AICC-V3-CUTOVER-UAT-001`, require exact-head V3 CI PASS, then cut over the China Mac local port 1420 and `aicc.b` to the single V3 service and stop at Owner Human UAT.
