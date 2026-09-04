@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {canonicalExecutionDecision} from './fastExecution.ts';
 
-const root='/Users/a/AI/007/AIcontrolcenter';
+const root=process.cwd();
 const clean={repository:root,branch:'feature/x',head:'sha',localMain:'main',remoteMain:'main',worktree:'CLEAN' as const,lastCommit:'sha'};
 const auth={workPackageId:'WP-1',branch:'feature/x',repositoryRoot:root,authoritySha:'main'};
 const matrix=[

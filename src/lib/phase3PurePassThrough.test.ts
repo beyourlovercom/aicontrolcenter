@@ -3,7 +3,7 @@ import {readFileSync} from 'node:fs';
 import {createCanonicalExecutionRequest, submitExecution} from './bridgeCore.ts';
 import {buildPassThroughPrompt} from './runtimeManager.ts';
 
-const root='/Users/a/AI/007/AIcontrolcenter';
+const root=process.cwd();
 const bridge=readFileSync(`${root}/src/lib/bridgeCore.ts`,'utf8');
 const app=readFileSync(`${root}/src/App.svelte`,'utf8');
 const server=readFileSync(`${root}/vite.config.ts`,'utf8');
