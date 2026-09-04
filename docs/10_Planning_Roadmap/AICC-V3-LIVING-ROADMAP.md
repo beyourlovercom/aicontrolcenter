@@ -1,6 +1,6 @@
 # AICC V3 Living Roadmap
 
-Roadmap-Revision: 6
+Roadmap-Revision: 7
 Updated-At: 2026-09-04
 Status: `ACTIVE`
 
@@ -9,7 +9,7 @@ Status: `ACTIVE`
 `V3.4 — WP + Task Core`
 
 Current Work Package: `AICC-V3-WP-TASK-CORE-001`
-Current implementation phase: `V3.4.1 — project-scoped store and API implementation`
+Current implementation phase: `V3.4.2 — minimal WP/Task UI integration`
 
 ## Milestones
 
@@ -56,4 +56,4 @@ Total implementation budget: `55–70h` including bounded rework.
 
 ## Next exact gate
 
-Implement the frozen V3.4 project-scoped store and minimal APIs on CN Mac, pass focused Node-22 tests, then commit/push exact head before any UI work.
+Add the minimal WP/Task UI over the frozen V3.4 APIs only after the exact-head V3.4.1 checkpoint CI passes. Do not add Codex, GPT Bridge, PR delivery, delete, rebind, bulk mutation, or title-edit behavior.

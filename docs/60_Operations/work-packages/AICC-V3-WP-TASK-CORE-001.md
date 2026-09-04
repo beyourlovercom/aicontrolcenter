@@ -50,6 +50,13 @@ Add the smallest durable Work Package + Task core to AICC V3, scoped only to the
 - Task binding to `workPackageId` is immutable.
 - No delete, rebind, bulk mutation, title-edit, Codex, GPT Bridge, or PR behavior in V3.4 core.
 
+## V3.4.1 checkpoint
+
+- Project-scoped `work-store.v1.json` implemented under the frozen contract.
+- Five minimal APIs implemented with ProjectContext re-load on every mutation.
+- Store/API focused tests: `18/18 PASS` on CN Mac Node 22.
+- UI intentionally not changed in this checkpoint.
+
 ## Next exact gate
 
-Implement the project-scoped store and minimal read/create/status APIs with focused tests. Do not add UI until the store/API layer passes locally.
+Commit/push this store/API checkpoint, require exact-head V3 CI PASS, then implement the minimal WP/Task UI over these APIs only.
