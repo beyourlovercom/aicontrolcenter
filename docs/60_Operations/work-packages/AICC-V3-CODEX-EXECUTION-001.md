@@ -1,6 +1,6 @@
 # AICC-V3-CODEX-EXECUTION-001
 
-Status: `ACTIVE / OWNER_AUTHORIZED`
+Status: `CLOSED / OWNER_UAT_PASS`
 
 ## Objective
 
@@ -89,7 +89,12 @@ Add the smallest trustworthy Codex execution core to AICC V3 while preserving Pr
 - UI explicitly states `EXITED does not mean PASS`.
 - Resume, retry, result rewrite, PR, GPT-return, semantic PASS/FAIL controls remain absent.
 - CN Mac Node 22 suite: `28/28 PASS`; real Codex was not invoked by implementation tests.
+## Owner UAT closure
 
-## Next exact gate
-
-Commit/push the V3.5.2 UI checkpoint, require exact-head V3 CI PASS, restart CN Mac 1420 on that exact head, and stop at Owner Human UAT. Do not begin V3.6 before explicit Owner pass.
+- Owner explicitly passed V3.5 on 2026-09-04.
+- Real Codex Run: `f067c013-24d0-4b1f-a831-3ed6425b798e`.
+- Run state: `EXITED`, exit code `0`, Codex session `01a06b9e-7bd0-7423-a3c9-cd44f10c03bd`.
+- Raw Codex output returned `AICC V3.5 CODEX UAT OK` with exact branch/head.
+- Start HEAD and current ProjectContext HEAD matched `72c05e429b54cf3d6ba359654246689c424a325e`; worktree remained clean.
+- Append-only event sequence was continuous `1..14`; active lease released to `null`.
+- Owner Human UAT result: `PASS`.

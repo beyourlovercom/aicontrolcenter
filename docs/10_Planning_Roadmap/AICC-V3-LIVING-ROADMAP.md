@@ -1,15 +1,15 @@
 # AICC V3 Living Roadmap
 
-Roadmap-Revision: 12
+Roadmap-Revision: 13
 Updated-At: 2026-09-04
 Status: `ACTIVE`
 
 ## Current milestone
 
-`V3.5 — Codex Execution`
+`V3.6 — Canonical Result Return`
 
-Current Work Package: `AICC-V3-CODEX-EXECUTION-001`
-Current implementation phase: `V3.5.3 — exact-head CI and Owner UAT`
+Current Work Package: `AICC-V3-CANONICAL-RESULT-RETURN-001`
+Current implementation phase: `V3.6.0 — result contract and persistence gate`
 
 ## Milestones
 
@@ -56,4 +56,4 @@ Total implementation budget: `55–70h` including bounded rework.
 
 ## Next exact gate
 
-Commit/push the minimal V3.5 execution UI, require exact-head V3 CI PASS, restart CN Mac 1420 on that exact head, then stop at Owner Human UAT. Do not begin V3.6 before explicit Owner pass.
+Freeze the V3.6 canonical Result contract: exact Run→Result binding, immutable result identity, durable persistence, reload-safe retrieval, and no AICC semantic rewrite. Do not implement GPT return, PR delivery, or retry/resume behavior in this gate.
