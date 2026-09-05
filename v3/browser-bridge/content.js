@@ -50,26 +50,33 @@
     };
   }
 
-  function nativeActionRow(container){
-    const buttons=[...container.querySelectorAll('button')];
-    const copy=buttons.find(button=>{
+  function nativeActionRow(container,node){
+    const copies=[...container.querySelectorAll('button')].filter(button=>{
       const id=button.getAttribute('data-testid')||'';
       const label=button.getAttribute('aria-label')||button.getAttribute('title')||'';
       return id==='copy-turn-action-button'||/^(copy|复制)$/i.test(label.trim());
     });
-    if(!copy)return null;
-    let row=copy.parentElement;
-    for(let depth=0;row&&depth<5;depth++,row=row.parentElement){
+    if(!copies.length)return null;
+    const bottom=node.getBoundingClientRect().bottom;
+    copies.sort((a,b)=>Math.abs(a.getBoundingClientRect().top-bottom)-Math.abs(b.getBoundingClientRect().top-bottom));
+    const copy=copies[0];let row=copy.parentElement;
+    for(let depth=0;row&&depth<6;depth++,row=row.parentElement){
       if(!container.contains(row))break;
       if(row.querySelectorAll('button').length>=3)return row;
     }
     return null;
   }
+  function actionRowForAssistant(node){
+    let container=node.parentElement;
+    for(let depth=0;container&&depth<12;depth++,container=container.parentElement){
+      const row=nativeActionRow(container,node);if(row)return row;
+    }
+    return null;
+  }
   function injectButtons(){
     for(const node of document.querySelectorAll('[data-message-author-role="assistant"]')){
-      const container=node.closest('article')||node.parentElement;if(!container||container.querySelector(`button[${BUTTON_ATTR}]`))continue;
       const text=assistantText(node);if(!text.trim())continue;
-      const row=nativeActionRow(container);if(!row)continue;
+      const row=actionRowForAssistant(node);if(!row||row.querySelector(`button[${BUTTON_ATTR}]`))continue;
       const button=document.createElement('button');button.type='button';button.textContent='✦ AICC';button.setAttribute(BUTTON_ATTR,'1');button.setAttribute('aria-label','Send this Assistant turn to AICC');
       Object.assign(button.style,{marginLeft:'6px',padding:'3px 8px',minHeight:'28px',border:'1px solid rgba(0,0,0,.18)',borderRadius:'999px',background:'transparent',font:'12px system-ui',lineHeight:'1',cursor:'pointer',whiteSpace:'nowrap'});
       button.addEventListener('click',event=>{event.preventDefault();event.stopPropagation();void openExplicitRun(text);});
