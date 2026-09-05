@@ -147,9 +147,17 @@ chrome.runtime.onMessage.addListener((message,sender,sendResponse)=>{
 async function ensureAlarm(){
   try{await chrome.alarms.create(ALARM,{periodInMinutes:0.5});}catch{}
 }
+async function reinjectOpenChatgptTabs(){
+  let tabs=[];try{tabs=await chrome.tabs.query({url:'https://chatgpt.com/*'});}catch{return;}
+  for(const tab of tabs){
+    if(!Number.isInteger(tab.id))continue;
+    try{await chrome.scripting.executeScript({target:{tabId:tab.id},files:['content.js']});}catch{}
+  }
+}
 
 chrome.alarms.onAlarm.addListener(alarm=>{if(alarm.name===ALARM)void coordinator.pollAll();});
-chrome.runtime.onStartup.addListener(()=>{void ensureAlarm();void autoPair().then(()=>coordinator.pollAll()).catch(()=>{});});
-chrome.runtime.onInstalled.addListener(()=>{void ensureAlarm();void autoPair().catch(()=>{});});
+chrome.runtime.onStartup.addListener(()=>{void ensureAlarm();void reinjectOpenChatgptTabs();void autoPair().then(()=>coordinator.pollAll()).catch(()=>{});});
+chrome.runtime.onInstalled.addListener(()=>{void ensureAlarm();void reinjectOpenChatgptTabs();void autoPair().catch(()=>{});});
 await ensureAlarm();
+void reinjectOpenChatgptTabs();
 void autoPair().then(()=>coordinator.pollAll()).catch(()=>{});

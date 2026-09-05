@@ -2,6 +2,7 @@ const $=id=>document.getElementById(id);
 const BASE='http://127.0.0.1:1420';
 const TOKEN_KEY='aiccBridgeTokenV1';
 const INSTANCE_KEY='aiccBridgeInstanceIdV1';
+const EXPECTED_VERSION='3.8.5';
 function render(value){
   const node=$('status');node.className=`status ${value?.ok&&value?.paired?'ok':value?.ok?'':'bad'}`;
   if(!value?.ok){node.textContent=`Not paired · ${value?.errorCode||'BRIDGE_CLIENT_ERROR'}`;return;}
@@ -29,4 +30,5 @@ $('save').addEventListener('click',async()=>{
   try{await verifyToken(token);$('token').value='';render(await storePairing(token));}
   catch(error){render({ok:false,errorCode:error?.message||'BRIDGE_CLIENT_UNAVAILABLE'});}finally{$('save').disabled=false;}
 });
-void refresh();
+if(chrome.runtime.getManifest().version!==EXPECTED_VERSION)chrome.runtime.reload();
+else void refresh();

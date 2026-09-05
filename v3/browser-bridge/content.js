@@ -1,6 +1,10 @@
 (()=>{
   'use strict';
+  if(globalThis.__AICC_V3_BRIDGE_CONTENT_LOADED__)return;
+  globalThis.__AICC_V3_BRIDGE_CONTENT_LOADED__=true;
   const BUTTON_ATTR='data-aicc-v3-bridge';
+  for(const stale of document.querySelectorAll(`button[${BUTTON_ATTR}]`))stale.remove();
+  document.getElementById('aicc-v3-bridge-modal-host')?.remove();
 
   function conversationId(){
     try{
