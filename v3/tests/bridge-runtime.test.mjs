@@ -103,3 +103,17 @@ test('credential is owner-only and all four Bridge APIs require it without leaki
     const receiptResponse=await fetch(`${base}/api/bridge/requests/${created.request.requestId}/receipt`,{method:'POST',headers,body:JSON.stringify({claimId:claim.claim.claimId,outcome:'DELIVERED',conversationId:'conv-explicit-1',contentSha256:claim.delivery.contentSha256})});const receipt=await receiptResponse.json();assert.equal(receiptResponse.status,200);assert.equal(receipt.state.deliveryState,'DELIVERED');assert.equal(JSON.stringify(receipt).includes(token),false);
   }finally{await new Promise(resolve=>server.close(resolve));}
 });
+
+test('Browser Bridge CORS is extension-only, non-wildcard, and supports preflight',async()=>{
+  const f=fixture();const token=ensureBridgeCredential(f.env,{token:'test-cors-token-00000000000000000000000000'});
+  const server=createAiccV3Server({env:f.env,executorOptions:f.executorOptions,bridgeOptions:{executorOptions:f.executorOptions,runUuid:f.bridgeOptions.runUuid,claimUuid:f.bridgeOptions.claimUuid}});
+  await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));const base=`http://127.0.0.1:${server.address().port}`;
+  const origin='chrome-extension://abcdefghijklmnopabcdefghijklmnop';
+  try{
+    const preflight=await fetch(`${base}/api/bridge/requests/00000000-0000-4000-8000-000000000000`,{method:'OPTIONS',headers:{origin,'access-control-request-method':'GET','access-control-request-headers':'x-aicc-bridge-token'}});
+    assert.equal(preflight.status,204);assert.equal(preflight.headers.get('access-control-allow-origin'),origin);assert.notEqual(preflight.headers.get('access-control-allow-origin'),'*');assert.match(preflight.headers.get('access-control-allow-headers')||'',/x-aicc-bridge-token/);
+    const work=await fetch(`${base}/api/work`,{headers:{origin}});assert.equal(work.status,200);assert.equal(work.headers.get('access-control-allow-origin'),origin);
+    const bridge=await fetch(`${base}/api/bridge/requests/00000000-0000-4000-8000-000000000000`,{headers:{origin,'x-aicc-bridge-token':token}});assert.equal(bridge.status,400);assert.equal(bridge.headers.get('access-control-allow-origin'),origin);
+    const denied=await fetch(`${base}/api/bridge/requests/00000000-0000-4000-8000-000000000000`,{method:'OPTIONS',headers:{origin:'https://chatgpt.com','access-control-request-method':'GET'}});assert.equal(denied.status,403);assert.equal(denied.headers.get('access-control-allow-origin'),null);
+  }finally{await new Promise(resolve=>server.close(resolve));}
+});

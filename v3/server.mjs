@@ -23,6 +23,25 @@ function json(res,status,body){
   res.writeHead(status,{'content-type':'application/json; charset=utf-8','cache-control':'no-store'});
   res.end(JSON.stringify(body));
 }
+function extensionOrigin(req){
+  const origin=req.headers.origin;
+  return typeof origin==='string'&&/^chrome-extension:\/\/[a-p]{32}$/.test(origin)?origin:null;
+}
+function handleExtensionCors(req,res,url){
+  const corsPath=url.pathname.startsWith('/api/bridge/')||url.pathname==='/api/work';
+  const rawOrigin=req.headers.origin;
+  if(!corsPath||typeof rawOrigin!=='string')return false;
+  const origin=extensionOrigin(req);
+  if(!origin){json(res,403,{ok:false,errorCode:'BRIDGE_ORIGIN_DENIED'});return true;}
+  res.setHeader('access-control-allow-origin',origin);
+  res.setHeader('vary','Origin');
+  res.setHeader('access-control-allow-methods','GET, POST, OPTIONS');
+  res.setHeader('access-control-allow-headers','content-type, x-aicc-bridge-token');
+  res.setHeader('access-control-max-age','600');
+  if(req.headers['access-control-request-private-network']==='true')res.setHeader('access-control-allow-private-network','true');
+  if(req.method==='OPTIONS'){res.writeHead(204,{'cache-control':'no-store'});res.end();return true;}
+  return false;
+}
 function projectError(error){return {available:false,errorCode:error?.code||'PROJECT_CONTEXT_UNAVAILABLE'};}
 function roadmapError(error){return {available:false,status:'NOT_AVAILABLE',errorCode:error?.code||'ROADMAP_UNAVAILABLE'};}
 function workErrorStatus(code){
@@ -100,6 +119,7 @@ export function createAiccV3Server(options={}){
   try{reconcileBridgeStartup(loadProjectContext(env),env,bridgeOptions);}catch{}
   return createHttpServer(async(req,res)=>{
     const url=new URL(req.url||'/',`http://${req.headers.host||'localhost'}`);
+    if(handleExtensionCors(req,res,url))return;
     if(req.method==='GET'&&url.pathname==='/api/health'){
       try{
         const context=loadProjectContext(env);
