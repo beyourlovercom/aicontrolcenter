@@ -5,7 +5,7 @@ const BASE='http://127.0.0.1:1420';
 const TOKEN_KEY='aiccBridgeTokenV1';
 const ALARM='aicc-v3-bridge-poll';
 
-try{await chrome.storage.local.setAccessLevel({accessLevel:'TRUSTED_CONTEXTS'});}catch{}
+try{void chrome.storage.local.setAccessLevel({accessLevel:'TRUSTED_CONTEXTS'}).catch(()=>{});}catch{}
 
 const storage={
   async get(key){const value=await chrome.storage.local.get(key);return value[key];},
@@ -141,7 +141,7 @@ chrome.runtime.onMessage.addListener((message,sender,sendResponse)=>{
       const senderConversation=conversationFromUrl(sender.tab.url);
       const supplied=conversationFromUrl(message.url);
       if(senderConversation.conversationId!==supplied.conversationId)throw Object.assign(new Error('BRIDGE_CONVERSATION_MISMATCH'),{code:'BRIDGE_CONVERSATION_MISMATCH'});
-      const result=await coordinator.submitAction({url:sender.tab.url,tabId:sender.tab.id,taskId:message.taskId,instruction:message.instruction});
+      const result=await coordinator.submitAction({url:sender.tab.url,tabId:sender.tab.id,taskId:message.taskId||null,workPackageTitle:message.workPackageTitle||null,taskTitle:message.taskTitle||null,instruction:message.instruction});
       void burstPoll();return sendResponse({ok:true,requestId:result.ledger.requestId,runId:result.ledger.runId});
     }
     return sendResponse({ok:false,errorCode:'BRIDGE_CLIENT_MESSAGE_INVALID'});
@@ -162,6 +162,6 @@ async function reinjectOpenChatgptTabs(){
 chrome.alarms.onAlarm.addListener(alarm=>{if(alarm.name===ALARM)void coordinator.pollAll();});
 chrome.runtime.onStartup.addListener(()=>{void ensureAlarm();void reinjectOpenChatgptTabs();void autoPair().then(()=>coordinator.pollAll()).catch(()=>{});});
 chrome.runtime.onInstalled.addListener(()=>{void ensureAlarm();void reinjectOpenChatgptTabs();void autoPair().catch(()=>{});});
-await ensureAlarm();
+void ensureAlarm();
 void reinjectOpenChatgptTabs();
 void autoPair().then(()=>coordinator.pollAll()).catch(()=>{});

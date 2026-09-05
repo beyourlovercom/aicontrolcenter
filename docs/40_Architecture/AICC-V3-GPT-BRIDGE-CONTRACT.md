@@ -47,7 +47,7 @@ Every Bridge request must carry these immutable origin facts:
 - non-empty opaque `conversationId`;
 - non-empty opaque `originTurnId`;
 - non-empty UUID `requestId` generated and persisted by the Bridge before the first network submission;
-- exact existing `taskId`;
+- exact Assistant-supplied execution binding: either a legacy exact existing `taskId`, or exact `workPackageTitle` + `taskTitle` that AICC materializes deterministically from the persisted `requestId`;
 - exact instruction string.
 
 `conversationId` must come from an explicit stable conversation identity available to the Bridge. If none is available, fail `BRIDGE_CONVERSATION_ID_UNAVAILABLE`.
@@ -69,14 +69,17 @@ No automatic run is triggered merely because a ChatGPT page renders or rerenders
 
 ## Request idempotency and Task binding
 
-`POST /api/bridge/requests` accepts only explicit `requestId`, origin identity, `taskId`, and exact `instruction`.
+`POST /api/bridge/requests` accepts explicit `requestId`, origin identity, exact `instruction`, and one exact execution binding mode:
+
+- legacy: exact existing `taskId`; or
+- Browser Bridge automatic binding: exact Assistant-supplied `workPackageTitle` + `taskTitle`.
 
 AICC re-loads current `ProjectContext` and Work Store for every request.
-The Task must exist in the current project; no implicit Task creation or selection occurs.
+For automatic binding, AICC derives deterministic WP/Task IDs from the already-persisted `requestId`, creates them idempotently in the canonical Work Store, and then starts the Run. Auto binding is the default. The Owner may explicitly select an existing exact Task for standalone assignment; AICC never chooses a latest/active Task by inference.
 
 AICC computes the instruction SHA-256 itself.
 Re-submitting the same `requestId` with identical immutable binding returns the existing request/Run correlation.
-Reusing a `requestId` with any different conversation, origin turn, Task, or instruction hash fails `BRIDGE_REQUEST_CONFLICT`.
+Reusing a `requestId` with any different conversation, origin turn, materialized Task/WP binding, or instruction hash fails `BRIDGE_REQUEST_CONFLICT`.
 
 Request submission may be retried up to 3 transport attempts by the Bridge, always with the same persisted `requestId`.
 

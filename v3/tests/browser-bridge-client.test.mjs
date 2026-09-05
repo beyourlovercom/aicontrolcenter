@@ -37,6 +37,13 @@ test('conversation binding is explicit from chatgpt.com /c/ identity only',()=>{
   assert.equal(action.instruction,'exact\n');
 });
 
+test('automatic origin binding carries Assistant WP/Task titles while manual exact Task remains supported',()=>{
+  const auto=createOriginBinding({url:'https://chatgpt.com/c/conv-auto',workPackageTitle:'WP Auto',taskTitle:'Task Auto',instruction:'auto exact'},ids());
+  assert.equal(auto.taskId,null);assert.equal(auto.workPackageTitle,'WP Auto');assert.equal(auto.taskTitle,'Task Auto');
+  const manual=createOriginBinding({url:'https://chatgpt.com/c/conv-manual',taskId:'task-existing',instruction:'manual exact'},ids());
+  assert.equal(manual.taskId,'task-existing');assert.equal(manual.workPackageTitle,null);assert.equal(manual.taskTitle,null);
+});
+
 test('requestId and originTurnId are persisted before first network submission',async()=>{
   const storage=memoryStorage();let seen=null;
   const api={...baseApi(),async createRequest(body){
@@ -95,7 +102,8 @@ test('extension manifest and source keep credential privileged and forbid active
   const options=readFileSync(join(root,'browser-bridge/options.js'),'utf8');
   const content=readFileSync(join(root,'browser-bridge/content.js'),'utf8');
   const pairing=readFileSync(join(root,'scripts/copy-bridge-pairing-token.mjs'),'utf8');
-  assert.match(background,/TRUSTED_CONTEXTS/);assert.match(background,/x-aicc-bridge-token/);assert.match(background,/api\/bridge\/bootstrap/);assert.match(background,/autoPair/);assert.match(background,/chrome\.scripting\.executeScript/);assert.match(background,/reinjectOpenChatgptTabs/);
+  assert.match(background,/TRUSTED_CONTEXTS/);assert.match(background,/x-aicc-bridge-token/);assert.match(background,/api\/bridge\/bootstrap/);assert.match(background,/autoPair/);assert.match(background,/chrome\.scripting\.executeScript/);assert.match(background,/reinjectOpenChatgptTabs/);assert.match(background,/AICC_LIST_TASKS/);
+  assert.equal(background.split('\n').some(line=>line.length>0&&!/^\s/.test(line)&&/\bawait\b/.test(line)),false,'MV3 service-worker event registration must not be delayed by top-level await');
   assert.match(options,/api\/bridge\/bootstrap/);assert.match(options,/chrome\.storage\.local\.set/);assert.match(options,/aiccBridgeTokenV1/);assert.equal(options.includes('console.log'),false);
   assert.equal(/chrome\.tabs\.query\(\{\s*active\s*:/.test(background),false);assert.equal(background.includes('currentWindow:true'),false);
   assert.equal(content.includes('x-aicc-bridge-token'),false);assert.equal(content.includes('aiccBridgeTokenV1'),false);assert.equal(content.includes('chrome.storage'),false);assert.match(content,/__AICC_V3_BRIDGE_CONTENT_VERSION__/);assert.match(content,/BRIDGE_BACKGROUND_TIMEOUT/);assert.match(content,/chrome\.runtime\.sendMessage\(\{type,\.\.\.payload\},response=>/);assert.match(background,/AbortController/);assert.match(content,/__AICC_V3_BRIDGE_CLEANUP__/);

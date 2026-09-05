@@ -21,7 +21,9 @@ export function exactInstruction(value){
 }
 export function createOriginBinding(input,ids={}){
   const {conversationId,conversationUrl}=conversationFromUrl(input?.url);
-  const taskId=nonEmpty(input?.taskId,'BRIDGE_TASK_NOT_FOUND');
+  const taskId=typeof input?.taskId==='string'&&input.taskId.trim()?input.taskId.trim():null;
+  const workPackageTitle=taskId?null:nonEmpty(input?.workPackageTitle,'BRIDGE_WORK_PACKAGE_TITLE_REQUIRED').trim();
+  const taskTitle=taskId?null:nonEmpty(input?.taskTitle,'BRIDGE_TASK_TITLE_REQUIRED').trim();
   const instruction=exactInstruction(input?.instruction);
   const uuid=ids.uuid||crypto.randomUUID.bind(crypto);
   return {
@@ -31,19 +33,23 @@ export function createOriginBinding(input,ids={}){
     conversationId,
     conversationUrl,
     taskId,
+    workPackageTitle,
+    taskTitle,
     instruction
   };
 }
 
 export function requestBody(binding){
-  return {
+  const body={
     provider:BRIDGE_PROVIDER,
     requestId:binding.requestId,
     conversationId:binding.conversationId,
     originTurnId:binding.originTurnId,
-    taskId:binding.taskId,
     instruction:binding.instruction
   };
+  if(binding.taskId)body.taskId=binding.taskId;
+  else{body.workPackageTitle=binding.workPackageTitle;body.taskTitle=binding.taskTitle;}
+  return body;
 }
 
 export function sameConversation(expected,url){

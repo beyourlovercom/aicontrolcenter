@@ -5,7 +5,7 @@ import {mkdtempSync,mkdirSync,statSync,writeFileSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {loadProjectContext} from '../lib/project-context.mjs';
-import {createTask,createWorkPackage} from '../lib/work-store.mjs';
+import {createTask,createWorkPackage,readWorkStore} from '../lib/work-store.mjs';
 import {appendRunEvent,releaseLease,updateRun} from '../lib/run-store.mjs';
 import {credentialFile,ensureBridgeCredential,readBridgeEvents,readBridgeState} from '../lib/bridge-store.mjs';
 import {bridgeProjection,claimBridgeDelivery,reconcileBridgeStartup,recordBridgeReceipt,submitBridgeRequest} from '../lib/bridge-runtime.mjs';
@@ -31,6 +31,19 @@ function completeRun(f,runId,content='  EXACT RESULT\nline2\n'){
   appendRunEvent(f.context,runId,'PROCESS_EXITED','EXECUTOR_WORKER',{exitCode:0},f.env);
   updateRun(f.context,runId,{state:'EXITED',exitCode:0},f.env);releaseLease(f.context,runId,f.env);return {content,raw};
 }
+
+test('automatic Bridge binding materializes deterministic WP and Task without Owner selection',()=>{
+  const f=fixture();
+  const auto={provider:'chatgpt-web',requestId:'30000000-0000-4000-8000-000000000088',conversationId:'conv-auto-1',originTurnId:'origin-auto-1',workPackageTitle:'Assistant planned WP',taskTitle:'Assistant planned Task',instruction:'Execute exact Assistant plan.\n'};
+  const first=submitBridgeRequest(f.context,auto,f.env,{...f.bridgeOptions,runUuid:()=> '10000000-0000-4000-8000-000000000088'});
+  const store=readWorkStore(f.context,f.env);
+  const task=store.tasks.find(item=>item.id===first.request.taskId);const wp=store.workPackages.find(item=>item.id===first.request.workPackageId);
+  assert.equal(wp.title,'Assistant planned WP');assert.equal(task.title,'Assistant planned Task');assert.equal(task.workPackageId,wp.id);
+  const second=submitBridgeRequest(f.context,auto,f.env,{...f.bridgeOptions,runUuid:()=> '10000000-0000-4000-8000-000000000099'});
+  assert.equal(second.created,false);assert.equal(second.request.taskId,first.request.taskId);assert.equal(second.request.workPackageId,first.request.workPackageId);
+  const after=readWorkStore(f.context,f.env);assert.equal(after.workPackages.filter(item=>item.id===wp.id).length,1);assert.equal(after.tasks.filter(item=>item.id===task.id).length,1);
+  assert.throws(()=>submitBridgeRequest(f.context,{...auto,taskTitle:'Drifted Task'},f.env,f.bridgeOptions),e=>e.code==='BRIDGE_REQUEST_CONFLICT');
+});
 
 test('Bridge request is idempotent and cannot drift origin, Task or instruction',()=>{
   const f=fixture();const first=submitBridgeRequest(f.context,input(f),f.env,f.bridgeOptions);

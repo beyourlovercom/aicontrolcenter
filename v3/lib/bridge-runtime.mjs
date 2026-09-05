@@ -1,7 +1,7 @@
-import {randomUUID} from 'node:crypto';
+import {createHash,randomUUID} from 'node:crypto';
 import {readRun} from './run-store.mjs';
 import {readOrMaterializeResult} from './result-store.mjs';
-import {readWorkStore} from './work-store.mjs';
+import {createTask,createWorkPackage,readWorkStore} from './work-store.mjs';
 import {startRun} from './executor-runtime.mjs';
 import {appendBridgeEvent,createBridgeRequest,createDelivery,createReceipt,listBridgeRequestIds,readBridgeRequest,readBridgeState,readDelivery,readReceipt,sha256,updateBridgeState} from './bridge-store.mjs';
 
@@ -9,26 +9,48 @@ function fail(code,detail=''){const error=new Error(detail?`${code}: ${detail}`:
 function text(value,code,max=4096){if(typeof value!=='string'||!value.trim()||value.length>max)fail(code);return value;}
 function uuid(value){if(typeof value!=='string'||!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value))fail('BRIDGE_REQUEST_INVALID');return value;}
 function exactInstruction(value){if(typeof value!=='string'||!value.trim()||Buffer.byteLength(value,'utf8')>60000)fail('BRIDGE_REQUEST_INVALID');return value;}
-function taskBinding(context,taskId,env){
+function existingTaskBinding(context,taskId,env){
   const store=readWorkStore(context,env);const task=store.tasks.find(item=>item.id===taskId);if(!task)fail('BRIDGE_TASK_NOT_FOUND');
   const wp=store.workPackages.find(item=>item.id===task.workPackageId);if(!wp)fail('BRIDGE_TASK_NOT_FOUND');return {task,wp};
+}
+function derivedUuid(requestId,label){
+  const chars=createHash('sha256').update(requestId).update('\0').update(label).digest('hex').slice(0,32).split('');
+  chars[12]='5';chars[16]=['8','9','a','b'][parseInt(chars[16],16)%4];const hex=chars.join('');
+  return `${hex.slice(0,8)}-${hex.slice(8,12)}-${hex.slice(12,16)}-${hex.slice(16,20)}-${hex.slice(20)}`;
+}
+function automaticTaskBinding(context,input,env,options={}){
+  const requestId=uuid(input?.requestId);
+  const workPackageTitle=text(input?.workPackageTitle,'BRIDGE_WORK_PACKAGE_TITLE_REQUIRED',240);
+  const taskTitle=text(input?.taskTitle,'BRIDGE_TASK_TITLE_REQUIRED',240);
+  const workPackageId=derivedUuid(requestId,'work-package');const taskId=derivedUuid(requestId,'task');
+  let store=readWorkStore(context,env);let wp=store.workPackages.find(item=>item.id===workPackageId);
+  if(wp&&wp.title!==workPackageTitle)fail('BRIDGE_REQUEST_CONFLICT');
+  if(!wp)wp=createWorkPackage(context,{title:workPackageTitle,status:'ACTIVE'},env,{uuid:()=>workPackageId,now:options.now}).workPackage;
+  store=readWorkStore(context,env);let task=store.tasks.find(item=>item.id===taskId);
+  if(task&&(task.workPackageId!==wp.id||task.title!==taskTitle))fail('BRIDGE_REQUEST_CONFLICT');
+  if(!task)task=createTask(context,{workPackageId:wp.id,title:taskTitle,status:'TODO'},env,{uuid:()=>taskId,now:options.now}).task;
+  return {task,wp};
+}
+function taskBinding(context,input,env,options={}){
+  if(typeof input?.taskId==='string'&&input.taskId.trim())return existingTaskBinding(context,input.taskId.trim(),env);
+  return automaticTaskBinding(context,input,env,options);
 }
 function requestCandidate(context,input,binding,runId,now){
   const instruction=exactInstruction(input.instruction);
   return {schema:'aicc.v3.bridge-request.v1',requestId:uuid(input.requestId),provider:input.provider,conversationId:text(input.conversationId,'BRIDGE_CONVERSATION_ID_UNAVAILABLE'),originTurnId:text(input.originTurnId,'BRIDGE_ORIGIN_TURN_ID_REQUIRED'),taskId:binding.task.id,workPackageId:binding.wp.id,instructionSha256:sha256(instruction),runId,projectId:context.project.id,repositoryIdentity:context.repository.identity,repositoryPath:context.repository.path,createdAt:now()};
 }
-function sameBinding(existing,input,instructionHash){
-  return existing.provider===input.provider&&existing.conversationId===input.conversationId&&existing.originTurnId===input.originTurnId&&existing.taskId===input.taskId&&existing.instructionSha256===instructionHash;
+function sameBinding(existing,input,binding,instructionHash){
+  return existing.provider===input.provider&&existing.conversationId===input.conversationId&&existing.originTurnId===input.originTurnId&&existing.taskId===binding.task.id&&existing.workPackageId===binding.wp.id&&existing.instructionSha256===instructionHash;
 }
 function startExactRun(context,request,instruction,env,options){
   try{return (options.startRun||startRun)(context,{taskId:request.taskId,instruction},env,{...(options.executorOptions||{}),uuid:()=>request.runId});}
   catch(error){if(error?.code==='RUN_TASK_NOT_FOUND')fail('BRIDGE_TASK_NOT_FOUND');const next=new Error('BRIDGE_RUN_BINDING_FAILED');next.code='BRIDGE_RUN_BINDING_FAILED';next.causeCode=error?.code||null;throw next;}
 }
 export function submitBridgeRequest(context,input,env=process.env,options={}){
-  if(input?.provider!=='chatgpt-web')fail('BRIDGE_REQUEST_INVALID');uuid(input?.requestId);const instruction=exactInstruction(input?.instruction);const binding=taskBinding(context,input?.taskId,env);
+  if(input?.provider!=='chatgpt-web')fail('BRIDGE_REQUEST_INVALID');uuid(input?.requestId);const instruction=exactInstruction(input?.instruction);const binding=taskBinding(context,input,env,options);
   let request;let created=false;
   try{request=readBridgeRequest(context,input.requestId,env);}catch(error){if(error?.code!=='BRIDGE_REQUEST_INVALID')throw error;}
-  if(request){if(!sameBinding(request,input,sha256(instruction)))fail('BRIDGE_REQUEST_CONFLICT');}
+  if(request){if(!sameBinding(request,input,binding,sha256(instruction)))fail('BRIDGE_REQUEST_CONFLICT');}
   else{
     request=requestCandidate(context,input,binding,(options.runUuid||randomUUID)(),options.now||(()=>new Date().toISOString()));
     createBridgeRequest(context,request,env);appendBridgeEvent(context,request.requestId,'REQUEST_CREATED',{taskId:request.taskId,runId:request.runId},env,options);created=true;
