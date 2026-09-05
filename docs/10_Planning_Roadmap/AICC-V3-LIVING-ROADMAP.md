@@ -1,6 +1,6 @@
 # AICC V3 Living Roadmap
 
-Roadmap-Revision: 19
+Roadmap-Revision: 20
 Updated-At: 2026-09-04
 Status: `ACTIVE`
 
@@ -9,7 +9,7 @@ Status: `ACTIVE`
 `V3.7 — PR Delivery`
 
 Current Work Package: `AICC-V3-PR-DELIVERY-001`
-Current implementation phase: `V3.7.2 — minimal PR Delivery UI integration`
+Current implementation phase: `V3.7.3 — exact-head CI and Owner UAT`
 
 ## Milestones
 
@@ -56,4 +56,4 @@ Total implementation budget: `55–70h` including bounded rework.
 
 ## Next exact gate
 
-Commit and push the V3.7.1 GitHub facts / Draft-only API checkpoint and require exact-head V3 CI PASS. Then add only the minimal PR Delivery UI: read-only repository/remote/check/PR facts plus one explicit Create Draft PR form. No merge, close, edit, ready, release, or deploy controls.
+Commit and push the V3.7.2 minimal PR Delivery UI checkpoint, require exact-head V3 CI PASS, deploy that exact head to CN Mac `aicc.b`, and stop for Human Owner UAT. Owner may explicitly create one Draft PR during UAT; AICC must expose no merge, close, edit, ready, approve, release, or deploy action.

@@ -244,6 +244,63 @@ $('stop-run').addEventListener('click',async()=>{
   }catch(error){setExecutorMessage(`Stop 失败 · ${error.message}`,'error');}
 });
 
+function setPrMessage(message,state=''){
+  $('pr-message').textContent=message;$('pr-message').dataset.state=state;
+}
+function renderCheck(check){
+  const card=document.createElement('article');card.className='entity-card';
+  const top=document.createElement('div');top.className='entity-top';
+  const name=document.createElement('strong');name.textContent=check.name;
+  const badge=document.createElement('span');badge.className='status-badge';badge.textContent=`${check.status}${check.conclusion?` / ${check.conclusion}`:''}`;
+  top.append(name,badge);card.append(top);
+  const meta=document.createElement('div');meta.className='entity-meta';meta.textContent=`HEAD ${check.headSha} · check ${check.id}`;card.append(meta);
+  return card;
+}
+function renderPullRequest(pr){
+  const card=document.createElement('article');card.className='entity-card';
+  const top=document.createElement('div');top.className='entity-top';
+  const title=document.createElement('strong');title.textContent=`#${pr.number} · ${pr.title}`;
+  const badge=document.createElement('span');badge.className='status-badge';badge.textContent=`${pr.state}${pr.isDraft?' · DRAFT':''}`;
+  top.append(title,badge);card.append(top);
+  const meta=document.createElement('div');meta.className='entity-meta';meta.textContent=`${pr.headRefName}@${pr.headRefOid} → ${pr.baseRefName}`;card.append(meta);
+  if(pr.url){const link=document.createElement('a');link.href=pr.url;link.target='_blank';link.rel='noreferrer';link.textContent='Open on GitHub';link.className='pr-link';card.append(link);}
+  return card;
+}
+function renderPrDelivery(delivery){
+  $('pr-repository').textContent=delivery.repository.identity;
+  $('pr-default-branch').textContent=delivery.repository.defaultBranch;
+  $('pr-local-head').textContent=delivery.local.head;
+  $('pr-remote-head').textContent=delivery.origin.remoteHeadSha||'NOT FOUND';
+  const ready=Boolean(delivery.draftPrerequisites?.ready);
+  $('pr-readiness').textContent=ready?'DRAFT PREREQUISITES READY':'DRAFT PR BLOCKED';
+  $('pr-status').textContent=delivery.origin.exactHeadMatch?'GITHUB EXACT-HEAD FACTS AVAILABLE':'GITHUB HEAD MISMATCH';
+  $('pr-status').dataset.state=delivery.origin.exactHeadMatch?'ok':'error';
+  const base=$('pr-base');base.replaceChildren();base.append(option(delivery.repository.defaultBranch));base.value=delivery.repository.defaultBranch;
+  const existing=delivery.pullRequests.find(pr=>pr.headRefName===delivery.local.branch&&pr.baseRefName===delivery.repository.defaultBranch);
+  $('create-draft-pr').disabled=!ready||Boolean(existing);
+  const checks=$('pr-checks');checks.replaceChildren();
+  if(delivery.checks.length===0){const empty=document.createElement('p');empty.className='empty';empty.textContent='暂无 exact-head check';checks.append(empty);}
+  for(const check of delivery.checks)checks.append(renderCheck(check));
+  const prs=$('pr-list');prs.replaceChildren();
+  if(delivery.pullRequests.length===0){const empty=document.createElement('p');empty.className='empty';empty.textContent='当前 head 暂无 open PR';prs.append(empty);}
+  for(const pr of delivery.pullRequests)prs.append(renderPullRequest(pr));
+  if(existing)setPrMessage(`Draft PR creation unavailable · open PR #${existing.number} already exists for this head/base.`,'');
+  else if(!ready)setPrMessage(`Draft PR blocked · ${(delivery.draftPrerequisites?.blockers||[]).join(', ')||'UNKNOWN'}`,'error');
+  $('pr-delivery').hidden=false;
+}
+async function loadPrDelivery(){
+  const body=await api('/api/pr-delivery');renderPrDelivery(body.delivery);return body.delivery;
+}
+$('draft-pr-form').addEventListener('submit',async event=>{
+  event.preventDefault();
+  const title=$('pr-title').value.trim();const body=$('pr-body').value;const baseRef=$('pr-base').value;
+  try{
+    const response=await api('/api/prs/draft',{method:'POST',body:{title,body,baseRef}});
+    setPrMessage(`Draft PR #${response.pullRequest.number} 已由 GitHub 创建。`,'ok');
+    await loadPrDelivery();
+  }catch(error){setPrMessage(`Create Draft PR 失败 · ${error.message}`,'error');}
+});
+
 async function boot(){
   try{
     const projectBody=await api('/api/project');renderProject(projectBody.context);
@@ -256,6 +313,8 @@ async function boot(){
   catch(error){$('work').hidden=false;$('work-status').textContent=`WORK STORE NOT AVAILABLE · ${error.message}`;$('work-status').dataset.state='error';}
   try{await loadExecutor();}
   catch(error){$('executor').hidden=false;$('executor-status').textContent=`EXECUTOR NOT AVAILABLE · ${error.message}`;$('executor-status').dataset.state='error';}
+  try{await loadPrDelivery();}
+  catch(error){$('pr-delivery').hidden=false;$('pr-status').textContent=`PR DELIVERY NOT AVAILABLE · ${error.message}`;$('pr-status').dataset.state='error';$('create-draft-pr').disabled=true;}
 }
 
 boot();

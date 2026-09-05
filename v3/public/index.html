@@ -86,7 +86,30 @@
         </section>
       </div>
     </section>
-    <footer>V3.6 · canonical Result display · no V2 fallback · no browser semantic inference</footer>
+    <section class="pr-delivery" id="pr-delivery" hidden>
+      <div class="pr-status" id="pr-status">正在读取 GitHub PR Delivery facts…</div>
+      <div class="section-heading"><div><span>PR Delivery</span><h2>GitHub exact-head delivery facts</h2></div><strong id="pr-readiness"></strong></div>
+      <div class="pr-facts">
+        <article><span>Repository</span><strong id="pr-repository"></strong></article>
+        <article><span>Default Branch</span><strong id="pr-default-branch"></strong></article>
+        <article><span>Local HEAD</span><strong id="pr-local-head"></strong></article>
+        <article><span>Remote HEAD</span><strong id="pr-remote-head"></strong></article>
+      </div>
+      <div class="transport-note">Transport only. Exact-head CI and PR facts are GitHub-provided; AICC does not infer merge readiness or engineering PASS.</div>
+      <div class="pr-columns">
+        <div><h3>Exact-head Checks</h3><div class="entity-list" id="pr-checks"></div></div>
+        <div><h3>Open PRs for this head</h3><div class="entity-list" id="pr-list"></div></div>
+      </div>
+      <form id="draft-pr-form" class="pr-form">
+        <h3>Create Draft PR</h3>
+        <label>Base<select id="pr-base" name="baseRef" required></select></label>
+        <label>Title<input id="pr-title" name="title" required maxlength="240"></label>
+        <label>Body<textarea id="pr-body" name="body" rows="6"></textarea></label>
+        <button id="create-draft-pr" type="submit">Create Draft PR</button>
+      </form>
+      <div class="work-message" id="pr-message" role="status"></div>
+    </section>
+    <footer>V3.7 · Draft-only PR delivery · no automatic merge · no browser semantic inference</footer>
   </main>
   <script type="module" src="/app.js"></script>
 </body>

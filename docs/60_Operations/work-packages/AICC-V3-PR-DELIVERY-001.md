@@ -47,7 +47,7 @@ Add the smallest trustworthy PR Delivery layer for AICC V3 so GitHub PR facts, D
 
 ## Next exact gate
 
-Commit and push the V3.7.1 GitHub facts / Draft-only API checkpoint and require exact-head V3 CI PASS. Then implement only the minimal PR Delivery UI: read-only repository/remote/check/PR facts plus one explicit Create Draft PR form. No merge, close, edit, ready, release, or deploy controls.
+Commit and push the V3.7.2 UI checkpoint, require exact-head V3 CI PASS, deploy that exact head to CN Mac, and stop for Human Owner UAT. A real Draft PR may be created only by explicit Owner action during UAT; no merge, close, edit, ready, approve, release, or deploy action is authorized.
 
 ## V3.7.1 implementation evidence
 
@@ -55,3 +55,13 @@ Commit and push the V3.7.1 GitHub facts / Draft-only API checkpoint and require 
 - Local Node 22 suite reached `41/41 PASS` before checkpoint hardening.
 - Real CN Mac read-only reconciliation: repository identity PASS; local/remote HEAD exact match PASS; exact-head `verify-v3` check fact PASS; V3 open PR count = 0; no credential fields exposed.
 - Real Draft PR mutation was not invoked in this gate.
+
+## V3.7.2 UI evidence
+
+- Read-only repository/default-branch/local-head/remote-head facts are rendered from `GET /api/pr-delivery`.
+- Exact-head check rows and current-head open PR rows are rendered without semantic rewriting.
+- The only mutation control is `Create Draft PR`, submitting only explicit `title`, `body`, and server-provided `baseRef`.
+- Existing exact head/base open PR disables duplicate creation in the UI; server-side duplicate refusal remains authoritative.
+- No merge, close, edit, ready-for-review, approve, release, or deploy control exists.
+- Local Node 22 suite reached `43/43 PASS`.
+- No real Draft PR mutation was invoked during implementation.
