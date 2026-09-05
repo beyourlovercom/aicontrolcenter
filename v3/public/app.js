@@ -298,7 +298,12 @@ $('draft-pr-form').addEventListener('submit',async event=>{
     const response=await api('/api/prs/draft',{method:'POST',body:{title,body,baseRef}});
     setPrMessage(`Draft PR #${response.pullRequest.number} 已由 GitHub 创建。`,'ok');
     await loadPrDelivery();
-  }catch(error){setPrMessage(`Create Draft PR 失败 · ${error.message}`,'error');}
+  }catch(error){
+    if(error.message==='PR_ALREADY_EXISTS'){
+      await loadPrDelivery();
+      setPrMessage('Draft PR 已存在；已刷新 GitHub facts。','ok');
+    }else setPrMessage(`Create Draft PR 失败 · ${error.message}`,'error');
+  }
 });
 
 async function boot(){

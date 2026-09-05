@@ -18,5 +18,7 @@ test('PR Delivery UI consumes frozen APIs and cannot override head or draft mode
   assert.ok(app.includes("api('/api/prs/draft',{method:'POST',body:{title,body,baseRef}})"));
   assert.equal(app.includes('headSha:'),false);assert.equal(app.includes('headRef:'),false);assert.equal(app.includes('draft:false'),false);
   assert.ok(app.includes("$('create-draft-pr').disabled=!ready||Boolean(existing)"));
+  assert.ok(app.includes("error.message==='PR_ALREADY_EXISTS'"));
+  assert.ok(app.includes("Draft PR 已存在；已刷新 GitHub facts。"));
   assert.equal(app.includes('mergeReady'),false);assert.equal(app.includes('safeToMerge'),false);
 });
