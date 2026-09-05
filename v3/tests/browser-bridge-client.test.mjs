@@ -44,6 +44,24 @@ test('automatic origin binding carries Assistant WP/Task titles while manual exa
   assert.equal(manual.taskId,'task-existing');assert.equal(manual.workPackageTitle,null);assert.equal(manual.taskTitle,null);
 });
 
+test('enqueueAction ACKs from durable ledger before any network submission',async()=>{
+  const storage=memoryStorage();let networkCalls=0;
+  const api={...baseApi(),async createRequest(){networkCalls++;throw new Error('network must not run during enqueue');}};
+  const coordinator=createCoordinator({storage,api,destination:{deliver:async()=>({outcome:'DELIVERED'})},ids:ids()});
+  const queued=await coordinator.enqueueAction({url:'https://chatgpt.com/c/conv-ack',tabId:11,taskId:'task-1',instruction:'ack first'});
+  assert.equal(networkCalls,0);assert.equal(queued.ledger.status,'SUBMIT_PENDING');assert.ok(storage.values.aiccBridgeRequestsV1?.[queued.ledger.requestId]);
+});
+
+test('terminal Run without Canonical Result becomes local RUN_FAILED instead of polling forever',async()=>{
+  const storage=memoryStorage();
+  const api={...baseApi(),async getRequest(){return {run:{runId:'run-failed',state:'EXITED',exitCode:1},delivery:null,state:{deliveryState:'WAITING_RESULT'}};}};
+  const coordinator=createCoordinator({storage,api,destination:{deliver:async()=>({outcome:'DELIVERED'})},ids:ids()});
+  const queued=await coordinator.enqueueAction({url:'https://chatgpt.com/c/conv-failed',tabId:12,taskId:'task-1',instruction:'fail exact'});
+  const map=storage.values.aiccBridgeRequestsV1;map[queued.ledger.requestId]={...map[queued.ledger.requestId],status:'WAITING_RESULT',runId:'run-failed'};
+  const result=await coordinator.pollOne(queued.ledger.requestId);
+  assert.equal(result.ledger.status,'RUN_FAILED');assert.equal(result.ledger.lastError,'BRIDGE_RUN_FAILED');
+});
+
 test('requestId and originTurnId are persisted before first network submission',async()=>{
   const storage=memoryStorage();let seen=null;
   const api={...baseApi(),async createRequest(body){

@@ -1,6 +1,6 @@
 (()=>{
   'use strict';
-  const CONTENT_VERSION='3.8.9';
+  const CONTENT_VERSION='3.8.10';
   if(globalThis.__AICC_V3_BRIDGE_CONTENT_VERSION__===CONTENT_VERSION)return;
   try{globalThis.__AICC_V3_BRIDGE_CLEANUP__?.();}catch{}
   globalThis.__AICC_V3_BRIDGE_CONTENT_VERSION__=CONTENT_VERSION;
@@ -81,7 +81,7 @@
       if(ui.task.value)payload.taskId=ui.task.value;else Object.assign(payload,binding);
       let result;try{result=await message('AICC_SUBMIT_EXPLICIT',payload);}catch(error){result={ok:false,errorCode:error?.code||'BRIDGE_CLIENT_ERROR'};}
       if(!result?.ok){ui.status.textContent=result?.errorCode||'Bridge request failed';ui.go.disabled=false;return;}
-      ui.status.textContent=`Bound request ${result.requestId}\nRun ${result.runId||'pending'}\n${ui.task.value?'Existing Task bound exactly.':'WP/Task auto-bound.'} Auto-return is bound to this conversation only.`;
+      ui.status.textContent=`Queued request ${result.requestId}\nRun pending in AICC background\n${ui.task.value?'Existing Task bound exactly.':'WP/Task auto-bound.'} Auto-return is bound to this conversation only.`;
     };
   }
 

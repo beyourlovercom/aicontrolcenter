@@ -83,6 +83,8 @@ Reusing a `requestId` with any different conversation, origin turn, materialized
 
 Request submission may be retried up to 3 transport attempts by the Bridge, always with the same persisted `requestId`.
 
+The Browser Bridge must ACK the explicit Owner action immediately after persisting that `requestId`; synchronous executor preflight or Run startup must not block the page message response. Network submission and Run startup continue from the durable ledger in the background.
+
 ## Durable storage
 
 Bridge state is project-scoped under the same deterministic project key used by Work/Run/Result storage:

@@ -39,11 +39,15 @@ export function createCoordinator(deps={}){
     }
   }
 
-  async function submitAction(input){
+  async function enqueueAction(input){
     const binding=createOriginBinding(input,ids);
     const ledger={...binding,tabId:input.tabId??null,status:'SUBMIT_PENDING',submitAttempts:0,runId:null,claimId:null,sendAttempted:false,pendingReceipt:null,createdAt:nowIso(clock),updatedAt:nowIso(clock)};
     await putLedger(ledger);
-    return submitExisting(ledger);
+    return {ledger};
+  }
+  async function submitAction(input){
+    const queued=await enqueueAction(input);
+    return submitExisting(queued.ledger);
   }
 
   async function queueReceipt(ledger,receipt){
@@ -100,9 +104,13 @@ export function createCoordinator(deps={}){
     let ledger=await getLedger(requestId);if(!ledger)return null;
     if(ledger.pendingReceipt){const flushed=await flushPendingReceipt(ledger);ledger=flushed.ledger;if(flushed.flushed)return flushed;}
     if(ledger.status==='SUBMIT_PENDING'||ledger.status==='SUBMITTING')return submitExisting(ledger);
-    if(['SUBMIT_FAILED','DELIVERED','DELIVERY_UNCERTAIN'].includes(ledger.status))return {ledger};
+    if(['SUBMIT_FAILED','RUN_FAILED','DELIVERED','DELIVERY_UNCERTAIN'].includes(ledger.status))return {ledger};
 
     const projection=await api.getRequest(requestId);
+    if(projection?.run&&['EXITED','SPAWN_ERROR','ORPHANED','STOPPED'].includes(projection.run.state)&&!projection.delivery){
+      ledger={...ledger,status:'RUN_FAILED',lastError:'BRIDGE_RUN_FAILED',runId:projection.run.runId||ledger.runId,updatedAt:nowIso(clock)};
+      await putLedger(ledger);return {ledger,projection};
+    }
     const action=recoveryAction(projection,ledger);
     if(action==='DONE'){
       ledger={...ledger,status:'DELIVERED',updatedAt:nowIso(clock)};await putLedger(ledger);return {ledger,projection};
@@ -125,5 +133,5 @@ export function createCoordinator(deps={}){
 
   async function ledgers(){return Object.values(await requestMap());}
 
-  return {submitAction,pollOne,pollAll,ledgers,getLedger,instanceId};
+  return {enqueueAction,submitAction,pollOne,pollAll,ledgers,getLedger,instanceId};
 }

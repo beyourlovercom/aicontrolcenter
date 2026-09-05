@@ -31,7 +31,7 @@ async function request(path,{method='GET',body,auth=true,overrideToken,timeout=5
   return value;
 }
 const api={
-  async createRequest(body){return request('/api/bridge/requests',{method:'POST',body});},
+  async createRequest(body){return request('/api/bridge/requests',{method:'POST',body,timeout:30000});},
   async getRequest(requestId){return (await request(`/api/bridge/requests/${encodeURIComponent(requestId)}`)).bridge;},
   async claim(requestId,body){return request(`/api/bridge/requests/${encodeURIComponent(requestId)}/claim`,{method:'POST',body});},
   async receipt(requestId,body){return request(`/api/bridge/requests/${encodeURIComponent(requestId)}/receipt`,{method:'POST',body});}
@@ -116,7 +116,7 @@ async function burstPoll(){
   try{
     for(let i=0;i<120;i++){
       await coordinator.pollAll();
-      const pending=(await coordinator.ledgers()).some(item=>!['DELIVERED','DELIVERY_UNCERTAIN','SUBMIT_FAILED'].includes(item.status));
+      const pending=(await coordinator.ledgers()).some(item=>!['DELIVERED','DELIVERY_UNCERTAIN','SUBMIT_FAILED','RUN_FAILED'].includes(item.status));
       if(!pending)break;
       await new Promise(resolve=>setTimeout(resolve,1000));
     }
@@ -126,7 +126,7 @@ async function burstPoll(){
 async function status(){
   const paired=typeof(await storage.get(TOKEN_KEY))==='string';
   const ledgers=await coordinator.ledgers();
-  return {paired,pending:ledgers.filter(item=>!['DELIVERED','DELIVERY_UNCERTAIN','SUBMIT_FAILED'].includes(item.status)).length,total:ledgers.length};
+  return {paired,pending:ledgers.filter(item=>!['DELIVERED','DELIVERY_UNCERTAIN','SUBMIT_FAILED','RUN_FAILED'].includes(item.status)).length,total:ledgers.length};
 }
 
 function errorBody(error){return {ok:false,errorCode:error?.code||error?.message||'BRIDGE_CLIENT_ERROR'};}
@@ -141,8 +141,9 @@ chrome.runtime.onMessage.addListener((message,sender,sendResponse)=>{
       const senderConversation=conversationFromUrl(sender.tab.url);
       const supplied=conversationFromUrl(message.url);
       if(senderConversation.conversationId!==supplied.conversationId)throw Object.assign(new Error('BRIDGE_CONVERSATION_MISMATCH'),{code:'BRIDGE_CONVERSATION_MISMATCH'});
-      const result=await coordinator.submitAction({url:sender.tab.url,tabId:sender.tab.id,taskId:message.taskId||null,workPackageTitle:message.workPackageTitle||null,taskTitle:message.taskTitle||null,instruction:message.instruction});
-      void burstPoll();return sendResponse({ok:true,requestId:result.ledger.requestId,runId:result.ledger.runId});
+      const queued=await coordinator.enqueueAction({url:sender.tab.url,tabId:sender.tab.id,taskId:message.taskId||null,workPackageTitle:message.workPackageTitle||null,taskTitle:message.taskTitle||null,instruction:message.instruction});
+      sendResponse({ok:true,requestId:queued.ledger.requestId,runId:null,queued:true});
+      void coordinator.pollOne(queued.ledger.requestId).catch(()=>{}).finally(()=>burstPoll());return;
     }
     return sendResponse({ok:false,errorCode:'BRIDGE_CLIENT_MESSAGE_INVALID'});
   })().catch(error=>sendResponse(errorBody(error)));
