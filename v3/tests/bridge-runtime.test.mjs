@@ -17,7 +17,7 @@ function fixture(){
   mkdirSync(repo);mkdirSync(home);git(repo,'init','-b','test/bridge');git(repo,'config','user.email','aicc@example.invalid');git(repo,'config','user.name','AICC Test');
   writeFileSync(join(repo,'README.md'),'bridge\n');git(repo,'add','.');git(repo,'commit','-m','fixture');
   writeFileSync(join(home,'project.json'),JSON.stringify({schema:'aicc.v3.project.v1',id:'fixture',name:'Fixture',repositoryIdentity:'example/bridge',repositoryPath:repo}));
-  const env={AICC_V3_HOME:home};const context=loadProjectContext(env);
+  const env={AICC_V3_HOME:home,AICC_BRIDGE_ALLOWED_ORIGIN:'chrome-extension://abcdefghijklmnopabcdefghijklmnop'};const context=loadProjectContext(env);
   const wp=createWorkPackage(context,{title:'Bridge WP',status:'ACTIVE'},env).workPackage;
   const task=createTask(context,{workPackageId:wp.id,title:'Bridge Task',status:'TODO'},env).task;
   const executorOptions={preflight:()=>({ready:true,path:'/tmp/fake-codex',version:'fake',model:'fake',authMode:'test'}),spawnWorker:()=>424242,processProbe:()=>true};
@@ -113,6 +113,8 @@ test('Browser Bridge CORS is extension-only, non-wildcard, and supports prefligh
     const preflight=await fetch(`${base}/api/bridge/requests/00000000-0000-4000-8000-000000000000`,{method:'OPTIONS',headers:{origin,'access-control-request-method':'GET','access-control-request-headers':'x-aicc-bridge-token'}});
     assert.equal(preflight.status,204);assert.equal(preflight.headers.get('access-control-allow-origin'),origin);assert.notEqual(preflight.headers.get('access-control-allow-origin'),'*');assert.match(preflight.headers.get('access-control-allow-headers')||'',/x-aicc-bridge-token/);
     const work=await fetch(`${base}/api/work`,{headers:{origin}});assert.equal(work.status,200);assert.equal(work.headers.get('access-control-allow-origin'),origin);
+    const bootstrap=await fetch(`${base}/api/bridge/bootstrap`,{method:'POST',headers:{origin}});const boot=await bootstrap.json();assert.equal(bootstrap.status,200);assert.equal(boot.token,token);assert.equal(bootstrap.headers.get('access-control-allow-origin'),origin);
+    const wrongExtension=await fetch(`${base}/api/bridge/bootstrap`,{method:'POST',headers:{origin:'chrome-extension://bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb'}});assert.equal(wrongExtension.status,403);
     const bridge=await fetch(`${base}/api/bridge/requests/00000000-0000-4000-8000-000000000000`,{headers:{origin,'x-aicc-bridge-token':token}});assert.equal(bridge.status,400);assert.equal(bridge.headers.get('access-control-allow-origin'),origin);
     const denied=await fetch(`${base}/api/bridge/requests/00000000-0000-4000-8000-000000000000`,{method:'OPTIONS',headers:{origin:'https://chatgpt.com','access-control-request-method':'GET'}});assert.equal(denied.status,403);assert.equal(denied.headers.get('access-control-allow-origin'),null);
   }finally{await new Promise(resolve=>server.close(resolve));}

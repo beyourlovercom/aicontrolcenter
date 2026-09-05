@@ -8,7 +8,7 @@ import {createTask,createWorkPackage,readWorkStore,updateTaskStatus,updateWorkPa
 import {executorStatus,runEvents,runProjection,startRun,stopRun} from './lib/executor-runtime.mjs';
 import {readOrMaterializeResult} from './lib/result-store.mjs';
 import {createDraftPr,readPrDeliveryFacts} from './lib/github-delivery.mjs';
-import {verifyBridgeCredential} from './lib/bridge-store.mjs';
+import {ensureBridgeCredential,verifyBridgeCredential} from './lib/bridge-store.mjs';
 import {bridgeProjection,claimBridgeDelivery,reconcileBridgeStartup,recordBridgeReceipt,submitBridgeRequest} from './lib/bridge-runtime.mjs';
 
 const root=dirname(fileURLToPath(import.meta.url));
@@ -23,15 +23,20 @@ function json(res,status,body){
   res.writeHead(status,{'content-type':'application/json; charset=utf-8','cache-control':'no-store'});
   res.end(JSON.stringify(body));
 }
-function extensionOrigin(req){
-  const origin=req.headers.origin;
-  return typeof origin==='string'&&/^chrome-extension:\/\/[a-p]{32}$/.test(origin)?origin:null;
+function configuredExtensionOrigin(env){
+  const value=env.AICC_BRIDGE_ALLOWED_ORIGIN;
+  return typeof value==='string'&&/^chrome-extension:\/\/[a-p]{32}$/.test(value)?value:null;
 }
-function handleExtensionCors(req,res,url){
+function extensionOrigin(req,env){
+  const origin=req.headers.origin;
+  const allowed=configuredExtensionOrigin(env);
+  return allowed&&origin===allowed?origin:null;
+}
+function handleExtensionCors(req,res,url,env){
   const corsPath=url.pathname.startsWith('/api/bridge/')||url.pathname==='/api/work';
   const rawOrigin=req.headers.origin;
   if(!corsPath||typeof rawOrigin!=='string')return false;
-  const origin=extensionOrigin(req);
+  const origin=extensionOrigin(req,env);
   if(!origin){json(res,403,{ok:false,errorCode:'BRIDGE_ORIGIN_DENIED'});return true;}
   res.setHeader('access-control-allow-origin',origin);
   res.setHeader('vary','Origin');
@@ -119,7 +124,7 @@ export function createAiccV3Server(options={}){
   try{reconcileBridgeStartup(loadProjectContext(env),env,bridgeOptions);}catch{}
   return createHttpServer(async(req,res)=>{
     const url=new URL(req.url||'/',`http://${req.headers.host||'localhost'}`);
-    if(handleExtensionCors(req,res,url))return;
+    if(handleExtensionCors(req,res,url,env))return;
     if(req.method==='GET'&&url.pathname==='/api/health'){
       try{
         const context=loadProjectContext(env);
@@ -179,6 +184,11 @@ export function createAiccV3Server(options={}){
       catch(error){return prError(res,error);}
     }
 
+    if(req.method==='POST'&&url.pathname==='/api/bridge/bootstrap'){
+      const remote=req.socket?.remoteAddress||'';const origin=extensionOrigin(req,env);
+      if(!['127.0.0.1','::1','::ffff:127.0.0.1'].includes(remote)||!origin)return json(res,403,{ok:false,errorCode:'BRIDGE_ORIGIN_DENIED'});
+      return json(res,200,{ok:true,token:ensureBridgeCredential(env,bridgeOptions.credentialOptions||{})});
+    }
     if(url.pathname.startsWith('/api/bridge/')){
       try{requireBridgeAuth(req,env,bridgeOptions);}catch(error){return bridgeError(res,error);}
     }

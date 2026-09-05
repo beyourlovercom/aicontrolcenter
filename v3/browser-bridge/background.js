@@ -100,6 +100,12 @@ async function savePairing(candidate){
   await coordinator.instanceId();
   return {paired:true};
 }
+async function autoPair(){
+  const existing=await storage.get(TOKEN_KEY);if(typeof existing==='string'&&existing.length>=32)return {paired:true};
+  const value=await request('/api/bridge/bootstrap',{method:'POST',auth:false});
+  if(typeof value?.token!=='string'||value.token.length<32)throw Object.assign(new Error('BRIDGE_AUTH_REQUIRED'),{code:'BRIDGE_AUTH_REQUIRED'});
+  return savePairing(value.token);
+}
 let burstRunning=false;
 async function burstPoll(){
   if(burstRunning)return;burstRunning=true;
@@ -125,7 +131,7 @@ chrome.runtime.onMessage.addListener((message,sender,sendResponse)=>{
   void (async()=>{
     if(message?.type==='AICC_LIST_TASKS')return sendResponse({ok:true,tasks:await listTasks()});
     if(message?.type==='AICC_SAVE_PAIRING')return sendResponse({ok:true,...await savePairing(message.token)});
-    if(message?.type==='AICC_PAIRING_STATUS')return sendResponse({ok:true,...await status()});
+    if(message?.type==='AICC_PAIRING_STATUS'){try{await autoPair();}catch{}return sendResponse({ok:true,...await status()});}
     if(message?.type==='AICC_SUBMIT_EXPLICIT'){
       if(!sender.tab?.id||!sender.tab?.url)throw Object.assign(new Error('BRIDGE_CONVERSATION_ID_UNAVAILABLE'),{code:'BRIDGE_CONVERSATION_ID_UNAVAILABLE'});
       const senderConversation=conversationFromUrl(sender.tab.url);
@@ -143,7 +149,7 @@ async function ensureAlarm(){
 }
 
 chrome.alarms.onAlarm.addListener(alarm=>{if(alarm.name===ALARM)void coordinator.pollAll();});
-chrome.runtime.onStartup.addListener(()=>{void ensureAlarm();void coordinator.pollAll();});
-chrome.runtime.onInstalled.addListener(()=>{void ensureAlarm();});
+chrome.runtime.onStartup.addListener(()=>{void ensureAlarm();void autoPair().then(()=>coordinator.pollAll()).catch(()=>{});});
+chrome.runtime.onInstalled.addListener(()=>{void ensureAlarm();void autoPair().catch(()=>{});});
 await ensureAlarm();
-void coordinator.pollAll();
+void autoPair().then(()=>coordinator.pollAll()).catch(()=>{});
