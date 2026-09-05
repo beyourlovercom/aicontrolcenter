@@ -1,6 +1,6 @@
 # AICC V3 Living Roadmap
 
-Roadmap-Revision: 23
+Roadmap-Revision: 24
 Updated-At: 2026-09-05
 Status: `ACTIVE`
 
@@ -9,7 +9,7 @@ Status: `ACTIVE`
 `V3.8 — GPT Bridge / Auto Return`
 
 Current Work Package: `AICC-V3-GPT-BRIDGE-AUTO-RETURN-001`
-Current implementation phase: `V3.8.2 — browser bridge client and same-conversation delivery integration`
+Current implementation phase: `V3.8.3 — exact-head CI and controlled Owner UAT`
 
 ## Milestones
 
@@ -56,4 +56,4 @@ Total implementation budget: `55–70h` including bounded rework.
 
 ## Next exact gate
 
-Commit and push the frozen V3.8 GPT Bridge contract and require exact-head V3 CI PASS. Then implement only project-scoped Bridge request/delivery persistence plus the four frozen Bridge APIs with fake-Bridge focused tests. Do not add the real ChatGPT browser adapter or perform a real ChatGPT send until that runtime/API checkpoint passes.
+Commit and push the V3.8.2 privileged Browser Bridge checkpoint and require exact-head V3 CI PASS. Then deploy the exact head to CN Mac, load the unpacked extension, pair it through the clipboard-only local credential helper, and perform one explicit Owner-triggered same-conversation end-to-end UAT. No ChatGPT message may be sent before the Owner explicitly clicks `✦ AICC` on the originating Assistant turn.

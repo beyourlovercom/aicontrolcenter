@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "start": "node server.mjs",
-    "test": "node --test tests/*.test.mjs"
+    "test": "node --test tests/*.test.mjs",
+    "bridge:pair": "node scripts/copy-bridge-pairing-token.mjs"
   },
   "engines": {
     "node": ">=22"

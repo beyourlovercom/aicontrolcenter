@@ -58,11 +58,22 @@ test('safe pre-send abort permits only two retries after the initial claim',()=>
   for(let attempt=1;attempt<=3;attempt++){
     const claimed=claimBridgeDelivery(f.context,submitted.request.requestId,{bridgeInstanceId:`bridge-${attempt}`},f.env,{...f.bridgeOptions,claimUuid:()=>`20000000-0000-4000-8000-00000000000${attempt}`});
     assert.equal(claimed.claim.attempt,attempt);
-    const aborted=recordBridgeReceipt(f.context,submitted.request.requestId,{claimId:claimed.claim.claimId,outcome:'ABORTED_BEFORE_SEND'},f.env,f.bridgeOptions);
+    const abortInput={claimId:claimed.claim.claimId,outcome:'ABORTED_BEFORE_SEND'};
+    const aborted=recordBridgeReceipt(f.context,submitted.request.requestId,abortInput,f.env,f.bridgeOptions);
     assert.equal(aborted.state.deliveryState,'READY');
+    const replay=recordBridgeReceipt(f.context,submitted.request.requestId,abortInput,f.env,f.bridgeOptions);assert.equal(replay.state.deliveryState,'READY');
   }
   assert.equal(readBridgeState(f.context,submitted.request.requestId,f.env).safePreSendRetryCount,2);
   assert.throws(()=>claimBridgeDelivery(f.context,submitted.request.requestId,{bridgeInstanceId:'bridge-4'},f.env,f.bridgeOptions),e=>e.code==='BRIDGE_RETRY_EXHAUSTED');
+});
+
+test('UNCERTAIN terminal receipt is idempotent only for the exact same claim/outcome',()=>{
+  const f=fixture();const submitted=submitBridgeRequest(f.context,input(f),f.env,f.bridgeOptions);completeRun(f,submitted.request.runId);
+  const claimed=claimBridgeDelivery(f.context,submitted.request.requestId,{bridgeInstanceId:'bridge-uncertain'},f.env,f.bridgeOptions);
+  const receiptInput={claimId:claimed.claim.claimId,outcome:'UNCERTAIN'};
+  const first=recordBridgeReceipt(f.context,submitted.request.requestId,receiptInput,f.env,f.bridgeOptions);assert.equal(first.state.deliveryState,'DELIVERY_UNCERTAIN');
+  const replay=recordBridgeReceipt(f.context,submitted.request.requestId,receiptInput,f.env,f.bridgeOptions);assert.equal(replay.state.deliveryState,'DELIVERY_UNCERTAIN');
+  assert.throws(()=>recordBridgeReceipt(f.context,submitted.request.requestId,{...receiptInput,claimId:'wrong-claim'},f.env,f.bridgeOptions),e=>e.code==='BRIDGE_RECEIPT_MISMATCH');
 });
 
 test('restart converts an unreceipted claimed delivery to DELIVERY_UNCERTAIN and forbids resend',()=>{

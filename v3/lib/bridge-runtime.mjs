@@ -86,16 +86,17 @@ function terminalReceipt(request,delivery,claim,outcome,input,now){
 }
 export function recordBridgeReceipt(context,requestId,input,env=process.env,options={}){
   const projection=bridgeProjection(context,requestId,env,options);const state=projection.state;
-  if(state.deliveryState==='DELIVERED'){
+  if(['DELIVERED','DELIVERY_UNCERTAIN'].includes(state.deliveryState)){
     const existing=projection.receipt;
     if(existing&&input?.claimId===existing.claimId&&input?.outcome===existing.outcome&&input?.conversationId===existing.conversationId&&input?.contentSha256===existing.contentSha256&&(input?.providerMessageId??null)===(existing.providerMessageId??null))return {receipt:existing,state};
+    if(state.deliveryState==='DELIVERY_UNCERTAIN'&&!existing)fail('BRIDGE_DELIVERY_UNCERTAIN');
     fail('BRIDGE_RECEIPT_MISMATCH');
   }
-  if(state.deliveryState==='DELIVERY_UNCERTAIN')fail('BRIDGE_DELIVERY_UNCERTAIN');
+  if(state.deliveryState==='READY'&&input?.outcome==='ABORTED_BEFORE_SEND'&&state.lastAbortedClaimId===input?.claimId)return {receipt:null,state};
   if(state.deliveryState!=='CLAIMED'||!state.activeClaim||input?.claimId!==state.activeClaim.claimId)fail('BRIDGE_RECEIPT_MISMATCH');
   if(!projection.delivery)fail('BRIDGE_DELIVERY_NOT_FOUND');const outcome=input?.outcome;
   if(outcome==='ABORTED_BEFORE_SEND'){
-    const next=updateBridgeState(context,requestId,{deliveryState:'READY',activeClaim:null},env,options);
+    const next=updateBridgeState(context,requestId,{deliveryState:'READY',activeClaim:null,lastAbortedClaimId:state.activeClaim.claimId},env,options);
     appendBridgeEvent(context,requestId,'DELIVERY_ABORTED_BEFORE_SEND',{claimId:state.activeClaim.claimId,attempt:state.activeClaim.attempt},env,options);
     return {receipt:null,state:next};
   }

@@ -42,7 +42,7 @@ Implement the smallest trustworthy GPT Bridge / Auto Return loop so an Owner-aut
 
 ## Next exact gate
 
-Commit and push the V3.8.1 durable Bridge persistence/API checkpoint and require exact-head V3 CI PASS. Then implement the privileged browser Bridge client and explicit same-conversation delivery verification. No real ChatGPT send side effect is authorized before that browser integration passes focused tests and reaches an explicit Owner UAT gate.
+Commit and push the V3.8.2 privileged Browser Bridge checkpoint and require exact-head V3 CI PASS. Then deploy that exact head to CN Mac, load and explicitly pair the unpacked extension, and enter one controlled Human Owner UAT. The real send side effect remains Owner-triggered only: nothing may submit to ChatGPT until the Owner clicks `✦ AICC` and then confirms the exact Task/instruction in the Bridge dialog.
 
 ## Frozen V3.8 contract
 
@@ -72,3 +72,16 @@ Commit and push the V3.8.1 durable Bridge persistence/API checkpoint and require
 - Restart reconciliation converts an unreceipted `CLAIMED` delivery to `DELIVERY_UNCERTAIN` and forbids automatic resend.
 - Focused fake-Browser-Bridge coverage plus the complete Node 22 V3 suite reached `48/48 PASS`.
 - Real CN Mac `~/.aicc-v3` remained free of Bridge requests/credentials during implementation; no real Codex Run or ChatGPT send was started.
+## V3.8.2 browser integration evidence
+
+- Added a Manifest V3 Chrome extension with privileged background transport and a credential-free ChatGPT content adapter.
+- Extension host access is limited to `https://chatgpt.com/*` and `http://127.0.0.1:1420/*`; no `activeTab`, `<all_urls>`, wildcard CORS, latest-conversation, or latest-Task fallback exists.
+- `chrome.storage.local` is restricted to `TRUSTED_CONTEXTS`; the ChatGPT content script never reads the Bridge credential or extension ledger.
+- Assistant turns receive an explicit `✦ AICC` action. The Owner must choose an existing Task and review the exact instruction before a Bridge Request is submitted. Page render alone never executes.
+- Background persistence writes `requestId/originTurnId` before first network submission and writes `sendAttempted=true` before touching the ChatGPT delivery adapter.
+- Same-conversation delivery verifies explicit `conversationId`, Canonical Result SHA-256, exact composer content, and send control before clicking Send.
+- Receipt transport loss retries only the immutable receipt; a focused regression proves the ChatGPT send adapter is called exactly once.
+- Exact duplicate `ABORTED_BEFORE_SEND` and terminal `UNCERTAIN` receipts are idempotent; conflicting receipts remain fail-closed.
+- Added clipboard-only macOS pairing helper; it never prints the Bridge token.
+- Fake-browser integration plus the complete Node 22 V3 suite reached `55/55 PASS`; Chrome 152 smoke produced no manifest/extension-load error.
+- No real Bridge credential, Bridge Request, Codex Run, or ChatGPT send was created during V3.8.2 implementation/testing.
