@@ -141,7 +141,15 @@ chrome.runtime.onMessage.addListener((message,sender,sendResponse)=>{
       const senderConversation=conversationFromUrl(sender.tab.url);
       const supplied=conversationFromUrl(message.url);
       if(senderConversation.conversationId!==supplied.conversationId)throw Object.assign(new Error('BRIDGE_CONVERSATION_MISMATCH'),{code:'BRIDGE_CONVERSATION_MISMATCH'});
-      const queued=await coordinator.enqueueAction({url:sender.tab.url,tabId:sender.tab.id,taskId:message.taskId||null,workPackageTitle:message.workPackageTitle||null,taskTitle:message.taskTitle||null,instruction:message.instruction});
+      const taskTitle=typeof message.taskTitle==='string'?message.taskTitle.trim():'';
+      if(!taskTitle)throw Object.assign(new Error('BRIDGE_TASK_TITLE_REQUIRED'),{code:'BRIDGE_TASK_TITLE_REQUIRED'});
+      if(message.taskId){
+        const exact=(await listTasks()).find(task=>task.id===message.taskId);
+        if(!exact)throw Object.assign(new Error('BRIDGE_TASK_NOT_FOUND'),{code:'BRIDGE_TASK_NOT_FOUND'});
+        if(typeof exact.title!=='string'||!exact.title.trim())throw Object.assign(new Error('BRIDGE_TASK_TITLE_REQUIRED'),{code:'BRIDGE_TASK_TITLE_REQUIRED'});
+        if(exact.title!==taskTitle)throw Object.assign(new Error('BRIDGE_TASK_TITLE_MISMATCH'),{code:'BRIDGE_TASK_TITLE_MISMATCH'});
+      }
+      const queued=await coordinator.enqueueAction({url:sender.tab.url,tabId:sender.tab.id,taskId:message.taskId||null,workPackageTitle:message.workPackageTitle||null,taskTitle,instruction:message.instruction});
       sendResponse({ok:true,requestId:queued.ledger.requestId,runId:null,queued:true});
       void coordinator.pollOne(queued.ledger.requestId).catch(()=>{}).finally(()=>burstPoll());return;
     }

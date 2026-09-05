@@ -9,8 +9,10 @@ function fail(code,detail=''){const error=new Error(detail?`${code}: ${detail}`:
 function text(value,code,max=4096){if(typeof value!=='string'||!value.trim()||value.length>max)fail(code);return value;}
 function uuid(value){if(typeof value!=='string'||!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value))fail('BRIDGE_REQUEST_INVALID');return value;}
 function exactInstruction(value){if(typeof value!=='string'||!value.trim()||Buffer.byteLength(value,'utf8')>60000)fail('BRIDGE_REQUEST_INVALID');return value;}
-function existingTaskBinding(context,taskId,env){
+function existingTaskBinding(context,taskId,taskTitle,env){
+  const expectedTitle=text(taskTitle,'BRIDGE_TASK_TITLE_REQUIRED',240).trim();
   const store=readWorkStore(context,env);const task=store.tasks.find(item=>item.id===taskId);if(!task)fail('BRIDGE_TASK_NOT_FOUND');
+  if(task.title!==expectedTitle)fail('BRIDGE_TASK_TITLE_MISMATCH');
   const wp=store.workPackages.find(item=>item.id===task.workPackageId);if(!wp)fail('BRIDGE_TASK_NOT_FOUND');return {task,wp};
 }
 function derivedUuid(requestId,label){
@@ -32,7 +34,7 @@ function automaticTaskBinding(context,input,env,options={}){
   return {task,wp};
 }
 function taskBinding(context,input,env,options={}){
-  if(typeof input?.taskId==='string'&&input.taskId.trim())return existingTaskBinding(context,input.taskId.trim(),env);
+  if(typeof input?.taskId==='string'&&input.taskId.trim())return existingTaskBinding(context,input.taskId.trim(),input?.taskTitle,env);
   return automaticTaskBinding(context,input,env,options);
 }
 function requestCandidate(context,input,binding,runId,now){

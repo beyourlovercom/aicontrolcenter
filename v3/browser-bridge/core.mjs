@@ -22,8 +22,8 @@ export function exactInstruction(value){
 export function createOriginBinding(input,ids={}){
   const {conversationId,conversationUrl}=conversationFromUrl(input?.url);
   const taskId=typeof input?.taskId==='string'&&input.taskId.trim()?input.taskId.trim():null;
+  const taskTitle=nonEmpty(input?.taskTitle,'BRIDGE_TASK_TITLE_REQUIRED').trim();
   const workPackageTitle=taskId?null:nonEmpty(input?.workPackageTitle,'BRIDGE_WORK_PACKAGE_TITLE_REQUIRED').trim();
-  const taskTitle=taskId?null:nonEmpty(input?.taskTitle,'BRIDGE_TASK_TITLE_REQUIRED').trim();
   const instruction=exactInstruction(input?.instruction);
   const uuid=ids.uuid||crypto.randomUUID.bind(crypto);
   return {
@@ -47,8 +47,9 @@ export function requestBody(binding){
     originTurnId:binding.originTurnId,
     instruction:binding.instruction
   };
+  body.taskTitle=binding.taskTitle;
   if(binding.taskId)body.taskId=binding.taskId;
-  else{body.workPackageTitle=binding.workPackageTitle;body.taskTitle=binding.taskTitle;}
+  else body.workPackageTitle=binding.workPackageTitle;
   return body;
 }
 

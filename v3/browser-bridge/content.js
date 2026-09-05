@@ -1,6 +1,6 @@
 (()=>{
   'use strict';
-  const CONTENT_VERSION='3.8.10';
+  const CONTENT_VERSION='3.8.11';
   if(globalThis.__AICC_V3_BRIDGE_CONTENT_VERSION__===CONTENT_VERSION)return;
   try{globalThis.__AICC_V3_BRIDGE_CLEANUP__?.();}catch{}
   globalThis.__AICC_V3_BRIDGE_CONTENT_VERSION__=CONTENT_VERSION;
@@ -43,9 +43,9 @@
       .backdrop{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:2147483646;display:flex;align-items:center;justify-content:center}
       .card{width:min(680px,92vw);max-height:84vh;overflow:auto;background:#fff;color:#111;border-radius:14px;padding:18px;font:14px system-ui;box-shadow:0 20px 60px #0006}
       h3{margin:0 0 12px} label{display:block;margin:10px 0 5px;font-weight:600} select,textarea{width:100%;box-sizing:border-box;font:13px ui-monospace,monospace}
-      textarea{min-height:220px;padding:10px;background:#fafafa}select{padding:8px}.binding{padding:9px 10px;border:1px solid #ddd;border-radius:8px;background:#f7f7f7;font:12px ui-monospace,monospace;white-space:pre-wrap}.row{display:flex;gap:8px;justify-content:flex-end;margin-top:12px} button{padding:8px 12px;border-radius:8px;border:1px solid #ccc;background:#fff;cursor:pointer}.go{background:#111;color:#fff}.status{font-size:12px;margin-top:8px;white-space:pre-wrap}
-    </style><div class="backdrop"><div class="card"><h3>✦ AICC · Explicit Run</h3><label>Task binding</label><select class="task"></select><div class="binding"></div><label>Exact Assistant instruction</label><textarea class="instruction" readonly></textarea><div class="status"></div><div class="row"><button class="cancel">Cancel</button><button class="go">Send to AICC</button></div></div></div>`;
-    modal={host,shadow,task:shadow.querySelector('.task'),binding:shadow.querySelector('.binding'),instruction:shadow.querySelector('.instruction'),status:shadow.querySelector('.status'),go:shadow.querySelector('.go')};
+      textarea{min-height:220px;padding:10px;background:#fafafa}select{padding:8px}.binding{padding:9px 10px;border:1px solid #ddd;border-radius:8px;background:#f7f7f7;font:12px ui-monospace,monospace;white-space:pre-wrap}.required{color:#b42318;font-weight:700}.row{display:flex;gap:8px;justify-content:flex-end;margin-top:12px} button{padding:8px 12px;border-radius:8px;border:1px solid #ccc;background:#fff;cursor:pointer}.go{background:#111;color:#fff}.status{font-size:12px;margin-top:8px;white-space:pre-wrap}
+    </style><div class="backdrop"><div class="card"><h3>✦ AICC · Explicit Run</h3><label>Task binding</label><select class="task"></select><div class="binding"></div><label>Task Name <span class="required">(required)</span></label><div class="task-name binding"></div><label>Exact Assistant instruction</label><textarea class="instruction" readonly></textarea><div class="status"></div><div class="row"><button class="cancel">Cancel</button><button class="go">Send to AICC</button></div></div></div>`;
+    modal={host,shadow,task:shadow.querySelector('.task'),binding:shadow.querySelector('.binding'),taskName:shadow.querySelector('.task-name'),instruction:shadow.querySelector('.instruction'),status:shadow.querySelector('.status'),go:shadow.querySelector('.go')};
     shadow.querySelector('.cancel').onclick=()=>{host.remove();modal=null;};
     return modal;
   }
@@ -60,25 +60,41 @@
     const taskTitle=(marker(sourceText,'AICC_TASK')||first).slice(0,200);
     return {workPackageTitle,taskTitle};
   }
+  function selectedTaskName(ui,binding){
+    if(!ui.task.value)return binding.taskTitle.trim();
+    return (ui.task.selectedOptions[0]?.dataset?.taskTitle||'').trim();
+  }
+  function taskNameGate(ui,binding){
+    const name=selectedTaskName(ui,binding);ui.taskName.textContent=name||'MISSING';
+    if(!name){ui.go.disabled=true;ui.status.textContent='Task Name is required. Submission blocked.';return false;}
+    return true;
+  }
   function showBinding(ui,binding){
     const selected=ui.task.value;
-    ui.binding.textContent=selected?`Mode: Existing exact Task\nTask ID: ${selected}`:`Mode: Auto create/bind\nWP: ${binding.workPackageTitle}\nTask: ${binding.taskTitle}`;
+    ui.binding.textContent=selected?`Mode: Existing exact Task\nTask ID: ${selected}`:`Mode: Auto create/bind\nWP: ${binding.workPackageTitle}`;
+    return taskNameGate(ui,binding);
   }
   async function openExplicitRun(sourceText){
     const ui=ensureModal();const binding=automaticBinding(sourceText);
     ui.instruction.value=sourceText;ui.task.textContent='';
-    const auto=document.createElement('option');auto.value='';auto.textContent='Auto · Create/bind WP + Task from this Assistant turn';ui.task.appendChild(auto);
+    const auto=document.createElement('option');auto.value='';auto.dataset.taskTitle=binding.taskTitle;auto.textContent=`Auto · ${binding.taskTitle}`;ui.task.appendChild(auto);
     ui.status.textContent='Loading existing Tasks…';ui.go.disabled=true;showBinding(ui,binding);
     let response;try{response=await message('AICC_LIST_TASKS');}catch(error){response={ok:false,errorCode:error?.code||'BRIDGE_CLIENT_ERROR'};}
     if(response?.ok){
-      for(const task of response.tasks||[]){const option=document.createElement('option');option.value=task.id;option.textContent=`${task.title} · ${task.status} · ${task.id}`;ui.task.appendChild(option);}
-      ui.status.textContent=`Ready · Auto is default · ${Math.max(0,ui.task.options.length-1)} existing Task(s) available.`;
-    }else ui.status.textContent=`Existing Task list unavailable: ${response?.errorCode||'BRIDGE_CLIENT_ERROR'} · Auto binding remains available.`;
-    ui.go.disabled=false;ui.task.onchange=()=>showBinding(ui,binding);
+      for(const task of response.tasks||[]){
+        if(typeof task?.id!=='string'||!task.id.trim()||typeof task?.title!=='string'||!task.title.trim())continue;
+        const option=document.createElement('option');option.value=task.id;option.dataset.taskTitle=task.title.trim();option.textContent=`${task.title} · ${task.status} · ${task.id}`;ui.task.appendChild(option);
+      }
+      ui.status.textContent=`Ready · Task Name required · ${Math.max(0,ui.task.options.length-1)} existing Task(s) available.`;
+    }else ui.status.textContent=`Existing Task list unavailable: ${response?.errorCode||'BRIDGE_CLIENT_ERROR'} · Auto Task Name must remain valid.`;
+    ui.go.disabled=false;showBinding(ui,binding);
+    ui.task.onchange=()=>{if(showBinding(ui,binding))ui.status.textContent='Ready · Task Name validated.';};
     ui.go.onclick=async()=>{
+      if(!taskNameGate(ui,binding))return;
+      const taskTitle=selectedTaskName(ui,binding);
       ui.go.disabled=true;ui.status.textContent='Submitting exact Assistant execution to AICC…';
-      const payload={url:location.href,instruction:sourceText};
-      if(ui.task.value)payload.taskId=ui.task.value;else Object.assign(payload,binding);
+      const payload={url:location.href,instruction:sourceText,taskTitle};
+      if(ui.task.value)payload.taskId=ui.task.value;else payload.workPackageTitle=binding.workPackageTitle;
       let result;try{result=await message('AICC_SUBMIT_EXPLICIT',payload);}catch(error){result={ok:false,errorCode:error?.code||'BRIDGE_CLIENT_ERROR'};}
       if(!result?.ok){ui.status.textContent=result?.errorCode||'Bridge request failed';ui.go.disabled=false;return;}
       ui.status.textContent=`Queued request ${result.requestId}\nRun pending in AICC background\n${ui.task.value?'Existing Task bound exactly.':'WP/Task auto-bound.'} Auto-return is bound to this conversation only.`;
@@ -155,9 +171,7 @@
     if(composerValue(node)!==content){node.textContent=content;node.dispatchEvent(new InputEvent('input',{bubbles:true,inputType:'insertText',data:content}));}
     return composerValue(node)===content;
   }
-  function exactUserCount(content){
-    let count=0;for(const node of document.querySelectorAll('[data-message-author-role="user"]'))if((node.innerText??node.textContent??'')===content)count++;return count;
-  }
+  function userTurnCount(){return document.querySelectorAll('[data-message-author-role="user"]').length;}
   async function waitFor(check,timeout=5000,step=100){
     const end=Date.now()+timeout;while(Date.now()<end){const value=check();if(value)return value;await new Promise(resolve=>setTimeout(resolve,step));}return null;
   }
@@ -172,9 +186,9 @@
     if(conversationId()!==message.conversationId)return {outcome:'ABORTED_BEFORE_SEND',reason:'BRIDGE_CONVERSATION_MISMATCH'};
     const button=await sendButton();if(!button)return {outcome:'ABORTED_BEFORE_SEND',reason:'BRIDGE_SEND_CONTROL_NOT_FOUND'};
     if(composerValue(box)!==message.content)return {outcome:'ABORTED_BEFORE_SEND',reason:'BRIDGE_COMPOSER_CONTENT_DRIFT'};
-    const before=exactUserCount(message.content);
+    const before=userTurnCount();
     try{button.click();}catch{return {outcome:'UNCERTAIN',reason:'BRIDGE_SEND_CLICK_UNCERTAIN'};}
-    const proved=await waitFor(()=>conversationId()===message.conversationId&&exactUserCount(message.content)>before,12000,150);
+    const proved=await waitFor(()=>conversationId()===message.conversationId&&userTurnCount()>before&&composerValue(box)!==message.content,12000,150);
     return proved?{outcome:'DELIVERED'}:{outcome:'UNCERTAIN',reason:'BRIDGE_SEND_PROOF_UNAVAILABLE'};
   }
 

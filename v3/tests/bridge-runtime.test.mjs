@@ -24,7 +24,7 @@ function fixture(){
   const bridgeOptions={executorOptions,runUuid:()=> '10000000-0000-4000-8000-000000000001',claimUuid:()=> '20000000-0000-4000-8000-000000000001'};
   return {root,repo,home,env,context,wp,task,executorOptions,bridgeOptions};
 }
-function input(f,overrides={}){return {provider:'chatgpt-web',requestId:'30000000-0000-4000-8000-000000000001',conversationId:'conv-explicit-1',originTurnId:'origin-turn-1',taskId:f.task.id,instruction:'Exact bridge instruction.\n',...overrides};}
+function input(f,overrides={}){return {provider:'chatgpt-web',requestId:'30000000-0000-4000-8000-000000000001',conversationId:'conv-explicit-1',originTurnId:'origin-turn-1',taskId:f.task.id,taskTitle:f.task.title,instruction:'Exact bridge instruction.\n',...overrides};}
 function completeRun(f,runId,content='  EXACT RESULT\nline2\n'){
   const raw=JSON.stringify({type:'item.completed',item:{type:'agent_message',text:content}});
   appendRunEvent(f.context,runId,'CODEX_STDOUT','CODEX',{raw},f.env);
@@ -43,6 +43,12 @@ test('automatic Bridge binding materializes deterministic WP and Task without Ow
   assert.equal(second.created,false);assert.equal(second.request.taskId,first.request.taskId);assert.equal(second.request.workPackageId,first.request.workPackageId);
   const after=readWorkStore(f.context,f.env);assert.equal(after.workPackages.filter(item=>item.id===wp.id).length,1);assert.equal(after.tasks.filter(item=>item.id===task.id).length,1);
   assert.throws(()=>submitBridgeRequest(f.context,{...auto,taskTitle:'Drifted Task'},f.env,f.bridgeOptions),e=>e.code==='BRIDGE_REQUEST_CONFLICT');
+});
+
+test('existing Task execution requires exact Task Name',()=>{
+  const f=fixture();
+  assert.throws(()=>submitBridgeRequest(f.context,input(f,{taskTitle:''}),f.env,f.bridgeOptions),e=>e.code==='BRIDGE_TASK_TITLE_REQUIRED');
+  assert.throws(()=>submitBridgeRequest(f.context,input(f,{taskTitle:'Wrong Task Name'}),f.env,f.bridgeOptions),e=>e.code==='BRIDGE_TASK_TITLE_MISMATCH');
 });
 
 test('Bridge request is idempotent and cannot drift origin, Task or instruction',()=>{
