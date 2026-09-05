@@ -99,5 +99,7 @@ test('extension manifest and source keep credential privileged and forbid active
   assert.equal(content.includes('x-aicc-bridge-token'),false);assert.equal(content.includes('aiccBridgeTokenV1'),false);assert.equal(content.includes('chrome.storage'),false);
   assert.ok((content.match(/conversationId\(\)!==message\.conversationId/g)||[]).length>=2);
   assert.match(content,/data-message-author-role="assistant"/);assert.match(content,/✦ AICC/);
+  assert.match(content,/function nativeActionRow/);assert.match(content,/copy-turn-action-button/);assert.match(content,/row\.appendChild\(button\)/);
+  assert.equal(content.includes('container.appendChild(button)'),false);assert.equal(content.includes("margin:'8px 0'"),false);
   assert.equal(pairing.includes('console.log(token)'),false);assert.match(pairing,/pbcopy/);
 });

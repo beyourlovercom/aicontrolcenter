@@ -1,6 +1,6 @@
 # AICC V3 Living Roadmap
 
-Roadmap-Revision: 24
+Roadmap-Revision: 25
 Updated-At: 2026-09-05
 Status: `ACTIVE`
 
@@ -56,4 +56,4 @@ Total implementation budget: `55–70h` including bounded rework.
 
 ## Next exact gate
 
-Commit and push the V3.8.2 privileged Browser Bridge checkpoint and require exact-head V3 CI PASS. Then deploy the exact head to CN Mac, load the unpacked extension, pair it through the clipboard-only local credential helper, and perform one explicit Owner-triggered same-conversation end-to-end UAT. No ChatGPT message may be sent before the Owner explicitly clicks `✦ AICC` on the originating Assistant turn.
+Commit and push the V3.8.2 privileged Browser Bridge checkpoint and require exact-head V3 CI PASS. Then deploy the exact head to the device-ID-pinned CN MacBook Pro, load the unpacked extension with the AICC trigger integrated into the native Assistant action row, pair it through the clipboard-only local credential helper, and perform one explicit Owner-triggered same-conversation end-to-end UAT. No ChatGPT message may be sent before the Owner explicitly clicks `✦ AICC` on the originating Assistant turn.

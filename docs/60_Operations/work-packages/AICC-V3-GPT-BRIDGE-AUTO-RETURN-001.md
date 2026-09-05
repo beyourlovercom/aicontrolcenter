@@ -85,3 +85,9 @@ Commit and push the V3.8.2 privileged Browser Bridge checkpoint and require exac
 - Added clipboard-only macOS pairing helper; it never prints the Bridge token.
 - Fake-browser integration plus the complete Node 22 V3 suite reached `55/55 PASS`; Chrome 152 smoke produced no manifest/extension-load error.
 - No real Bridge credential, Bridge Request, Codex Run, or ChatGPT send was created during V3.8.2 implementation/testing.
+
+## V3.8.3 UI integration evidence
+
+- Owner-approved placement is one native Assistant action row: copy / feedback / regenerate / more / `✦ AICC`, with no dedicated second row.
+- The content adapter now waits for the native Assistant action row and appends the small AICC pill there; if that row cannot be proven, it fails closed and injects nothing.
+- Device identity is hard-pinned for deployment: CN MacBook Pro is `3107d5f0-6f29-479c-8453-77bf53c172cf`; hostname inference is forbidden for rollout.
