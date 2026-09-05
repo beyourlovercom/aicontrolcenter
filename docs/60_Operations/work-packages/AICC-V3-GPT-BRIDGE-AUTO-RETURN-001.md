@@ -42,4 +42,21 @@ Implement the smallest trustworthy GPT Bridge / Auto Return loop so an Owner-aut
 
 ## Next exact gate
 
-Freeze the V3.8 bridge contract before code: conversation identity, turn identity, Task/Run/Result binding, delivery envelope, receipt, idempotency, retry limits, restart reconciliation, and fail-closed error codes. No bridge implementation until this contract is committed and exact-head CI passes.
+Commit and push the frozen V3.8 Bridge contract and require exact-head V3 CI PASS. Then implement only durable Bridge request/delivery state and the four frozen Bridge APIs with fake-Bridge tests. The real ChatGPT browser adapter and any real ChatGPT send remain forbidden until that checkpoint passes.
+
+## Frozen V3.8 contract
+
+- Authority: `docs/40_Architecture/AICC-V3-GPT-BRIDGE-CONTRACT.md`.
+- One explicit Owner action binds one persisted `requestId` to exact `conversationId`, Bridge-owned `originTurnId`, existing Task, exact instruction, Run, and Canonical Result.
+- No active-tab/latest-conversation/latest-Task fallback exists.
+- Result delivery content is exactly `Canonical Result.content`; AICC/Bridge may not prefix, trim, summarize, translate, wrap, or infer PASS/FAIL.
+- Automatic post-claim send retry count is zero. An ambiguous send becomes terminal `DELIVERY_UNCERTAIN` rather than being auto-replayed.
+- Safe pre-send retry is bounded to two attempts only after explicit `ABORTED_BEFORE_SEND`.
+- Bridge mutation/read APIs require a loopback-only local Bridge credential held by extension/background transport, not page DOM.
+
+## V3.8.0 contract evidence
+
+- Historical V2 roadmap evidence preserved the same-conversation exactly-once goal but no reusable Bridge implementation was present in the current repository.
+- V3 therefore freezes a new clean protocol rather than importing V2 runtime/state.
+- ChatGPT internal message/turn IDs are not assumed; `originTurnId` is explicitly Bridge-owned unless a provider ID can later be proven.
+- Same-conversation return fails closed on identity mismatch and never uses browser focus or latest activity.

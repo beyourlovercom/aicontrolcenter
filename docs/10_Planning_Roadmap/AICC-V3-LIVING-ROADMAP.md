@@ -1,6 +1,6 @@
 # AICC V3 Living Roadmap
 
-Roadmap-Revision: 21
+Roadmap-Revision: 22
 Updated-At: 2026-09-05
 Status: `ACTIVE`
 
@@ -9,7 +9,7 @@ Status: `ACTIVE`
 `V3.8 — GPT Bridge / Auto Return`
 
 Current Work Package: `AICC-V3-GPT-BRIDGE-AUTO-RETURN-001`
-Current implementation phase: `V3.8.0 — bridge contract and conversation-binding gate`
+Current implementation phase: `V3.8.1 — bridge persistence and API implementation`
 
 ## Milestones
 
@@ -56,4 +56,4 @@ Total implementation budget: `55–70h` including bounded rework.
 
 ## Next exact gate
 
-Freeze the V3.8 GPT Bridge / Auto Return contract before implementation. Define explicit conversation identity, Run/Result correlation, delivery receipt semantics, retry/idempotency boundaries, and fail-closed behavior while preserving `AICC_TRANSPORT_ONLY = 1`, `AICC_DISPLAY_ONLY = 1`, `AICC_DECISION_AUTHORITY = 0`, and `AICC_RESULT_REWRITE = 0`. Do not implement bridge transport until the contract is frozen and locally reconciled.
+Commit and push the frozen V3.8 GPT Bridge contract and require exact-head V3 CI PASS. Then implement only project-scoped Bridge request/delivery persistence plus the four frozen Bridge APIs with fake-Bridge focused tests. Do not add the real ChatGPT browser adapter or perform a real ChatGPT send until that runtime/API checkpoint passes.

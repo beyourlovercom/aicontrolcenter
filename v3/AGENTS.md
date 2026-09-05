@@ -35,3 +35,16 @@ Production cutover to port 1420 is a separate gate.
 `EXECUTOR_SEMANTIC_RESULT_INFERENCE = FORBIDDEN`
 
 Codex execution contract authority: `docs/40_Architecture/AICC-V3-CODEX-RUN-CONTRACT.md`.
+
+## V3.8 Bridge boundaries
+
+`BRIDGE_EXPLICIT_ORIGIN_BINDING = REQUIRED`
+`BRIDGE_LOCAL_CREDENTIAL = REQUIRED`
+`BRIDGE_IMPLICIT_CONVERSATION_DISCOVERY = FORBIDDEN`
+`BRIDGE_LATEST_TASK_OR_RUN_FALLBACK = FORBIDDEN`
+`BRIDGE_RESULT_CONTENT_REWRITE = FORBIDDEN`
+`BRIDGE_AUTO_POST_SEND_RETRY = 0`
+`BRIDGE_AMBIGUOUS_DELIVERY = FAIL_CLOSED`
+
+Bridge contract authority: `docs/40_Architecture/AICC-V3-GPT-BRIDGE-CONTRACT.md`.
+A real ChatGPT browser send is not authorized until the declared runtime/API and browser-adapter gates pass.
