@@ -1,6 +1,6 @@
 (()=>{
   'use strict';
-  const CONTENT_VERSION='3.8.6';
+  const CONTENT_VERSION='3.8.7';
   if(globalThis.__AICC_V3_BRIDGE_CONTENT_VERSION__===CONTENT_VERSION)return;
   try{globalThis.__AICC_V3_BRIDGE_CLEANUP__?.();}catch{}
   globalThis.__AICC_V3_BRIDGE_CONTENT_VERSION__=CONTENT_VERSION;
@@ -19,7 +19,20 @@
     return [...new Uint8Array(hash)].map(value=>value.toString(16).padStart(2,'0')).join('');
   }
   function assistantText(node){return typeof node?.innerText==='string'?node.innerText:'';}
-  function message(type,payload={}){return chrome.runtime.sendMessage({type,...payload});}
+  function message(type,payload={},timeout=5000){
+    return new Promise((resolve,reject)=>{
+      let settled=false;
+      const finish=(fn,value)=>{if(settled)return;settled=true;clearTimeout(timer);fn(value);};
+      const timer=setTimeout(()=>finish(reject,Object.assign(new Error('BRIDGE_BACKGROUND_TIMEOUT'),{code:'BRIDGE_BACKGROUND_TIMEOUT'})),timeout);
+      try{
+        chrome.runtime.sendMessage({type,...payload},response=>{
+          const lastError=chrome.runtime.lastError;
+          if(lastError)return finish(reject,Object.assign(new Error(lastError.message||'BRIDGE_CLIENT_ERROR'),{code:'BRIDGE_CLIENT_ERROR'}));
+          finish(resolve,response);
+        });
+      }catch(error){finish(reject,error);}
+    });
+  }
 
   let modal=null;
   function ensureModal(){

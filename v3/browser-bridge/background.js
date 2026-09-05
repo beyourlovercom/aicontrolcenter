@@ -18,10 +18,14 @@ async function token(){
   return value;
 }
 
-async function request(path,{method='GET',body,auth=true,overrideToken}={}){
+async function request(path,{method='GET',body,auth=true,overrideToken,timeout=5000}={}){
   const headers={};if(body!==undefined)headers['content-type']='application/json';
   if(auth)headers['x-aicc-bridge-token']=overrideToken||await token();
-  let response;try{response=await fetch(`${BASE}${path}`,{method,headers,body:body===undefined?undefined:JSON.stringify(body)});}catch{const error=new Error('BRIDGE_AICC_UNREACHABLE');error.code='BRIDGE_AICC_UNREACHABLE';throw error;}
+  const controller=new AbortController();const timer=setTimeout(()=>controller.abort(),timeout);
+  let response;
+  try{response=await fetch(`${BASE}${path}`,{method,headers,body:body===undefined?undefined:JSON.stringify(body),signal:controller.signal});}
+  catch{const error=new Error('BRIDGE_AICC_UNREACHABLE');error.code='BRIDGE_AICC_UNREACHABLE';throw error;}
+  finally{clearTimeout(timer);}
   let value={};try{value=await response.json();}catch{}
   if(!response.ok){const error=new Error(value.errorCode||`HTTP_${response.status}`);error.code=value.errorCode||`HTTP_${response.status}`;error.status=response.status;throw error;}
   return value;
