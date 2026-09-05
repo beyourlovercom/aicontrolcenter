@@ -98,10 +98,10 @@ test('extension manifest and source keep credential privileged and forbid active
   assert.match(background,/TRUSTED_CONTEXTS/);assert.match(background,/x-aicc-bridge-token/);assert.match(background,/api\/bridge\/bootstrap/);assert.match(background,/autoPair/);assert.match(background,/chrome\.scripting\.executeScript/);assert.match(background,/reinjectOpenChatgptTabs/);
   assert.match(options,/api\/bridge\/bootstrap/);assert.match(options,/chrome\.storage\.local\.set/);assert.match(options,/aiccBridgeTokenV1/);assert.equal(options.includes('console.log'),false);
   assert.equal(/chrome\.tabs\.query\(\{\s*active\s*:/.test(background),false);assert.equal(background.includes('currentWindow:true'),false);
-  assert.equal(content.includes('x-aicc-bridge-token'),false);assert.equal(content.includes('aiccBridgeTokenV1'),false);assert.equal(content.includes('chrome.storage'),false);assert.match(content,/__AICC_V3_BRIDGE_CONTENT_LOADED__/);
+  assert.equal(content.includes('x-aicc-bridge-token'),false);assert.equal(content.includes('aiccBridgeTokenV1'),false);assert.equal(content.includes('chrome.storage'),false);assert.match(content,/__AICC_V3_BRIDGE_CONTENT_VERSION__/);assert.match(content,/__AICC_V3_BRIDGE_CLEANUP__/);
   assert.ok((content.match(/conversationId\(\)!==message\.conversationId/g)||[]).length>=2);
   assert.match(content,/data-message-author-role="assistant"/);assert.match(content,/✦ AICC/);
-  assert.match(content,/function nativeActionRow/);assert.match(content,/copy-turn-action-button/);assert.match(content,/row\.appendChild\(button\)/);
+  assert.match(content,/function actionRowFromCopy/);assert.match(content,/function sourceTextForRow/);assert.match(content,/copy-turn-action-button/);assert.match(content,/document\.querySelectorAll\('button'\)\]\.filter\(isCopyButton\)/);assert.match(content,/row\.appendChild\(button\)/);
   assert.equal(content.includes('container.appendChild(button)'),false);assert.equal(content.includes("margin:'8px 0'"),false);
   assert.equal(pairing.includes('console.log(token)'),false);assert.match(pairing,/pbcopy/);
 });

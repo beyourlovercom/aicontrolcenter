@@ -1,7 +1,9 @@
 (()=>{
   'use strict';
-  if(globalThis.__AICC_V3_BRIDGE_CONTENT_LOADED__)return;
-  globalThis.__AICC_V3_BRIDGE_CONTENT_LOADED__=true;
+  const CONTENT_VERSION='3.8.6';
+  if(globalThis.__AICC_V3_BRIDGE_CONTENT_VERSION__===CONTENT_VERSION)return;
+  try{globalThis.__AICC_V3_BRIDGE_CLEANUP__?.();}catch{}
+  globalThis.__AICC_V3_BRIDGE_CONTENT_VERSION__=CONTENT_VERSION;
   const BUTTON_ATTR='data-aicc-v3-bridge';
   for(const stale of document.querySelectorAll(`button[${BUTTON_ATTR}]`))stale.remove();
   document.getElementById('aicc-v3-bridge-modal-host')?.remove();
@@ -50,33 +52,51 @@
     };
   }
 
-  function nativeActionRow(container,node){
-    const copies=[...container.querySelectorAll('button')].filter(button=>{
+  function isCopyButton(button){
+    const id=button.getAttribute('data-testid')||'';
+    const label=button.getAttribute('aria-label')||button.getAttribute('title')||'';
+    return id==='copy-turn-action-button'||/^(copy|复制)$/i.test(label.trim());
+  }
+  function isAssistantActionRow(row){
+    const buttons=[...row.querySelectorAll('button')];
+    if(buttons.length<3)return false;
+    return buttons.some(button=>{
       const id=button.getAttribute('data-testid')||'';
       const label=button.getAttribute('aria-label')||button.getAttribute('title')||'';
-      return id==='copy-turn-action-button'||/^(copy|复制)$/i.test(label.trim());
-    });
-    if(!copies.length)return null;
-    const bottom=node.getBoundingClientRect().bottom;
-    copies.sort((a,b)=>Math.abs(a.getBoundingClientRect().top-bottom)-Math.abs(b.getBoundingClientRect().top-bottom));
-    const copy=copies[0];let row=copy.parentElement;
+      return /regenerate|retry|重新生成|重试/i.test(`${id} ${label}`);
+    })||buttons.length>=4;
+  }
+  function actionRowFromCopy(copy){
+    let row=copy.parentElement;
     for(let depth=0;row&&depth<6;depth++,row=row.parentElement){
-      if(!container.contains(row))break;
-      if(row.querySelectorAll('button').length>=3)return row;
+      if(isAssistantActionRow(row))return row;
     }
     return null;
   }
-  function actionRowForAssistant(node){
-    let container=node.parentElement;
-    for(let depth=0;container&&depth<12;depth++,container=container.parentElement){
-      const row=nativeActionRow(container,node);if(row)return row;
+  function turnContainerFromRow(row){
+    const direct=row.closest('[data-testid^="conversation-turn-"],article,[data-message-id]');
+    if(direct)return direct;
+    let current=row.parentElement;
+    for(let depth=0;current&&depth<12;depth++,current=current.parentElement){
+      const copies=[...current.querySelectorAll('button')].filter(isCopyButton);
+      if(copies.length===1&&(current.innerText||'').trim())return current;
     }
     return null;
+  }
+  function sourceTextForRow(row){
+    const container=turnContainerFromRow(row);if(!container)return '';
+    const assistant=container.querySelector('[data-message-author-role="assistant"]');
+    if(assistant)return assistantText(assistant);
+    const clone=container.cloneNode(true);
+    for(const button of clone.querySelectorAll('button'))button.remove();
+    for(const host of clone.querySelectorAll('#aicc-v3-bridge-modal-host'))host.remove();
+    return (clone.innerText||clone.textContent||'').trim();
   }
   function injectButtons(){
-    for(const node of document.querySelectorAll('[data-message-author-role="assistant"]')){
-      const text=assistantText(node);if(!text.trim())continue;
-      const row=actionRowForAssistant(node);if(!row||row.querySelector(`button[${BUTTON_ATTR}]`))continue;
+    const copies=[...document.querySelectorAll('button')].filter(isCopyButton);
+    for(const copy of copies){
+      const row=actionRowFromCopy(copy);if(!row||row.querySelector(`button[${BUTTON_ATTR}]`))continue;
+      const text=sourceTextForRow(row);if(!text.trim())continue;
       const button=document.createElement('button');button.type='button';button.textContent='✦ AICC';button.setAttribute(BUTTON_ATTR,'1');button.setAttribute('aria-label','Send this Assistant turn to AICC');
       Object.assign(button.style,{marginLeft:'6px',padding:'3px 8px',minHeight:'28px',border:'1px solid rgba(0,0,0,.18)',borderRadius:'999px',background:'transparent',font:'12px system-ui',lineHeight:'1',cursor:'pointer',whiteSpace:'nowrap'});
       button.addEventListener('click',event=>{event.preventDefault();event.stopPropagation();void openExplicitRun(text);});
@@ -125,9 +145,16 @@
     return proved?{outcome:'DELIVERED'}:{outcome:'UNCERTAIN',reason:'BRIDGE_SEND_PROOF_UNAVAILABLE'};
   }
 
-  chrome.runtime.onMessage.addListener((message,_sender,sendResponse)=>{
+  function deliveryListener(message,_sender,sendResponse){
     if(message?.type!=='AICC_DELIVER_EXACT')return false;
     void deliverExact(message).then(sendResponse).catch(()=>sendResponse({outcome:'UNCERTAIN',reason:'BRIDGE_CONTENT_ADAPTER_ERROR'}));
     return true;
-  });
+  }
+  chrome.runtime.onMessage.addListener(deliveryListener);
+  globalThis.__AICC_V3_BRIDGE_CLEANUP__=()=>{
+    try{observer.disconnect();}catch{}
+    try{chrome.runtime.onMessage.removeListener(deliveryListener);}catch{}
+    for(const stale of document.querySelectorAll(`button[${BUTTON_ATTR}]`))stale.remove();
+    document.getElementById('aicc-v3-bridge-modal-host')?.remove();
+  };
 })();
