@@ -1,6 +1,6 @@
 # AICC V3 Living Roadmap
 
-Roadmap-Revision: 22
+Roadmap-Revision: 23
 Updated-At: 2026-09-05
 Status: `ACTIVE`
 
@@ -9,7 +9,7 @@ Status: `ACTIVE`
 `V3.8 — GPT Bridge / Auto Return`
 
 Current Work Package: `AICC-V3-GPT-BRIDGE-AUTO-RETURN-001`
-Current implementation phase: `V3.8.1 — bridge persistence and API implementation`
+Current implementation phase: `V3.8.2 — browser bridge client and same-conversation delivery integration`
 
 ## Milestones
 

@@ -8,6 +8,8 @@ import {createTask,createWorkPackage,readWorkStore,updateTaskStatus,updateWorkPa
 import {executorStatus,runEvents,runProjection,startRun,stopRun} from './lib/executor-runtime.mjs';
 import {readOrMaterializeResult} from './lib/result-store.mjs';
 import {createDraftPr,readPrDeliveryFacts} from './lib/github-delivery.mjs';
+import {verifyBridgeCredential} from './lib/bridge-store.mjs';
+import {bridgeProjection,claimBridgeDelivery,reconcileBridgeStartup,recordBridgeReceipt,submitBridgeRequest} from './lib/bridge-runtime.mjs';
 
 const root=dirname(fileURLToPath(import.meta.url));
 const publicRoot=join(root,'public');
@@ -64,6 +66,21 @@ function prError(res,error){
   if(error?.existingPr)body.existingPr=error.existingPr;return json(res,prErrorStatus(errorCode),body);
 }
 
+function bridgeErrorStatus(code){
+  if(code==='BRIDGE_AUTH_REQUIRED')return 401;
+  if(['BRIDGE_TASK_NOT_FOUND','BRIDGE_DELIVERY_NOT_FOUND'].includes(code))return 404;
+  if(['BRIDGE_REQUEST_INVALID','BRIDGE_CONVERSATION_ID_UNAVAILABLE','BRIDGE_ORIGIN_TURN_ID_REQUIRED','REQUEST_JSON_INVALID'].includes(code))return 400;
+  if(['BRIDGE_REQUEST_CONFLICT','BRIDGE_PROJECT_MISMATCH','BRIDGE_RUN_BINDING_FAILED','BRIDGE_RESULT_NOT_READY','BRIDGE_DELIVERY_ALREADY_CLAIMED','BRIDGE_DELIVERY_ALREADY_DELIVERED','BRIDGE_DELIVERY_UNCERTAIN','BRIDGE_CONVERSATION_MISMATCH','BRIDGE_RECEIPT_MISMATCH','BRIDGE_RETRY_EXHAUSTED'].includes(code))return 409;
+  return 503;
+}
+function bridgeError(res,error){const errorCode=error?.code||'BRIDGE_REQUEST_INVALID';return json(res,bridgeErrorStatus(errorCode),{ok:false,errorCode});}
+function requireBridgeAuth(req,env,options={}){
+  const remote=req.socket?.remoteAddress||'';
+  if(!['127.0.0.1','::1','::ffff:127.0.0.1'].includes(remote)){const error=new Error('BRIDGE_AUTH_REQUIRED');error.code='BRIDGE_AUTH_REQUIRED';throw error;}
+  const raw=req.headers['x-aicc-bridge-token'];const token=Array.isArray(raw)?raw[0]:raw;
+  verifyBridgeCredential(token,env,options.credentialOptions||{});
+}
+
 async function readJson(req){
   let body='';
   for await(const chunk of req){
@@ -79,6 +96,8 @@ export function createAiccV3Server(options={}){
   const storeOptions=options.workStoreOptions||{};
   const executorOptions=options.executorOptions||{};
   const prDeliveryOptions=options.prDeliveryOptions||{};
+  const bridgeOptions={...(options.bridgeOptions||{}),executorOptions:options.bridgeOptions?.executorOptions||executorOptions};
+  try{reconcileBridgeStartup(loadProjectContext(env),env,bridgeOptions);}catch{}
   return createHttpServer(async(req,res)=>{
     const url=new URL(req.url||'/',`http://${req.headers.host||'localhost'}`);
     if(req.method==='GET'&&url.pathname==='/api/health'){
@@ -138,6 +157,29 @@ export function createAiccV3Server(options={}){
     if(req.method==='POST'&&url.pathname==='/api/prs/draft'){
       try{const input=await readJson(req);const context=loadProjectContext(env);return json(res,201,{ok:true,pullRequest:createDraftPr(context,input,env,prDeliveryOptions)});}
       catch(error){return prError(res,error);}
+    }
+
+    if(url.pathname.startsWith('/api/bridge/')){
+      try{requireBridgeAuth(req,env,bridgeOptions);}catch(error){return bridgeError(res,error);}
+    }
+    if(req.method==='POST'&&url.pathname==='/api/bridge/requests'){
+      try{const input=await readJson(req);const context=loadProjectContext(env);return json(res,201,{ok:true,...submitBridgeRequest(context,input,env,bridgeOptions)});}
+      catch(error){return bridgeError(res,error);}
+    }
+    const bridgeClaim=url.pathname.match(/^\/api\/bridge\/requests\/([^/]+)\/claim$/);
+    if(req.method==='POST'&&bridgeClaim){
+      try{const input=await readJson(req);const context=loadProjectContext(env);const requestId=decodeURIComponent(bridgeClaim[1]);return json(res,200,{ok:true,...claimBridgeDelivery(context,requestId,input,env,bridgeOptions)});}
+      catch(error){return bridgeError(res,error);}
+    }
+    const bridgeReceipt=url.pathname.match(/^\/api\/bridge\/requests\/([^/]+)\/receipt$/);
+    if(req.method==='POST'&&bridgeReceipt){
+      try{const input=await readJson(req);const context=loadProjectContext(env);const requestId=decodeURIComponent(bridgeReceipt[1]);return json(res,200,{ok:true,...recordBridgeReceipt(context,requestId,input,env,bridgeOptions)});}
+      catch(error){return bridgeError(res,error);}
+    }
+    const bridgeRequest=url.pathname.match(/^\/api\/bridge\/requests\/([^/]+)$/);
+    if(req.method==='GET'&&bridgeRequest){
+      try{const context=loadProjectContext(env);const requestId=decodeURIComponent(bridgeRequest[1]);return json(res,200,{available:true,bridge:bridgeProjection(context,requestId,env,bridgeOptions)});}
+      catch(error){return bridgeError(res,error);}
     }
 
     if(req.method==='GET'&&url.pathname==='/api/executor'){

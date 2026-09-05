@@ -42,7 +42,7 @@ Implement the smallest trustworthy GPT Bridge / Auto Return loop so an Owner-aut
 
 ## Next exact gate
 
-Commit and push the frozen V3.8 Bridge contract and require exact-head V3 CI PASS. Then implement only durable Bridge request/delivery state and the four frozen Bridge APIs with fake-Bridge tests. The real ChatGPT browser adapter and any real ChatGPT send remain forbidden until that checkpoint passes.
+Commit and push the V3.8.1 durable Bridge persistence/API checkpoint and require exact-head V3 CI PASS. Then implement the privileged browser Bridge client and explicit same-conversation delivery verification. No real ChatGPT send side effect is authorized before that browser integration passes focused tests and reaches an explicit Owner UAT gate.
 
 ## Frozen V3.8 contract
 
@@ -60,3 +60,15 @@ Commit and push the frozen V3.8 Bridge contract and require exact-head V3 CI PAS
 - V3 therefore freezes a new clean protocol rather than importing V2 runtime/state.
 - ChatGPT internal message/turn IDs are not assumed; `originTurnId` is explicitly Bridge-owned unless a provider ID can later be proven.
 - Same-conversation return fails closed on identity mismatch and never uses browser focus or latest activity.
+
+## V3.8.1 implementation evidence
+
+- Added project-scoped durable Bridge Request / state / append-only events / immutable Delivery / terminal receipt storage.
+- Request creation binds a persisted `requestId` to one exact Task/WP and one fixed Run ID before network retry can create another Run.
+- Added authenticated `POST /api/bridge/requests`, exact `GET /api/bridge/requests/:requestId`, exact claim, and exact receipt endpoints.
+- Local Bridge credential is generated/stored outside Git with owner-only `0600` permissions; all four APIs require loopback + credential and do not return it.
+- Canonical Result content is copied byte-for-byte into one immutable Delivery; no trim, wrapper, summary, translation, or semantic status is added.
+- Safe pre-send retries are bounded to two after the initial claim; after a possible send side effect there is zero automatic retry.
+- Restart reconciliation converts an unreceipted `CLAIMED` delivery to `DELIVERY_UNCERTAIN` and forbids automatic resend.
+- Focused fake-Browser-Bridge coverage plus the complete Node 22 V3 suite reached `48/48 PASS`.
+- Real CN Mac `~/.aicc-v3` remained free of Bridge requests/credentials during implementation; no real Codex Run or ChatGPT send was started.
