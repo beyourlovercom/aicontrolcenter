@@ -1,14 +1,32 @@
 const $=id=>document.getElementById(id);
-function send(message){return chrome.runtime.sendMessage(message);}
+const BASE='http://127.0.0.1:1420';
+const TOKEN_KEY='aiccBridgeTokenV1';
+const INSTANCE_KEY='aiccBridgeInstanceIdV1';
 function render(value){
   const node=$('status');node.className=`status ${value?.ok&&value?.paired?'ok':value?.ok?'':'bad'}`;
   if(!value?.ok){node.textContent=`Not paired · ${value?.errorCode||'BRIDGE_CLIENT_ERROR'}`;return;}
   node.textContent=value.paired?`PAIRED · pending ${value.pending??0} · total ${value.total??0}`:'NOT PAIRED';
 }
-async function refresh(){try{const current=await send({type:'AICC_PAIRING_STATUS'});if(current?.paired)return render(current);const boot=await fetch('http://127.0.0.1:1420/api/bridge/bootstrap',{method:'POST'});const value=await boot.json();if(!boot.ok||typeof value?.token!=='string')throw new Error(value?.errorCode||'BRIDGE_AUTO_PAIR_FAILED');const saved=await send({type:'AICC_SAVE_PAIRING',token:value.token});render(saved?.ok?{...saved,pending:0,total:0}:saved);}catch{render({ok:false,errorCode:'BRIDGE_CLIENT_UNAVAILABLE'});}}
+async function storePairing(token){
+  if(typeof token!=='string'||token.length<32)throw new Error('BRIDGE_AUTH_REQUIRED');
+  const current=await chrome.storage.local.get(INSTANCE_KEY);
+  const values={[TOKEN_KEY]:token};if(!current[INSTANCE_KEY])values[INSTANCE_KEY]=crypto.randomUUID();
+  await chrome.storage.local.set(values);return {ok:true,paired:true,pending:0,total:0};
+}
+async function verifyToken(token){
+  const response=await fetch(`${BASE}/api/bridge/requests/00000000-0000-4000-8000-000000000000`,{headers:{'x-aicc-bridge-token':token}});
+  if(response.status===401)throw new Error('BRIDGE_AUTH_REQUIRED');return true;
+}
+async function refresh(){
+  try{
+    const current=await chrome.storage.local.get(TOKEN_KEY);if(typeof current[TOKEN_KEY]==='string'&&current[TOKEN_KEY].length>=32)return render({ok:true,paired:true,pending:0,total:0});
+    const response=await fetch(`${BASE}/api/bridge/bootstrap`,{method:'POST'});const value=await response.json();
+    if(!response.ok)throw new Error(value?.errorCode||'BRIDGE_AUTO_PAIR_FAILED');render(await storePairing(value.token));
+  }catch{render({ok:false,errorCode:'BRIDGE_CLIENT_UNAVAILABLE'});}
+}
 $('save').addEventListener('click',async()=>{
   const token=$('token').value;$('save').disabled=true;$('status').textContent='Verifying…';
-  try{const value=await send({type:'AICC_SAVE_PAIRING',token});if(value?.ok)$('token').value='';render(value);}
-  catch{render({ok:false,errorCode:'BRIDGE_CLIENT_UNAVAILABLE'});}finally{$('save').disabled=false;}
+  try{await verifyToken(token);$('token').value='';render(await storePairing(token));}
+  catch(error){render({ok:false,errorCode:error?.message||'BRIDGE_CLIENT_UNAVAILABLE'});}finally{$('save').disabled=false;}
 });
 void refresh();

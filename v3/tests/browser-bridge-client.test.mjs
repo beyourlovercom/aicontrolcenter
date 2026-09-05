@@ -96,7 +96,7 @@ test('extension manifest and source keep credential privileged and forbid active
   const content=readFileSync(join(root,'browser-bridge/content.js'),'utf8');
   const pairing=readFileSync(join(root,'scripts/copy-bridge-pairing-token.mjs'),'utf8');
   assert.match(background,/TRUSTED_CONTEXTS/);assert.match(background,/x-aicc-bridge-token/);assert.match(background,/api\/bridge\/bootstrap/);assert.match(background,/autoPair/);
-  assert.match(options,/api\/bridge\/bootstrap/);assert.equal(options.includes('console.log'),false);
+  assert.match(options,/api\/bridge\/bootstrap/);assert.match(options,/chrome\.storage\.local\.set/);assert.match(options,/aiccBridgeTokenV1/);assert.equal(options.includes('console.log'),false);
   assert.equal(/chrome\.tabs\.query\(\{\s*active\s*:/.test(background),false);assert.equal(background.includes('currentWindow:true'),false);
   assert.equal(content.includes('x-aicc-bridge-token'),false);assert.equal(content.includes('aiccBridgeTokenV1'),false);assert.equal(content.includes('chrome.storage'),false);
   assert.ok((content.match(/conversationId\(\)!==message\.conversationId/g)||[]).length>=2);
