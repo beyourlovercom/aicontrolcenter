@@ -1,6 +1,6 @@
 # AICC-V3-PR-DELIVERY-001
 
-Status: `ACTIVE / OWNER_AUTHORIZED`
+Status: `CLOSED / OWNER_UAT_PASS`
 
 ## Objective
 
@@ -45,9 +45,16 @@ Add the smallest trustworthy PR Delivery layer for AICC V3 so GitHub PR facts, D
 - Draft PR creation requires clean worktree, exact pushed remote HEAD, explicit base/title/body, and no existing open PR for the exact head/base pair.
 - AICC never auto-pushes, never creates a non-Draft PR, and exposes no merge/close/edit/ready/release/deploy action.
 
-## Next exact gate
+## Owner UAT closure
 
-Commit and push the V3.7.2 UI checkpoint, require exact-head V3 CI PASS, deploy that exact head to CN Mac, and stop for Human Owner UAT. A real Draft PR may be created only by explicit Owner action during UAT; no merge, close, edit, ready, approve, release, or deploy action is authorized.
+- Human Owner result: `PASS` on 2026-09-05.
+- Real Draft PR #12 was created from AICC V3 by explicit Owner action only.
+- PR #12 remained `OPEN / DRAFT / NOT MERGED`, base `main`, head `rebuild/aicc-v3-clean`.
+- Duplicate head/base creation was refused; the UI was then hardened to display the existing Draft PR as a normal non-error state.
+- Final UAT product HEAD before closure: `7057e086456fbd649b25a534b4b4d9b7f7a20957`.
+- Exact-head V3 CI and repository-level CI both completed with `success` on that UAT head.
+- Historical PR #11 remained open, Draft, and unmerged; V3.7 did not mutate it.
+- No merge, close, ready-for-review, approve, release, deploy, force-push, or branch rewrite was authorized or performed.
 
 ## V3.7.1 implementation evidence
 

@@ -1,15 +1,15 @@
 # AICC V3 Living Roadmap
 
-Roadmap-Revision: 20
-Updated-At: 2026-09-04
+Roadmap-Revision: 21
+Updated-At: 2026-09-05
 Status: `ACTIVE`
 
 ## Current milestone
 
-`V3.7 — PR Delivery`
+`V3.8 — GPT Bridge / Auto Return`
 
-Current Work Package: `AICC-V3-PR-DELIVERY-001`
-Current implementation phase: `V3.7.3 — exact-head CI and Owner UAT`
+Current Work Package: `AICC-V3-GPT-BRIDGE-AUTO-RETURN-001`
+Current implementation phase: `V3.8.0 — bridge contract and conversation-binding gate`
 
 ## Milestones
 
@@ -56,4 +56,4 @@ Total implementation budget: `55–70h` including bounded rework.
 
 ## Next exact gate
 
-Commit and push the V3.7.2 minimal PR Delivery UI checkpoint, require exact-head V3 CI PASS, deploy that exact head to CN Mac `aicc.b`, and stop for Human Owner UAT. Owner may explicitly create one Draft PR during UAT; AICC must expose no merge, close, edit, ready, approve, release, or deploy action.
+Freeze the V3.8 GPT Bridge / Auto Return contract before implementation. Define explicit conversation identity, Run/Result correlation, delivery receipt semantics, retry/idempotency boundaries, and fail-closed behavior while preserving `AICC_TRANSPORT_ONLY = 1`, `AICC_DISPLAY_ONLY = 1`, `AICC_DECISION_AUTHORITY = 0`, and `AICC_RESULT_REWRITE = 0`. Do not implement bridge transport until the contract is frozen and locally reconciled.
