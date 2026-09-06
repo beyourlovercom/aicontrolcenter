@@ -2,6 +2,7 @@ const state = {
   projects: [],
   viewProjectId: localStorage.getItem('aicc.v4.viewProjectId') || 'all',
   selectedNode: null,
+  freshness: {},
   loading: true,
   error: null
 };
@@ -33,6 +34,27 @@ function freshness(project) {
   return project?.provenance?.ref ? `GitHub main@${shortSha(project.provenance.ref)}` : 'GitHub facts unavailable';
 }
 
+function progressLabel(progress) {
+  return progress?.available ? `${progress.percentage}%` : '—';
+}
+
+function progressEvidence(progress) {
+  if (!progress?.available) return 'No GitHub progress evidence';
+  if (progress.basis === 'explicit-percent') return `Explicit Progress label${progress.line ? ` · line ${progress.line}` : ''}`;
+  return `${progress.completed}/${progress.total} GitHub Markdown checklist items`;
+}
+
+function projectionStatus(project) {
+  if (!project?.available) return 'UNKNOWN';
+  if (project.provenance?.repository !== project.repository || project.provenance?.ref !== project.mainSha) return 'DRIFT';
+  return state.freshness[project.projectId]?.status || 'FRESH';
+}
+
+function projectionBadge(project) {
+  const status = projectionStatus(project);
+  return `<span class="projection-pill ${status.toLowerCase()}">${esc(status)}</span>`;
+}
+
 function readTreeState(projectId) {
   try { return JSON.parse(localStorage.getItem(treeStorageKey(projectId)) || '{}'); }
   catch { return {}; }
@@ -49,7 +71,7 @@ function renderSwitcher() {
   switcherLabel.textContent = current?.name || 'All Projects';
   const rows = [
     `<button class="switcher-item ${state.viewProjectId === 'all' ? 'active' : ''}" data-project-id="all" role="option"><span><strong>All Projects</strong><small>全局开发总览</small></span><b>${state.projects.length}</b></button>`,
-    ...state.projects.map((project) => `<button class="switcher-item ${state.viewProjectId === project.projectId ? 'active' : ''}" data-project-id="${esc(project.projectId)}" role="option"><span><strong>${esc(project.name)}</strong><small>${esc(project.repository)}</small></span><b class="${project.available ? 'ok' : 'bad'}">${project.available ? 'LIVE' : 'ERROR'}</b></button>`)
+    ...state.projects.map((project) => `<button class="switcher-item ${state.viewProjectId === project.projectId ? 'active' : ''}" data-project-id="${esc(project.projectId)}" role="option"><span><strong>${esc(project.name)}</strong><small>${esc(project.repository)}</small></span><b class="${project.available ? projectionStatus(project).toLowerCase() : 'bad'}">${project.available ? esc(projectionStatus(project)) : 'ERROR'}</b></button>`)
   ];
   switcherMenu.innerHTML = rows.join('');
   switcherMenu.querySelectorAll('[data-project-id]').forEach((button) => button.addEventListener('click', () => setView(button.dataset.projectId)));
@@ -67,12 +89,13 @@ function renderAllProjects() {
     <section class="project-grid">
       ${state.projects.map((project) => project.available ? `
         <button class="project-card" data-open-project="${esc(project.projectId)}">
-          <div class="card-top"><span class="project-dot"></span><span class="live-pill">GITHUB LIVE</span></div>
+          <div class="card-top"><span class="project-dot"></span>${projectionBadge(project)}</div>
           <h2>${esc(project.name)}</h2><p class="repo">${esc(project.repository)}</p>
           <div class="fact-row"><span>Main</span><strong class="mono">${esc(shortSha(project.mainSha))}</strong></div>
           <div class="fact-row"><span>Open PR</span><strong>${project.openPullRequests?.length || 0}</strong></div>
           <div class="fact-row"><span>CI</span><strong>${esc(ciSummary(project.ci))}</strong></div>
           <div class="fact-row"><span>Roadmap</span><strong>${esc(project.roadmap?.title || 'Not registered')}</strong></div>
+          <div class="fact-row"><span>Progress</span><strong>${esc(progressLabel(project.roadmap?.progress))}</strong></div>
           <div class="card-foot">${esc(freshness(project))}<span>→</span></div>
         </button>` : `
         <button class="project-card unavailable" data-open-project="${esc(project.projectId)}">
@@ -99,9 +122,10 @@ function outlineTree(nodes) {
 function treeBranch(project, node, treeState) {
   const key = `roadmap-${node.id}`;
   const open = treeState[key] ?? false;
+  const progress = node.progress?.available ? `<b class="tree-progress">${esc(progressLabel(node.progress))}</b>` : '';
   const children = node.children?.length ? `<div class="tree-children">${node.children.map((child) => treeBranch(project, child, treeState)).join('')}</div>` : '';
-  if (!children) return `<button class="tree-leaf" data-node-kind="roadmap" data-node-id="${esc(node.id)}"><span class="tree-dot"></span><span>${esc(node.title)}</span></button>`;
-  return `<details class="tree-branch" data-tree-key="${esc(key)}" ${open ? 'open' : ''}><summary>${esc(node.title)}</summary>${children}</details>`;
+  if (!children) return `<button class="tree-leaf" data-node-kind="roadmap" data-node-id="${esc(node.id)}"><span class="tree-dot"></span><span>${esc(node.title)}</span>${progress}</button>`;
+  return `<details class="tree-branch" data-tree-key="${esc(key)}" ${open ? 'open' : ''}><summary><span>${esc(node.title)}</span>${progress}</summary>${children}</details>`;
 }
 
 function treeGroup(key, label, body, openDefault, treeState, badge = '') {
@@ -126,7 +150,7 @@ function renderDevelopmentTree(project) {
   const attentionBody = '<div class="tree-empty muted">Owner Attention projection starts in V4.5</div>';
   return `<aside class="development-tree" aria-label="Development Tree">
     <div class="tree-title"><span>PROJECT TREE</span><strong>${esc(project.name)}</strong></div>
-    ${treeGroup('group-roadmap', 'Roadmap', roadmapBody, true, treeState)}
+    ${treeGroup('group-roadmap', 'Roadmap', roadmapBody, true, treeState, progressLabel(project.roadmap?.progress))}
     ${treeGroup('group-current', 'WP / Task', currentBody, true, treeState)}
     ${treeGroup('group-prs', 'Pull Requests', prBody, true, treeState, String(project.openPullRequests?.length || 0))}
     ${treeGroup('group-attention', 'Owner Attention', attentionBody, false, treeState)}
@@ -134,12 +158,14 @@ function renderDevelopmentTree(project) {
 }
 
 function summaryDetail(project) {
-  return `<section class="page-heading project-heading"><div><p class="eyebrow">PROJECT</p><h1>${esc(project.name)}</h1><p>${esc(project.repository)}</p></div><span class="live-pill">GITHUB LIVE</span></section>
+  return `<section class="page-heading project-heading"><div><p class="eyebrow">PROJECT</p><h1>${esc(project.name)}</h1><p>${esc(project.repository)}</p></div>${projectionBadge(project)}</section>
     <section class="detail-grid">
       <article class="detail-card hero-card"><span>Canonical Main</span><strong class="mono">${esc(project.mainSha)}</strong><small>${esc(project.defaultBranch)} · exact GitHub default-branch head</small></article>
       <article class="detail-card"><span>Current Work Package</span><strong>${esc(project.roadmap?.currentWorkPackage || 'Not explicitly labeled')}</strong><small>${project.roadmap?.currentPointers?.workPackage ? `GitHub roadmap line ${project.roadmap.currentPointers.workPackage.line}` : 'No inference'}</small></article>
       <article class="detail-card"><span>Current Task</span><strong>${esc(project.roadmap?.currentTask || 'Not explicitly labeled')}</strong><small>${project.roadmap?.currentPointers?.task ? `GitHub roadmap line ${project.roadmap.currentPointers.task.line}` : 'No inference'}</small></article>
       <article class="detail-card"><span>Open Pull Requests</span><strong>${project.openPullRequests.length}</strong><small>${esc(ciSummary(project.ci))}</small></article>
+      <article class="detail-card"><span>Roadmap Progress</span><strong>${esc(progressLabel(project.roadmap?.progress))}</strong><small>${esc(progressEvidence(project.roadmap?.progress))}</small></article>
+      <article class="detail-card"><span>Projection</span><strong>${esc(projectionStatus(project))}</strong><small>${projectionStatus(project) === 'FRESH' ? 'Loaded exact ref still matches GitHub' : 'Refresh/reconciliation required; GitHub remains authoritative'}</small></article>
     </section>
     <section class="source-panel"><div><p class="eyebrow">GITHUB PROVENANCE</p><h2>事实来源</h2></div><dl><div><dt>Repository</dt><dd>${esc(project.repository)}</dd></div><div><dt>Ref</dt><dd class="mono">${esc(project.provenance.ref)}</dd></div><div><dt>Refreshed</dt><dd>${esc(project.provenance.refreshedAt)}</dd></div></dl></section>`;
 }
@@ -150,7 +176,7 @@ function selectedDetail(project) {
   if (selection.kind === 'roadmap') {
     const node = project.roadmap?.outline?.find((item) => item.id === selection.id);
     if (!node) return summaryDetail(project);
-    return `<section class="node-detail"><p class="eyebrow">ROADMAP</p><h1>${esc(node.title)}</h1><p class="node-meta">${esc(project.roadmap.path)} · line ${node.line} · main@${esc(shortSha(project.mainSha))}</p><div class="detail-copy">${node.excerpt?.length ? node.excerpt.map((line) => `<p>${esc(line)}</p>`).join('') : '<p>No excerpt under this heading.</p>'}</div><div class="evidence-strip"><span>GitHub source</span><code>${esc(project.mainSha)}</code></div></section>`;
+    return `<section class="node-detail"><p class="eyebrow">ROADMAP</p><h1>${esc(node.title)}</h1><p class="node-meta">${esc(project.roadmap.path)} · line ${node.line} · main@${esc(shortSha(project.mainSha))}</p><div class="detail-copy"><p><strong>Progress: ${esc(progressLabel(node.progress))}</strong> · ${esc(progressEvidence(node.progress))}</p>${node.excerpt?.length ? node.excerpt.map((line) => `<p>${esc(line)}</p>`).join('') : '<p>No excerpt under this heading.</p>'}</div><div class="evidence-strip"><span>GitHub source</span><code>${esc(project.mainSha)}</code></div></section>`;
   }
   if (selection.kind === 'work-package' || selection.kind === 'task') {
     const pointer = selection.kind === 'work-package' ? project.roadmap?.currentPointers?.workPackage : project.roadmap?.currentPointers?.task;
@@ -214,11 +240,27 @@ async function refresh() {
     const payload = await response.json();
     if (payload.schema !== 'aicc.v4.projects.v1' || !Array.isArray(payload.projects)) throw new Error('Unexpected AICC V4 API response');
     state.projects = payload.projects;
+    state.freshness = Object.fromEntries(payload.projects.filter((project) => project.available).map((project) => [project.projectId, { status: 'FRESH', expectedRef: project.mainSha, currentRef: project.mainSha }]));
   } catch (error) { state.error = error.message; }
   finally { state.loading = false; render(); }
+}
+
+async function checkFreshness() {
+  const checks = state.projects.filter((project) => project.available).map(async (project) => {
+    try {
+      const params = new URLSearchParams({ ref: project.mainSha, repository: project.repository });
+      const response = await fetch(`/api/projects/${encodeURIComponent(project.projectId)}/freshness?${params}`, { cache: 'no-store' });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const result = await response.json();
+      state.freshness[project.projectId] = result;
+    } catch { state.freshness[project.projectId] = { status: 'UNKNOWN' }; }
+  });
+  await Promise.all(checks);
+  if (!state.loading && !state.error) render();
 }
 
 switcherButton.addEventListener('click', () => { switcherMenu.hidden = !switcherMenu.hidden; switcherButton.setAttribute('aria-expanded', String(!switcherMenu.hidden)); });
 document.addEventListener('click', (event) => { if (!switcher.contains(event.target)) { switcherMenu.hidden = true; switcherButton.setAttribute('aria-expanded', 'false'); } });
 refreshButton.addEventListener('click', refresh);
 refresh();
+setInterval(checkFreshness, 60000);
