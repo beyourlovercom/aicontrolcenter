@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>AICC V3</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <main class="shell">
+    <header><div class="mark">A</div><div><h1>AI Control Center</h1><p>V3 · Single Authority</p></div></header>
+    <section class="banner" id="banner">正在读取唯一 ProjectContext…</section>
+    <section class="grid" id="facts" hidden>
+      <article><span>Project</span><strong id="project"></strong></article>
+      <article><span>Repository</span><strong id="repository"></strong></article>
+      <article><span>Branch</span><strong id="branch"></strong></article>
+      <article><span>HEAD</span><strong id="head"></strong></article>
+      <article><span>Worktree</span><strong id="dirty"></strong></article>
+      <article><span>Authority</span><strong>ONE PROJECT CONTEXT</strong></article>
+    </section>
+    <section class="roadmap" id="roadmap" hidden>
+      <div class="roadmap-status" id="roadmap-status">正在读取 canonical Roadmap…</div>
+      <div class="section-heading"><div><span>Canonical Roadmap</span><h2>当前执行焦点</h2></div><strong id="roadmap-revision"></strong></div>
+      <div class="current-grid">        <article><span>Milestone</span><strong id="current-milestone"></strong></article>
+        <article><span>Work Package</span><strong id="current-wp"></strong></article>
+        <article><span>Phase</span><strong id="current-phase"></strong></article>
+      </div>
+      <div class="roadmap-meta" id="roadmap-authority"></div>
+      <div class="milestone-list" id="milestone-list"></div>
+    </section>
+    <section class="work" id="work" hidden>
+      <div class="work-status" id="work-status">正在读取 project-scoped work store…</div>
+      <div class="section-heading"><div><span>WP + Task Core</span><h2>显式工作状态</h2></div><strong id="work-revision"></strong></div>
+      <div class="work-forms">
+        <form id="wp-form" class="work-form">
+          <h3>创建 Work Package</h3>
+          <label>Title<input id="wp-title" name="title" required maxlength="160"></label>
+          <label>Status<select id="wp-create-status" name="status" required><option value="OPEN">OPEN</option><option value="ACTIVE">ACTIVE</option><option value="BLOCKED">BLOCKED</option><option value="DONE">DONE</option></select></label>
+          <button type="submit">创建 WP</button>
+        </form>
+        <form id="task-form" class="work-form">
+          <h3>创建 Task</h3>
+          <label>Work Package<select id="task-wp" name="workPackageId" required></select></label>
+          <label>Title<input id="task-title" name="title" required maxlength="160"></label>          <label>Status<select id="task-create-status" name="status" required><option value="TODO">TODO</option><option value="IN_PROGRESS">IN_PROGRESS</option><option value="BLOCKED">BLOCKED</option><option value="DONE">DONE</option><option value="CANCELLED">CANCELLED</option></select></label>
+          <button type="submit">创建 Task</button>
+        </form>
+      </div>
+      <div class="work-message" id="work-message" role="status"></div>
+      <div class="work-columns">
+        <div><h3>Work Packages</h3><div class="entity-list" id="wp-list"></div></div>
+        <div><h3>Tasks</h3><div class="entity-list" id="task-list"></div></div>
+      </div>
+      <div class="roadmap-meta" id="work-authority"></div>
+    </section>
+    <section class="executor" id="executor" hidden>
+      <div class="executor-status" id="executor-status">正在读取 Codex readiness…</div>
+      <div class="section-heading"><div><span>Codex Execution</span><h2>显式 Run 传输状态</h2></div><strong id="executor-readiness"></strong></div>
+      <form id="run-form" class="run-form">
+        <label>Task<select id="run-task" name="taskId" required></select></label>
+        <label>Exact Instruction<textarea id="run-instruction" name="instruction" required maxlength="60000" rows="7"></textarea></label>
+        <button id="start-run" type="submit">Start Run</button>
+      </form>
+      <div class="work-message" id="executor-message" role="status"></div>
+      <div class="run-panel" id="run-panel" hidden>
+        <div class="run-facts">
+          <article><span>Run ID</span><strong id="run-id"></strong></article>
+          <article><span>State</span><strong id="run-state"></strong></article>
+          <article><span>Task</span><strong id="run-task-id"></strong></article>
+          <article><span>Codex Session</span><strong id="run-session"></strong></article>
+        </div>
+        <button id="stop-run" class="stop-run" type="button">Stop Exact Run</button>
+        <div class="transport-note">Transport only: EXITED does not mean PASS. AICC does not infer semantic result.</div>
+        <h3>Append-only Events</h3>
+        <pre class="event-stream" id="run-events"></pre>
+        <section class="result-panel" id="result-panel" hidden>
+          <div class="result-status" id="result-status">正在读取 Canonical Result…</div>
+          <div class="section-heading"><div><span>Canonical Result</span><h3>Executor-provided Result</h3></div><strong id="result-source"></strong></div>
+          <div class="result-facts">
+            <article><span>Result ID</span><strong id="result-id"></strong></article>
+            <article><span>Bound Run</span><strong id="result-run-id"></strong></article>
+            <article><span>Content SHA-256</span><strong id="result-content-sha"></strong></article>
+            <article><span>Raw SHA-256</span><strong id="result-raw-sha"></strong></article>
+          </div>
+          <div class="transport-note">Executor-provided exact content. AICC does not rewrite, summarize, translate, or infer PASS from Result presence.</div>
+          <pre class="result-content" id="result-content"></pre>
+        </section>
+      </div>
+    </section>
+    <section class="pr-delivery" id="pr-delivery" hidden>
+      <div class="pr-status" id="pr-status">正在读取 GitHub PR Delivery facts…</div>
+      <div class="section-heading"><div><span>PR Delivery</span><h2>GitHub exact-head delivery facts</h2></div><strong id="pr-readiness"></strong></div>
+      <div class="pr-facts">
+        <article><span>Repository</span><strong id="pr-repository"></strong></article>
+        <article><span>Default Branch</span><strong id="pr-default-branch"></strong></article>
+        <article><span>Local HEAD</span><strong id="pr-local-head"></strong></article>
+        <article><span>Remote HEAD</span><strong id="pr-remote-head"></strong></article>
+      </div>
+      <div class="transport-note">Transport only. Exact-head CI and PR facts are GitHub-provided; AICC does not infer merge readiness or engineering PASS.</div>
+      <div class="pr-columns">
+        <div><h3>Exact-head Checks</h3><div class="entity-list" id="pr-checks"></div></div>
+        <div><h3>Open PRs for this head</h3><div class="entity-list" id="pr-list"></div></div>
+      </div>
+      <form id="draft-pr-form" class="pr-form">
+        <h3>Create Draft PR</h3>
+        <label>Base<select id="pr-base" name="baseRef" required></select></label>
+        <label>Title<input id="pr-title" name="title" required maxlength="240"></label>
+        <label>Body<textarea id="pr-body" name="body" rows="6"></textarea></label>
+        <button id="create-draft-pr" type="submit">Create Draft PR</button>
+      </form>
+      <div class="work-message" id="pr-message" role="status"></div>
+    </section>
+    <footer>V3.7 · Draft-only PR delivery · no automatic merge · no browser semantic inference</footer>
+  </main>
+  <script type="module" src="/app.js"></script>
+</body>
+</html>
