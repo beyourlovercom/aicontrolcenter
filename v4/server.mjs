@@ -1,13 +1,17 @@
 import http from 'node:http';
 import { fileURLToPath } from 'node:url';
 import { dirname, extname, join, normalize } from 'node:path';
+import { homedir } from 'node:os';
 import { readFile } from 'node:fs/promises';
 import { createGhApiClient } from './lib/github-client.mjs';
 import { getProjectLocator, loadProjectRegistry } from './lib/project-registry.mjs';
 import { compareProjectionFreshness, readAllGitHubProjectFacts, readGitHubProjectFacts, readGitHubProjectHead } from './lib/project-facts.mjs';
+import { loadMachineRegistry, readRuntimeOverview } from './lib/runtime-overview.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const defaultRegistryPath = join(here, 'projects.json');
+const defaultMachineRegistryPath = join(here, 'machines.json');
+const defaultRuntimeObservationPath = process.env.AICC_V4_RUNTIME_OBSERVATION || join(homedir(), '.aicc-v4', 'runtime-observation.json');
 const publicRoot = join(here, 'public');
 const contentTypes = Object.freeze({ '.html':'text/html; charset=utf-8', '.js':'text/javascript; charset=utf-8', '.css':'text/css; charset=utf-8' });
 
@@ -30,8 +34,9 @@ function sendJson(response, status, body) {
   response.end(JSON.stringify(body));
 }
 
-export async function createV4Server({ registryPath = defaultRegistryPath, client = createGhApiClient(), now = () => new Date() } = {}) {
+export async function createV4Server({ registryPath = defaultRegistryPath, machineRegistryPath = defaultMachineRegistryPath, runtimeObservationPath = defaultRuntimeObservationPath, client = createGhApiClient(), now = () => new Date() } = {}) {
   const registry = await loadProjectRegistry(registryPath);
+  const machineRegistry = await loadMachineRegistry(machineRegistryPath);
   return http.createServer(async (request, response) => {
     if (request.method !== 'GET') {
       sendJson(response, 405, { schema: 'aicc.v4.error.v1', error: 'READ_ONLY_API' });
@@ -39,12 +44,17 @@ export async function createV4Server({ registryPath = defaultRegistryPath, clien
     }
     const url = new URL(request.url, 'http://127.0.0.1');
     if (url.pathname === '/api/health') {
-      sendJson(response, 200, { schema: 'aicc.v4.health.v1', ok: true, service: 'AICC_V4', projectCount: registry.projects.length });
+      sendJson(response, 200, { schema: 'aicc.v4.health.v1', ok: true, service: 'AICC_V4', projectCount: registry.projects.length, machineCount: machineRegistry.machines.length });
       return;
     }
     if (url.pathname === '/api/projects') {
       const projects = await readAllGitHubProjectFacts(registry, { client, now });
       sendJson(response, 200, { schema: 'aicc.v4.projects.v1', projects });
+      return;
+    }
+    if (url.pathname === '/api/runtime') {
+      try { sendJson(response, 200, await readRuntimeOverview(machineRegistry, runtimeObservationPath, { now })); }
+      catch (error) { sendJson(response, 502, { schema: 'aicc.v4.error.v1', error: 'RUNTIME_OBSERVATION_INVALID', detail: error.message }); }
       return;
     }
     const freshnessMatch = url.pathname.match(/^\/api\/projects\/([a-z0-9-]+)\/freshness$/);

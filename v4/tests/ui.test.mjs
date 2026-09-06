@@ -65,3 +65,13 @@ test('V4.4 renders only evidence-backed progress and exact freshness states', ()
   assert.match(js, /DRIFT/);
   assert.doesNotMatch(js, /82%|68%|46%|31%/);
 });
+
+
+test('V4.6 exposes three-machine runtime evidence without machine control', () => {
+  assert.match(html, /id="runtimeButton"/);
+  assert.match(js, /renderRuntimeOverview/);
+  assert.match(js, /STALE_OBSERVATION/);
+  assert.match(js, /\/api\/runtime/);
+  assert.match(css, /\.runtime-grid/);
+  assert.doesNotMatch(js, /pingDevice|shutdown|start_process|switchBranch|machineControl/i);
+});

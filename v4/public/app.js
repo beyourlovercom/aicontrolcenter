@@ -4,6 +4,8 @@ const state = {
   selectedNode: null,
   freshness: {},
   attentionMode: false,
+  runtimeMode: false,
+  runtime: { available: false, observationState: 'UNAVAILABLE', machines: [] },
   loading: true,
   error: null
 };
@@ -17,6 +19,8 @@ const switcherMenu = document.querySelector('#switcherMenu');
 const refreshButton = document.querySelector('#refreshButton');
 const attentionButton = document.querySelector('#attentionButton');
 const attentionCount = document.querySelector('#attentionCount');
+const runtimeButton = document.querySelector('#runtimeButton');
+const runtimeCount = document.querySelector('#runtimeCount');
 
 const esc = (value) => String(value ?? '').replace(/[&<>'"]/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));
 const shortSha = (sha) => sha ? sha.slice(0, 10) : '—';
@@ -74,6 +78,45 @@ function renderAttentionButton() {
   attentionButton.title = count ? `${count} explicit GitHub Owner attention item${count === 1 ? '' : 's'}` : 'No explicit GitHub Owner attention items';
 }
 
+function runtimeStatusClass(status) {
+  return ({ ONLINE:'online', OFFLINE:'offline', STALE_OBSERVATION:'stale', UNOBSERVED:'unknown', UNKNOWN:'unknown' })[status] || 'unknown';
+}
+
+function runtimeStatusLabel(machine) {
+  if (machine.status === 'STALE_OBSERVATION') return `STALE · last ${machine.reportedStatus || 'unknown'}`;
+  return machine.status || 'UNOBSERVED';
+}
+
+function runtimeDevicesForProject(projectId) {
+  return (state.runtime?.machines || []).filter((machine) => (machine.projectIds || []).includes(projectId));
+}
+
+function renderRuntimeButton() {
+  const machines = state.runtime?.machines || [];
+  const online = machines.filter((machine) => machine.status === 'ONLINE').length;
+  runtimeCount.textContent = `${online}/${machines.length || 3}`;
+  runtimeButton.classList.toggle('runtime-stale', state.runtime?.observationState === 'STALE_OBSERVATION');
+  runtimeButton.title = state.runtime?.available ? `${state.runtime.observationState} · ${online}/${machines.length} online in latest DC observation` : 'No DC runtime observation available';
+}
+
+function runtimeCards(machines) {
+  if (!machines?.length) return '<div class="runtime-empty">No runtime machines registered.</div>';
+  return machines.map((machine) => `<article class="runtime-card">
+    <div class="runtime-card-head"><span class="runtime-dot ${runtimeStatusClass(machine.status)}"></span><div><h3>${esc(machine.name)}</h3><p>${esc(machine.role)}</p></div><b class="runtime-state ${runtimeStatusClass(machine.status)}">${esc(runtimeStatusLabel(machine))}</b></div>
+    <dl><div><dt>Host</dt><dd>${esc(machine.hostname || '—')}</dd></div><div><dt>Platform</dt><dd>${esc(machine.platform || '—')}</dd></div><div><dt>Last seen</dt><dd>${esc(machine.lastSeen || '—')}</dd></div><div><dt>Projects</dt><dd>${esc((machine.projectIds || []).join(', ') || '—')}</dd></div></dl>
+    ${(machine.observations || []).length ? `<div class="runtime-observations">${machine.observations.map((item) => `<div><strong>${esc(item.repository || 'runtime')}</strong><span>${esc(item.branch || 'branch unknown')}${item.runtime ? ` · ${esc(item.runtime)}` : ''}</span></div>`).join('')}</div>` : '<div class="runtime-observations muted">No repo/runtime detail in latest observation.</div>'}
+  </article>`).join('');
+}
+
+function renderRuntimeOverview() {
+  const runtime = state.runtime || { available:false, machines:[] };
+  main.className = 'main-content';
+  main.innerHTML = `<section class="page-heading"><div><p class="eyebrow">RUNTIME EVIDENCE</p><h1>三台机器运行概览</h1><p>来自 GPT/DC 的只读 observation；GitHub 仍是唯一项目事实源，AICC 不控制机器。</p></div><div class="headline-stats"><div><b>${runtime.machines?.filter((machine) => machine.status === 'ONLINE').length || 0}/${runtime.machines?.length || 3}</b><span>Observed Online</span></div><div><b>${esc(runtime.observationState || 'UNAVAILABLE')}</b><span>Observation</span></div></div></section>
+    <section class="runtime-meta"><span>Source: ${esc(runtime.source || 'remote-desktop-commander')}</span><span>Observed: ${esc(runtime.observedAt || 'not available')}</span></section>
+    <section class="runtime-grid">${runtimeCards(runtime.machines || [])}</section>
+    ${!runtime.available ? '<section class="runtime-notice">No local runtime observation exists yet. AICC will not infer machine state.</section>' : runtime.observationState === 'STALE_OBSERVATION' ? '<section class="runtime-notice warning">Observation is stale. Old ONLINE values are not treated as current online state.</section>' : ''}`;
+}
+
 function renderOwnerAttentionCenter() {
   const items = allOwnerAttention();
   main.className = 'main-content';
@@ -120,6 +163,7 @@ function renderAllProjects() {
       <div><p class="eyebrow">ALL PROJECTS</p><h1>多项目开发总览</h1><p>所有状态均直接投影自 GitHub 默认分支；切换项目只改变当前视图。</p></div>
       <div class="headline-stats"><div><b>${available}/${state.projects.length}</b><span>GitHub Available</span></div><div><b>${openPrs}</b><span>Open PR</span></div><div><b>${ownerItems}</b><span>Owner Attention</span></div></div>
     </section>
+    <section class="runtime-strip"><div><p class="eyebrow">RUNTIME</p><h2>Three-machine observation</h2></div><div class="runtime-mini">${(state.runtime?.machines || []).map((machine) => `<span><i class="runtime-dot ${runtimeStatusClass(machine.status)}"></i>${esc(machine.name)} <b>${esc(runtimeStatusLabel(machine))}</b></span>`).join('') || '<span>No runtime observation</span>'}</div></section>
     <section class="project-grid">
       ${state.projects.map((project) => project.available ? `
         <button class="project-card" data-open-project="${esc(project.projectId)}">
@@ -204,6 +248,7 @@ function summaryDetail(project) {
       <article class="detail-card"><span>Owner Attention</span><strong>${project.ownerAttention?.length || 0}</strong><small>Explicit GitHub gates only</small></article>
       <article class="detail-card"><span>Projection</span><strong>${esc(projectionStatus(project))}</strong><small>${projectionStatus(project) === 'FRESH' ? 'Loaded exact ref still matches GitHub' : 'Refresh/reconciliation required; GitHub remains authoritative'}</small></article>
     </section>
+    <section class="project-runtime"><div><p class="eyebrow">RUNTIME EVIDENCE</p><h2>Observed machines for this project</h2></div><div class="runtime-mini">${runtimeDevicesForProject(project.projectId).map((machine) => `<span><i class="runtime-dot ${runtimeStatusClass(machine.status)}"></i>${esc(machine.name)} <b>${esc(runtimeStatusLabel(machine))}</b></span>`).join('') || '<span>No machine association in latest observation</span>'}</div></section>
     <section class="source-panel"><div><p class="eyebrow">GITHUB PROVENANCE</p><h2>事实来源</h2></div><dl><div><dt>Repository</dt><dd>${esc(project.repository)}</dd></div><div><dt>Ref</dt><dd class="mono">${esc(project.provenance.ref)}</dd></div><div><dt>Refreshed</dt><dd>${esc(project.provenance.refreshedAt)}</dd></div></dl></section>`;
 }
 
@@ -261,8 +306,10 @@ function renderProject(project) {
 function render() {
   renderSwitcher();
   renderAttentionButton();
+  renderRuntimeButton();
   if (state.loading) { main.className = 'main-content'; main.innerHTML = '<section class="loading-state"><div class="spinner"></div><h1>正在读取 GitHub 项目事实</h1><p>不会读取本地 branch 作为项目权威。</p></section>'; statusbar.textContent = 'GitHub source · refreshing…'; return; }
   if (state.error) { main.className = 'main-content'; main.innerHTML = `<section class="empty-state"><span class="error-pill">ERROR</span><h1>GitHub 项目事实读取失败</h1><p>${esc(state.error)}</p></section>`; statusbar.textContent = 'GitHub source · refresh failed'; return; }
+  if (state.runtimeMode) { renderRuntimeOverview(); statusbar.textContent = `Runtime evidence · ${state.runtime?.observationState || 'UNAVAILABLE'} · observed ${state.runtime?.observedAt || 'unknown'}`; return; }
   if (state.attentionMode) { renderOwnerAttentionCenter(); const latest = state.projects.map((project) => project.provenance?.refreshedAt).filter(Boolean).sort().at(-1); statusbar.textContent = `GitHub source · Owner Attention · synced ${latest || 'unknown'}`; return; }
   const selected = state.viewProjectId === 'all' ? null : projectById(state.viewProjectId);
   if (state.viewProjectId !== 'all' && !selected) state.viewProjectId = 'all';
@@ -273,6 +320,7 @@ function render() {
 
 function setView(projectId) {
   state.attentionMode = false;
+  state.runtimeMode = false;
   state.viewProjectId = projectId;
   state.selectedNode = null;
   localStorage.setItem('aicc.v4.viewProjectId', projectId);
@@ -284,12 +332,16 @@ function setView(projectId) {
 async function refresh() {
   state.loading = true; state.error = null; render();
   try {
-    const response = await fetch('/api/projects', { cache: 'no-store' });
-    if (!response.ok) throw new Error(`HTTP ${response.status}`);
-    const payload = await response.json();
+    const [projectResponse, runtimeResponse] = await Promise.all([
+      fetch('/api/projects', { cache: 'no-store' }),
+      fetch('/api/runtime', { cache: 'no-store' })
+    ]);
+    if (!projectResponse.ok) throw new Error(`Projects HTTP ${projectResponse.status}`);
+    const payload = await projectResponse.json();
     if (payload.schema !== 'aicc.v4.projects.v1' || !Array.isArray(payload.projects)) throw new Error('Unexpected AICC V4 API response');
     state.projects = payload.projects;
     state.freshness = Object.fromEntries(payload.projects.filter((project) => project.available).map((project) => [project.projectId, { status: 'FRESH', expectedRef: project.mainSha, currentRef: project.mainSha }]));
+    state.runtime = runtimeResponse.ok ? await runtimeResponse.json() : { available:false, observationState:'UNAVAILABLE', machines:[] };
   } catch (error) { state.error = error.message; }
   finally { state.loading = false; render(); }
 }
@@ -310,7 +362,8 @@ async function checkFreshness() {
 
 switcherButton.addEventListener('click', () => { switcherMenu.hidden = !switcherMenu.hidden; switcherButton.setAttribute('aria-expanded', String(!switcherMenu.hidden)); });
 document.addEventListener('click', (event) => { if (!switcher.contains(event.target)) { switcherMenu.hidden = true; switcherButton.setAttribute('aria-expanded', 'false'); } });
-attentionButton.addEventListener('click', () => { state.attentionMode = true; state.selectedNode = null; render(); });
+attentionButton.addEventListener('click', () => { state.runtimeMode = false; state.attentionMode = true; state.selectedNode = null; render(); });
+runtimeButton.addEventListener('click', () => { state.attentionMode = false; state.runtimeMode = true; state.selectedNode = null; render(); });
 refreshButton.addEventListener('click', refresh);
 refresh();
 setInterval(checkFreshness, 60000);

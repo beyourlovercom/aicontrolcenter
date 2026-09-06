@@ -1,0 +1,23 @@
+{
+  "schema": "aicc.v4.machine-registry.v1",
+  "machines": [
+    {
+      "id": "cn-mac",
+      "name": "CN Mac",
+      "deviceId": "3107d5f0-6f29-479c-8453-77bf53c172cf",
+      "role": "Primary Development"
+    },
+    {
+      "id": "us-mac",
+      "name": "US Mac",
+      "deviceId": "552d665e-a779-4c81-863c-f8eeb311b55d",
+      "role": "Verification"
+    },
+    {
+      "id": "windows",
+      "name": "Windows",
+      "deviceId": "8cb43b70-d3d9-4d8d-9afd-1f75549c697e",
+      "role": "Development / Andy-Core"
+    }
+  ]
+}
