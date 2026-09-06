@@ -1,44 +1,39 @@
----
-schema: aicc-work-package/v1
-id: AICC-V4-ROADMAP-REBASELINE-001
-title: V4 Roadmap Rebaseline
-status: AUTHORIZED
-authority_sha: 45d3862ef0e9ec0df98939363982a8a0346ea723
-openspec_change: aicc-v4-roadmap-rebaseline-001
-dependencies: []
-previous_run_status: PLANNED
-owner_authorization: AUTHORIZED_FOR_IMPLEMENTATION
-authorization_scope:
-  - roadmap and governance documentation only
-  - V4 effort budget and ordered delivery sequence
-  - reconcile stale legacy current-state declarations
-allowed_capabilities:
-  - REPOSITORY_SCOPED_DOCUMENTATION_EDIT
-  - DOCUMENTATION_VALIDATION
-forbidden_capabilities:
-  - RUNTIME_SOURCE_CHANGE
-  - OPENSPEC_APPLY
-  - OPENSPEC_SYNC
-  - OPENSPEC_ARCHIVE
-  - SELF_AUTHORIZATION
-  - AUTOMATIC_NEXT_WP_EXECUTION
-  - PR_MERGE
-  - RELEASE
-  - DEPLOY
-acceptance:
-  criteria:
-    - V3 production baseline remains sealed and unchanged
-    - one canonical V4.0 through V4.8 sequence is documented
-    - implementation and CI/UAT/closure effort ranges are explicit and totaled
-    - legacy M4.1 declarations no longer claim current development authority
-    - AICC-CONTROL-LOOP-001B remains PLANNED and NOT_AUTHORIZED
-    - no runtime source under v3, src, or src-tauri changes
----
-
 # AICC-V4-ROADMAP-REBASELINE-001
 
-The Owner instruction to continue development and quantify the roadmap/work effort authorizes this bounded V4.0 documentation rebaseline only. It does not authorize V4.1 implementation.
+Status: `OWNER_AUTHORIZED / IN PROGRESS`
+Authority base: `main@45d3862ef0e9ec0df98939363982a8a0346ea723`
+Source of Truth: `GitHub`
+
+## Objective
+
+Replace the incorrect OpenSpec/execution-control V4 plan with the Owner-approved GitHub-first architecture and accepted multi-project UI baseline.
+
+## Authorized scope
+
+- roadmap and governance documentation for V4;
+- GitHub-first / GPT-orchestrated / AICC-advisory architecture;
+- multi-project Project Switcher + All Projects direction;
+- left collapsible Development Tree direction;
+- corrected V4 effort budget.
+
+## Explicitly not authorized
+
+- merge PR #13;
+- production deploy or release/tag;
+- AICC execution authority;
+- automatic branch switching or machine control from AICC;
+- a second authoritative project-state database;
+- OpenSpec in any V4 planning or execution path.
+
+## Acceptance
+
+- GitHub is the only project Source of Truth;
+- GPT is the development orchestrator using GitHub + DC;
+- AICC is aggregation / projection / recommendation / alerting / display only;
+- V4 roadmap contains no OpenSpec successor phase;
+- accepted Project Switcher + Development Tree UI is captured as the V4 visual baseline;
+- V3 production runtime remains unchanged.
 
 ## Exit gate
 
-Stop after reviewed documentation changes, roadmap regression checks, branch commit/push and Draft PR preparation. `AICC-CONTROL-LOOP-001B` requires a separate explicit Owner authorization before implementation.
+Commit and push the corrected documentation to the existing Draft PR #13 and require exact-head CI. Stop before Ready-for-Review or merge unless the Owner separately authorizes it.

@@ -1,119 +1,134 @@
 # AICC V4 Living Roadmap
 
-Roadmap-Revision: 1
+Roadmap-Revision: 2
 Updated-At: 2026-09-06
-Status: `V4.0 ACTIVE / ROADMAP REBASELINE`
+Status: `V4.0 ACTIVE / GITHUB-FIRST REBASELINE`
 Authority-Base: `main@45d3862ef0e9ec0df98939363982a8a0346ea723`
 V3-Runtime-Baseline: `8998f46805723e661e700e3c55695fd3095f5fa5`
 
 ## Current milestone
 
-`V4.0 — Roadmap Rebaseline`
+`V4.0 — GitHub Source-of-Truth Rebaseline`
 
 Current Work Package: `AICC-V4-ROADMAP-REBASELINE-001`
-Current implementation phase: `V4.0.2 — Draft PR / exact-head CI gate`
-Next gated Work Package: `AICC-CONTROL-LOOP-001B — OpenSpec Binding`
-Next gate: `SEPARATE OWNER AUTHORIZATION REQUIRED`
+Current implementation phase: `V4.0.3 — corrected architecture / visual baseline accepted`
+Next planned phase: `V4.1 — Project Registry + GitHub Project Facts`
 
-## Inherited production baseline
+## Canonical architecture
 
-AICC V3.0–V3.9 is `CLOSED / OWNER ACCEPTED / MERGED TO MAIN / RUNTIME CUTOVER PASS / PRODUCTION BASELINE SEALED`.
-The CN Mac production runtime remains on `main`, the local service remains the V3 single-service runtime, and the Browser Bridge remains the accepted 3.8.12 baseline. V4 work starts in separate explicit Work Packages and must not rewrite V3 evidence.
-
-Permanent architecture constraints:
+GitHub is the only project Source of Truth. GPT is the development orchestrator. GPT uses GitHub and Remote Desktop Commander to inspect and execute work across the authorized computers and repositories. AICC is not an execution engine and is never project authority.
 
 ```text
-AICC_TRANSPORT_ONLY = 1
-AICC_DISPLAY_ONLY = 1
+GITHUB_SOURCE_OF_TRUTH = 1
+GPT_ORCHESTRATION_AUTHORITY = 1
+OPENSPEC = 0
+AICC_AGGREGATION = 1
+AICC_PROJECTION = 1
+AICC_RECOMMENDATION = 1
+AICC_ALERTING = 1
+AICC_DISPLAY = 1
+AICC_REPOSITORY_AUTHORITY = 0
+AICC_ROADMAP_AUTHORITY = 0
+AICC_WP_AUTHORITY = 0
+AICC_TASK_AUTHORITY = 0
+AICC_PR_AUTHORITY = 0
+AICC_CI_AUTHORITY = 0
+AICC_EXECUTION_AUTHORITY = 0
 AICC_DECISION_AUTHORITY = 0
-AICC_PASS_FAIL_BLOCKED_AUTHORITY = CODEX
-AICC_RESULT_REWRITE = 0
-NO_SELF_AUTHORIZATION = 1
-OWNER_GATES_REMAIN_EXPLICIT = 1
 ```
+
+If AICC disagrees with GitHub, AICC is stale or drifting. GitHub wins. AICC must surface `STALE`, `DRIFT`, or `REFRESH REQUIRED`; it must not overwrite GitHub facts.
+
+## V4 product model
+
+AICC becomes a GitHub-backed multi-project development dashboard for Owner + GPT. It answers five questions: which projects exist, how far each project has progressed, what is active now, what requires Owner attention, and what GPT should inspect next.
+
+Project switching changes only the displayed project context. It never switches branches, starts execution, mutates a repository, or changes machine state.
+
+## Accepted UI baseline
+
+The Owner accepted the V4 desktop layout on 2026-09-06.
+
+- Top-right: `Project Switcher` with one-click switching and `All Projects`.
+- Left: collapsible `Development Tree` for Roadmap / WP / Task / Pull Requests / Owner Attention.
+- Center: selected item detail with progress, GitHub source SHA, PR/CI, blockers, suggested next, runtime and evidence.
+- Bottom: GitHub provenance / sync status.
+- Status and progress are projections of GitHub-backed facts, never an independent AICC authority.
 
 ## V4 delivery sequence and effort budget
 
-| Phase | Capability | Formal state | Engineering | CI/UAT/closure | Total |
-| --- | --- | --- | ---: | ---: | ---: |
-| V4.0 | Roadmap Rebaseline | ACTIVE / OWNER_AUTHORIZED | 2–3h | 1h | 3–4h |
-| V4.1 | OpenSpec Binding / `AICC-CONTROL-LOOP-001B` | PLANNED / NOT_AUTHORIZED | 8–12h | 2–3h | 10–15h |
-| V4.2 | Review + Exact-head CI Control Plane | PLANNED | 8–12h | 2–4h | 10–16h |
-| V4.3 | Autonomous PR Delivery | PLANNED | 10–16h | 3–5h | 13–21h |
-| V4.4 | WP Automatic Lifecycle | PLANNED | 10–14h | 2–4h | 12–18h |
-| V4.5 | Evidence & Audit | PLANNED | 6–10h | 2–3h | 8–13h |
-| V4.6 | Mobile Owner Console | PLANNED | 12–18h | 3–5h | 15–23h |
-| V4.7 | Multi-project AICC | PLANNED | 14–22h | 4–6h | 18–28h |
-| V4.8 | Self-development Real Run | PLANNED | 10–16h | 4–6h | 14–22h |
+| Phase | Capability | Planned effort |
+| --- | --- | ---: |
+| V4.0 | GitHub Source-of-Truth Rebaseline | 3–5h |
+| V4.1 | Project Registry + GitHub Project Facts | 4–7h |
+| V4.2 | Project Switcher + All Projects Dashboard | 4–7h |
+| V4.3 | Development Tree + Detail View | 5–8h |
+| V4.4 | Progress + Drift / Stale Detection | 3–5h |
+| V4.5 | Owner Attention Center | 3–5h |
+| V4.6 | Three-machine Runtime Overview | 3–5h |
+| V4.7 | GPT Context Snapshot + Suggested Next | 3–5h |
+| V4.8 | Multi-project Real-use Hardening | 3–5h |
 
-Engineering subtotal: `80–123h`.
-CI/UAT/closure subtotal: `23–37h`.
-Total V4 planning budget: `103–160h`.
+Total V4 budget: `31–52h` of focused engineering work. Passive CI queue time, third-party outages and unrelated environment failures are excluded.
 
-Planning assumption: these are engineering-equivalent focused hours for the current Codex-assisted workflow. They include bounded regression/fix cycles but exclude passive waiting for external CI queues, outages, credentials, or unrelated environment failures. Each future phase requires its own named Work Package and Owner Gate before implementation.
+## V4.0 — GitHub Source-of-Truth Rebaseline
 
-## V4.0 — Roadmap Rebaseline
+Goal: remove the obsolete OpenSpec/execution-control roadmap, lock GitHub as the only project truth, lock GPT as orchestrator, and freeze AICC as an advisory projection layer.
+Exit: corrected roadmap and UI baseline are reviewed; PR remains separate from merge authorization.
 
-Goal: retire stale “M4.1 is current” declarations, establish one canonical V4 sequence, preserve V3 production evidence, and publish the effort baseline.
-Exit: roadmap/WP documentation checks pass; runtime source is unchanged; V4.1 remains blocked until separate Owner authorization.
+## V4.1 — Project Registry + GitHub Project Facts
 
-## V4.1 — OpenSpec Binding
+Goal: register multiple projects and their GitHub repositories without creating a second project authority database.
+Each project exposes repository identity, default branch, main SHA, roadmap location, active WP/Task references, PR/CI facts and last refresh provenance.
 
-Goal: bind one formal Work Package to its exact `proposal.md`, `design.md`, `tasks.md`, and capability specs through a typed read-only evidence model.
-Required outcomes: complete/incomplete/malformed/ambiguous/dependency/authority/owner-gate states; traversal and absolute-path rejection; no Apply/Sync/Archive or self-authorization.
-Formal package: `AICC-CONTROL-LOOP-001B` remains `PLANNED / NOT_AUTHORIZED` at V4.0 closure.
+## V4.2 — Project Switcher + All Projects Dashboard
 
-## V4.2 — Review + Exact-head CI Control Plane
+Goal: add the accepted top-right one-click project switcher and an `All Projects` overview.
+Switching changes only `viewProjectId`; active work in other projects continues unaffected.
 
-Goal: make review, test, build, CI and exact-head facts durable first-class evidence attached to the exact Task/Run/commit, without AICC inventing semantic PASS/FAIL.
-Exit: stale-head evidence cannot satisfy a current gate; failures identify the exact failing check and source SHA.
+## V4.3 — Development Tree + Detail View
 
-## V4.3 — Autonomous PR Delivery
+Goal: move the accepted collapsible Roadmap / WP / Task / Pull Requests / Owner Attention hierarchy into the left navigation and show the selected node in the center detail view.
+The tree must remain compact, preserve expand/collapse state per project and link every status back to GitHub evidence.
 
-Goal: progress an authorized implementation to a Draft PR and merge-ready evidence automatically after scoped tests/review/CI, while preserving an explicit Owner merge gate.
-Exit: branch/commit/PR/check facts are exact-bound and retry-safe; no force operations or autonomous merge.
+## V4.4 — Progress + Drift / Stale Detection
 
-## V4.4 — WP Automatic Lifecycle
+Goal: calculate useful progress summaries from GitHub-backed roadmap/WP/task evidence and clearly mark stale or conflicting projections.
+AICC never resolves a conflict by overriding GitHub.
 
-Goal: derive Task/WP lifecycle transitions from durable execution evidence instead of repeated manual status maintenance.
-Exit: transitions are deterministic and auditable; authorization, Human UAT and merge gates cannot be self-satisfied.
+## V4.5 — Owner Attention Center
 
-## V4.5 — Evidence & Audit
+Goal: aggregate Human UAT, merge approval, deploy approval and other explicit Owner gates across projects.
+AICC may highlight an item; GPT/GitHub reconciliation remains required before action.
 
-Goal: expose one queryable chain from Owner instruction → WP → Task → Run → Result → commit → PR → CI → UAT → merge/closure.
-Exit: every displayed state can link back to immutable source evidence and exact identity.
+## V4.6 — Three-machine Runtime Overview
 
-## V4.6 — Mobile Owner Console
+Goal: display CN Mac, US Mac and Windows availability, current observed project/branch role and last activity as runtime evidence.
+Runtime observations do not override GitHub project truth and do not give AICC remote execution authority.
 
-Goal: allow mobile read/approval workflows for status, blockers, UAT and explicit Owner gates while execution remains on authorized runtimes.
-Exit: mobile actions cannot bypass identity, authorization or same-project constraints.
+## V4.7 — GPT Context Snapshot + Suggested Next
 
-## V4.7 — Multi-project AICC
+Goal: provide a compact, copyable project snapshot containing GitHub facts, current roadmap/WP/task, PR/CI, runtime evidence, blockers and advisory next checks.
+`Suggested Next` is explicitly advisory; GPT decides and executes through GitHub/DC.
 
-Goal: manage multiple repositories/projects with strict project/worktree/state isolation and no latest/current fallback across projects.
-Exit: concurrent project observation is safe; writers remain isolated and explicit.
+## V4.8 — Multi-project Real-use Hardening
 
-## V4.8 — Self-development Real Run
+Goal: validate the dashboard while several real projects are simultaneously active and ensure project isolation, refresh correctness, staleness handling and Owner attention remain trustworthy.
 
-Goal: prove AICC can read its own canonical roadmap, surface the next eligible WP, obtain Owner authorization, drive Codex delivery, collect CI/PR/UAT evidence and advance lifecycle without granting itself semantic or authorization authority.
-Exit: one real AICC self-development WP completes end-to-end under the same gates used for other projects.
-
-## Final target operating model
+## Final operating model
 
 ```text
-Owner requirement / approval
+GitHub (only Source of Truth)
         ↓
-GPT planning + architecture
+GPT reconciliation + planning + decisions
         ↓
-AICC control plane + identity + evidence + lifecycle
+GitHub tools + Remote Desktop Commander
         ↓
-Codex execution
+CN Mac / US Mac / Windows / Codex / browser / runtimes
         ↓
-Repository / tests / GitHub CI / PR
-        ↓
-Owner UAT / Merge Gate
-        ↓
-Audited closure + next eligible WP
+execution evidence returns to GitHub + GPT
+        ↘
+         AICC projection / navigation / alerts / suggestions
 ```
 
-V4 Definition of Done: AICC becomes an evidence-driven software development control plane that can manage the full governed lifecycle while Owner authorization and GPT/Codex semantic authority remain explicit and non-transferable.
+V4 Definition of Done: AICC is a lightweight, trustworthy multi-project navigation and status layer. It never becomes a second Source of Truth and never duplicates GPT's execution role.
