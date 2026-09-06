@@ -3,6 +3,7 @@ const state = {
   viewProjectId: localStorage.getItem('aicc.v4.viewProjectId') || 'all',
   selectedNode: null,
   freshness: {},
+  attentionMode: false,
   loading: true,
   error: null
 };
@@ -14,6 +15,8 @@ const switcherButton = document.querySelector('#switcherButton');
 const switcherLabel = document.querySelector('#switcherLabel');
 const switcherMenu = document.querySelector('#switcherMenu');
 const refreshButton = document.querySelector('#refreshButton');
+const attentionButton = document.querySelector('#attentionButton');
+const attentionCount = document.querySelector('#attentionCount');
 
 const esc = (value) => String(value ?? '').replace(/[&<>'"]/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));
 const shortSha = (sha) => sha ? sha.slice(0, 10) : '—';
@@ -55,6 +58,36 @@ function projectionBadge(project) {
   return `<span class="projection-pill ${status.toLowerCase()}">${esc(status)}</span>`;
 }
 
+
+function allOwnerAttention() {
+  return state.projects.flatMap((project) => (project.ownerAttention || []).map((item) => ({ ...item, projectId: project.projectId, projectName: project.name, repository: project.repository })));
+}
+
+function attentionTypeLabel(type) {
+  return ({ HUMAN_UAT:'Human UAT', MERGE_APPROVAL:'Merge Approval', DEPLOY_APPROVAL:'Deploy Approval', PRODUCTION_GATE:'Production Gate', OWNER_DECISION:'Owner Decision', OWNER_ACTION:'Owner Action' })[type] || type || 'Owner Action';
+}
+
+function renderAttentionButton() {
+  const count = allOwnerAttention().length;
+  attentionCount.textContent = String(count);
+  attentionButton.classList.toggle('has-attention', count > 0);
+  attentionButton.title = count ? `${count} explicit GitHub Owner attention item${count === 1 ? '' : 's'}` : 'No explicit GitHub Owner attention items';
+}
+
+function renderOwnerAttentionCenter() {
+  const items = allOwnerAttention();
+  main.className = 'main-content';
+  main.innerHTML = `<section class="page-heading"><div><p class="eyebrow">OWNER ATTENTION</p><h1>需要你处理</h1><p>这里只显示 GitHub 明确声明的 Owner Gate；AICC 不从 CI、Draft PR 或标题自行推断。</p></div><div class="headline-stats"><div><b>${items.length}</b><span>Explicit Gates</span></div></div></section>
+    ${items.length ? `<section class="attention-list">${items.map((item) => `<button class="attention-card" data-attention-project="${esc(item.projectId)}" data-attention-id="${esc(item.id)}"><div><span class="attention-type">${esc(attentionTypeLabel(item.type))}</span><h2>${esc(item.title)}</h2><p>${esc(item.projectName)} · ${esc(item.repository)}</p></div><span class="attention-arrow">→</span></button>`).join('')}</section>` : '<section class="empty-state attention-empty"><span class="live-pill">CLEAR</span><h1>当前没有显式 Owner Gate</h1><p>没有 GitHub 证据时，AICC 不会制造待办。</p></section>'}`;
+  main.querySelectorAll('[data-attention-project]').forEach((button) => button.addEventListener('click', () => {
+    state.attentionMode = false;
+    state.viewProjectId = button.dataset.attentionProject;
+    state.selectedNode = { projectId: button.dataset.attentionProject, kind: 'attention', id: button.dataset.attentionId };
+    localStorage.setItem('aicc.v4.viewProjectId', state.viewProjectId);
+    render();
+  }));
+}
+
 function readTreeState(projectId) {
   try { return JSON.parse(localStorage.getItem(treeStorageKey(projectId)) || '{}'); }
   catch { return {}; }
@@ -80,11 +113,12 @@ function renderSwitcher() {
 function renderAllProjects() {
   const available = state.projects.filter((project) => project.available).length;
   const openPrs = state.projects.reduce((sum, project) => sum + (project.openPullRequests?.length || 0), 0);
+  const ownerItems = allOwnerAttention().length;
   main.className = 'main-content';
   main.innerHTML = `
     <section class="page-heading">
       <div><p class="eyebrow">ALL PROJECTS</p><h1>多项目开发总览</h1><p>所有状态均直接投影自 GitHub 默认分支；切换项目只改变当前视图。</p></div>
-      <div class="headline-stats"><div><b>${available}/${state.projects.length}</b><span>GitHub Available</span></div><div><b>${openPrs}</b><span>Open PR</span></div></div>
+      <div class="headline-stats"><div><b>${available}/${state.projects.length}</b><span>GitHub Available</span></div><div><b>${openPrs}</b><span>Open PR</span></div><div><b>${ownerItems}</b><span>Owner Attention</span></div></div>
     </section>
     <section class="project-grid">
       ${state.projects.map((project) => project.available ? `
@@ -96,6 +130,7 @@ function renderAllProjects() {
           <div class="fact-row"><span>CI</span><strong>${esc(ciSummary(project.ci))}</strong></div>
           <div class="fact-row"><span>Roadmap</span><strong>${esc(project.roadmap?.title || 'Not registered')}</strong></div>
           <div class="fact-row"><span>Progress</span><strong>${esc(progressLabel(project.roadmap?.progress))}</strong></div>
+          <div class="fact-row"><span>Owner Attention</span><strong>${project.ownerAttention?.length || 0}</strong></div>
           <div class="card-foot">${esc(freshness(project))}<span>→</span></div>
         </button>` : `
         <button class="project-card unavailable" data-open-project="${esc(project.projectId)}">
@@ -147,13 +182,14 @@ function renderDevelopmentTree(project) {
     task ? `<button class="tree-leaf" data-node-kind="task" data-node-id="current"><span class="status-dot active"></span><span><small>Task</small>${esc(task.value)}</span></button>` : '<div class="tree-empty">No explicit Current Task label</div>'
   ].join('');
   const prBody = project.openPullRequests?.length ? project.openPullRequests.map((pr) => `<button class="tree-leaf" data-node-kind="pr" data-node-id="${pr.number}"><span class="status-dot ${pr.draft ? 'draft' : 'active'}"></span><span><small>PR #${pr.number}</small>${esc(pr.title)}</span></button>`).join('') : '<div class="tree-empty">No open pull requests</div>';
-  const attentionBody = '<div class="tree-empty muted">Owner Attention projection starts in V4.5</div>';
+  const attentionItems = project.ownerAttention || [];
+  const attentionBody = attentionItems.length ? attentionItems.map((item) => `<button class="tree-leaf attention-leaf" data-node-kind="attention" data-node-id="${esc(item.id)}"><span class="status-dot attention"></span><span><small>${esc(attentionTypeLabel(item.type))}</small>${esc(item.title)}</span></button>`).join('') : '<div class="tree-empty muted">No explicit GitHub Owner Gate</div>';
   return `<aside class="development-tree" aria-label="Development Tree">
     <div class="tree-title"><span>PROJECT TREE</span><strong>${esc(project.name)}</strong></div>
     ${treeGroup('group-roadmap', 'Roadmap', roadmapBody, true, treeState, progressLabel(project.roadmap?.progress))}
     ${treeGroup('group-current', 'WP / Task', currentBody, true, treeState)}
     ${treeGroup('group-prs', 'Pull Requests', prBody, true, treeState, String(project.openPullRequests?.length || 0))}
-    ${treeGroup('group-attention', 'Owner Attention', attentionBody, false, treeState)}
+    ${treeGroup('group-attention', 'Owner Attention', attentionBody, attentionItems.length > 0, treeState, attentionItems.length ? String(attentionItems.length) : '')}
   </aside>`;
 }
 
@@ -165,6 +201,7 @@ function summaryDetail(project) {
       <article class="detail-card"><span>Current Task</span><strong>${esc(project.roadmap?.currentTask || 'Not explicitly labeled')}</strong><small>${project.roadmap?.currentPointers?.task ? `GitHub roadmap line ${project.roadmap.currentPointers.task.line}` : 'No inference'}</small></article>
       <article class="detail-card"><span>Open Pull Requests</span><strong>${project.openPullRequests.length}</strong><small>${esc(ciSummary(project.ci))}</small></article>
       <article class="detail-card"><span>Roadmap Progress</span><strong>${esc(progressLabel(project.roadmap?.progress))}</strong><small>${esc(progressEvidence(project.roadmap?.progress))}</small></article>
+      <article class="detail-card"><span>Owner Attention</span><strong>${project.ownerAttention?.length || 0}</strong><small>Explicit GitHub gates only</small></article>
       <article class="detail-card"><span>Projection</span><strong>${esc(projectionStatus(project))}</strong><small>${projectionStatus(project) === 'FRESH' ? 'Loaded exact ref still matches GitHub' : 'Refresh/reconciliation required; GitHub remains authoritative'}</small></article>
     </section>
     <section class="source-panel"><div><p class="eyebrow">GITHUB PROVENANCE</p><h2>事实来源</h2></div><dl><div><dt>Repository</dt><dd>${esc(project.repository)}</dd></div><div><dt>Ref</dt><dd class="mono">${esc(project.provenance.ref)}</dd></div><div><dt>Refreshed</dt><dd>${esc(project.provenance.refreshedAt)}</dd></div></dl></section>`;
@@ -184,6 +221,15 @@ function selectedDetail(project) {
     if (!pointer) return summaryDetail(project);
     return `<section class="node-detail"><p class="eyebrow">${selection.kind === 'work-package' ? 'WORK PACKAGE' : 'TASK'}</p><h1>${esc(pointer.value)}</h1><p class="node-meta">Exact ${esc(title)} label · ${esc(project.roadmap.path)} · line ${pointer.line}</p><div class="evidence-strip"><span>GitHub main</span><code>${esc(project.mainSha)}</code></div></section>`;
   }
+
+  if (selection.kind === 'attention') {
+    const item = (project.ownerAttention || []).find((entry) => entry.id === selection.id);
+    if (!item) return summaryDetail(project);
+    const source = item.source === 'pull-request' ? `GitHub PR #${item.prNumber}` : `${project.roadmap?.path || 'Roadmap'} · line ${item.line}`;
+    const link = item.url ? `<a href="${esc(item.url)}" target="_blank" rel="noreferrer">Open GitHub evidence ↗</a>` : 'GitHub main roadmap evidence';
+    return `<section class="node-detail"><p class="eyebrow">OWNER ATTENTION</p><h1>${esc(item.title)}</h1><p class="node-meta">${esc(attentionTypeLabel(item.type))} · ${esc(source)}</p><dl class="fact-list"><div><dt>Status</dt><dd>REQUIRED</dd></div><div><dt>Source</dt><dd>${link}</dd></div><div><dt>Authority</dt><dd>GitHub evidence; GPT reconciles before action</dd></div></dl><div class="evidence-strip"><span>GitHub main</span><code>${esc(project.mainSha)}</code></div></section>`;
+  }
+
   if (selection.kind === 'pr') {
     const pr = project.openPullRequests.find((item) => String(item.number) === String(selection.id));
     if (!pr) return summaryDetail(project);
@@ -214,8 +260,10 @@ function renderProject(project) {
 
 function render() {
   renderSwitcher();
+  renderAttentionButton();
   if (state.loading) { main.className = 'main-content'; main.innerHTML = '<section class="loading-state"><div class="spinner"></div><h1>正在读取 GitHub 项目事实</h1><p>不会读取本地 branch 作为项目权威。</p></section>'; statusbar.textContent = 'GitHub source · refreshing…'; return; }
   if (state.error) { main.className = 'main-content'; main.innerHTML = `<section class="empty-state"><span class="error-pill">ERROR</span><h1>GitHub 项目事实读取失败</h1><p>${esc(state.error)}</p></section>`; statusbar.textContent = 'GitHub source · refresh failed'; return; }
+  if (state.attentionMode) { renderOwnerAttentionCenter(); const latest = state.projects.map((project) => project.provenance?.refreshedAt).filter(Boolean).sort().at(-1); statusbar.textContent = `GitHub source · Owner Attention · synced ${latest || 'unknown'}`; return; }
   const selected = state.viewProjectId === 'all' ? null : projectById(state.viewProjectId);
   if (state.viewProjectId !== 'all' && !selected) state.viewProjectId = 'all';
   state.viewProjectId === 'all' ? renderAllProjects() : renderProject(selected);
@@ -224,6 +272,7 @@ function render() {
 }
 
 function setView(projectId) {
+  state.attentionMode = false;
   state.viewProjectId = projectId;
   state.selectedNode = null;
   localStorage.setItem('aicc.v4.viewProjectId', projectId);
@@ -261,6 +310,7 @@ async function checkFreshness() {
 
 switcherButton.addEventListener('click', () => { switcherMenu.hidden = !switcherMenu.hidden; switcherButton.setAttribute('aria-expanded', String(!switcherMenu.hidden)); });
 document.addEventListener('click', (event) => { if (!switcher.contains(event.target)) { switcherMenu.hidden = true; switcherButton.setAttribute('aria-expanded', 'false'); } });
+attentionButton.addEventListener('click', () => { state.attentionMode = true; state.selectedNode = null; render(); });
 refreshButton.addEventListener('click', refresh);
 refresh();
 setInterval(checkFreshness, 60000);

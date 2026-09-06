@@ -13,6 +13,79 @@ function cleanHeading(value) {
 }
 
 
+
+const OWNER_PR_LABEL_TYPES = Object.freeze({
+  'owner-attention': 'OWNER_ACTION',
+  'owner-uat': 'HUMAN_UAT',
+  'owner-merge': 'MERGE_APPROVAL',
+  'owner-deploy': 'DEPLOY_APPROVAL',
+  'owner-production': 'PRODUCTION_GATE',
+  'owner-decision': 'OWNER_DECISION'
+});
+
+function ownerAttentionType(text) {
+  const value = String(text ?? '');
+  if (/\b(?:human\s+)?uat\b/i.test(value)) return 'HUMAN_UAT';
+  if (/\bmerge\b/i.test(value)) return 'MERGE_APPROVAL';
+  if (/\bdeploy(?:ment)?\b/i.test(value)) return 'DEPLOY_APPROVAL';
+  if (/\bproduction\b/i.test(value)) return 'PRODUCTION_GATE';
+  if (/\bdecision\b/i.test(value)) return 'OWNER_DECISION';
+  return 'OWNER_ACTION';
+}
+
+function isClosedOwnerValue(value) {
+  return /^(?:none|clear|pass|passed|closed|done|complete|completed|approved|accepted|merged|n\/a|na)$/i.test(cleanInlineValue(String(value ?? '')));
+}
+
+export function extractOwnerAttention(markdown) {
+  const lines = String(markdown ?? '').split(/\r?\n/);
+  const items = [];
+  let sectionLevel = null;
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index];
+    const heading = line.match(/^(#{2,6})\s+(.+?)\s*$/);
+    if (heading) {
+      const title = cleanHeading(heading[2]);
+      const level = heading[1].length;
+      if (/^Owner (?:Attention|Gates?)$/i.test(title)) sectionLevel = level;
+      else if (sectionLevel && level <= sectionLevel) sectionLevel = null;
+      continue;
+    }
+    const direct = line.match(/^\s*(?:[-*>]\s*)?(?:\*\*)?(Owner Attention|Owner Gate)(?:\*\*)?\s*[:：]\s*(.+?)\s*$/i);
+    if (direct) {
+      const title = cleanInlineValue(direct[2]);
+      if (!title || isClosedOwnerValue(title)) continue;
+      items.push(Object.freeze({ id: `roadmap-line-${index + 1}`, source: 'roadmap', type: ownerAttentionType(title), status: 'REQUIRED', title, line: index + 1 }));
+      continue;
+    }
+    if (sectionLevel) {
+      const unchecked = line.match(/^\s*[-*+]\s+\[ \]\s+(.+?)\s*$/);
+      if (!unchecked) continue;
+      const title = cleanInlineValue(unchecked[1]);
+      if (!title || isClosedOwnerValue(title)) continue;
+      items.push(Object.freeze({ id: `roadmap-line-${index + 1}`, source: 'roadmap', type: ownerAttentionType(title), status: 'REQUIRED', title, line: index + 1 }));
+    }
+  }
+  return Object.freeze(items);
+}
+
+function pullRequestOwnerAttention(pr) {
+  const labels = (Array.isArray(pr.labels) ? pr.labels : []).map((label) => typeof label === 'string' ? label : label?.name).filter(Boolean);
+  const explicit = labels.filter((label) => OWNER_PR_LABEL_TYPES[label]);
+  if (!explicit.length) return null;
+  const specific = explicit.find((label) => label !== 'owner-attention') ?? explicit[0];
+  return Object.freeze({
+    id: `pr-${pr.number}`,
+    source: 'pull-request',
+    type: OWNER_PR_LABEL_TYPES[specific],
+    status: 'REQUIRED',
+    title: `PR #${pr.number} · ${pr.title}`,
+    prNumber: pr.number,
+    url: pr.html_url ?? null,
+    labels: Object.freeze(explicit)
+  });
+}
+
 function progressFromLines(lines, baseLine = 1) {
   for (let index = 0; index < lines.length; index += 1) {
     const match = lines[index].match(/^\s*(?:[-*>]\s*)?(?:\*\*)?Progress(?:\*\*)?\s*[:：]\s*`?([0-9]{1,3}(?:\.[0-9]+)?)%`?\s*$/i);
@@ -118,6 +191,7 @@ async function readRoadmap(project, mainSha, client) {
     contentSha256: createHash('sha256').update(text).digest('hex'),
     ...refs,
     progress: extractRoadmapProgress(text),
+    ownerAttention: Object.freeze(extractOwnerAttention(text).map((item) => Object.freeze({ ...item, path: project.roadmapPath }))),
     currentPointers: Object.freeze({
       workPackage: wp ? Object.freeze({ value: wp.value, line: wp.line }) : null,
       task: task ? Object.freeze({ value: task.value, line: task.line }) : null
@@ -172,8 +246,14 @@ export async function readGitHubProjectFacts(project, { client, now = () => new 
     headSha: pr.head?.sha ?? null,
     baseRef: pr.base?.ref ?? null,
     url: pr.html_url ?? null,
-    updatedAt: pr.updated_at ?? null
+    updatedAt: pr.updated_at ?? null,
+    labels: Object.freeze((Array.isArray(pr.labels) ? pr.labels : []).map((label) => typeof label === 'string' ? label : label?.name).filter(Boolean))
   }));
+
+  const ownerAttention = Object.freeze([
+    ...(roadmap?.ownerAttention ?? []),
+    ...(Array.isArray(pulls) ? pulls : []).map(pullRequestOwnerAttention).filter(Boolean)
+  ]);
 
   return Object.freeze({
     schema: 'aicc.v4.github-project-facts.v1',
@@ -186,6 +266,7 @@ export async function readGitHubProjectFacts(project, { client, now = () => new 
     repositoryState: Object.freeze({ archived: Boolean(repo.archived), visibility: repo.visibility ?? null }),
     roadmap,
     openPullRequests: Object.freeze(openPullRequests),
+    ownerAttention,
     ci: summarizeCheckRuns(checks),
     provenance: Object.freeze({ source: 'github', repository, ref: mainSha, refreshedAt: now().toISOString() })
   });

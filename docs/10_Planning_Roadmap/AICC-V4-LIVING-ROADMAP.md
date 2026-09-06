@@ -10,9 +10,9 @@ V3-Runtime-Baseline: `8998f46805723e661e700e3c55695fd3095f5fa5`
 
 `V4.2 — Project Switcher + All Projects Dashboard`
 
-Current Work Package: `AICC-V4-PROGRESS-DRIFT-STALE-001`
+Current Work Package: `AICC-V4-OWNER-ATTENTION-001`
 Current implementation phase: `V4.1.2 — implementation complete / Draft PR + exact-head CI gate`
-Next planned phase: `V4.5 — Owner Attention Center`
+Next planned phase: `V4.6 — Three-machine Runtime Overview`
 
 ## Canonical architecture
 
