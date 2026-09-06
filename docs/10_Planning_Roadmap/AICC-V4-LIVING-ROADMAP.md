@@ -1,18 +1,18 @@
 # AICC V4 Living Roadmap
 
-Roadmap-Revision: 2
+Roadmap-Revision: 3
 Updated-At: 2026-09-06
-Status: `V4.0 ACTIVE / GITHUB-FIRST REBASELINE`
+Status: `V4.1 ACTIVE / PROJECT REGISTRY + GITHUB FACTS`
 Authority-Base: `main@45d3862ef0e9ec0df98939363982a8a0346ea723`
 V3-Runtime-Baseline: `8998f46805723e661e700e3c55695fd3095f5fa5`
 
 ## Current milestone
 
-`V4.0 — GitHub Source-of-Truth Rebaseline`
+`V4.1 — Project Registry + GitHub Project Facts`
 
-Current Work Package: `AICC-V4-ROADMAP-REBASELINE-001`
-Current implementation phase: `V4.0.3 — corrected architecture / visual baseline accepted`
-Next planned phase: `V4.1 — Project Registry + GitHub Project Facts`
+Current Work Package: `AICC-V4-PROJECT-REGISTRY-GITHUB-FACTS-001`
+Current implementation phase: `V4.1.2 — implementation complete / Draft PR + exact-head CI gate`
+Next planned phase: `V4.2 — Project Switcher + All Projects Dashboard`
 
 ## Canonical architecture
 
@@ -21,7 +21,6 @@ GitHub is the only project Source of Truth. GPT is the development orchestrator.
 ```text
 GITHUB_SOURCE_OF_TRUTH = 1
 GPT_ORCHESTRATION_AUTHORITY = 1
-OPENSPEC = 0
 AICC_AGGREGATION = 1
 AICC_PROJECTION = 1
 AICC_RECOMMENDATION = 1
@@ -73,7 +72,7 @@ Total V4 budget: `31–52h` of focused engineering work. Passive CI queue time, 
 
 ## V4.0 — GitHub Source-of-Truth Rebaseline
 
-Goal: remove the obsolete OpenSpec/execution-control roadmap, lock GitHub as the only project truth, lock GPT as orchestrator, and freeze AICC as an advisory projection layer.
+Goal: remove the obsolete planning/execution-control roadmap, lock GitHub as the only project truth, lock GPT as orchestrator, and freeze AICC as an advisory projection layer.
 Exit: corrected roadmap and UI baseline are reviewed; PR remains separate from merge authorization.
 
 ## V4.1 — Project Registry + GitHub Project Facts

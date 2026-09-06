@@ -1,0 +1,9 @@
+{
+  "name": "aicc-v4",
+  "private": true,
+  "version": "4.1.0",
+  "type": "module",
+  "scripts": {
+    "test": "node --test tests/*.test.mjs"
+  }
+}

@@ -1,0 +1,34 @@
+{
+  "schema": "aicc.v4.project-registry.v1",
+  "projects": [
+    {
+      "id": "aicc",
+      "name": "AICC",
+      "repository": "beyourlovercom/aicontrolcenter",
+      "roadmapPath": "docs/10_Planning_Roadmap/AICC-V4-LIVING-ROADMAP.md"
+    },
+    {
+      "id": "byl-erp",
+      "name": "BYL ERP",
+      "repository": "beyourlovercom/erpbeyourlovercom",
+      "roadmapPath": "docs/10_Planning_Roadmap/27_ERP_ROADMAP_PRODUCTION_RECONCILIATION_V2.md"
+    },
+    {
+      "id": "family-plan",
+      "name": "Family Plan",
+      "repository": "beyourlovercom/family-plan",
+      "roadmapPath": "docs/ROADMAP_V1.md"
+    },
+    {
+      "id": "andy-core",
+      "name": "Andy-Core",
+      "repository": "beyourlovercom/YBY-Core",
+      "roadmapPath": "docs/v1.5.3/ANDY_CORE_V1_5_3_WORDPRESS_CONNECTOR_WORK_PACKAGE.md"
+    },
+    {
+      "id": "yby-core",
+      "name": "YBY-Core",
+      "repository": "beyourlovercom/YBY-Core"
+    }
+  ]
+}
