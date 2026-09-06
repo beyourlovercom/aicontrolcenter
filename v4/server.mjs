@@ -1,12 +1,26 @@
 import http from 'node:http';
 import { fileURLToPath } from 'node:url';
-import { dirname, join } from 'node:path';
+import { dirname, extname, join, normalize } from 'node:path';
+import { readFile } from 'node:fs/promises';
 import { createGhApiClient } from './lib/github-client.mjs';
 import { getProjectLocator, loadProjectRegistry } from './lib/project-registry.mjs';
 import { readAllGitHubProjectFacts, readGitHubProjectFacts } from './lib/project-facts.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const defaultRegistryPath = join(here, 'projects.json');
+const publicRoot = join(here, 'public');
+const contentTypes = Object.freeze({ '.html':'text/html; charset=utf-8', '.js':'text/javascript; charset=utf-8', '.css':'text/css; charset=utf-8' });
+
+async function sendStatic(response, pathname) {
+  const relative = pathname === '/' ? 'index.html' : pathname.replace(/^\/+/, '');
+  const safe = normalize(relative);
+  if (safe.startsWith('..') || safe.includes('/../')) return false;
+  try {
+    const body = await readFile(join(publicRoot, safe));
+    response.writeHead(200, { 'content-type': contentTypes[extname(safe)] ?? 'application/octet-stream', 'cache-control':'no-store' });
+    response.end(body); return true;
+  } catch { return false; }
+}
 
 function sendJson(response, status, body) {
   response.writeHead(status, {
@@ -48,6 +62,7 @@ export async function createV4Server({ registryPath = defaultRegistryPath, clien
       }
       return;
     }
+    if (await sendStatic(response, url.pathname)) return;
     sendJson(response, 404, { schema: 'aicc.v4.error.v1', error: 'NOT_FOUND' });
   });
 }

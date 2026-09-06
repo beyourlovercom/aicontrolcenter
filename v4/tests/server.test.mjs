@@ -27,6 +27,10 @@ async function withServer(run) {
 
 test('read-only API exposes project facts and rejects mutations', async () => {
   await withServer(async (base) => {
+    const page = await fetch(`${base}/`).then((r) => r.text());
+    assert.match(page, /id=\"switcherButton\"/);
+    const asset = await fetch(`${base}/app.js`).then((r) => r.text());
+    assert.match(asset, /All Projects/);
     const health = await fetch(`${base}/api/health`).then((r) => r.json());
     assert.equal(health.projectCount, 1);
     const facts = await fetch(`${base}/api/projects/demo`).then((r) => r.json());
