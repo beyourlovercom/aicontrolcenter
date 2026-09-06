@@ -1,8 +1,8 @@
 # AICC V3 Living Roadmap
 
-Roadmap-Revision: 27
+Roadmap-Revision: 28
 Updated-At: 2026-09-06
-Status: `CLOSED / DEVELOPMENT COMPLETE`
+Status: `CLOSED / PRODUCTION BASELINE SEALED`
 
 ## Current milestone
 
@@ -57,6 +57,6 @@ V3.9 status: `CLOSED / OWNER ACCEPTED`.
 
 Total implementation budget: `55–70h` including bounded rework.
 
-## Post-V3.9 merge gate
+## Production baseline closure
 
-V3.0–V3.9 development is closed after deterministic restart/isolation hardening, exact-head CI success, and explicit Owner acceptance on 2026-09-06. PR #12 remains Draft / Open and is now the only next gate. Merge, release, deployment, or PR readiness changes require separate explicit Owner authorization.
+V3.0–V3.9 development is closed and merged. PR #12 merged to `main` as `8998f46805723e661e700e3c55695fd3095f5fa5`. The CN Mac canonical runtime was cut over to `main`, remained healthy, and passed the exact same-conversation smoke with `AICC_MAIN_CUTOVER_SMOKE_PASS`. Production baseline closure is sealed; future implementation work must start from `main` in a new explicit WP/version. No release/tag is implied by this closure.
