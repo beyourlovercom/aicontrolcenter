@@ -36,6 +36,12 @@ test('read-only API exposes project facts and rejects mutations', async () => {
     const facts = await fetch(`${base}/api/projects/demo`).then((r) => r.json());
     assert.equal(facts.mainSha, sha);
     assert.equal(facts.provenance.source, 'github');
+    const fresh = await fetch(`${base}/api/projects/demo/freshness?ref=${sha}&repository=owner%2Frepo`).then((r) => r.json());
+    assert.equal(fresh.status, 'FRESH');
+    const stale = await fetch(`${base}/api/projects/demo/freshness?ref=${'d'.repeat(40)}&repository=owner%2Frepo`).then((r) => r.json());
+    assert.equal(stale.status, 'STALE');
+    const drift = await fetch(`${base}/api/projects/demo/freshness?ref=${sha}&repository=owner%2Fother`).then((r) => r.json());
+    assert.equal(drift.status, 'DRIFT');
     const mutation = await fetch(`${base}/api/projects/demo`, { method: 'POST' });
     assert.equal(mutation.status, 405);
     assert.equal((await mutation.json()).error, 'READ_ONLY_API');

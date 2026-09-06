@@ -12,6 +12,30 @@ function cleanHeading(value) {
   return value.replace(/\s+#+\s*$/, '').replace(/[`*_]/g, '').trim();
 }
 
+
+function progressFromLines(lines, baseLine = 1) {
+  for (let index = 0; index < lines.length; index += 1) {
+    const match = lines[index].match(/^\s*(?:[-*>]\s*)?(?:\*\*)?Progress(?:\*\*)?\s*[:：]\s*`?([0-9]{1,3}(?:\.[0-9]+)?)%`?\s*$/i);
+    if (!match) continue;
+    const percentage = Number(match[1]);
+    if (percentage >= 0 && percentage <= 100) return Object.freeze({ available: true, percentage, basis: 'explicit-percent', completed: null, total: null, line: baseLine + index });
+  }
+  let completed = 0;
+  let total = 0;
+  for (const line of lines) {
+    const match = line.match(/^\s*[-*+]\s+\[([ xX])\]\s+/);
+    if (!match) continue;
+    total += 1;
+    if (match[1].toLowerCase() === 'x') completed += 1;
+  }
+  if (total) return Object.freeze({ available: true, percentage: Math.round((completed / total) * 1000) / 10, basis: 'markdown-checklist', completed, total, line: null });
+  return Object.freeze({ available: false, percentage: null, basis: null, completed: null, total: null, line: null });
+}
+
+export function extractRoadmapProgress(markdown) {
+  return progressFromLines(String(markdown ?? '').split(/\r?\n/), 1);
+}
+
 function pointerWithLine(lines, labels) {
   for (let index = 0; index < lines.length; index += 1) {
     for (const label of labels) {
@@ -34,27 +58,33 @@ export function extractRoadmapReferences(markdown) {
 
 export function extractRoadmapOutline(markdown) {
   const lines = String(markdown ?? '').split(/\r?\n/);
-  const outline = [];
+  const headings = [];
   for (let index = 0; index < lines.length; index += 1) {
     const match = lines[index].match(/^(#{2,4})\s+(.+?)\s*$/);
-    if (!match) continue;
+    if (match) headings.push({ index, level: match[1].length, title: cleanHeading(match[2]) });
+  }
+  return Object.freeze(headings.map((heading, position) => {
+    let end = lines.length;
+    for (let next = position + 1; next < headings.length; next += 1) {
+      if (headings[next].level <= heading.level) { end = headings[next].index; break; }
+    }
     const excerpt = [];
-    for (let cursor = index + 1; cursor < lines.length && excerpt.length < 2; cursor += 1) {
+    for (let cursor = heading.index + 1; cursor < end && excerpt.length < 2; cursor += 1) {
       const line = lines[cursor].trim();
       if (/^#{1,6}\s+/.test(line)) break;
       if (!line || /^Current (?:Work Package|WP|Task)\s*[:：]/i.test(line)) continue;
       excerpt.push(line.replace(/^[-*>]\s*/, '').slice(0, 220));
     }
-    outline.push(Object.freeze({
-      id: `roadmap-line-${index + 1}`,
+    return Object.freeze({
+      id: `roadmap-line-${heading.index + 1}`,
       kind: 'roadmap-heading',
-      title: cleanHeading(match[2]),
-      level: match[1].length,
-      line: index + 1,
-      excerpt: Object.freeze(excerpt)
-    }));
-  }
-  return Object.freeze(outline);
+      title: heading.title,
+      level: heading.level,
+      line: heading.index + 1,
+      excerpt: Object.freeze(excerpt),
+      progress: progressFromLines(lines.slice(heading.index + 1, end), heading.index + 2)
+    });
+  }));
 }
 
 export function summarizeCheckRuns(input) {
@@ -87,12 +117,31 @@ async function readRoadmap(project, mainSha, client) {
     blobSha: file.sha ?? null,
     contentSha256: createHash('sha256').update(text).digest('hex'),
     ...refs,
+    progress: extractRoadmapProgress(text),
     currentPointers: Object.freeze({
       workPackage: wp ? Object.freeze({ value: wp.value, line: wp.line }) : null,
       task: task ? Object.freeze({ value: task.value, line: task.line }) : null
     }),
     outline: extractRoadmapOutline(text)
   });
+}
+
+export async function readGitHubProjectHead(project, { client, now = () => new Date() }) {
+  const repo = await client.api(`repos/${project.repository}`);
+  const repository = repo?.full_name;
+  const defaultBranch = repo?.default_branch;
+  if (repository !== project.repository || typeof defaultBranch !== 'string' || !defaultBranch) throw new Error('GitHub repository identity/default branch is unavailable');
+  const commit = await client.api(`repos/${project.repository}/commits/${encodeURIComponent(defaultBranch)}`);
+  const mainSha = commit?.sha;
+  if (typeof mainSha !== 'string' || !/^[0-9a-f]{40}$/i.test(mainSha)) throw new Error('GitHub default branch head SHA is unavailable');
+  return Object.freeze({ schema: 'aicc.v4.github-project-head.v1', projectId: project.id, repository, defaultBranch, mainSha, checkedAt: now().toISOString() });
+}
+
+export function compareProjectionFreshness(project, head, expectedRef, expectedRepository = null) {
+  if (expectedRepository && expectedRepository !== project.repository) return Object.freeze({ status: 'DRIFT', reason: 'REPOSITORY_MISMATCH' });
+  if (head.repository !== project.repository) return Object.freeze({ status: 'DRIFT', reason: 'GITHUB_REPOSITORY_MISMATCH' });
+  if (expectedRef !== head.mainSha) return Object.freeze({ status: 'STALE', reason: 'DEFAULT_BRANCH_ADVANCED' });
+  return Object.freeze({ status: 'FRESH', reason: 'EXACT_HEAD_MATCH' });
 }
 
 export async function readGitHubProjectFacts(project, { client, now = () => new Date() }) {

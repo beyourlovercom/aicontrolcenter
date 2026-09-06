@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { extractRoadmapOutline, extractRoadmapReferences, readAllGitHubProjectFacts, readGitHubProjectFacts, summarizeCheckRuns } from '../lib/project-facts.mjs';
+import { extractRoadmapOutline, compareProjectionFreshness, extractRoadmapProgress, extractRoadmapReferences, readAllGitHubProjectFacts, readGitHubProjectFacts, summarizeCheckRuns } from '../lib/project-facts.mjs';
 
 const sha = 'a'.repeat(40);
 const roadmap = '# Demo Roadmap\n\nCurrent Work Package: `WP-42`\nCurrent Task: **Task 7**\n\n## Phase A\nBuild the first phase.\n\n### Detail A1\n- evidence only\n';
@@ -66,4 +66,19 @@ test('all-project refresh fails individual projects visibly instead of fabricati
   assert.equal(facts[0].available, true);
   assert.equal(facts[1].available, false);
   assert.equal(facts[1].error.code, 'GITHUB_FACTS_UNAVAILABLE');
+});
+
+
+test('roadmap progress uses explicit percentage, then checklist evidence, and never invents missing progress', () => {
+  assert.deepEqual(extractRoadmapProgress('# X\nProgress: `42%`\n- [x] a\n- [ ] b'), { available: true, percentage: 42, basis: 'explicit-percent', completed: null, total: null, line: 2 });
+  assert.deepEqual(extractRoadmapProgress('# X\n- [x] a\n- [ ] b\n- [x] c'), { available: true, percentage: 66.7, basis: 'markdown-checklist', completed: 2, total: 3, line: null });
+  assert.equal(extractRoadmapProgress('# X\nNo evidence').available, false);
+});
+
+test('freshness comparison is exact-ref and repository-identity based', () => {
+  const locator = { id: 'demo', repository: 'owner/repo' };
+  const head = { repository: 'owner/repo', mainSha: sha };
+  assert.equal(compareProjectionFreshness(locator, head, sha, 'owner/repo').status, 'FRESH');
+  assert.equal(compareProjectionFreshness(locator, head, 'b'.repeat(40), 'owner/repo').status, 'STALE');
+  assert.equal(compareProjectionFreshness(locator, head, sha, 'owner/other').status, 'DRIFT');
 });

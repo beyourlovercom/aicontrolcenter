@@ -5,6 +5,7 @@ import { readFile } from 'node:fs/promises';
 const html = await readFile(new URL('../public/index.html', import.meta.url), 'utf8');
 const js = await readFile(new URL('../public/app.js', import.meta.url), 'utf8');
 const css = await readFile(new URL('../public/styles.css', import.meta.url), 'utf8');
+const factsLib = await readFile(new URL('../lib/project-facts.mjs', import.meta.url), 'utf8');
 
 test('V4.2 exposes accepted Project Switcher and All Projects shell', () => {
   assert.match(html, /id="switcherButton"/);
@@ -46,4 +47,15 @@ test('tree expand collapse state is view-only and persisted per project', () => 
 
 test('Owner Attention is reserved for V4.5 instead of fabricated from heuristics', () => {
   assert.match(js, /Owner Attention projection starts in V4\.5/);
+});
+
+
+test('V4.4 renders only evidence-backed progress and exact freshness states', () => {
+  assert.match(js, /progressLabel/);
+  assert.match(js, /GitHub Markdown checklist items/);
+  assert.match(js, /freshness\?\$\{params\}/);
+  assert.match(factsLib, /STALE/);
+  assert.match(factsLib, /DRIFT/);
+  assert.match(js, /DRIFT/);
+  assert.doesNotMatch(js, /82%|68%|46%|31%/);
 });
