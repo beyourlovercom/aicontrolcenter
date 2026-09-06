@@ -1,15 +1,15 @@
 # AICC V3 Living Roadmap
 
-Roadmap-Revision: 25
-Updated-At: 2026-09-05
+Roadmap-Revision: 26
+Updated-At: 2026-09-06
 Status: `ACTIVE`
 
 ## Current milestone
 
-`V3.8 — GPT Bridge / Auto Return`
+`V3.9 — Human UAT + Hardening`
 
-Current Work Package: `AICC-V3-GPT-BRIDGE-AUTO-RETURN-001`
-Current implementation phase: `V3.8.3 — exact-head CI and controlled Owner UAT`
+Current Work Package: `AICC-V3-HUMAN-UAT-HARDENING-001`
+Current implementation phase: `V3.9.1 — deterministic restart/isolation regression and final handoff`
 
 ## Milestones
 
@@ -52,8 +52,11 @@ Estimate: 7–10h.
 Goal: restart recovery, isolation regression, real Owner UAT, handoff.
 Estimate: 5–7h.
 
+V3.8 disposition: `CLOSED / ACCEPTED` after the privileged Browser Bridge implementation, exact-head CI, and controlled Owner UAT evidence recorded in the final handoff.
+V3.9 status: `ACTIVE`.
+
 Total implementation budget: `55–70h` including bounded rework.
 
-## Next exact gate
+## V3.9 exact final gate
 
-Commit and push the V3.8.2 privileged Browser Bridge checkpoint and require exact-head V3 CI PASS. Then deploy the exact head to the device-ID-pinned CN MacBook Pro, load the unpacked extension with the AICC trigger integrated into the native Assistant action row, pair it through the clipboard-only local credential helper, and perform one explicit Owner-triggered same-conversation end-to-end UAT. No ChatGPT message may be sent before the Owner explicitly clicks `✦ AICC` on the originating Assistant turn.
+Commit and push the reviewed V3.9-scoped tests, roadmap, and final handoff from `rebuild/aicc-v3-clean`; require exact-head V3 CI PASS; then the Owner must independently confirm the human UAT evidence on the device-ID-pinned CN MacBook Pro. V3.9 may be closed only after explicit Owner confirmation of restart safety, request isolation, exact same-conversation delivery, and the documented recovery/failure rules. No merge, release, deployment, or PR status change is implied by this gate.

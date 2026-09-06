@@ -72,6 +72,56 @@ test('exact Task→Run→Result→Delivery content is preserved and terminal rec
   assert.throws(()=>recordBridgeReceipt(f.context,submitted.request.requestId,{...receiptInput,conversationId:'wrong'},f.env,f.bridgeOptions),e=>e.code==='BRIDGE_RECEIPT_MISMATCH');
 });
 
+test('restart preserves a terminal DELIVERED receipt and never reclaims or replays it',()=>{
+  const f=fixture();const submitted=submitBridgeRequest(f.context,input(f),f.env,f.bridgeOptions);completeRun(f,submitted.request.runId,'DELIVERED ONCE\n');
+  const ready=bridgeProjection(f.context,submitted.request.requestId,f.env,f.bridgeOptions);
+  const claimed=claimBridgeDelivery(f.context,submitted.request.requestId,{bridgeInstanceId:'bridge-delivered'},f.env,f.bridgeOptions);
+  const receiptInput={claimId:claimed.claim.claimId,outcome:'DELIVERED',conversationId:submitted.request.conversationId,contentSha256:claimed.delivery.contentSha256};
+  const delivered=recordBridgeReceipt(f.context,submitted.request.requestId,receiptInput,f.env,f.bridgeOptions);
+  assert.equal(ready.delivery.deliveryId,claimed.delivery.deliveryId);
+  assert.equal(delivered.state.deliveryState,'DELIVERED');
+  assert.deepEqual(reconcileBridgeStartup(f.context,f.env,f.bridgeOptions),[]);
+  assert.equal(readBridgeState(f.context,submitted.request.requestId,f.env).deliveryState,'DELIVERED');
+  assert.throws(()=>claimBridgeDelivery(f.context,submitted.request.requestId,{bridgeInstanceId:'bridge-restart'},f.env,f.bridgeOptions),e=>e.code==='BRIDGE_DELIVERY_ALREADY_DELIVERED');
+  const afterRestart=bridgeProjection(f.context,submitted.request.requestId,f.env,f.bridgeOptions);
+  assert.equal(afterRestart.state.deliveryState,'DELIVERED');
+  assert.equal(afterRestart.receipt.claimId,claimed.claim.claimId);
+  assert.equal(afterRestart.delivery.content,'DELIVERED ONCE\n');
+});
+
+test('independent explicit requests remain isolated across Task→Run→Result→Delivery',()=>{
+  const f=fixture();
+  const secondWp=createWorkPackage(f.context,{title:'Second Bridge WP',status:'ACTIVE'},f.env).workPackage;
+  const secondTask=createTask(f.context,{workPackageId:secondWp.id,title:'Second Bridge Task',status:'TODO'},f.env).task;
+  const first=submitBridgeRequest(f.context,input(f),f.env,f.bridgeOptions);
+  completeRun(f,first.request.runId,'RESULT FOR FIRST REQUEST\n');
+  const second=submitBridgeRequest(f.context,input(f,{requestId:'30000000-0000-4000-8000-000000000002',conversationId:'conv-explicit-2',originTurnId:'origin-turn-2',taskId:secondTask.id,taskTitle:secondTask.title,instruction:'Second exact bridge instruction.\n'}),f.env,{...f.bridgeOptions,runUuid:()=> '10000000-0000-4000-8000-000000000002'});
+  completeRun(f,second.request.runId,'RESULT FOR SECOND REQUEST\n');
+
+  const firstProjection=bridgeProjection(f.context,first.request.requestId,f.env,f.bridgeOptions);
+  const secondProjection=bridgeProjection(f.context,second.request.requestId,f.env,f.bridgeOptions);
+  assert.notEqual(first.request.taskId,second.request.taskId);
+  assert.notEqual(first.request.runId,second.request.runId);
+  assert.notEqual(first.request.conversationId,second.request.conversationId);
+  assert.equal(firstProjection.delivery.taskId,first.request.taskId);
+  assert.equal(firstProjection.delivery.runId,first.request.runId);
+  assert.equal(firstProjection.delivery.content,'RESULT FOR FIRST REQUEST\n');
+  assert.equal(secondProjection.delivery.taskId,second.request.taskId);
+  assert.equal(secondProjection.delivery.runId,second.request.runId);
+  assert.equal(secondProjection.delivery.content,'RESULT FOR SECOND REQUEST\n');
+
+  const firstClaim=claimBridgeDelivery(f.context,first.request.requestId,{bridgeInstanceId:'bridge-first'},f.env,f.bridgeOptions);
+  const secondClaim=claimBridgeDelivery(f.context,second.request.requestId,{bridgeInstanceId:'bridge-second'},f.env,{...f.bridgeOptions,claimUuid:()=> '20000000-0000-4000-8000-000000000002'});
+  assert.equal(firstClaim.delivery.requestId,first.request.requestId);
+  assert.equal(secondClaim.delivery.requestId,second.request.requestId);
+  recordBridgeReceipt(f.context,first.request.requestId,{claimId:firstClaim.claim.claimId,outcome:'DELIVERED',conversationId:first.request.conversationId,contentSha256:firstClaim.delivery.contentSha256},f.env,f.bridgeOptions);
+  recordBridgeReceipt(f.context,second.request.requestId,{claimId:secondClaim.claim.claimId,outcome:'DELIVERED',conversationId:second.request.conversationId,contentSha256:secondClaim.delivery.contentSha256},f.env,{...f.bridgeOptions,claimUuid:()=> '20000000-0000-4000-8000-000000000002'});
+  assert.equal(bridgeProjection(f.context,first.request.requestId,f.env,f.bridgeOptions).receipt.conversationId,'conv-explicit-1');
+  assert.equal(bridgeProjection(f.context,second.request.requestId,f.env,f.bridgeOptions).receipt.conversationId,'conv-explicit-2');
+  assert.equal(readBridgeState(f.context,first.request.requestId,f.env).deliveryState,'DELIVERED');
+  assert.equal(readBridgeState(f.context,second.request.requestId,f.env).deliveryState,'DELIVERED');
+});
+
 test('safe pre-send abort permits only two retries after the initial claim',()=>{
   const f=fixture();const submitted=submitBridgeRequest(f.context,input(f),f.env,f.bridgeOptions);completeRun(f,submitted.request.runId);
   for(let attempt=1;attempt<=3;attempt++){
