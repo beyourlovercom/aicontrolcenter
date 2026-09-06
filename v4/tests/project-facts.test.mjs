@@ -1,9 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { extractRoadmapReferences, readAllGitHubProjectFacts, readGitHubProjectFacts, summarizeCheckRuns } from '../lib/project-facts.mjs';
+import { extractRoadmapOutline, extractRoadmapReferences, readAllGitHubProjectFacts, readGitHubProjectFacts, summarizeCheckRuns } from '../lib/project-facts.mjs';
 
 const sha = 'a'.repeat(40);
-const roadmap = '# Demo Roadmap\n\nCurrent Work Package: `WP-42`\nCurrent Task: **Task 7**\n';
+const roadmap = '# Demo Roadmap\n\nCurrent Work Package: `WP-42`\nCurrent Task: **Task 7**\n\n## Phase A\nBuild the first phase.\n\n### Detail A1\n- evidence only\n';
 const project = { id: 'demo', name: 'Demo', repository: 'owner/repo', roadmapPath: 'docs/roadmap.md' };
 function fakeClient(overrides = {}) {
   const responses = {
@@ -27,6 +27,17 @@ test('roadmap references are exact labels only', () => {
   assert.equal(extractRoadmapReferences('# x\nNext Work Package: WP-99').currentWorkPackage, null);
 });
 
+
+
+test('roadmap outline projects exact GitHub markdown headings without status inference', () => {
+  const outline = extractRoadmapOutline(roadmap);
+  assert.deepEqual(outline.map(({ title, level, line }) => ({ title, level, line })), [
+    { title: 'Phase A', level: 2, line: 6 },
+    { title: 'Detail A1', level: 3, line: 9 }
+  ]);
+  assert.deepEqual(outline[0].excerpt, ['Build the first phase.']);
+});
+
 test('GitHub facts are bound to exact default-branch head and provenance', async () => {
   const facts = await readGitHubProjectFacts(project, { client: fakeClient(), now: () => new Date('2026-09-06T01:02:03Z') });
   assert.equal(facts.repository, 'owner/repo');
@@ -34,6 +45,9 @@ test('GitHub facts are bound to exact default-branch head and provenance', async
   assert.equal(facts.mainSha, sha);
   assert.equal(facts.roadmap.currentWorkPackage, 'WP-42');
   assert.equal(facts.roadmap.currentTask, 'Task 7');
+  assert.equal(facts.roadmap.currentPointers.workPackage.line, 3);
+  assert.equal(facts.roadmap.currentPointers.task.line, 4);
+  assert.equal(facts.roadmap.outline[0].title, 'Phase A');
   assert.equal(facts.openPullRequests[0].number, 9);
   assert.equal(facts.ci.total, 2);
   assert.deepEqual(facts.ci.byStatus, { completed: 1, in_progress: 1 });

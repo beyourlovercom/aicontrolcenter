@@ -8,23 +8,53 @@ function cleanInlineValue(value) {
   return value.replace(/^\s*[`*_]+|[`*_]+\s*$/g, '').trim();
 }
 
+function cleanHeading(value) {
+  return value.replace(/\s+#+\s*$/, '').replace(/[`*_]/g, '').trim();
+}
+
+function pointerWithLine(lines, labels) {
+  for (let index = 0; index < lines.length; index += 1) {
+    for (const label of labels) {
+      const match = lines[index].match(new RegExp(`^\\s*(?:[-*>]\\s*)?(?:\\*\\*)?${label}(?:\\*\\*)?\\s*[:：]\\s*(.+?)\\s*$`, 'i'));
+      if (match) return Object.freeze({ value: cleanInlineValue(match[1]), line: index + 1 });
+    }
+  }
+  return null;
+}
+
 export function extractRoadmapReferences(markdown) {
   const lines = String(markdown ?? '').split(/\r?\n/);
   const firstHeading = lines.find((line) => /^#\s+\S/.test(line));
-  const findValue = (labels) => {
-    for (const line of lines) {
-      for (const label of labels) {
-        const match = line.match(new RegExp(`^\\s*(?:[-*>]\\s*)?(?:\\*\\*)?${label}(?:\\*\\*)?\\s*[:：]\\s*(.+?)\\s*$`, 'i'));
-        if (match) return cleanInlineValue(match[1]);
-      }
-    }
-    return null;
-  };
   return Object.freeze({
-    title: firstHeading ? firstHeading.replace(/^#\s+/, '').trim() : null,
-    currentWorkPackage: findValue(['Current Work Package', 'Current WP']),
-    currentTask: findValue(['Current Task'])
+    title: firstHeading ? cleanHeading(firstHeading.replace(/^#\s+/, '')) : null,
+    currentWorkPackage: pointerWithLine(lines, ['Current Work Package', 'Current WP'])?.value ?? null,
+    currentTask: pointerWithLine(lines, ['Current Task'])?.value ?? null
   });
+}
+
+export function extractRoadmapOutline(markdown) {
+  const lines = String(markdown ?? '').split(/\r?\n/);
+  const outline = [];
+  for (let index = 0; index < lines.length; index += 1) {
+    const match = lines[index].match(/^(#{2,4})\s+(.+?)\s*$/);
+    if (!match) continue;
+    const excerpt = [];
+    for (let cursor = index + 1; cursor < lines.length && excerpt.length < 2; cursor += 1) {
+      const line = lines[cursor].trim();
+      if (/^#{1,6}\s+/.test(line)) break;
+      if (!line || /^Current (?:Work Package|WP|Task)\s*[:：]/i.test(line)) continue;
+      excerpt.push(line.replace(/^[-*>]\s*/, '').slice(0, 220));
+    }
+    outline.push(Object.freeze({
+      id: `roadmap-line-${index + 1}`,
+      kind: 'roadmap-heading',
+      title: cleanHeading(match[2]),
+      level: match[1].length,
+      line: index + 1,
+      excerpt: Object.freeze(excerpt)
+    }));
+  }
+  return Object.freeze(outline);
 }
 
 export function summarizeCheckRuns(input) {
@@ -49,11 +79,19 @@ async function readRoadmap(project, mainSha, client) {
   }
   const text = Buffer.from(file.content.replace(/\n/g, ''), 'base64').toString('utf8');
   const refs = extractRoadmapReferences(text);
+  const lines = text.split(/\r?\n/);
+  const wp = pointerWithLine(lines, ['Current Work Package', 'Current WP']);
+  const task = pointerWithLine(lines, ['Current Task']);
   return Object.freeze({
     path: project.roadmapPath,
     blobSha: file.sha ?? null,
     contentSha256: createHash('sha256').update(text).digest('hex'),
-    ...refs
+    ...refs,
+    currentPointers: Object.freeze({
+      workPackage: wp ? Object.freeze({ value: wp.value, line: wp.line }) : null,
+      task: task ? Object.freeze({ value: task.value, line: task.line }) : null
+    }),
+    outline: extractRoadmapOutline(text)
   });
 }
 
@@ -100,12 +138,7 @@ export async function readGitHubProjectFacts(project, { client, now = () => new 
     roadmap,
     openPullRequests: Object.freeze(openPullRequests),
     ci: summarizeCheckRuns(checks),
-    provenance: Object.freeze({
-      source: 'github',
-      repository,
-      ref: mainSha,
-      refreshedAt: now().toISOString()
-    })
+    provenance: Object.freeze({ source: 'github', repository, ref: mainSha, refreshedAt: now().toISOString() })
   });
 }
 
