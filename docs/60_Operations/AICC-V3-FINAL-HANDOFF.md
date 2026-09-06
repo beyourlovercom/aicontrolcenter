@@ -2,7 +2,7 @@
 
 Status: `V3.9 ACTIVE — OWNER FINAL GATE PENDING`
 Repository: `beyourlovercom/aicontrolcenter`
-Canonical worktree: `/Users/a/AI/007/worktrees/aicc-v3-clean`
+Canonical worktree: `~/AI/007/worktrees/aicc-v3-clean`
 Canonical branch: `rebuild/aicc-v3-clean`
 V3.9 starting HEAD: `c0da25f3dae457c130e365b2a81109646454243f`
 
@@ -16,7 +16,7 @@ The authority chain remains `Owner action → explicit Bridge origin → Project
 
 The exact workflow is: verify the clean canonical worktree and `rebuild/aicc-v3-clean`; verify the expected starting HEAD and remote authority; edit only the authorized V3 scope; run targeted tests first; run the complete `v3` Node test suite; review the diff; commit the reviewed head; push only to `origin rebuild/aicc-v3-clean`; require exact-head CI and separate Owner gates. PR #11 is untouched. PR #12 remains `Draft` until the Owner separately authorizes merge. No merge, release, or deployment is part of this handoff.
 
-The V3 runtime is pinned to the CN MacBook Pro device ID `3107d5f0-6f29-479c-8453-77bf53c172cf`; hostname inference is not valid. The local service is the single V3 Node server on `127.0.0.1:1420`, launchd label `com.aicc.v3.local-service`, with state rooted at `~/.aicc-v3` and project facts loaded from `~/.aicc-v3/project.json`. The Browser Bridge is `AICC V3 ChatGPT Bridge` version `3.8.12`, extension ID `ckidplkogedlpnocdodjhgjelpdflpki`, loaded unpacked in Chrome Profile 12 from `/Users/a/AI/007/worktrees/aicc-v3-clean/v3/browser-bridge`. The exact profile/extension identity is authoritative; do not fall back to frontmost/latest Chrome. The Owner Gate is required before any real ChatGPT send, any pairing, any merge, and any deployment/cutover.
+The V3 runtime is pinned to the CN MacBook Pro device ID `3107d5f0-6f29-479c-8453-77bf53c172cf`; hostname inference is not valid. The local service is the single V3 Node server on `127.0.0.1:1420`, launchd label `com.aicc.v3.local-service`, with state rooted at `~/.aicc-v3` and project facts loaded from `~/.aicc-v3/project.json`. The Browser Bridge is `AICC V3 ChatGPT Bridge` version `3.8.12`, extension ID `ckidplkogedlpnocdodjhgjelpdflpki`, loaded unpacked in Chrome Profile 12 from `~/AI/007/worktrees/aicc-v3-clean/v3/browser-bridge`. The exact profile/extension identity is authoritative; do not fall back to frontmost/latest Chrome. The Owner Gate is required before any real ChatGPT send, any pairing, any merge, and any deployment/cutover.
 
 ## Guarantees and recovery
 
