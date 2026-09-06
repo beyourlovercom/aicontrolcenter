@@ -1,12 +1,16 @@
-# AI Control Center Living Roadmap
+# AI Control Center Legacy Living Roadmap
+
+> Canonical next-development roadmap: [AICC V4 Living Roadmap](AICC-V4-LIVING-ROADMAP.md).
+> This file is retained for V2/M4 historical traceability and is not the authority for
+> the current milestone or next Work Package.
 
 ## Current milestone
 
-`M11.5 — AICC Self Development Real Run`
+`V4.0 — Roadmap Rebaseline`
 
 ## Authority
 
-Current constitutional authority: `AICC-V2-PROJECT-CONSTITUTION-001 v1.3`
+Current baseline authority: `AICC V3.0–V3.9 production baseline — CLOSED / MERGED TO MAIN / RUNTIME CUTOVER PASS`
 
 Highest architecture constraint:
 
@@ -16,15 +20,18 @@ AICC_DECISION_AUTHORITY = 0
 AICC_PASS_FAIL_BLOCKED_AUTHORITY = CODEX
 ```
 
-Closed Work Packages: `AICC-VISIBLE-SLICE-001`, `AICC-OPENSPEC-READMODEL-001`, `AICC-CONTROL-LOOP-001A`, `AICC-V2-PR-RUNNER-001`
+Closed baseline: `AICC V3.0–V3.9`, including merged/cutover/smoke/sealed closure recorded in
+`docs/10_Planning_Roadmap/AICC-V3-LIVING-ROADMAP.md` and
+`docs/60_Operations/AICC-V3-FINAL-HANDOFF.md`.
 
-Current Work Package: `AICC-M11.5-REAL-RUN-001`
+Current Work Package: `AICC-V4-ROADMAP-REBASELINE-001`
 
-Current implementation phase: `Phase 1 — Unified Action Layer`
+Current implementation phase: `V4.0 — documentation/governance only; no runtime implementation`
 
-Owner progression decision: `M4` is closed after final real PR Canary / Owner Human UAT PASS. `M4.1` is now the sole current development mainline.
+Owner progression decision: V3 production closure is sealed. `M4.1` is historical V2
+traceability, not the current implementation mainline. V4.1 remains `PLANNED / NOT_AUTHORIZED`.
 
-## Active V2 Milestones
+## Historical V2 Milestones
 
 ### M1 — Control Surface Finalization
 Work Packages: `AICC-V2-UI-WORKFLOW-001`, `AICC-V2-DUAL-PANEL-001`, `AICC-V2-VISUAL-IDENTITY-UNIFICATION-001`, `AICC-V2-RUNTIME-OBSERVER-001`
@@ -97,8 +104,8 @@ reconnect idempotency, and historical PR preservation passed Owner Human UAT.
 `M4_OWNER_UAT = PASS`
 `M4_ROADMAP_STATUS = CLOSED`
 
-### M4.1 — GPT ↔ AICC ↔ Codex Closed Loop
-Work Packages: `AICC-V2-GPT-AICC-CODEX-CLOSED-LOOP-001` — `ACTIVE / OWNER_AUTHORIZED`.
+### M4.1 — GPT ↔ AICC ↔ Codex Closed Loop (Historical)
+Work Packages: `AICC-V2-GPT-AICC-CODEX-CLOSED-LOOP-001` — `HISTORICAL / OWNER_AUTHORIZED AT THE TIME`.
 
 Purpose: connect the already-delivered execution panel, GPT Bridge, Codex
 runtime, result persistence, and ChatGPT return path into one reliable closed
@@ -137,8 +144,8 @@ AICC_PASS_FAIL_BLOCKED_AUTHORITY = CODEX
 AICC_RESULT_REWRITE = 0
 ```
 
-`M4_1_ROADMAP_STATUS = ACTIVE`
-`CURRENT_M4_1_PHASE = PHASE_1_UNIFIED_ACTION_LAYER`
+`M4_1_ROADMAP_STATUS = HISTORICAL / SUPERSEDED BY V3 PRODUCTION CLOSURE`
+`CURRENT_M4_1_PHASE = HISTORICAL_SUPERSEDED`
 `M4_PR_RUNNER_IMPLEMENTATION = APPROVED_BASELINE`
 `M4_PR_RUNNER_HUMAN_UAT = PASS`
 
@@ -188,14 +195,14 @@ Goal:
 
 验证 AICC 是否可以根据 Living Roadmap 自动驱动自身真实开发。
 
-## Near-term delivery sequence
+## Historical V2 near-term delivery sequence
 
 ```text
 M3.87 Runtime Workspace V1 Freeze — CLOSED
 ↓
 M4 PR Runner Foundation — CLOSED / HUMAN_UAT_PASS
 ↓
-M4.1 GPT ↔ AICC ↔ Codex Closed Loop — ACTIVE
+M4.1 GPT ↔ AICC ↔ Codex Closed Loop — HISTORICAL / SUPERSEDED
   Phase 1 Unified Action Layer
   ↓
   Phase 2 GPT → AICC
@@ -215,7 +222,9 @@ M6 Autonomous PR Delivery
 M7 WP Automatic Lifecycle
 ```
 
-M4 is closed. New PR Runner feature expansion belongs to later Roadmap scope and must not reopen M4 by default. M4.1 is the current development mainline by explicit Owner decision.
+M4 is closed. This sequence is retained only as historical traceability. It does not
+authorize reopening M4/M4.1 or selecting a successor Work Package. The canonical
+successor sequence is defined in `AICC-V4-LIVING-ROADMAP.md`.
 
 ## Current execution architecture
 
@@ -244,9 +253,9 @@ return the result. Such failures remain distinct from Codex task outcomes.
 
 ## Historical traceability
 
-The former `M3.88 — GPT ↔ AICC ↔ Codex Closed Loop` label is superseded by
-`M4.1` to match the actual Roadmap order after PR Runner Foundation. The Work
-Package ID remains unchanged so execution history and references stay stable.
+The former `M3.88 — GPT ↔ AICC ↔ Codex Closed Loop` label was superseded by
+`M4.1` to match the historical Roadmap order after PR Runner Foundation. The
+Work Package ID remains unchanged so execution history and references stay stable.
 
 Legacy Work Packages and earlier Roadmap language remain historical evidence.
 Where historical wording assigns semantic pre-Codex gates, Writer Lock execution
