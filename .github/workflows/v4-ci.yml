@@ -1,0 +1,37 @@
+name: AICC V4 CI
+
+on:
+  pull_request:
+    paths:
+      - 'v4/**'
+      - 'docs/10_Planning_Roadmap/AICC-V4-LIVING-ROADMAP.md'
+      - 'docs/60_Operations/work-packages/AICC-V4-*.md'
+      - '.github/workflows/v4-ci.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'v4/**'
+      - 'docs/10_Planning_Roadmap/AICC-V4-LIVING-ROADMAP.md'
+      - 'docs/60_Operations/work-packages/AICC-V4-*.md'
+      - '.github/workflows/v4-ci.yml'
+
+jobs:
+  verify:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: V4 tests
+        run: npm test --prefix v4
+      - name: V4 active-scope legacy-planning scan
+        run: |
+          if grep -Rni 'openspec' v4 docs/10_Planning_Roadmap/AICC-V4-LIVING-ROADMAP.md docs/60_Operations/work-packages/AICC-V4-ROADMAP-REBASELINE-001.md docs/60_Operations/work-packages/AICC-V4-PROJECT-REGISTRY-GITHUB-FACTS-001.md; then
+            echo 'Legacy planning reference found in active V4 scope'
+            exit 1
+          fi
+      - name: Diff check
+        run: git diff --check HEAD^ HEAD

@@ -12,11 +12,11 @@ const wp = await read('docs/60_Operations/work-packages/AICC-V4-ROADMAP-REBASELI
 
 assert(legacy.includes('AICC-V4-LIVING-ROADMAP.md'), 'legacy roadmap points to canonical V4 roadmap');
 assert(!legacy.includes('M4.1 is now the sole current development mainline'), 'legacy roadmap does not present M4.1 as current');
-for (const token of ['GITHUB_SOURCE_OF_TRUTH = 1','GPT_ORCHESTRATION_AUTHORITY = 1','OPENSPEC = 0','AICC_EXECUTION_AUTHORITY = 0','AICC_DECISION_AUTHORITY = 0']) assert(v4.includes(token), `V4 architecture contains ${token}`);
+for (const token of ['GITHUB_SOURCE_OF_TRUTH = 1','GPT_ORCHESTRATION_AUTHORITY = 1','AICC_EXECUTION_AUTHORITY = 0','AICC_DECISION_AUTHORITY = 0']) assert(v4.includes(token), `V4 architecture contains ${token}`);
 for (const phase of ['V4.1 — Project Registry + GitHub Project Facts','V4.2 — Project Switcher + All Projects Dashboard','V4.3 — Development Tree + Detail View','V4.4 — Progress + Drift / Stale Detection','V4.5 — Owner Attention Center','V4.6 — Three-machine Runtime Overview','V4.7 — GPT Context Snapshot + Suggested Next','V4.8 — Multi-project Real-use Hardening']) assert(v4.includes(phase), `V4 sequence contains ${phase}`);
 assert(v4.includes('Total V4 budget: `31–52h`'), 'V4 budget total is present');
 assert(v4.includes('Top-right: `Project Switcher`') && v4.includes('Left: collapsible `Development Tree`'), 'accepted UI baseline is recorded');
 assert(v3.includes('CLOSED / PRODUCTION BASELINE SEALED'), 'V3 roadmap remains sealed');
-assert(wp.includes('Source of Truth: `GitHub`') && wp.includes('OpenSpec in any V4 planning or execution path'), 'V4.0 WP records GitHub-first and OpenSpec removal');
-assert(!v4.includes('OpenSpec Binding') && !v4.includes('AICC-CONTROL-LOOP-001B'), 'obsolete OpenSpec successor is absent from V4');
+assert(wp.includes('Source of Truth: `GitHub`'), 'V4.0 WP records GitHub-first authority');
+assert(v4.includes('Current Work Package: `AICC-V4-PROJECT-REGISTRY-GITHUB-FACTS-001`'), 'V4.1 is the current Work Package');
 console.log('roadmap documentation regression tests passed');

@@ -6,7 +6,7 @@ Source of Truth: `GitHub`
 
 ## Objective
 
-Replace the incorrect OpenSpec/execution-control V4 plan with the Owner-approved GitHub-first architecture and accepted multi-project UI baseline.
+Replace the incorrect planning/execution-control V4 plan with the Owner-approved GitHub-first architecture and accepted multi-project UI baseline.
 
 ## Authorized scope
 
@@ -23,14 +23,13 @@ Replace the incorrect OpenSpec/execution-control V4 plan with the Owner-approved
 - AICC execution authority;
 - automatic branch switching or machine control from AICC;
 - a second authoritative project-state database;
-- OpenSpec in any V4 planning or execution path.
 
 ## Acceptance
 
 - GitHub is the only project Source of Truth;
 - GPT is the development orchestrator using GitHub + DC;
 - AICC is aggregation / projection / recommendation / alerting / display only;
-- V4 roadmap contains no OpenSpec successor phase;
+- V4 roadmap contains no obsolete planning successor phase;
 - accepted Project Switcher + Development Tree UI is captured as the V4 visual baseline;
 - V3 production runtime remains unchanged.
 
