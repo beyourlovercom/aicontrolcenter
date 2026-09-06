@@ -11,7 +11,7 @@ V3-Runtime-Baseline: `8998f46805723e661e700e3c55695fd3095f5fa5`
 `V4.0 — Roadmap Rebaseline`
 
 Current Work Package: `AICC-V4-ROADMAP-REBASELINE-001`
-Current implementation phase: `V4.0.1 — Canonical roadmap + effort baseline`
+Current implementation phase: `V4.0.2 — Draft PR / exact-head CI gate`
 Next gated Work Package: `AICC-CONTROL-LOOP-001B — OpenSpec Binding`
 Next gate: `SEPARATE OWNER AUTHORIZATION REQUIRED`
 

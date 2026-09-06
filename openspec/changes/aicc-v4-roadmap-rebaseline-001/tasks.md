@@ -14,5 +14,5 @@
 
 - [x] 3.1 Add roadmap documentation regression coverage.
 - [x] 3.2 Run OpenSpec validation, repository checks, and scope diff review.
-- [ ] 3.3 Commit and push the reviewed feature branch.
-- [ ] 3.4 Create a Draft PR and stop before merge.
+- [x] 3.3 Commit and push the reviewed feature branch.
+- [x] 3.4 Create a Draft PR and stop before merge.
