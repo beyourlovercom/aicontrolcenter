@@ -1,15 +1,15 @@
 # AICC V3 Living Roadmap
 
-Roadmap-Revision: 26
+Roadmap-Revision: 27
 Updated-At: 2026-09-06
-Status: `ACTIVE`
+Status: `CLOSED / DEVELOPMENT COMPLETE`
 
 ## Current milestone
 
-`V3.9 — Human UAT + Hardening`
+`V3.9 — Human UAT + Hardening — CLOSED / ACCEPTED`
 
 Current Work Package: `AICC-V3-HUMAN-UAT-HARDENING-001`
-Current implementation phase: `V3.9.1 — deterministic restart/isolation regression and final handoff`
+Current implementation phase: `V3.9.2 — CLOSED / OWNER ACCEPTED`
 
 ## Milestones
 
@@ -53,10 +53,10 @@ Goal: restart recovery, isolation regression, real Owner UAT, handoff.
 Estimate: 5–7h.
 
 V3.8 disposition: `CLOSED / ACCEPTED` after the privileged Browser Bridge implementation, exact-head CI, and controlled Owner UAT evidence recorded in the final handoff.
-V3.9 status: `ACTIVE`.
+V3.9 status: `CLOSED / OWNER ACCEPTED`.
 
 Total implementation budget: `55–70h` including bounded rework.
 
-## V3.9 exact final gate
+## Post-V3.9 merge gate
 
-Commit and push the reviewed V3.9-scoped tests, roadmap, and final handoff from `rebuild/aicc-v3-clean`; require exact-head V3 CI PASS; then the Owner must independently confirm the human UAT evidence on the device-ID-pinned CN MacBook Pro. V3.9 may be closed only after explicit Owner confirmation of restart safety, request isolation, exact same-conversation delivery, and the documented recovery/failure rules. No merge, release, deployment, or PR status change is implied by this gate.
+V3.0–V3.9 development is closed after deterministic restart/isolation hardening, exact-head CI success, and explicit Owner acceptance on 2026-09-06. PR #12 remains Draft / Open and is now the only next gate. Merge, release, deployment, or PR readiness changes require separate explicit Owner authorization.

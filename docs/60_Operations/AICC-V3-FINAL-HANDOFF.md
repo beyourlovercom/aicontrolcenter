@@ -1,6 +1,6 @@
 # AICC V3.0–V3.9 Final Handoff
 
-Status: `V3.9 ACTIVE — OWNER FINAL GATE PENDING`
+Status: `V3.9 CLOSED / OWNER ACCEPTED — PR #12 MERGE GATE PENDING`
 Repository: `beyourlovercom/aicontrolcenter`
 Canonical worktree: `~/AI/007/worktrees/aicc-v3-clean`
 Canonical branch: `rebuild/aicc-v3-clean`
@@ -8,7 +8,7 @@ V3.9 starting HEAD: `c0da25f3dae457c130e365b2a81109646454243f`
 
 ## Scope and architecture
 
-V3.0 froze V2 and established isolated governance. V3.1 established one V3 server. V3.2 made the typed ProjectContext the authority for repository, branch, HEAD, and dirty state. V3.3 established the read-only canonical roadmap. V3.4 added the durable Work Package and Task store. V3.5 added one exact Task-bound Codex Run and executor lease. V3.6 added immutable Canonical Result persistence. V3.7 added Draft-only GitHub delivery and exact-head CI facts. V3.8 added the explicit GPT Browser Bridge: request → Task → Run → Canonical Result → Delivery → same-conversation receipt. V3.8 is closed/accepted for its implemented scope; V3.9 is active for Human UAT and hardening.
+V3.0 froze V2 and established isolated governance. V3.1 established one V3 server. V3.2 made the typed ProjectContext the authority for repository, branch, HEAD, and dirty state. V3.3 established the read-only canonical roadmap. V3.4 added the durable Work Package and Task store. V3.5 added one exact Task-bound Codex Run and executor lease. V3.6 added immutable Canonical Result persistence. V3.7 added Draft-only GitHub delivery and exact-head CI facts. V3.8 added the explicit GPT Browser Bridge: request → Task → Run → Canonical Result → Delivery → same-conversation receipt. V3.8 is closed/accepted for its implemented scope; V3.9 is also closed/accepted after deterministic hardening and explicit Owner final acceptance.
 
 The authority chain remains `Owner action → explicit Bridge origin → ProjectContext → Task → Run → Canonical Result → Delivery → Bridge receipt`. AICC transports and displays identity/state; it does not infer requirements, rewrite Result content, or decide semantic PASS/FAIL.
 
@@ -30,6 +30,6 @@ The V3 runtime is pinned to the CN MacBook Pro device ID `3107d5f0-6f29-479c-845
 
 The exact evidence to retain and review is request `c12c9a36-5d48-4887-9696-abb8ae328f9d`, Run `d67d5703-aa8b-4950-be40-1001701ebcf3`, and Canonical Result/delivery marker `AICC_V3_8_12_E2E_PASS`. This evidence is transport and UAT evidence only; it does not authorize merge or deployment.
 
-## V3.9 final gate
+## V3.9 closure and next gate
 
-V3.9 closes only when the Owner explicitly confirms the exact-head V3 test evidence, deterministic restart and isolation regressions, and the human same-conversation UAT on the pinned CN Mac/Profile 12 setup. Until that confirmation, this handoff remains `OWNER FINAL GATE PENDING`; PR #12 remains Draft, and no deployment or release may be claimed.
+The Owner explicitly accepted V3.9 on 2026-09-06 after exact-head CI success, deterministic restart/isolation regressions, and the human same-conversation UAT on the pinned CN Mac/Profile 12 setup. AICC V3.0–V3.9 development is therefore closed. PR #12 remains Draft / Open; merge, release, deployment, or readiness changes remain separate Owner-authorized gates.
