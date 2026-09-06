@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { extractRoadmapOutline, compareProjectionFreshness, extractRoadmapProgress, extractRoadmapReferences, readAllGitHubProjectFacts, readGitHubProjectFacts, summarizeCheckRuns } from '../lib/project-facts.mjs';
+import { extractOwnerAttention, extractRoadmapOutline, compareProjectionFreshness, extractRoadmapProgress, extractRoadmapReferences, readAllGitHubProjectFacts, readGitHubProjectFacts, summarizeCheckRuns } from '../lib/project-facts.mjs';
 
 const sha = 'a'.repeat(40);
 const roadmap = '# Demo Roadmap\n\nCurrent Work Package: `WP-42`\nCurrent Task: **Task 7**\n\n## Phase A\nBuild the first phase.\n\n### Detail A1\n- evidence only\n';
@@ -81,4 +81,26 @@ test('freshness comparison is exact-ref and repository-identity based', () => {
   assert.equal(compareProjectionFreshness(locator, head, sha, 'owner/repo').status, 'FRESH');
   assert.equal(compareProjectionFreshness(locator, head, 'b'.repeat(40), 'owner/repo').status, 'STALE');
   assert.equal(compareProjectionFreshness(locator, head, sha, 'owner/other').status, 'DRIFT');
+});
+
+
+test('Owner Attention is projected only from explicit unresolved GitHub roadmap evidence', () => {
+  const source = '# Demo\n\n## Owner Attention\n- [ ] Human UAT required for exact QR\n- [x] Merge approval completed\nOwner Gate: Deploy approval required\nOwner Attention: PASS\n\n## Other\n- [ ] ignored ordinary task\n';
+  const items = extractOwnerAttention(source);
+  assert.deepEqual(items.map(({ type, title, line }) => ({ type, title, line })), [
+    { type: 'HUMAN_UAT', title: 'Human UAT required for exact QR', line: 4 },
+    { type: 'DEPLOY_APPROVAL', title: 'Deploy approval required', line: 6 }
+  ]);
+});
+
+test('PR Owner Attention requires an explicit owner label; draft state alone is not a gate', async () => {
+  const pullsPath = 'repos/owner/repo/pulls?state=open&per_page=100';
+  const pulls = [
+    { number: 10, title: 'Draft only', draft: true, state: 'open', labels: [], head: { sha: 'b'.repeat(40) }, base: { ref: 'main' }, html_url: 'https://github.test/pr/10' },
+    { number: 11, title: 'Merge gate', draft: false, state: 'open', labels: [{ name: 'owner-merge' }], head: { sha: 'c'.repeat(40) }, base: { ref: 'main' }, html_url: 'https://github.test/pr/11' }
+  ];
+  const facts = await readGitHubProjectFacts(project, { client: fakeClient({ [pullsPath]: pulls }) });
+  assert.equal(facts.ownerAttention.length, 1);
+  assert.equal(facts.ownerAttention[0].type, 'MERGE_APPROVAL');
+  assert.equal(facts.ownerAttention[0].prNumber, 11);
 });

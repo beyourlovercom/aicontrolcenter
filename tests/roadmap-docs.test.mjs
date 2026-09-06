@@ -18,5 +18,5 @@ assert(v4.includes('Total V4 budget: `31–52h`'), 'V4 budget total is present')
 assert(v4.includes('Top-right: `Project Switcher`') && v4.includes('Left: collapsible `Development Tree`'), 'accepted UI baseline is recorded');
 assert(v3.includes('CLOSED / PRODUCTION BASELINE SEALED'), 'V3 roadmap remains sealed');
 assert(wp.includes('Source of Truth: `GitHub`'), 'V4.0 WP records GitHub-first authority');
-assert(v4.includes('Current Work Package: `AICC-V4-PROGRESS-DRIFT-STALE-001`'), 'V4.4 is the current Work Package');
+assert(v4.includes('Current Work Package: `AICC-V4-OWNER-ATTENTION-001`'), 'V4.5 is the current Work Package');
 console.log('roadmap documentation regression tests passed');

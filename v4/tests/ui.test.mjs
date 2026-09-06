@@ -45,8 +45,14 @@ test('tree expand collapse state is view-only and persisted per project', () => 
   assert.doesNotMatch(js, /method\s*:\s*['"](?:POST|PUT|PATCH|DELETE)['"]/i);
 });
 
-test('Owner Attention is reserved for V4.5 instead of fabricated from heuristics', () => {
-  assert.match(js, /Owner Attention projection starts in V4\.5/);
+test('V4.5 exposes explicit GitHub-backed Owner Attention without PR or CI heuristics', () => {
+  assert.match(html, /id="attentionButton"/);
+  assert.match(js, /renderOwnerAttentionCenter/);
+  assert.match(js, /No explicit GitHub Owner Gate/);
+  assert.match(js, /Explicit GitHub gates only/);
+  assert.match(factsLib, /owner-merge/);
+  assert.match(factsLib, /Owner Attention\|Owner Gate/);
+  assert.doesNotMatch(js, /draft\s*&&.*attention|success.*ownerAttention/i);
 });
 
 
