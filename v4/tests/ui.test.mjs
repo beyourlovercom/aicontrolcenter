@@ -6,6 +6,7 @@ const html = await readFile(new URL('../public/index.html', import.meta.url), 'u
 const js = await readFile(new URL('../public/app.js', import.meta.url), 'utf8');
 const css = await readFile(new URL('../public/styles.css', import.meta.url), 'utf8');
 const factsLib = await readFile(new URL('../lib/project-facts.mjs', import.meta.url), 'utf8');
+const contextLib = await readFile(new URL('../lib/gpt-context.mjs', import.meta.url), 'utf8');
 
 test('V4.2 exposes accepted Project Switcher and All Projects shell', () => {
   assert.match(html, /id="switcherButton"/);
@@ -74,4 +75,17 @@ test('V4.6 exposes three-machine runtime evidence without machine control', () =
   assert.match(js, /\/api\/runtime/);
   assert.match(css, /\.runtime-grid/);
   assert.doesNotMatch(js, /pingDevice|shutdown|start_process|switchBranch|machineControl/i);
+});
+
+
+test('V4.7 exposes copyable GPT Context and advisory Suggested Next without execution authority', () => {
+  assert.match(html, /id="contextButton"/);
+  assert.match(js, /Copy GPT Context/);
+  assert.match(js, /Suggested Next/);
+  assert.match(js, /\/api\/projects\/\$\{encodeURIComponent\(projectId\)\}\/context/);
+  assert.match(contextLib, /GitHub is the only project Source of Truth/);
+  assert.match(contextLib, /Suggested Next \(ADVISORY\)/);
+  assert.match(contextLib, /Open PR existence never|Reconcile its exact head|exact head, review state and CI/i);
+  assert.doesNotMatch(js, /method\s*:\s*['"](?:POST|PUT|PATCH|DELETE)['"]/i);
+  assert.doesNotMatch(contextLib, /merge now|deploy now|start executor|switch branch/i);
 });

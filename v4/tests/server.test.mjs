@@ -44,6 +44,11 @@ test('read-only API exposes project facts and rejects mutations', async () => {
     const facts = await fetch(`${base}/api/projects/demo`).then((r) => r.json());
     assert.equal(facts.mainSha, sha);
     assert.equal(facts.provenance.source, 'github');
+    const context = await fetch(`${base}/api/projects/demo/context`).then((r) => r.json());
+    assert.equal(context.schema, 'aicc.v4.gpt-context.v1');
+    assert.equal(context.github.mainSha, sha);
+    assert.equal(context.authority.sourceOfTruth, 'GitHub');
+    assert.match(context.copyText, /Before action: reconcile current GitHub evidence/);
     const fresh = await fetch(`${base}/api/projects/demo/freshness?ref=${sha}&repository=owner%2Frepo`).then((r) => r.json());
     assert.equal(fresh.status, 'FRESH');
     const stale = await fetch(`${base}/api/projects/demo/freshness?ref=${'d'.repeat(40)}&repository=owner%2Frepo`).then((r) => r.json());
