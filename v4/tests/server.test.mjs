@@ -34,7 +34,7 @@ test('read-only API exposes project facts and rejects mutations', async () => {
     const page = await fetch(`${base}/`).then((r) => r.text());
     assert.match(page, /id=\"switcherButton\"/);
     const asset = await fetch(`${base}/app.js`).then((r) => r.text());
-    assert.match(asset, /All Projects/);
+    assert.match(asset, /所有项目/);
     const health = await fetch(`${base}/api/health`).then((r) => r.json());
     assert.equal(health.projectCount, 1);
     assert.equal(health.machineCount, 1);

@@ -9,22 +9,22 @@
 <body>
   <div class="app-shell">
     <header class="topbar">
-      <div class="brand"><span class="brand-mark">A</span><div><strong>AICC</strong><small>GitHub-backed Development Dashboard</small></div></div>
+      <div class="brand"><span class="brand-mark">A</span><div><strong>AICC</strong><small>GitHub 驱动的开发总控台</small></div></div>
       <div class="top-actions">
-        <button id="refreshButton" class="ghost-button" type="button">Refresh GitHub</button>
-        <button id="contextButton" class="context-button" type="button" disabled>✦ GPT Context</button>
-        <button id="runtimeButton" class="runtime-button" type="button" aria-label="Runtime Overview"><span>●</span><b id="runtimeCount">0</b></button>
-        <button id="attentionButton" class="attention-button" type="button" aria-label="Owner Attention"><span>⚠</span><b id="attentionCount">0</b></button>
+        <button id="refreshButton" class="ghost-button" type="button">刷新 GitHub</button>
+        <button id="contextButton" class="context-button" type="button" disabled>✦ GPT 上下文</button>
+        <button id="runtimeButton" class="runtime-button" type="button" aria-label="三机运行状态"><span>●</span><b id="runtimeCount">0</b></button>
+        <button id="attentionButton" class="attention-button" type="button" aria-label="待我处理"><span>⚠</span><b id="attentionCount">0</b></button>
         <div class="switcher" id="switcher">
           <button id="switcherButton" class="switcher-button" type="button" aria-haspopup="listbox" aria-expanded="false">
-            <span id="switcherLabel">All Projects</span><span class="chevron">⌄</span>
+            <span id="switcherLabel">所有项目</span><span class="chevron">⌄</span>
           </button>
           <div id="switcherMenu" class="switcher-menu" role="listbox" hidden></div>
         </div>
       </div>
     </header>
     <main id="main" class="main-content" aria-live="polite"></main>
-    <footer id="statusbar" class="statusbar">GitHub source · loading…</footer>
+    <footer id="statusbar" class="statusbar">GitHub 事实源 · 加载中…</footer>
   </div>
   <script type="module" src="/app.js"></script>
 </body>
