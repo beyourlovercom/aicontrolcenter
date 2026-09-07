@@ -1,18 +1,18 @@
 # AICC V4 Living Roadmap
 
-Roadmap-Revision: 6
+Roadmap-Revision: 7
 Updated-At: 2026-09-07
-Status: `V4 CODE CLOSED / PRODUCTION UAT ACTIVE`
-Authority-Base: `main@c5a1c438c4d16d41930101a0bbcac9f02008ff3b`
+Status: `V4 PRODUCTION ACCEPTED / CLOSED`
+Authority-Base: `main@ebf37018fb504d87574dd6bce2f9babb3990272b`
 V3-Runtime-Baseline: `8998f46805723e661e700e3c55695fd3095f5fa5`
 
 ## Current milestone
 
-`V4 Production Cutover / Owner UAT Gate`
+`V4 Production — Accepted / Closed`
 
-Current Work Package: `AICC-V4-PRODUCTION-UAT-GITHUB-BULK-READ-HOTFIX-002`
-Current implementation phase: `Production UAT GitHub bulk-read hotfix — implementation complete / Draft PR + exact-head CI gate`
-Next planned phase: `Merge hotfix → rerun latest main on 1421 → V3 → V4 Production Cutover Gate`
+Current Work Package: `AICC-V4-PRODUCTION-CLOSURE-001`
+Current implementation phase: `Production cutover accepted; canonical closure documentation — implementation complete / Draft PR + exact-head CI gate`
+Next planned phase: `No active V4 delivery phase. Future development requires a new Owner-approved roadmap/work package.`
 
 ## Canonical architecture
 
@@ -117,6 +117,21 @@ Goal: validate the dashboard while several real projects are simultaneously acti
 ## Production UAT / Cutover Gate
 
 Goal: validate the merged V4 code in parallel on port 1421 while V3 remains production on port 1420. Production cutover is a separate protected Owner gate.
+
+Outcome: `PASS / OWNER ACCEPTED` on 2026-09-07. V4 is now the production runtime on port 1420 at exact GitHub main SHA `ebf37018fb504d87574dd6bce2f9babb3990272b`.
+
+Production acceptance evidence:
+
+- V4 health on port 1420: PASS.
+- All Projects: 5/5 project views available.
+- GitHub exact-SHA projection and GPT Context: PASS.
+- Three-machine runtime observation: fresh; CN Mac / US Mac / Windows observed online.
+- Read-only mutation gate: POST rejected with HTTP 405.
+- launchd KeepAlive restart test: PASS.
+- V4 regression: 36/36 PASS.
+- V3 regression: 63/63 PASS before cutover.
+- V3 remains a sealed rollback baseline; it was unloaded from production, not deleted.
+- Temporary UAT/hotfix ports were released after acceptance.
 
 ## Final operating model
 
