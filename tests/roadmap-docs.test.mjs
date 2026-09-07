@@ -9,6 +9,8 @@ const legacy = await read('docs/10_Planning_Roadmap/01_LIVING_ROADMAP.md');
 const v4 = await read('docs/10_Planning_Roadmap/AICC-V4-LIVING-ROADMAP.md');
 const v3 = await read('docs/10_Planning_Roadmap/AICC-V3-LIVING-ROADMAP.md');
 const wp = await read('docs/60_Operations/work-packages/AICC-V4-ROADMAP-REBASELINE-001.md');
+const localization = await read('docs/10_Planning_Roadmap/AICC-UI-LOCALIZATION-V1-ROADMAP.md');
+const localizationWp = await read('docs/60_Operations/work-packages/AICC-UI-LOCALIZATION-V1-001.md');
 
 assert(legacy.includes('AICC-V4-LIVING-ROADMAP.md'), 'legacy roadmap points to canonical V4 roadmap');
 assert(!legacy.includes('M4.1 is now the sole current development mainline'), 'legacy roadmap does not present M4.1 as current');
@@ -22,3 +24,8 @@ assert(v4.includes('Current Work Package: `AICC-V4-PRODUCTION-CLOSURE-001`'), 'P
 assert(v4.includes('Status: `V4 PRODUCTION ACCEPTED / CLOSED`'), 'V4 production acceptance and closure status are current');
 assert(v4.includes('main@ebf37018fb504d87574dd6bce2f9babb3990272b'), 'V4 closure records the accepted production SHA');
 console.log('roadmap documentation regression tests passed');
+
+assert(localization.includes('AICC UI Localization V1 — 全前台中文化'), 'Localization V1 has an independent roadmap');
+assert(localization.includes('Current Work Package: `AICC-UI-LOCALIZATION-V1-001`'), 'Localization V1 records its current WP');
+assert(localizationWp.includes('repo / SHA / branch / PR / WP ID 不翻译'), 'Localization preserves engineering identifiers');
+assert(v4.includes('Status: `V4 PRODUCTION ACCEPTED / CLOSED`'), 'V4 remains closed while Localization V1 is separate');
