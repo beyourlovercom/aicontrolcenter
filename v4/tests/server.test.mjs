@@ -18,8 +18,12 @@ const client = { api: async (path) => {
 async function withServer(run) {
   const dir = await mkdtemp(join(tmpdir(), 'aicc-v4-'));
   const registryPath = join(dir, 'projects.json');
+  const machineRegistryPath = join(dir, 'machines.json');
+  const runtimeObservationPath = join(dir, 'runtime.json');
   await writeFile(registryPath, JSON.stringify(registry));
-  const server = await createV4Server({ registryPath, client, now: () => new Date('2026-09-06T02:00:00Z') });
+  await writeFile(machineRegistryPath, JSON.stringify({ schema:'aicc.v4.machine-registry.v1', machines:[{ id:'cn-mac', name:'CN Mac', deviceId:'11111111-1111-4111-8111-111111111111', role:'Primary Development' }] }));
+  await writeFile(runtimeObservationPath, JSON.stringify({ schema:'aicc.v4.runtime-observation.v1', source:'remote-desktop-commander', observedAt:'2026-09-06T01:59:30Z', devices:[{ deviceId:'11111111-1111-4111-8111-111111111111', status:'online', projectIds:['demo'] }] }));
+  const server = await createV4Server({ registryPath, machineRegistryPath, runtimeObservationPath, client, now: () => new Date('2026-09-06T02:00:00Z') });
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
   try { await run(`http://127.0.0.1:${server.address().port}`); }
   finally { await new Promise((resolve) => server.close(resolve)); }
@@ -33,6 +37,10 @@ test('read-only API exposes project facts and rejects mutations', async () => {
     assert.match(asset, /All Projects/);
     const health = await fetch(`${base}/api/health`).then((r) => r.json());
     assert.equal(health.projectCount, 1);
+    assert.equal(health.machineCount, 1);
+    const runtime = await fetch(`${base}/api/runtime`).then((r) => r.json());
+    assert.equal(runtime.observationState, 'FRESH_OBSERVATION');
+    assert.equal(runtime.machines[0].status, 'ONLINE');
     const facts = await fetch(`${base}/api/projects/demo`).then((r) => r.json());
     assert.equal(facts.mainSha, sha);
     assert.equal(facts.provenance.source, 'github');
