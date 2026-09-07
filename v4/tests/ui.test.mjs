@@ -89,3 +89,10 @@ test('V4.7 exposes copyable GPT Context and advisory Suggested Next without exec
   assert.doesNotMatch(js, /method\s*:\s*['"](?:POST|PUT|PATCH|DELETE)['"]/i);
   assert.doesNotMatch(contextLib, /merge now|deploy now|start executor|switch branch/i);
 });
+
+test('V4.8 hardens repeated refreshes against stale response overwrite', () => {
+  assert.match(js, /let refreshEpoch = 0/);
+  assert.match(js, /const epoch = \+\+refreshEpoch/);
+  assert.match(js, /epoch !== refreshEpoch/);
+  assert.match(js, /refreshButton\.disabled = state\.loading/);
+});

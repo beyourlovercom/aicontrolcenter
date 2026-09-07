@@ -1,18 +1,18 @@
 # AICC V4 Living Roadmap
 
-Roadmap-Revision: 3
-Updated-At: 2026-09-06
-Status: `V4.1 ACTIVE / PROJECT REGISTRY + GITHUB FACTS`
-Authority-Base: `main@45d3862ef0e9ec0df98939363982a8a0346ea723`
+Roadmap-Revision: 4
+Updated-At: 2026-09-07
+Status: `V4.8 ACTIVE / MULTI-PROJECT REAL-USE HARDENING`
+Authority-Base: `main@1cb45f91cfb458baf2a146ebf0bcfbc6974e387b`
 V3-Runtime-Baseline: `8998f46805723e661e700e3c55695fd3095f5fa5`
 
 ## Current milestone
 
-`V4.2 — Project Switcher + All Projects Dashboard`
+`V4.8 — Multi-project Real-use Hardening`
 
-Current Work Package: `AICC-V4-GPT-CONTEXT-001`
-Current implementation phase: `V4.7 — implementation complete / Draft PR + exact-head CI gate`
-Next planned phase: `V4.8 — Multi-project Real-use Hardening`
+Current Work Package: `AICC-V4-MULTI-PROJECT-HARDENING-001`
+Current implementation phase: `V4.8 — implementation complete / Draft PR + exact-head CI gate`
+Next planned phase: `V4 final merge gate / closure; production cutover remains a separate Owner gate`
 
 ## Canonical architecture
 
