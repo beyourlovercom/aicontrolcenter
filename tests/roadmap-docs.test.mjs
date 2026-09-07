@@ -18,6 +18,6 @@ assert(v4.includes('Total V4 budget: `31–52h`'), 'V4 budget total is present')
 assert(v4.includes('Top-right: `Project Switcher`') && v4.includes('Left: collapsible `Development Tree`'), 'accepted UI baseline is recorded');
 assert(v3.includes('CLOSED / PRODUCTION BASELINE SEALED'), 'V3 roadmap remains sealed');
 assert(wp.includes('Source of Truth: `GitHub`'), 'V4.0 WP records GitHub-first authority');
-assert(v4.includes('Current Work Package: `AICC-V4-PRODUCTION-UAT-GITHUB-LATENCY-HOTFIX-001`'), 'Production UAT hotfix is the current Work Package');
+assert(v4.includes('Current Work Package: `AICC-V4-PRODUCTION-UAT-GITHUB-BULK-READ-HOTFIX-002`'), 'Production UAT hotfix is the current Work Package');
 assert(v4.includes('Status: `V4 CODE CLOSED / PRODUCTION UAT ACTIVE`'), 'V4 code closure and production UAT status are current');
 console.log('roadmap documentation regression tests passed');

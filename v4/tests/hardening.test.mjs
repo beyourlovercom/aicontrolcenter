@@ -76,6 +76,27 @@ test('same-repository project views share identical GitHub reads within one refr
   assert.equal([...calls.values()].reduce((a,b) => a+b, 0), 4);
   assert.ok([...calls.values()].every((count) => count === 1));
 });
+
+test('All Projects bounds shared GitHub read concurrency without losing request de-duplication', async () => {
+  let active = 0; let peak = 0;
+  const client = { api: async (path) => {
+    active += 1; peak = Math.max(peak, active);
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    active -= 1;
+    const repo = path.match(/^repos\/([^/]+\/[^/]+)$/)?.[1];
+    if (repo) return { full_name:repo, default_branch:'main', archived:false, visibility:'private' };
+    if (/\/commits\/HEAD$/.test(path)) return { sha };
+    if (/\/pulls\?state=open/.test(path)) return [];
+    if (/\/check-runs\?/.test(path)) return { check_runs:[] };
+    throw new Error(`unexpected ${path}`);
+  } };
+  const registry = { projects:['a','b','c','d','e'].map((id) => ({ id, name:id, repository:`owner/${id}` })) };
+  const facts = await readAllGitHubProjectFacts(registry, { client, now:() => new Date('2026-09-07T00:00:00Z') });
+  assert.equal(facts.length, 5);
+  assert.ok(facts.every((item) => item.available));
+  assert.ok(peak <= 4, `peak GitHub concurrency ${peak} exceeded 4`);
+});
+
 test('concurrent All Projects requests coalesce one in-flight GitHub refresh', async () => {
   const calls = new Map();
   const client = { api: async (path) => {
@@ -101,4 +122,39 @@ test('concurrent All Projects requests coalesce one in-flight GitHub refresh', a
     assert.equal(b.projects[0].mainSha, sha);
     assert.equal([...calls.values()].reduce((x,y)=>x+y,0), 4);
   } finally { await new Promise((resolve) => server.close(resolve)); }
+});
+
+test('All Projects bulk GraphQL uses one aggregate query and exact HEAD verification per unique repo', async () => {
+  let graphqlCalls = 0;
+  const apiCalls = [];
+  const makeRepo = (nameWithOwner, roadmapText = null) => ({
+    nameWithOwner, isArchived:false, visibility:'PRIVATE',
+    defaultBranchRef:{ name:'main', target:{ oid:sha, statusCheckRollup:{ contexts:{ nodes:[{ __typename:'CheckRun', status:'COMPLETED', conclusion:'SUCCESS', name:'verify' }] } } } },
+    pullRequests:{ nodes:[] },
+    ...(roadmapText == null ? {} : { roadmap0:{ oid:'blob-sha', text:roadmapText } })
+  });
+  const client = {
+    graphql: async (query) => {
+      graphqlCalls += 1;
+      assert.match(query, /repository\(owner:"owner", name:"one"\)/);
+      assert.match(query, /repository\(owner:"owner", name:"shared"\)/);
+      return { data:{
+        repo0:makeRepo('owner/one', '# One\n\nCurrent Work Package: `WP-1`\n'),
+        repo1:makeRepo('owner/shared', '# Shared\n\nCurrent Work Package: `WP-SHARED`\n')
+      } };
+    },
+    api: async (path) => { apiCalls.push(path); return { sha }; }
+  };
+  const registry = { projects:[
+    { id:'one', name:'One', repository:'owner/one', roadmapPath:'docs/one.md' },
+    { id:'shared-a', name:'Shared A', repository:'owner/shared', roadmapPath:'docs/shared.md' },
+    { id:'shared-b', name:'Shared B', repository:'owner/shared' }
+  ] };
+  const facts = await readAllGitHubProjectFacts(registry, { client, now:() => new Date('2026-09-07T00:00:00Z') });
+  assert.equal(graphqlCalls, 1);
+  assert.deepEqual(apiCalls.sort(), ['repos/owner/one/commits/HEAD','repos/owner/shared/commits/HEAD']);
+  assert.deepEqual(facts.map((item) => item.projectId), ['one','shared-a','shared-b']);
+  assert.ok(facts.every((item) => item.available && item.mainSha === sha));
+  assert.equal(facts[1].roadmap.currentWorkPackage, 'WP-SHARED');
+  assert.equal(facts[2].roadmap, null);
 });
