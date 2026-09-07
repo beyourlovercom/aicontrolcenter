@@ -17,6 +17,7 @@ const switcherButton = document.querySelector('#switcherButton');
 const switcherLabel = document.querySelector('#switcherLabel');
 const switcherMenu = document.querySelector('#switcherMenu');
 const refreshButton = document.querySelector('#refreshButton');
+const contextButton = document.querySelector('#contextButton');
 const attentionButton = document.querySelector('#attentionButton');
 const attentionCount = document.querySelector('#attentionCount');
 const runtimeButton = document.querySelector('#runtimeButton');
@@ -62,6 +63,21 @@ function projectionBadge(project) {
   return `<span class="projection-pill ${status.toLowerCase()}">${esc(status)}</span>`;
 }
 
+function clientSuggestedNext(project) {
+  const projection = projectionStatus(project);
+  if (projection !== 'FRESH') return { kind:'GITHUB_RECONCILIATION', text:'Refresh and reconcile GitHub before acting.', reason:`Current AICC projection is ${projection}; GitHub remains authoritative.`, evidence:`${project.repository}@${shortSha(project.mainSha)}` };
+  const gate = project.ownerAttention?.[0];
+  if (gate) return { kind:'OWNER_GATE_RECONCILIATION', text:`Reconcile explicit Owner Gate: ${gate.title}`, reason:'GitHub explicitly marks an Owner action. Verify exact evidence before surfacing or acting on it.', evidence:gate.source === 'pull-request' ? `GitHub PR #${gate.prNumber}` : `${project.roadmap?.path || 'Roadmap'} line ${gate.line || '—'}` };
+  const task = project.roadmap?.currentPointers?.task;
+  if (task?.value) return { kind:'CURRENT_TASK_RECONCILIATION', text:`Reconcile explicit Current Task: ${task.value}`, reason:'The GitHub roadmap contains an exact Current Task label; GPT decides execution after repository/runtime reconciliation.', evidence:`${project.roadmap.path} line ${task.line}` };
+  const wp = project.roadmap?.currentPointers?.workPackage;
+  if (wp?.value) return { kind:'CURRENT_WP_RECONCILIATION', text:`Reconcile explicit Current Work Package: ${wp.value}`, reason:'The GitHub roadmap contains an exact Current Work Package label but no exact Current Task label.', evidence:`${project.roadmap.path} line ${wp.line}` };
+  const prs = [...(project.openPullRequests || [])].sort((a,b) => (Date.parse(b.updatedAt || '') || 0) - (Date.parse(a.updatedAt || '') || 0) || Number(b.number || 0) - Number(a.number || 0));
+  if (prs.length) return { kind:'OPEN_PR_RECONCILIATION', text:`Inspect open PR #${prs[0].number}: ${prs[0].title}`, reason:'No explicit Current Task/WP is projected. Reconcile exact PR head, review state and CI in GitHub before deciding whether to continue, revise or merge.', evidence:`GitHub PR #${prs[0].number} · head ${shortSha(prs[0].headSha)}` };
+  if (project.roadmap?.path) return { kind:'ROADMAP_REVIEW', text:'Review the GitHub roadmap for the next explicit task.', reason:'No narrower explicit Gate, Current Task, Current WP or PR evidence is projected.', evidence:project.roadmap.path };
+  return { kind:'GITHUB_RECONCILIATION', text:'Inspect GitHub directly before selecting the next development action.', reason:'AICC has no narrower explicit evidence.', evidence:project.repository };
+}
+
 
 function allOwnerAttention() {
   return state.projects.flatMap((project) => (project.ownerAttention || []).map((item) => ({ ...item, projectId: project.projectId, projectName: project.name, repository: project.repository })));
@@ -97,6 +113,41 @@ function renderRuntimeButton() {
   runtimeCount.textContent = `${online}/${machines.length || 3}`;
   runtimeButton.classList.toggle('runtime-stale', state.runtime?.observationState === 'STALE_OBSERVATION');
   runtimeButton.title = state.runtime?.available ? `${state.runtime.observationState} · ${online}/${machines.length} online in latest DC observation` : 'No DC runtime observation available';
+}
+
+function renderContextButton() {
+  const project = state.viewProjectId === 'all' ? null : projectById(state.viewProjectId);
+  contextButton.disabled = state.loading || !project?.available || state.attentionMode || state.runtimeMode;
+  contextButton.title = project?.available ? `Copy fresh GitHub-backed GPT context for ${project.name}` : 'Select an available project first';
+}
+
+async function writeClipboard(text) {
+  if (navigator.clipboard?.writeText) { await navigator.clipboard.writeText(text); return; }
+  const area = document.createElement('textarea');
+  area.value = text; area.setAttribute('readonly',''); area.style.position = 'fixed'; area.style.opacity = '0';
+  document.body.appendChild(area); area.select();
+  const ok = document.execCommand('copy'); area.remove();
+  if (!ok) throw new Error('Clipboard unavailable');
+}
+
+async function copyProjectContext(projectId, button = contextButton) {
+  const project = projectById(projectId);
+  if (!project?.available) return;
+  const original = button.textContent;
+  button.disabled = true; button.textContent = 'Generating…';
+  try {
+    const response = await fetch(`/api/projects/${encodeURIComponent(projectId)}/context`, { cache:'no-store' });
+    if (!response.ok) throw new Error(`Context HTTP ${response.status}`);
+    const snapshot = await response.json();
+    if (snapshot.schema !== 'aicc.v4.gpt-context.v1' || typeof snapshot.copyText !== 'string') throw new Error('Unexpected GPT context response');
+    await writeClipboard(snapshot.copyText);
+    button.textContent = 'Copied ✓';
+    setTimeout(() => { button.textContent = original; renderContextButton(); }, 1200);
+  } catch (error) {
+    button.textContent = 'Copy failed';
+    button.title = error.message;
+    setTimeout(() => { button.textContent = original; renderContextButton(); }, 1600);
+  }
 }
 
 function runtimeCards(machines) {
@@ -238,6 +289,7 @@ function renderDevelopmentTree(project) {
 }
 
 function summaryDetail(project) {
+  const suggested = clientSuggestedNext(project);
   return `<section class="page-heading project-heading"><div><p class="eyebrow">PROJECT</p><h1>${esc(project.name)}</h1><p>${esc(project.repository)}</p></div>${projectionBadge(project)}</section>
     <section class="detail-grid">
       <article class="detail-card hero-card"><span>Canonical Main</span><strong class="mono">${esc(project.mainSha)}</strong><small>${esc(project.defaultBranch)} · exact GitHub default-branch head</small></article>
@@ -249,6 +301,7 @@ function summaryDetail(project) {
       <article class="detail-card"><span>Projection</span><strong>${esc(projectionStatus(project))}</strong><small>${projectionStatus(project) === 'FRESH' ? 'Loaded exact ref still matches GitHub' : 'Refresh/reconciliation required; GitHub remains authoritative'}</small></article>
     </section>
     <section class="project-runtime"><div><p class="eyebrow">RUNTIME EVIDENCE</p><h2>Observed machines for this project</h2></div><div class="runtime-mini">${runtimeDevicesForProject(project.projectId).map((machine) => `<span><i class="runtime-dot ${runtimeStatusClass(machine.status)}"></i>${esc(machine.name)} <b>${esc(runtimeStatusLabel(machine))}</b></span>`).join('') || '<span>No machine association in latest observation</span>'}</div></section>
+    <section class="context-panel"><div class="context-copy"><p class="eyebrow">GPT CONTEXT SNAPSHOT</p><h2>Suggested Next <span>ADVISORY</span></h2><strong>${esc(suggested.text)}</strong><p>${esc(suggested.reason)}</p><small>Evidence: ${esc(suggested.evidence)} · AICC does not decide or execute.</small></div><button class="primary-button context-copy-button" data-copy-context="${esc(project.projectId)}">Copy GPT Context</button></section>
     <section class="source-panel"><div><p class="eyebrow">GITHUB PROVENANCE</p><h2>事实来源</h2></div><dl><div><dt>Repository</dt><dd>${esc(project.repository)}</dd></div><div><dt>Ref</dt><dd class="mono">${esc(project.provenance.ref)}</dd></div><div><dt>Refreshed</dt><dd>${esc(project.provenance.refreshedAt)}</dd></div></dl></section>`;
 }
 
@@ -289,6 +342,7 @@ function bindTree(project) {
     state.selectedNode = { projectId: project.projectId, kind: button.dataset.nodeKind, id: button.dataset.nodeId };
     renderProject(project);
   }));
+  main.querySelectorAll('[data-copy-context]').forEach((button) => button.addEventListener('click', () => copyProjectContext(button.dataset.copyContext, button)));
 }
 
 function renderProject(project) {
@@ -307,6 +361,7 @@ function render() {
   renderSwitcher();
   renderAttentionButton();
   renderRuntimeButton();
+  renderContextButton();
   if (state.loading) { main.className = 'main-content'; main.innerHTML = '<section class="loading-state"><div class="spinner"></div><h1>正在读取 GitHub 项目事实</h1><p>不会读取本地 branch 作为项目权威。</p></section>'; statusbar.textContent = 'GitHub source · refreshing…'; return; }
   if (state.error) { main.className = 'main-content'; main.innerHTML = `<section class="empty-state"><span class="error-pill">ERROR</span><h1>GitHub 项目事实读取失败</h1><p>${esc(state.error)}</p></section>`; statusbar.textContent = 'GitHub source · refresh failed'; return; }
   if (state.runtimeMode) { renderRuntimeOverview(); statusbar.textContent = `Runtime evidence · ${state.runtime?.observationState || 'UNAVAILABLE'} · observed ${state.runtime?.observedAt || 'unknown'}`; return; }
@@ -364,6 +419,7 @@ switcherButton.addEventListener('click', () => { switcherMenu.hidden = !switcher
 document.addEventListener('click', (event) => { if (!switcher.contains(event.target)) { switcherMenu.hidden = true; switcherButton.setAttribute('aria-expanded', 'false'); } });
 attentionButton.addEventListener('click', () => { state.runtimeMode = false; state.attentionMode = true; state.selectedNode = null; render(); });
 runtimeButton.addEventListener('click', () => { state.attentionMode = false; state.runtimeMode = true; state.selectedNode = null; render(); });
+contextButton.addEventListener('click', () => { if (state.viewProjectId !== 'all') copyProjectContext(state.viewProjectId, contextButton); });
 refreshButton.addEventListener('click', refresh);
 refresh();
 setInterval(checkFreshness, 60000);

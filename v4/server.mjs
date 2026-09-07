@@ -7,6 +7,7 @@ import { createGhApiClient } from './lib/github-client.mjs';
 import { getProjectLocator, loadProjectRegistry } from './lib/project-registry.mjs';
 import { compareProjectionFreshness, readAllGitHubProjectFacts, readGitHubProjectFacts, readGitHubProjectHead } from './lib/project-facts.mjs';
 import { loadMachineRegistry, readRuntimeOverview } from './lib/runtime-overview.mjs';
+import { createGptContextSnapshot } from './lib/gpt-context.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const defaultRegistryPath = join(here, 'projects.json');
@@ -55,6 +56,18 @@ export async function createV4Server({ registryPath = defaultRegistryPath, machi
     if (url.pathname === '/api/runtime') {
       try { sendJson(response, 200, await readRuntimeOverview(machineRegistry, runtimeObservationPath, { now })); }
       catch (error) { sendJson(response, 502, { schema: 'aicc.v4.error.v1', error: 'RUNTIME_OBSERVATION_INVALID', detail: error.message }); }
+      return;
+    }
+    const contextMatch = url.pathname.match(/^\/api\/projects\/([a-z0-9-]+)\/context$/);
+    if (contextMatch) {
+      const project = getProjectLocator(registry, contextMatch[1]);
+      if (!project) { sendJson(response, 404, { schema: 'aicc.v4.error.v1', error: 'PROJECT_NOT_REGISTERED' }); return; }
+      try {
+        const facts = await readGitHubProjectFacts(project, { client, now });
+        let runtime = null;
+        try { runtime = await readRuntimeOverview(machineRegistry, runtimeObservationPath, { now }); } catch { runtime = null; }
+        sendJson(response, 200, createGptContextSnapshot(facts, runtime, { now }));
+      } catch (error) { sendJson(response, 502, { schema: 'aicc.v4.error.v1', error: error.code ?? 'GPT_CONTEXT_UNAVAILABLE', detail: error.message }); }
       return;
     }
     const freshnessMatch = url.pathname.match(/^\/api\/projects\/([a-z0-9-]+)\/freshness$/);
