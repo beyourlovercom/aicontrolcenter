@@ -9,7 +9,7 @@ const sha = 'c'.repeat(40);
 const registry = { schema: 'aicc.v4.project-registry.v1', projects: [{ id: 'demo', name: 'Demo', repository: 'owner/repo' }] };
 const client = { api: async (path) => {
   if (path === 'repos/owner/repo') return { full_name: 'owner/repo', default_branch: 'main', archived: false, visibility: 'private' };
-  if (path === 'repos/owner/repo/commits/main') return { sha };
+  if (path === 'repos/owner/repo/commits/HEAD') return { sha };
   if (path === 'repos/owner/repo/pulls?state=open&per_page=100') return [];
   if (path === `repos/owner/repo/commits/${sha}/check-runs?per_page=100`) return { check_runs: [] };
   throw new Error(`unexpected path ${path}`);
