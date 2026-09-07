@@ -38,6 +38,13 @@ function sendJson(response, status, body) {
 export async function createV4Server({ registryPath = defaultRegistryPath, machineRegistryPath = defaultMachineRegistryPath, runtimeObservationPath = defaultRuntimeObservationPath, client = createGhApiClient(), now = () => new Date() } = {}) {
   const registry = await loadProjectRegistry(registryPath);
   const machineRegistry = await loadMachineRegistry(machineRegistryPath);
+  let projectsInFlight = null;
+  const readProjects = () => {
+    if (!projectsInFlight) {
+      projectsInFlight = readAllGitHubProjectFacts(registry, { client, now }).finally(() => { projectsInFlight = null; });
+    }
+    return projectsInFlight;
+  };
   return http.createServer(async (request, response) => {
     if (request.method !== 'GET') {
       sendJson(response, 405, { schema: 'aicc.v4.error.v1', error: 'READ_ONLY_API' });
@@ -49,7 +56,7 @@ export async function createV4Server({ registryPath = defaultRegistryPath, machi
       return;
     }
     if (url.pathname === '/api/projects') {
-      const projects = await readAllGitHubProjectFacts(registry, { client, now });
+      const projects = await readProjects();
       sendJson(response, 200, { schema: 'aicc.v4.projects.v1', projects });
       return;
     }

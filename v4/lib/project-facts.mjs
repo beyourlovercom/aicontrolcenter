@@ -272,8 +272,18 @@ export async function readGitHubProjectFacts(project, { client, now = () => new 
   });
 }
 
+function requestScopedClient(client) {
+  const pending = new Map();
+  return Object.freeze({
+    api(apiPath) {
+      if (!pending.has(apiPath)) pending.set(apiPath, Promise.resolve().then(() => client.api(apiPath)));
+      return pending.get(apiPath);
+    }
+  });
+}
+
 export async function readAllGitHubProjectFacts(registry, { client, now = () => new Date() }) {
-  const options = { client, now };
+  const options = { client: requestScopedClient(client), now };
   return Promise.all(registry.projects.map(async (project) => {
     try {
       return await readGitHubProjectFacts(project, options);

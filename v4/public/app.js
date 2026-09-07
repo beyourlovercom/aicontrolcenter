@@ -27,6 +27,7 @@ const esc = (value) => String(value ?? '').replace(/[&<>'"]/g, (c) => ({'&':'&am
 const shortSha = (sha) => sha ? sha.slice(0, 10) : '—';
 const projectById = (id) => state.projects.find((project) => project.projectId === id);
 const treeStorageKey = (projectId) => `aicc.v4.treeState.${projectId}`;
+let refreshEpoch = 0;
 
 function ciSummary(ci) {
   if (!ci) return 'No CI facts';
@@ -362,6 +363,7 @@ function render() {
   renderAttentionButton();
   renderRuntimeButton();
   renderContextButton();
+  refreshButton.disabled = state.loading;
   if (state.loading) { main.className = 'main-content'; main.innerHTML = '<section class="loading-state"><div class="spinner"></div><h1>正在读取 GitHub 项目事实</h1><p>不会读取本地 branch 作为项目权威。</p></section>'; statusbar.textContent = 'GitHub source · refreshing…'; return; }
   if (state.error) { main.className = 'main-content'; main.innerHTML = `<section class="empty-state"><span class="error-pill">ERROR</span><h1>GitHub 项目事实读取失败</h1><p>${esc(state.error)}</p></section>`; statusbar.textContent = 'GitHub source · refresh failed'; return; }
   if (state.runtimeMode) { renderRuntimeOverview(); statusbar.textContent = `Runtime evidence · ${state.runtime?.observationState || 'UNAVAILABLE'} · observed ${state.runtime?.observedAt || 'unknown'}`; return; }
@@ -385,6 +387,7 @@ function setView(projectId) {
 }
 
 async function refresh() {
+  const epoch = ++refreshEpoch;
   state.loading = true; state.error = null; render();
   try {
     const [projectResponse, runtimeResponse] = await Promise.all([
@@ -394,11 +397,12 @@ async function refresh() {
     if (!projectResponse.ok) throw new Error(`Projects HTTP ${projectResponse.status}`);
     const payload = await projectResponse.json();
     if (payload.schema !== 'aicc.v4.projects.v1' || !Array.isArray(payload.projects)) throw new Error('Unexpected AICC V4 API response');
+    if (epoch !== refreshEpoch) return;
     state.projects = payload.projects;
     state.freshness = Object.fromEntries(payload.projects.filter((project) => project.available).map((project) => [project.projectId, { status: 'FRESH', expectedRef: project.mainSha, currentRef: project.mainSha }]));
     state.runtime = runtimeResponse.ok ? await runtimeResponse.json() : { available:false, observationState:'UNAVAILABLE', machines:[] };
-  } catch (error) { state.error = error.message; }
-  finally { state.loading = false; render(); }
+  } catch (error) { if (epoch === refreshEpoch) state.error = error.message; }
+  finally { if (epoch === refreshEpoch) { state.loading = false; render(); } }
 }
 
 async function checkFreshness() {
