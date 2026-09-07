@@ -1,18 +1,18 @@
 # AICC V4 Living Roadmap
 
-Roadmap-Revision: 4
+Roadmap-Revision: 5
 Updated-At: 2026-09-07
-Status: `V4.8 ACTIVE / MULTI-PROJECT REAL-USE HARDENING`
-Authority-Base: `main@1cb45f91cfb458baf2a146ebf0bcfbc6974e387b`
+Status: `V4 CODE CLOSED / PRODUCTION UAT ACTIVE`
+Authority-Base: `main@93e431d078e5b1819e3e99146d9dbc5fbd51f9c4`
 V3-Runtime-Baseline: `8998f46805723e661e700e3c55695fd3095f5fa5`
 
 ## Current milestone
 
-`V4.8 — Multi-project Real-use Hardening`
+`V4 Production Cutover / Owner UAT Gate`
 
-Current Work Package: `AICC-V4-MULTI-PROJECT-HARDENING-001`
-Current implementation phase: `V4.8 — implementation complete / Draft PR + exact-head CI gate`
-Next planned phase: `V4 final merge gate / closure; production cutover remains a separate Owner gate`
+Current Work Package: `AICC-V4-PRODUCTION-UAT-GITHUB-LATENCY-HOTFIX-001`
+Current implementation phase: `Production UAT blocker hotfix — implementation complete / Draft PR + exact-head CI gate`
+Next planned phase: `V4 Production Cutover / Owner UAT Gate`
 
 ## Canonical architecture
 
@@ -113,6 +113,10 @@ Goal: provide a compact, copyable project snapshot containing GitHub facts, curr
 ## V4.8 — Multi-project Real-use Hardening
 
 Goal: validate the dashboard while several real projects are simultaneously active and ensure project isolation, refresh correctness, staleness handling and Owner attention remain trustworthy.
+
+## Production UAT / Cutover Gate
+
+Goal: validate the merged V4 code in parallel on port 1421 while V3 remains production on port 1420. Production cutover is a separate protected Owner gate.
 
 ## Final operating model
 

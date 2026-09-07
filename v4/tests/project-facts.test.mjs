@@ -8,7 +8,7 @@ const project = { id: 'demo', name: 'Demo', repository: 'owner/repo', roadmapPat
 function fakeClient(overrides = {}) {
   const responses = {
     'repos/owner/repo': { full_name: 'owner/repo', default_branch: 'main', archived: false, visibility: 'private' },
-    'repos/owner/repo/commits/main': { sha },
+    'repos/owner/repo/commits/HEAD': { sha },
     [`repos/owner/repo/pulls?state=open&per_page=100`]: [{ number: 9, title: 'Demo PR', draft: true, state: 'open', head: { sha: 'b'.repeat(40) }, base: { ref: 'main' }, html_url: 'https://github.test/pr/9', updated_at: '2026-09-06T00:00:00Z' }],
     [`repos/owner/repo/commits/${sha}/check-runs?per_page=100`]: { check_runs: [{ status: 'completed', conclusion: 'success' }, { status: 'in_progress', conclusion: null }] },
     [`repos/owner/repo/contents/docs/roadmap.md?ref=${sha}`]: { type: 'file', encoding: 'base64', content: Buffer.from(roadmap).toString('base64'), sha: 'blob123' },

@@ -6,7 +6,7 @@ import { mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createGhApiClient } from '../lib/github-client.mjs';
-import { readAllGitHubProjectFacts } from '../lib/project-facts.mjs';
+import { readAllGitHubProjectFacts, readGitHubProjectFacts } from '../lib/project-facts.mjs';
 import { createV4Server } from '../server.mjs';
 
 const sha = 'a'.repeat(40);
@@ -33,12 +33,35 @@ test('GitHub CLI reads fail closed on timeout instead of hanging the dashboard',
   assert.equal(child.killedSignal, 'SIGTERM');
 });
 
+
+test('project fact seed reads repository metadata, default HEAD and open PRs concurrently', async () => {
+  const initial = new Set(['repos/owner/repo','repos/owner/repo/commits/HEAD','repos/owner/repo/pulls?state=open&per_page=100']);
+  let activeInitial = 0;
+  let maxInitial = 0;
+  const client = { api: async (path) => {
+    if (initial.has(path)) {
+      activeInitial += 1;
+      maxInitial = Math.max(maxInitial, activeInitial);
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      activeInitial -= 1;
+      if (path === 'repos/owner/repo') return { full_name:'owner/repo', default_branch:'trunk', archived:false, visibility:'private' };
+      if (path === 'repos/owner/repo/commits/HEAD') return { sha };
+      return [];
+    }
+    if (path === `repos/owner/repo/commits/${sha}/check-runs?per_page=100`) return { check_runs:[] };
+    throw new Error(`unexpected ${path}`);
+  } };
+  const facts = await readGitHubProjectFacts({ id:'demo', name:'Demo', repository:'owner/repo' }, { client });
+  assert.equal(maxInitial, 3);
+  assert.equal(facts.defaultBranch, 'trunk');
+  assert.equal(facts.mainSha, sha);
+});
 test('same-repository project views share identical GitHub reads within one refresh', async () => {
   const calls = new Map();
   const client = { api: async (path) => {
     calls.set(path, (calls.get(path) || 0) + 1);
     if (path === 'repos/owner/shared') return { full_name:'owner/shared', default_branch:'main', archived:false, visibility:'private' };
-    if (path === 'repos/owner/shared/commits/main') return { sha };
+    if (path === 'repos/owner/shared/commits/HEAD') return { sha };
     if (path === 'repos/owner/shared/pulls?state=open&per_page=100') return [];
     if (path === `repos/owner/shared/commits/${sha}/check-runs?per_page=100`) return { check_runs:[] };
     throw new Error(`unexpected ${path}`);
@@ -59,7 +82,7 @@ test('concurrent All Projects requests coalesce one in-flight GitHub refresh', a
     calls.set(path, (calls.get(path) || 0) + 1);
     await new Promise((resolve) => setTimeout(resolve, 15));
     if (path === 'repos/owner/repo') return { full_name:'owner/repo', default_branch:'main', archived:false, visibility:'private' };
-    if (path === 'repos/owner/repo/commits/main') return { sha };
+    if (path === 'repos/owner/repo/commits/HEAD') return { sha };
     if (path === 'repos/owner/repo/pulls?state=open&per_page=100') return [];
     if (path === `repos/owner/repo/commits/${sha}/check-runs?per_page=100`) return { check_runs:[] };
     throw new Error(`unexpected ${path}`);

@@ -200,15 +200,22 @@ async function readRoadmap(project, mainSha, client) {
   });
 }
 
-export async function readGitHubProjectHead(project, { client, now = () => new Date() }) {
-  const repo = await client.api(`repos/${project.repository}`);
+async function readRepositoryHead(project, client) {
+  const [repo, commit] = await Promise.all([
+    client.api(`repos/${project.repository}`),
+    client.api(`repos/${project.repository}/commits/HEAD`)
+  ]);
   const repository = repo?.full_name;
   const defaultBranch = repo?.default_branch;
-  if (repository !== project.repository || typeof defaultBranch !== 'string' || !defaultBranch) throw new Error('GitHub repository identity/default branch is unavailable');
-  const commit = await client.api(`repos/${project.repository}/commits/${encodeURIComponent(defaultBranch)}`);
   const mainSha = commit?.sha;
+  if (repository !== project.repository || typeof defaultBranch !== 'string' || !defaultBranch) throw new Error('GitHub repository identity/default branch is unavailable');
   if (typeof mainSha !== 'string' || !/^[0-9a-f]{40}$/i.test(mainSha)) throw new Error('GitHub default branch head SHA is unavailable');
-  return Object.freeze({ schema: 'aicc.v4.github-project-head.v1', projectId: project.id, repository, defaultBranch, mainSha, checkedAt: now().toISOString() });
+  return Object.freeze({ repo, repository, defaultBranch, mainSha });
+}
+
+export async function readGitHubProjectHead(project, { client, now = () => new Date() }) {
+  const head = await readRepositoryHead(project, client);
+  return Object.freeze({ schema: 'aicc.v4.github-project-head.v1', projectId: project.id, repository: head.repository, defaultBranch: head.defaultBranch, mainSha: head.mainSha, checkedAt: now().toISOString() });
 }
 
 export function compareProjectionFreshness(project, head, expectedRef, expectedRepository = null) {
@@ -219,21 +226,13 @@ export function compareProjectionFreshness(project, head, expectedRef, expectedR
 }
 
 export async function readGitHubProjectFacts(project, { client, now = () => new Date() }) {
-  const repo = await client.api(`repos/${project.repository}`);
-  const repository = repo?.full_name;
-  const defaultBranch = repo?.default_branch;
-  if (repository !== project.repository || typeof defaultBranch !== 'string' || !defaultBranch) {
-    throw new Error('GitHub repository identity/default branch is unavailable');
-  }
+  const [head, pulls] = await Promise.all([
+    readRepositoryHead(project, client),
+    client.api(`repos/${project.repository}/pulls?state=open&per_page=100`)
+  ]);
+  const { repo, repository, defaultBranch, mainSha } = head;
 
-  const commit = await client.api(`repos/${project.repository}/commits/${encodeURIComponent(defaultBranch)}`);
-  const mainSha = commit?.sha;
-  if (typeof mainSha !== 'string' || !/^[0-9a-f]{40}$/i.test(mainSha)) {
-    throw new Error('GitHub default branch head SHA is unavailable');
-  }
-
-  const [pulls, checks, roadmap] = await Promise.all([
-    client.api(`repos/${project.repository}/pulls?state=open&per_page=100`),
+  const [checks, roadmap] = await Promise.all([
     client.api(`repos/${project.repository}/commits/${mainSha}/check-runs?per_page=100`),
     readRoadmap(project, mainSha, client)
   ]);
