@@ -1,18 +1,18 @@
 # AICC V4 Living Roadmap
 
-Roadmap-Revision: 5
+Roadmap-Revision: 6
 Updated-At: 2026-09-07
 Status: `V4 CODE CLOSED / PRODUCTION UAT ACTIVE`
-Authority-Base: `main@93e431d078e5b1819e3e99146d9dbc5fbd51f9c4`
+Authority-Base: `main@c5a1c438c4d16d41930101a0bbcac9f02008ff3b`
 V3-Runtime-Baseline: `8998f46805723e661e700e3c55695fd3095f5fa5`
 
 ## Current milestone
 
 `V4 Production Cutover / Owner UAT Gate`
 
-Current Work Package: `AICC-V4-PRODUCTION-UAT-GITHUB-LATENCY-HOTFIX-001`
-Current implementation phase: `Production UAT blocker hotfix — implementation complete / Draft PR + exact-head CI gate`
-Next planned phase: `V4 Production Cutover / Owner UAT Gate`
+Current Work Package: `AICC-V4-PRODUCTION-UAT-GITHUB-BULK-READ-HOTFIX-002`
+Current implementation phase: `Production UAT GitHub bulk-read hotfix — implementation complete / Draft PR + exact-head CI gate`
+Next planned phase: `Merge hotfix → rerun latest main on 1421 → V3 → V4 Production Cutover Gate`
 
 ## Canonical architecture
 

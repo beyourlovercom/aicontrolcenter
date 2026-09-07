@@ -173,21 +173,14 @@ export function summarizeCheckRuns(input) {
   return Object.freeze({ total: runs.length, byStatus: Object.freeze(byStatus), byConclusion: Object.freeze(byConclusion) });
 }
 
-async function readRoadmap(project, mainSha, client) {
-  if (!project.roadmapPath) return null;
-  const apiPath = `repos/${project.repository}/contents/${encodeRepositoryPath(project.roadmapPath)}?ref=${encodeURIComponent(mainSha)}`;
-  const file = await client.api(apiPath);
-  if (!file || file.type !== 'file' || file.encoding !== 'base64' || typeof file.content !== 'string') {
-    throw new Error('roadmap locator did not resolve to a base64 GitHub file');
-  }
-  const text = Buffer.from(file.content.replace(/\n/g, ''), 'base64').toString('utf8');
+function parseRoadmapText(project, text, blobSha = null) {
   const refs = extractRoadmapReferences(text);
   const lines = text.split(/\r?\n/);
   const wp = pointerWithLine(lines, ['Current Work Package', 'Current WP']);
   const task = pointerWithLine(lines, ['Current Task']);
   return Object.freeze({
     path: project.roadmapPath,
-    blobSha: file.sha ?? null,
+    blobSha,
     contentSha256: createHash('sha256').update(text).digest('hex'),
     ...refs,
     progress: extractRoadmapProgress(text),
@@ -198,6 +191,17 @@ async function readRoadmap(project, mainSha, client) {
     }),
     outline: extractRoadmapOutline(text)
   });
+}
+
+async function readRoadmap(project, mainSha, client) {
+  if (!project.roadmapPath) return null;
+  const apiPath = `repos/${project.repository}/contents/${encodeRepositoryPath(project.roadmapPath)}?ref=${encodeURIComponent(mainSha)}`;
+  const file = await client.api(apiPath);
+  if (!file || file.type !== 'file' || file.encoding !== 'base64' || typeof file.content !== 'string') {
+    throw new Error('roadmap locator did not resolve to a base64 GitHub file');
+  }
+  const text = Buffer.from(file.content.replace(/\n/g, ''), 'base64').toString('utf8');
+  return parseRoadmapText(project, text, file.sha ?? null);
 }
 
 async function readRepositoryHead(project, client) {
@@ -271,31 +275,146 @@ export async function readGitHubProjectFacts(project, { client, now = () => new 
   });
 }
 
-function requestScopedClient(client) {
+
+function gql(value) { return JSON.stringify(String(value)); }
+
+function buildBulkGraphqlPlan(registry) {
+  const groups = [];
+  const byRepository = new Map();
+  for (const project of registry.projects) {
+    let group = byRepository.get(project.repository);
+    if (!group) {
+      const [owner, name] = project.repository.split('/');
+      group = { alias:`repo${groups.length}`, owner, name, repository:project.repository, projects:[], roadmapAliases:new Map() };
+      byRepository.set(project.repository, group);
+      groups.push(group);
+    }
+    group.projects.push(project);
+    if (project.roadmapPath && !group.roadmapAliases.has(project.roadmapPath)) group.roadmapAliases.set(project.roadmapPath, `roadmap${group.roadmapAliases.size}`);
+  }
+  const fragments = groups.map((group) => {
+    const roadmapFields = [...group.roadmapAliases.entries()].map(([path, alias]) => `${alias}: object(expression:${gql(`HEAD:${path}`)}) { ... on Blob { oid text } }`).join('\n');
+    return `${group.alias}: repository(owner:${gql(group.owner)}, name:${gql(group.name)}) {
+      nameWithOwner isArchived visibility
+      defaultBranchRef { name target { ... on Commit { oid statusCheckRollup { contexts(first:100) { nodes { __typename ... on CheckRun { status conclusion name } ... on StatusContext { state context } } } } } } }
+      pullRequests(states:OPEN, first:100, orderBy:{field:UPDATED_AT,direction:DESC}) { nodes { number title isDraft state headRefOid baseRefName url updatedAt labels(first:50){nodes{name}} } }
+      ${roadmapFields}
+    }`;
+  });
+  return Object.freeze({ groups:Object.freeze(groups), query:`query {\n${fragments.join('\n')}\n}` });
+}
+
+function gqlChecks(repoNode) {
+  const nodes = repoNode?.defaultBranchRef?.target?.statusCheckRollup?.contexts?.nodes;
+  const check_runs = (Array.isArray(nodes) ? nodes : []).filter((item) => item?.__typename === 'CheckRun').map((item) => ({
+    status: String(item.status ?? 'unknown').toLowerCase(),
+    conclusion: item.conclusion == null ? null : String(item.conclusion).toLowerCase(),
+    name: item.name ?? null
+  }));
+  return { check_runs };
+}
+
+function gqlPulls(repoNode) {
+  const nodes = repoNode?.pullRequests?.nodes;
+  return (Array.isArray(nodes) ? nodes : []).map((pr) => ({
+    number: pr.number,
+    title: pr.title,
+    draft: Boolean(pr.isDraft),
+    state: String(pr.state ?? 'OPEN').toLowerCase(),
+    headSha: pr.headRefOid ?? null,
+    baseRef: pr.baseRefName ?? null,
+    url: pr.url ?? null,
+    updatedAt: pr.updatedAt ?? null,
+    labels: Object.freeze((pr.labels?.nodes ?? []).map((label) => label?.name).filter(Boolean))
+  }));
+}
+
+function gqlOwnerAttention(pulls, roadmap) {
+  const raw = pulls.map((pr) => ({ number:pr.number, title:pr.title, html_url:pr.url, labels:pr.labels }));
+  return Object.freeze([...(roadmap?.ownerAttention ?? []), ...raw.map(pullRequestOwnerAttention).filter(Boolean)]);
+}
+
+function unavailableProject(project, error, now) {
+  return Object.freeze({
+    schema: 'aicc.v4.github-project-facts.v1',
+    available: false,
+    projectId: project.id,
+    name: project.name,
+    repository: project.repository,
+    error: Object.freeze({ code: error.code ?? 'GITHUB_FACTS_UNAVAILABLE', message: error.message }),
+    provenance: Object.freeze({ source: 'github', repository: project.repository, refreshedAt: now().toISOString() })
+  });
+}
+
+async function readAllGitHubProjectFactsGraphql(registry, { client, now }) {
+  const plan = buildBulkGraphqlPlan(registry);
+  let payload;
+  try { payload = await client.graphql(plan.query); }
+  catch (error) { return registry.projects.map((project) => unavailableProject(project, error, now)); }
+  const data = payload?.data ?? {};
+  const groupErrors = new Map();
+  const verifiedHeads = new Map();
+  await Promise.all(plan.groups.map(async (group) => {
+    const repoNode = data[group.alias];
+    try {
+      const repository = repoNode?.nameWithOwner;
+      const defaultBranch = repoNode?.defaultBranchRef?.name;
+      const mainSha = repoNode?.defaultBranchRef?.target?.oid;
+      if (repository !== group.repository || typeof defaultBranch !== 'string' || !defaultBranch) throw new Error('GitHub GraphQL repository identity/default branch is unavailable');
+      if (typeof mainSha !== 'string' || !/^[0-9a-f]{40}$/i.test(mainSha)) throw new Error('GitHub GraphQL default branch head SHA is unavailable');
+      const verify = await client.api(`repos/${group.repository}/commits/HEAD`);
+      if (verify?.sha !== mainSha) { const error = new Error('GitHub default branch advanced during bulk refresh'); error.code = 'GITHUB_HEAD_MOVED_DURING_REFRESH'; throw error; }
+      verifiedHeads.set(group.repository, { repoNode, repository, defaultBranch, mainSha });
+    } catch (error) { groupErrors.set(group.repository, error); }
+  }));
+  return registry.projects.map((project) => {
+    const group = plan.groups.find((item) => item.repository === project.repository);
+    const error = groupErrors.get(project.repository);
+    if (error || !group) return unavailableProject(project, error ?? new Error('bulk GitHub repository group missing'), now);
+    try {
+      const head = verifiedHeads.get(project.repository);
+      const { repoNode, repository, defaultBranch, mainSha } = head;
+      const roadmapAlias = project.roadmapPath ? group.roadmapAliases.get(project.roadmapPath) : null;
+      const blob = roadmapAlias ? repoNode?.[roadmapAlias] : null;
+      if (project.roadmapPath && (!blob || typeof blob.text !== 'string')) throw new Error('roadmap locator did not resolve to a GitHub GraphQL blob');
+      const roadmap = project.roadmapPath ? parseRoadmapText(project, blob.text, blob.oid ?? null) : null;
+      const openPullRequests = Object.freeze(gqlPulls(repoNode).map((pr) => Object.freeze(pr)));
+      return Object.freeze({
+        schema: 'aicc.v4.github-project-facts.v1', available: true, projectId:project.id, name:project.name,
+        repository, defaultBranch, mainSha,
+        repositoryState:Object.freeze({ archived:Boolean(repoNode.isArchived), visibility:repoNode.visibility == null ? null : String(repoNode.visibility).toLowerCase() }),
+        roadmap, openPullRequests, ownerAttention:gqlOwnerAttention(openPullRequests, roadmap), ci:summarizeCheckRuns(gqlChecks(repoNode)),
+        provenance:Object.freeze({ source:'github', repository, ref:mainSha, refreshedAt:now().toISOString() })
+      });
+    } catch (projectError) { return unavailableProject(project, projectError, now); }
+  });
+}
+
+function requestScopedClient(client, { maxConcurrent = 4 } = {}) {
   const pending = new Map();
+  const queue = [];
+  let active = 0;
+  const pump = () => {
+    while (active < maxConcurrent && queue.length) {
+      const job = queue.shift();
+      active += 1;
+      Promise.resolve().then(() => client.api(job.apiPath)).then(job.resolve, job.reject).finally(() => { active -= 1; pump(); });
+    }
+  };
+  const schedule = (apiPath) => new Promise((resolve, reject) => { queue.push({ apiPath, resolve, reject }); pump(); });
   return Object.freeze({
     api(apiPath) {
-      if (!pending.has(apiPath)) pending.set(apiPath, Promise.resolve().then(() => client.api(apiPath)));
+      if (!pending.has(apiPath)) pending.set(apiPath, schedule(apiPath));
       return pending.get(apiPath);
     }
   });
 }
 
 export async function readAllGitHubProjectFacts(registry, { client, now = () => new Date() }) {
+  if (typeof client?.graphql === 'function') return readAllGitHubProjectFactsGraphql(registry, { client, now });
   const options = { client: requestScopedClient(client), now };
   return Promise.all(registry.projects.map(async (project) => {
-    try {
-      return await readGitHubProjectFacts(project, options);
-    } catch (error) {
-      return Object.freeze({
-        schema: 'aicc.v4.github-project-facts.v1',
-        available: false,
-        projectId: project.id,
-        name: project.name,
-        repository: project.repository,
-        error: Object.freeze({ code: error.code ?? 'GITHUB_FACTS_UNAVAILABLE', message: error.message }),
-        provenance: Object.freeze({ source: 'github', repository: project.repository, refreshedAt: options.now().toISOString() })
-      });
-    }
+    try { return await readGitHubProjectFacts(project, options); }
+    catch (error) { return unavailableProject(project, error, now); }
   }));
 }
