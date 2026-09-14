@@ -2,6 +2,8 @@ import assert from 'node:assert/strict';
 import {
   EXECUTION_ROOM_STORAGE_KEY,
   MAX_ACTIVE_ROOMS,
+  bindGptConversation,
+  chatgptConversationIdentity,
   closeExecutionRoom,
   createDefaultExecutionRoomStore,
   createExecutionRoom,
@@ -10,7 +12,8 @@ import {
   persistExecutionRoomStore,
   reopenExecutionRoom,
   selectExecutionRoom,
-  toggleRoadmapSection
+  toggleRoadmapSection,
+  unbindGptConversation
 } from './executionRoomState.ts';
 
 class MemoryStorage {
@@ -38,6 +41,23 @@ assert.equal(defaults.rooms.traffic.ui.leftPanelCollapsed, false);
 const trafficTaskCollapsed = toggleRoadmapSection(trafficCollapsed, 'traffic', 'task');
 assert.equal(trafficTaskCollapsed.rooms.traffic.ui.collapsedSections.task, true);
 assert.equal(trafficTaskCollapsed.rooms.inquiry.ui.collapsedSections.task, false);
+
+const identity = chatgptConversationIdentity('https://chatgpt.com/c/traffic-conversation?model=sol');
+assert.equal(identity.conversationId, 'traffic-conversation');
+const trafficBound = bindGptConversation(trafficTaskCollapsed, 'traffic', {
+  conversationId: 'traffic-conversation',
+  conversationUrl: 'https://chatgpt.com/c/traffic-conversation',
+  title: 'Traffic GPT'
+});
+assert.equal(trafficBound.rooms.traffic.gptConversationBinding, 'traffic-conversation');
+assert.equal(trafficBound.rooms.traffic.gptConversationTitle, 'Traffic GPT');
+assert.equal(trafficBound.rooms.inquiry.gptConversationBinding, null);
+assert.throws(() => bindGptConversation(trafficBound, 'inquiry', {
+  conversationId: 'traffic-conversation',
+  conversationUrl: 'https://chatgpt.com/c/traffic-conversation'
+}), /CHATGPT_CONVERSATION_ALREADY_BOUND/);
+const trafficUnbound = unbindGptConversation(trafficBound, 'traffic');
+assert.equal(trafficUnbound.rooms.traffic.gptConversationBinding, null);
 
 const inquirySelected = selectExecutionRoom(trafficTaskCollapsed, 'inquiry');
 assert.equal(inquirySelected.activeViewId, 'inquiry');

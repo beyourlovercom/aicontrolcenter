@@ -34,7 +34,8 @@ const api={
   async createRequest(body){return request('/api/bridge/requests',{method:'POST',body,timeout:30000});},
   async getRequest(requestId){return (await request(`/api/bridge/requests/${encodeURIComponent(requestId)}`)).bridge;},
   async claim(requestId,body){return request(`/api/bridge/requests/${encodeURIComponent(requestId)}/claim`,{method:'POST',body});},
-  async receipt(requestId,body){return request(`/api/bridge/requests/${encodeURIComponent(requestId)}/receipt`,{method:'POST',body});}
+  async receipt(requestId,body){return request(`/api/bridge/requests/${encodeURIComponent(requestId)}/receipt`,{method:'POST',body});},
+  async publishSnapshot(body){return request('/api/bridge/snapshots',{method:'POST',body,timeout:10000});}
 };
 
 async function waitTabComplete(tabId,timeout=15000){
@@ -82,6 +83,22 @@ const destination={
 };
 
 const coordinator=createCoordinator({storage,api,destination});
+
+async function publishTabSnapshot(tab){
+  if(!Number.isInteger(tab?.id)||!sameConversationSafe(tab.url||''))return null;
+  try{
+    const response=await chrome.tabs.sendMessage(tab.id,{type:'AICC_READ_SNAPSHOT'});
+    if(!response?.ok||!response.snapshot)return null;
+    const identity=conversationFromUrl(tab.url);
+    if(response.snapshot.conversationId!==identity.conversationId)return null;
+    return api.publishSnapshot({...response.snapshot,tabId:tab.id});
+  }catch{return null;}
+}
+function sameConversationSafe(url){try{conversationFromUrl(url);return true;}catch{return false;}}
+async function snapshotOpenChatgptTabs(){
+  let tabs=[];try{tabs=await chrome.tabs.query({url:'https://chatgpt.com/c/*'});}catch{return [];}
+  return Promise.all(tabs.map(tab=>publishTabSnapshot(tab)));
+}
 
 async function listTasks(){
   const value=await request('/api/work',{auth:false});
@@ -136,6 +153,12 @@ chrome.runtime.onMessage.addListener((message,sender,sendResponse)=>{
     if(message?.type==='AICC_LIST_TASKS')return sendResponse({ok:true,tasks:await listTasks()});
     if(message?.type==='AICC_SAVE_PAIRING')return sendResponse({ok:true,...await savePairing(message.token)});
     if(message?.type==='AICC_PAIRING_STATUS'){try{await autoPair();}catch{}return sendResponse({ok:true,...await status()});}
+    if(message?.type==='AICC_PUBLISH_SNAPSHOT'){
+      if(!sender.tab?.id||!sender.tab?.url)throw Object.assign(new Error('BRIDGE_CONVERSATION_ID_UNAVAILABLE'),{code:'BRIDGE_CONVERSATION_ID_UNAVAILABLE'});
+      const identity=conversationFromUrl(sender.tab.url);
+      if(message.snapshot?.conversationId!==identity.conversationId)throw Object.assign(new Error('BRIDGE_CONVERSATION_MISMATCH'),{code:'BRIDGE_CONVERSATION_MISMATCH'});
+      return sendResponse({ok:true,...await api.publishSnapshot({...message.snapshot,tabId:sender.tab.id})});
+    }
     if(message?.type==='AICC_SUBMIT_EXPLICIT'){
       if(!sender.tab?.id||!sender.tab?.url)throw Object.assign(new Error('BRIDGE_CONVERSATION_ID_UNAVAILABLE'),{code:'BRIDGE_CONVERSATION_ID_UNAVAILABLE'});
       const senderConversation=conversationFromUrl(sender.tab.url);
@@ -168,9 +191,12 @@ async function reinjectOpenChatgptTabs(){
   }
 }
 
-chrome.alarms.onAlarm.addListener(alarm=>{if(alarm.name===ALARM)void coordinator.pollAll();});
-chrome.runtime.onStartup.addListener(()=>{void ensureAlarm();void reinjectOpenChatgptTabs();void autoPair().then(()=>coordinator.pollAll()).catch(()=>{});});
-chrome.runtime.onInstalled.addListener(()=>{void ensureAlarm();void reinjectOpenChatgptTabs();void autoPair().catch(()=>{});});
+chrome.alarms.onAlarm.addListener(alarm=>{if(alarm.name===ALARM){void coordinator.pollAll();void snapshotOpenChatgptTabs();}});
+chrome.runtime.onStartup.addListener(()=>{void ensureAlarm();void reinjectOpenChatgptTabs();void autoPair().then(()=>coordinator.pollAll()).catch(()=>{});
+void snapshotOpenChatgptTabs();void snapshotOpenChatgptTabs();});
+chrome.runtime.onInstalled.addListener(()=>{void ensureAlarm();void reinjectOpenChatgptTabs();void autoPair().catch(()=>{});void snapshotOpenChatgptTabs();});
 void ensureAlarm();
 void reinjectOpenChatgptTabs();
 void autoPair().then(()=>coordinator.pollAll()).catch(()=>{});
+
+chrome.tabs.onUpdated.addListener((tabId,info,tab)=>{if(info.status==='complete'&&sameConversationSafe(tab?.url||''))void publishTabSnapshot({...tab,id:tabId});});

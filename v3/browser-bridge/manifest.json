@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "AICC V3 ChatGPT Bridge",
-  "version": "3.8.12",
-  "description": "Explicit same-conversation transport bridge for AICC V3.",
+  "name": "AICC ChatGPT Bridge",
+  "version": "3.8.13",
+  "description": "Real-conversation projection and explicit same-conversation transport bridge for AICC.",
   "permissions": ["storage", "tabs", "alarms", "scripting"],
   "host_permissions": [
     "https://chatgpt.com/*",

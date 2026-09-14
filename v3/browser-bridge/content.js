@@ -1,6 +1,6 @@
 (()=>{
   'use strict';
-  const CONTENT_VERSION='3.8.12';
+  const CONTENT_VERSION='3.8.13';
   if(globalThis.__AICC_V3_BRIDGE_CONTENT_VERSION__===CONTENT_VERSION)return;
   try{globalThis.__AICC_V3_BRIDGE_CLEANUP__?.();}catch{}
   globalThis.__AICC_V3_BRIDGE_CONTENT_VERSION__=CONTENT_VERSION;
@@ -19,6 +19,20 @@
     return [...new Uint8Array(hash)].map(value=>value.toString(16).padStart(2,'0')).join('');
   }
   function assistantText(node){return typeof node?.innerText==='string'?node.innerText:'';}
+  function snapshotMessageId(node,index,role){
+    const turn=node.closest('[data-testid^="conversation-turn-"],[data-message-id],article');
+    return turn?.getAttribute('data-message-id')||turn?.getAttribute('data-testid')||`${role}-${index}`;
+  }
+  function conversationSnapshot(){
+    const id=conversationId();if(!id)return null;
+    const nodes=[...document.querySelectorAll('[data-message-author-role="user"],[data-message-author-role="assistant"]')];
+    const messages=nodes.slice(-120).map((node,index)=>({
+      messageId:snapshotMessageId(node,index,node.getAttribute('data-message-author-role')||'unknown'),
+      role:node.getAttribute('data-message-author-role'),
+      text:(node.innerText||node.textContent||'').trim().slice(0,6000)
+    })).filter(item=>(item.role==='user'||item.role==='assistant')&&item.text);
+    return {conversationId:id,conversationUrl:`https://chatgpt.com/c/${encodeURIComponent(id)}`,title:(document.title||'ChatGPT Conversation').replace(/\s*[-–—]\s*ChatGPT\s*$/i,'').trim()||'ChatGPT Conversation',capturedAt:new Date().toISOString(),messages};
+  }
   function message(type,payload={},timeout=5000){
     return new Promise((resolve,reject)=>{
       let settled=false;
@@ -33,6 +47,15 @@
       }catch(error){finish(reject,error);}
     });
   }
+
+  let snapshotTimer=null;let lastSnapshotSignature='';
+  async function publishSnapshot(){
+    const snapshot=conversationSnapshot();if(!snapshot)return;
+    const last=snapshot.messages.at(-1);const signature=`${snapshot.conversationId}:${snapshot.messages.length}:${last?.role||''}:${(last?.text||'').slice(-240)}`;
+    if(signature===lastSnapshotSignature)return;lastSnapshotSignature=signature;
+    try{await message('AICC_PUBLISH_SNAPSHOT',{snapshot},8000);}catch{}
+  }
+  function scheduleSnapshot(){clearTimeout(snapshotTimer);snapshotTimer=setTimeout(()=>void publishSnapshot(),900);}
 
   let modal=null;
   function ensureModal(){
@@ -155,7 +178,7 @@
     }
   }
 
-  const observer=new MutationObserver(()=>injectButtons());observer.observe(document.documentElement,{childList:true,subtree:true});injectButtons();
+  const observer=new MutationObserver(()=>{injectButtons();scheduleSnapshot();});observer.observe(document.documentElement,{childList:true,subtree:true});injectButtons();scheduleSnapshot();
   function composer(){return document.querySelector('#prompt-textarea');}
   function composerValue(node){
     if(!node)return null;
@@ -194,15 +217,17 @@
     return proved?{outcome:'DELIVERED'}:{outcome:'UNCERTAIN',reason:'BRIDGE_SEND_PROOF_UNAVAILABLE'};
   }
 
-  function deliveryListener(message,_sender,sendResponse){
+  function bridgeListener(message,_sender,sendResponse){
+    if(message?.type==='AICC_READ_SNAPSHOT'){sendResponse({ok:true,snapshot:conversationSnapshot()});return false;}
     if(message?.type!=='AICC_DELIVER_EXACT')return false;
     void deliverExact(message).then(sendResponse).catch(()=>sendResponse({outcome:'UNCERTAIN',reason:'BRIDGE_CONTENT_ADAPTER_ERROR'}));
     return true;
   }
-  chrome.runtime.onMessage.addListener(deliveryListener);
+  chrome.runtime.onMessage.addListener(bridgeListener);
   globalThis.__AICC_V3_BRIDGE_CLEANUP__=()=>{
     try{observer.disconnect();}catch{}
-    try{chrome.runtime.onMessage.removeListener(deliveryListener);}catch{}
+    try{chrome.runtime.onMessage.removeListener(bridgeListener);}catch{}
+    clearTimeout(snapshotTimer);
     for(const stale of document.querySelectorAll(`button[${BUTTON_ATTR}]`))stale.remove();
     document.getElementById('aicc-v3-bridge-modal-host')?.remove();
   };

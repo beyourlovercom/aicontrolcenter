@@ -2,6 +2,7 @@
   import { onMount } from 'svelte';
   import {
     MAX_ACTIVE_ROOMS,
+    bindGptConversation,
     closeExecutionRoom,
     createDefaultExecutionRoomStore,
     loadExecutionRoomStore,
@@ -11,12 +12,16 @@
     selectExecutionRoom,
     selectMainline as selectMainlineView,
     toggleRoadmapSection,
+    unbindGptConversation,
     type ExecutionRoomStore,
     type RoadmapSection
   } from './lib/executionRoomState';
+  import { readChatgptSnapshots, snapshotForConversation, type ChatgptConversationSnapshot } from './lib/chatgptProjection';
 
   let roomStore: ExecutionRoomStore = createDefaultExecutionRoomStore();
   let toast = '';
+  let chatgptSnapshots: ChatgptConversationSnapshot[] = [];
+  let projectionError = '';
 
   $: activeViewId = roomStore.activeViewId;
   $: activeRooms = roomStore.activeRoomIds.map((id) => roomStore.rooms[id]).filter(Boolean);
@@ -25,9 +30,26 @@
   $: leftPanelCollapsed = activeRoom?.ui.leftPanelCollapsed ?? false;
   $: rightPanelCollapsed = activeRoom?.ui.rightPanelCollapsed ?? false;
   $: collapsed = activeRoom?.ui.collapsedSections ?? { blueprint: false, wp: false, pr: false, task: false, gate: false };
+  $: activeSnapshot = snapshotForConversation(chatgptSnapshots, activeRoom?.gptConversationBinding ?? null);
+  $: boundRoomCount = allRooms.filter((room) => Boolean(room.gptConversationBinding)).length;
 
   onMount(() => {
     roomStore = loadExecutionRoomStore(window.localStorage);
+    let cancelled = false;
+    const refreshProjection = async () => {
+      try {
+        const snapshots = await readChatgptSnapshots();
+        if (cancelled) return;
+        chatgptSnapshots = snapshots;
+        projectionError = '';
+      } catch (error) {
+        if (cancelled) return;
+        projectionError = error instanceof Error ? error.message : String(error);
+      }
+    };
+    void refreshProjection();
+    const timer = window.setInterval(() => void refreshProjection(), 1800);
+    return () => { cancelled = true; window.clearInterval(timer); };
   });
 
   function commit(next: ExecutionRoomStore) {
@@ -97,6 +119,39 @@
     const input = event.currentTarget as HTMLInputElement;
     commit(patchExecutionRoomUi(roomStore, activeRoom.roomId, { draft: input.value }));
   }
+
+  function roomBoundToConversation(conversationId: string) {
+    return allRooms.find((room) => room.gptConversationBinding === conversationId) ?? null;
+  }
+
+  function bindSnapshot(event: Event) {
+    if (!activeRoom) return;
+    const select = event.currentTarget as HTMLSelectElement;
+    const snapshot = chatgptSnapshots.find((item) => item.conversationId === select.value);
+    if (!snapshot) return;
+    try {
+      commit(bindGptConversation(roomStore, activeRoom.roomId, {
+        conversationId: snapshot.conversationId,
+        conversationUrl: snapshot.conversationUrl,
+        title: snapshot.title
+      }));
+      announce(`已绑定真实 ChatGPT 会话：${snapshot.title}`);
+    } catch (error) {
+      announce(error instanceof Error ? error.message : String(error));
+    }
+    select.value = '';
+  }
+
+  function unbindCurrentConversation() {
+    if (!activeRoom) return;
+    commit(unbindGptConversation(roomStore, activeRoom.roomId));
+    announce('已解除当前 Room 的 ChatGPT 会话绑定；Chrome 会话本身未关闭。');
+  }
+
+  function capturedLabel(value: string) {
+    const date = new Date(value);
+    return Number.isNaN(date.getTime()) ? value : date.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  }
 </script>
 
 <div class="aicc-v5-shell">
@@ -108,7 +163,7 @@
         <div class="brand-subtitle">Multi-Execution Workbench</div>
       </div>
     </div>
-    <div class="header-status"><span class="status-dot"></span><span>V5.1 · Room State / Isolation · {activeRooms.length} / {MAX_ACTIVE_ROOMS} ACTIVE</span></div>
+    <div class="header-status"><span class="status-dot"></span><span>V5.2 · Chrome GPT Binding · {activeRooms.length} / {MAX_ACTIVE_ROOMS} ACTIVE</span></div>
   </header>
 
   <nav class="room-tabs" aria-label="Execution Rooms">
@@ -133,24 +188,24 @@
       <div class="mainline-scroll">
         <section class="mainline-hero">
           <div><span class="eyebrow">Always-on Mainline View</span><h1>主线面板</h1><p>完整查看 AICC V5 从 Blueprint 到 Gate 的整体推进，并从这里恢复或切换任一 Execution Room。</p></div>
-          <span class="shell-badge">V5.1 Room State · V5.3 接实时事实</span>
+          <span class="shell-badge">V5.2 Chrome GPT Binding · 真实会话投影</span>
         </section>
 
         <section class="mainline-kpis">
-          <article><span>当前阶段</span><strong>V5.1</strong><small>Room State / Isolation</small></article>
+          <article><span>当前阶段</span><strong>V5.2</strong><small>Chrome GPT Binding</small></article>
           <article><span>Active Rooms</span><strong>{activeRooms.length} / {MAX_ACTIVE_ROOMS}</strong><small>状态层硬限制</small></article>
-          <article><span>持久化</span><strong>ON</strong><small>localStorage · V1 schema</small></article>
-          <article><span>V5.0</span><strong>MERGED</strong><small>main@301d176</small></article>
-          <article><span>Blocker</span><strong>0</strong><small>等待 Runtime UAT</small></article>
+          <article><span>GPT Bindings</span><strong>{boundRoomCount} / {allRooms.length}</strong><small>每个 Room 独立 conversationId</small></article>
+          <article><span>Detected GPT</span><strong>{chatgptSnapshots.length}</strong><small>Profile 12 实时 snapshot</small></article>
+          <article><span>V5.1</span><strong>MERGED</strong><small>main@3eebdbe</small></article>
         </section>
 
         <section class="mainline-card">
-          <div class="mainline-section-heading"><div><h2>完整主线进度视图</h2><p>V5 Roadmap · 从产品方向到多 Room Managed Execution</p></div><span class="mini-progress">V5.1 IMPLEMENTING</span></div>
+          <div class="mainline-section-heading"><div><h2>完整主线进度视图</h2><p>V5 Roadmap · 从产品方向到多 Room Managed Execution</p></div><span class="mini-progress">V5.2 BINDING</span></div>
           <div class="stage-flow">
             <div class="stage done"><b>✓</b><strong>Blueprint</strong><span>产品方向冻结</span><i><em style="width:100%"></em></i><small>100%</small></div>
             <div class="stage done"><b>✓</b><strong>V5.0 Shell</strong><span>PR #26 已合并</span><i><em style="width:100%"></em></i><small>100%</small></div>
-            <div class="stage current"><b>●</b><strong>V5.1 Isolation</strong><span>Room State</span><i><em style="width:75%"></em></i><small>75%</small></div>
-            <div class="stage"><b>○</b><strong>V5.2 GPT</strong><span>Chrome Binding</span><i><em style="width:0%"></em></i><small>0%</small></div>
+            <div class="stage done"><b>✓</b><strong>V5.1 Isolation</strong><span>PR #27 已合并</span><i><em style="width:100%"></em></i><small>100%</small></div>
+            <div class="stage current"><b>●</b><strong>V5.2 GPT</strong><span>Chrome Binding</span><i><em style="width:65%"></em></i><small>65%</small></div>
             <div class="stage"><b>○</b><strong>V5.3–5.5</strong><span>Facts / Loop / Hardening</span><i><em style="width:0%"></em></i><small>0%</small></div>
           </div>
         </section>
@@ -160,7 +215,7 @@
           <div class="room-overview-grid">
             {#each allRooms as room}
               <button type="button" class="room-overview-card" onclick={() => openOrReopenRoom(room.roomId)}>
-                <div><span class="room-running-dot"></span><strong>{room.name}</strong><small>{room.branch} · {room.worktree}</small></div>
+                <div><span class="room-running-dot"></span><strong>{room.name}</strong><small>{room.gptConversationTitle ?? '未绑定真实 ChatGPT 会话'} · {room.branch}</small></div>
                 <span class="room-shell-status">{roomStore.activeRoomIds.includes(room.roomId) ? 'ACTIVE' : '已关闭 · 可恢复'}</span><b>›</b>
               </button>
             {/each}
@@ -171,17 +226,17 @@
           <article class="mainline-card">
             <div class="mainline-section-heading"><div><h2>主线 Gate</h2><p>不会自动越过 Owner 审批</p></div></div>
             <div class="gate-list">
-              <div class="gate-row current"><span>●</span><div><strong>V5.1 Room Isolation Gate</strong><small>验证四 Room 切换、关闭/恢复、刷新后均不串状态</small></div><b>UAT NEXT</b></div>
-              <div class="gate-row"><span>○</span><div><strong>V5.2 Chrome GPT Binding Gate</strong><small>2–4 条真实 GPT 支线可继续对话</small></div><b>LATER</b></div>
+              <div class="gate-row current"><span>●</span><div><strong>V5.2 Chrome GPT Binding Gate</strong><small>真实 Profile 12 会话可发现、绑定、投影且不串 Room</small></div><b>UAT NEXT</b></div>
+              <div class="gate-row"><span>○</span><div><strong>V5.3 Executor Facts Gate</strong><small>branch / PR / CI 与 GitHub 事实一致</small></div><b>LATER</b></div>
               <div class="gate-row"><span>○</span><div><strong>V5.3 Executor Facts Gate</strong><small>branch / PR / CI 与 GitHub 事实一致</small></div><b>LATER</b></div>
             </div>
           </article>
           <article class="mainline-card">
-            <div class="mainline-section-heading"><div><h2>V5.1 Source of Truth</h2><p>当前 branch 只负责 Room State / Isolation</p></div></div>
+            <div class="mainline-section-heading"><div><h2>V5.2 Source of Truth</h2><p>当前 branch 只负责真实 Chrome GPT Binding / Projection</p></div></div>
             <div class="mainline-facts">
-              <div><span>Base SHA</span><strong>301d176</strong></div>
-              <div><span>V5.1 Branch</span><strong>feat/aicc-v5-room-state-isolation</strong></div>
-              <div><span>Persistence Key</span><strong>aicc.v5.execution-rooms.v1</strong></div>
+              <div><span>Base SHA</span><strong>3eebdbe</strong></div>
+              <div><span>V5.2 Branch</span><strong>feat/aicc-v5-chrome-gpt-binding</strong></div>
+              <div><span>Projection</span><strong>Profile 12 · chatgpt-web</strong></div>
               <div><span>Production</span><strong>1420 · READY · 未重启</strong></div>
             </div>
           </article>
@@ -198,12 +253,12 @@
               <span class="eyebrow">当前 Execution Room</span>
               <h2>{activeRoom.name}</h2>
             </div>
-            <span class="phase-pill">V5.1</span>
+            <span class="phase-pill">V5.2</span>
           </div>
 
           <div class="roadmap-title-row">
             <div><strong>支线进度</strong><span>{activeRoom.projectId} / {activeRoom.workstreamId}</span></div>
-            <span class="mini-progress">Isolation</span>
+            <span class="mini-progress">GPT Binding</span>
           </div>
 
           <div class="roadmap-groups">
@@ -214,28 +269,28 @@
 
             <section class="roadmap-group">
               <button class="group-toggle" type="button" onclick={() => toggle('wp')}><span>WP · 工作包</span><b>1 / 1</b><i>{collapsed.wp ? '›' : '⌄'}</i></button>
-              {#if !collapsed.wp}<div class="roadmap-item current"><span>●</span><div><strong>{activeRoom.currentWp}</strong><small>Persistent room state + isolation</small></div></div>{/if}
+              {#if !collapsed.wp}<div class="roadmap-item current"><span>●</span><div><strong>V5.2 — Chrome GPT Binding</strong><small>Real conversation projection + per-Room binding</small></div></div>{/if}
             </section>
 
             <section class="roadmap-group">
               <button class="group-toggle" type="button" onclick={() => toggle('pr')}><span>PR · 需求与计划</span><b>0 / 1</b><i>{collapsed.pr ? '›' : '⌄'}</i></button>
-              {#if !collapsed.pr}<div class="roadmap-item pending"><span>○</span><div><strong>V5.1 Room State PR</strong><small>Isolation UAT 后才进入 PR Gate</small></div></div>{/if}
+              {#if !collapsed.pr}<div class="roadmap-item pending"><span>○</span><div><strong>V5.2 Chrome GPT Binding PR</strong><small>Binding UAT 后才进入 PR Gate</small></div></div>{/if}
             </section>
 
             <section class="roadmap-group">
               <button class="group-toggle" type="button" onclick={() => toggle('task')}><span>Task · 任务执行</span><b>4 / 5</b><i>{collapsed.task ? '›' : '⌄'}</i></button>
               {#if !collapsed.task}
-                <div class="roadmap-item done"><span>✓</span><div><strong>Room State Schema</strong><small>room_id / project / workstream / Gate</small></div></div>
-                <div class="roadmap-item done"><span>✓</span><div><strong>Per-Room UI Isolation</strong><small>左右栏 / Roadmap / 草稿独立</small></div></div>
-                <div class="roadmap-item done"><span>✓</span><div><strong>Persistent Room State</strong><small>刷新后恢复当前状态</small></div></div>
-                <div class="roadmap-item done"><span>✓</span><div><strong>4 Room Limit + Reopen</strong><small>关闭 UI 不删除 Room binding</small></div></div>
-                <div class="roadmap-item current"><span>●</span><div><strong>Owner Isolation UAT</strong><small>切换 / 关闭 / 恢复 / 刷新</small></div></div>
+                <div class="roadmap-item done"><span>✓</span><div><strong>Canonical Browser Bridge Reuse</strong><small>Profile 12 · fixed extension identity</small></div></div>
+                <div class="roadmap-item done"><span>✓</span><div><strong>Read-only Transcript Projection</strong><small>真实 user / assistant DOM snapshot</small></div></div>
+                <div class="roadmap-item done"><span>✓</span><div><strong>Per-Room Conversation Binding</strong><small>conversationId 唯一绑定，不允许串线</small></div></div>
+                <div class="roadmap-item done"><span>✓</span><div><strong>No-Spawn Read Path</strong><small>读取不会创建 Chrome Tab</small></div></div>
+                <div class="roadmap-item current"><span>●</span><div><strong>Owner Binding UAT</strong><small>发现 / 绑定 / 切换 / 真实投影</small></div></div>
               {/if}
             </section>
 
             <section class="roadmap-group">
               <button class="group-toggle" type="button" onclick={() => toggle('gate')}><span>Gate · 阶段评审</span><b>0 / 1</b><i>{collapsed.gate ? '›' : '⌄'}</i></button>
-              {#if !collapsed.gate}<div class="roadmap-item current"><span>●</span><div><strong>V5.1 Room Isolation Gate</strong><small>PASS 后才能进入 V5.2</small></div></div>{/if}
+              {#if !collapsed.gate}<div class="roadmap-item current"><span>●</span><div><strong>V5.2 Chrome GPT Binding Gate</strong><small>PASS 后才能进入 V5.3</small></div></div>{/if}
             </section>
           </div>
         {/if}
@@ -244,35 +299,47 @@
       <main class="gpt-panel">
         <div class="gpt-header">
           <div>
-            <span class="eyebrow">真实 Chrome ChatGPT 会话</span>
+            <span class="eyebrow">真实 Chrome ChatGPT 会话 · Profile 12</span>
             <h1>{activeRoom.name}</h1>
           </div>
-          <div class="binding-pill"><span></span>V5.2 绑定</div>
+          {#if activeRoom.gptConversationBinding}
+            <div class="binding-actions"><span class="binding-pill live-binding"><span></span>{activeRoom.gptConversationTitle ?? activeRoom.gptConversationBinding}</span><button class="binding-link" type="button" onclick={unbindCurrentConversation}>解绑</button></div>
+          {:else}
+            <select class="conversation-select" aria-label="绑定真实 ChatGPT 会话" onchange={bindSnapshot} value="">
+              <option value="">{chatgptSnapshots.length ? '选择真实 ChatGPT 会话…' : '未检测到打开的 ChatGPT 会话'}</option>
+              {#each chatgptSnapshots as snapshot}
+                {@const owner = roomBoundToConversation(snapshot.conversationId)}
+                <option value={snapshot.conversationId} disabled={Boolean(owner)}>{snapshot.title} · {snapshot.conversationId.slice(0, 8)}{owner ? ` · 已绑定 ${owner.name}` : ''}</option>
+              {/each}
+            </select>
+          {/if}
         </div>
 
         <div class="conversation-shell">
-          <div class="conversation-notice">
-            <div class="notice-icon">✦</div>
-            <div>
-              <strong>V5.1 Room Isolation</strong>
-              <p>当前 Room 已有独立持久化状态。真实 Chrome ChatGPT 会话仍在 V5.2 才绑定；本阶段不会用 API 仿造 ChatGPT。</p>
+          {#if activeSnapshot}
+            <div class="conversation-notice live-conversation-notice">
+              <div class="notice-icon">✦</div>
+              <div><strong>真实 ChatGPT Transcript · {activeSnapshot.title}</strong><p>conversationId：{activeSnapshot.conversationId} · snapshot {capturedLabel(activeSnapshot.capturedAt)} · {activeSnapshot.messages.length} 条可见消息。内容来自 Profile 12 页面 DOM，不使用 OpenAI API。</p></div>
             </div>
-          </div>
-
-          <div class="chat-preview user-message">
-            <span class="message-avatar">你</span>
-            <div><strong>Room ID：{activeRoom.roomId}</strong><p>{activeRoom.branch} · {activeRoom.worktree}</p></div>
-          </div>
-
-          <div class="chat-preview assistant-message">
-            <span class="message-avatar assistant">✦</span>
-            <div><strong>当前 Gate：{activeRoom.currentGate}</strong><p>在输入框随便写一段 Room 专属草稿，然后切换 Room；草稿、左右栏和 Roadmap 折叠状态都不应该串线。</p></div>
-          </div>
+            {#each activeSnapshot.messages as message}
+              <div class="chat-preview" class:user-message={message.role === 'user'}>
+                <span class:assistant={message.role === 'assistant'} class="message-avatar">{message.role === 'user' ? '你' : '✦'}</span>
+                <div><strong>{message.role === 'user' ? 'You · Chrome' : 'ChatGPT · Chrome'}</strong><p class="projected-message">{message.text}</p></div>
+              </div>
+            {/each}
+          {:else if activeRoom.gptConversationBinding}
+            <div class="conversation-notice stale-conversation-notice"><div class="notice-icon">!</div><div><strong>已绑定，但当前没有实时 snapshot</strong><p>{activeRoom.gptConversationUrl}。请保持该真实 ChatGPT 会话在 Profile 12 中打开；AICC 不会为读取动作自动创建新 Tab。</p></div></div>
+          {:else}
+            <div class="conversation-notice">
+              <div class="notice-icon">✦</div>
+              <div><strong>等待绑定真实 Chrome ChatGPT 会话</strong><p>{chatgptSnapshots.length ? `已检测到 ${chatgptSnapshots.length} 个真实会话，请在右上角选择一次完成 Room 绑定。` : '当前 Profile 12 没有已打开的 chatgpt.com/c/... 会话。V5.2 不会自动 spawn Chrome Tab。'}{projectionError ? ` · Projection: ${projectionError}` : ''}</p></div>
+            </div>
+          {/if}
         </div>
 
         <div class="composer-shell">
-          <div class="composer-input"><span class="composer-plus">＋</span><input class="composer-draft" style="width:100%;border:0;outline:0;background:transparent;color:#111;font:inherit;" value={activeRoom.ui.draft} oninput={updateDraft} placeholder="输入当前 Room 的独立测试草稿…" /><span class="composer-mic">⌁</span></div>
-          <button class="next-step-button" type="button" onclick={() => announce('V5.1 STOP Gate：Owner Isolation UAT PASS 前不进入 V5.2')}>推进下一步</button>
+          <div class="composer-input"><span class="composer-plus">＋</span><input class="composer-draft" style="width:100%;border:0;outline:0;background:transparent;color:#111;font:inherit;" value={activeRoom.ui.draft} oninput={updateDraft} placeholder="V5.2 本地草稿 · 真实发送仍受 Owner authorization Gate 控制" /><span class="composer-mic">⌁</span></div>
+          <button class="next-step-button" type="button" onclick={() => announce('V5.2 STOP Gate：当前只做真实会话绑定/投影；自动推进在后续 Closed Loop Gate 接入')}>推进下一步</button>
         </div>
       </main>
 
@@ -280,7 +347,7 @@
         <button class="panel-collapse panel-collapse-right" type="button" aria-label={rightPanelCollapsed ? '展开右侧事实' : '收起右侧事实'} onclick={toggleRightPanel}>{rightPanelCollapsed ? '‹' : '›'}</button>
         {#if !rightPanelCollapsed}
           <div class="panel-heading facts-heading">
-            <div><span class="eyebrow">Room Binding State</span><h2>执行详情</h2></div>
+            <div><span class="eyebrow">Chrome GPT Binding</span><h2>执行详情</h2></div>
             <span class="live-pill"><i></i>{activeRoom.status}</span>
           </div>
 
@@ -290,20 +357,21 @@
             <div class="fact-row"><span>分支名称</span><strong>{activeRoom.branch}</strong></div>
             <div class="fact-row"><span>工作目录</span><strong>{activeRoom.worktree}</strong></div>
             <div class="fact-row"><span>Base SHA</span><strong class="mono">{activeRoom.baseSha.slice(0, 8)}</strong></div>
-            <div class="fact-row"><span>GPT Binding</span><strong>{activeRoom.gptConversationBinding ?? 'V5.2 PENDING'}</strong></div>
+            <div class="fact-row"><span>GPT Conversation</span><strong>{activeRoom.gptConversationBinding ?? 'UNBOUND'}</strong></div>
+            <div class="fact-row"><span>Projection</span><strong>{activeSnapshot ? `LIVE · ${activeSnapshot.messages.length} messages` : activeRoom.gptConversationBinding ? 'WAITING SNAPSHOT' : 'UNBOUND'}</strong></div>
             <div class="fact-row"><span>Codex Session</span><strong>{activeRoom.codexSession ?? 'UNBOUND'}</strong></div>
             <div class="fact-row"><span>Next Gate</span><strong>{activeRoom.nextGate}</strong></div>
           </div>
 
           <div class="log-block">
-            <div class="log-heading"><strong>V5.1 Isolation Evidence</strong><span>{activeRooms.length} ACTIVE</span></div>
-            <div class="log-line"><span>01</span><p>Room 状态按 room_id 独立存储</p></div>
-            <div class="log-line"><span>02</span><p>关闭 Room 不删除 branch/worktree binding</p></div>
-            <div class="log-line"><span>03</span><p>ACTIVE Room 上限固定为 4</p></div>
-            <div class="log-line current"><span>NOW</span><p>WAITING → Owner Isolation UAT</p></div>
+            <div class="log-heading"><strong>V5.2 Binding Evidence</strong><span>{chatgptSnapshots.length} DETECTED</span></div>
+            <div class="log-line"><span>01</span><p>Profile 12 canonical extension 被复用，不走 OpenAI API</p></div>
+            <div class="log-line"><span>02</span><p>Read path 只读取现有 ChatGPT Tab，不自动创建 Tab</p></div>
+            <div class="log-line"><span>03</span><p>conversationId 在 Room 间唯一绑定</p></div>
+            <div class="log-line current"><span>NOW</span><p>WAITING → Owner Binding UAT</p></div>
           </div>
 
-          <div class="facts-note"><strong>GitHub = Source of Truth</strong><p>V5.1 只负责 Room 状态隔离；真实 PR / CI / runtime facts 仍在 V5.3 接入。</p></div>
+          <div class="facts-note"><strong>Chrome = GPT Conversation Source</strong><p>中间区只投影真实 Profile 12 会话；GitHub 继续是代码/PR/CI 的唯一事实源，V5.3 再接 Executor Facts。</p></div>
         {/if}
       </aside>
     </section>
