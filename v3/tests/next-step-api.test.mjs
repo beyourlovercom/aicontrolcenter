@@ -19,7 +19,7 @@ function fixture(){
 function readyExecutor(){return {ready:true,checkedAt:'2026-09-14T09:00:00.000Z',path:'/fake/codex',version:'0.test',model:'test',authMode:'test',doctorStatus:'ok',diagnostics:[]};}
 async function withServer(fx,run){
   const projection=createChatgptProjectionStore({now:()=> '2026-09-14T09:00:00.000Z'});
-  projection.upsert({conversationId:'conv-v54',conversationUrl:'https://chatgpt.com/c/conv-v54',title:'V5.4',tabId:7,messages:[{role:'assistant',text:'ready'}]});
+  projection.upsert({conversationId:'conv-v54',conversationUrl:'https://chatgpt.com/c/conv-v54',title:'V5.4',tabId:7,capturedAt:new Date().toISOString(),messages:[{role:'assistant',text:'ready'}]});
   const env={AICC_V3_HOME:fx.home};const server=createAiccV3Server({env,chatgptProjectionStore:projection,executorOptions:{preflight:readyExecutor}});
   await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));const {port}=server.address();
   try{await run(`http://127.0.0.1:${port}`,env);}finally{await new Promise(resolve=>server.close(resolve));}
@@ -29,7 +29,7 @@ function requestBody(repo){return {roomId:'room-v54',roomName:'V5.4 Room',workst
 test('Next-Step HTTP loop freezes intent, allows one authenticated claim, and records STOP_GATE',async()=>{
   const fx=fixture();await withServer(fx,async(base,env)=>{
     const create=await fetch(`${base}/api/next-step/requests`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(requestBody(fx.repo))});
-    const created=await create.json();assert.equal(create.status,201);assert.equal(created.state.state,'PENDING');assert.match(created.request.prompt,/AICC_NEXT_STEP_V1/);
+    const created=await create.json();assert.equal(create.status,201,JSON.stringify(created));assert.equal(created.state.state,'PENDING');assert.match(created.request.prompt,/AICC_NEXT_STEP_V1/);
     const token=ensureBridgeCredential(env);const auth={'content-type':'application/json','x-aicc-bridge-token':token};
     const claim=await fetch(`${base}/api/bridge/next-step/claim`,{method:'POST',headers:auth,body:JSON.stringify({bridgeInstanceId:'bridge-test'})}).then(r=>r.json());
     assert.equal(claim.claimed.request.requestId,created.request.requestId);assert.equal(claim.claimed.state.state,'CLAIMED');

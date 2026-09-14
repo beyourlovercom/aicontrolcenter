@@ -8,11 +8,21 @@ export type NextStepProjection = {
   state: { requestId: string; state: NextStepStateName; bridgeRequestId?: string | null; runId?: string | null; decision?: Record<string, unknown> | null; errorCode?: string | null; updatedAt: string };
 };
 export type NextStepEligibility = { ready: boolean; blockers: string[] };
+export const NEXT_STEP_SNAPSHOT_MAX_AGE_MS = 90_000;
+const NEXT_STEP_SNAPSHOT_FUTURE_SKEW_MS = 5_000;
 
-export function nextStepEligibility(room: ExecutionRoomState, facts: ExecutorFactsProjection | null, snapshot: ChatgptConversationSnapshot | null): NextStepEligibility {
+function freshSnapshot(snapshot: ChatgptConversationSnapshot | null, nowMs: number): boolean {
+  if (!snapshot) return false;
+  const capturedAt = Date.parse(snapshot.capturedAt);
+  if (!Number.isFinite(capturedAt)) return false;
+  const age = nowMs - capturedAt;
+  return age <= NEXT_STEP_SNAPSHOT_MAX_AGE_MS && age >= -NEXT_STEP_SNAPSHOT_FUTURE_SKEW_MS;
+}
+
+export function nextStepEligibility(room: ExecutionRoomState, facts: ExecutorFactsProjection | null, snapshot: ChatgptConversationSnapshot | null, nowMs: number = Date.now()): NextStepEligibility {
   const blockers: string[] = [];
   if (!room.gptConversationBinding || !room.gptConversationUrl) blockers.push('GPT_UNBOUND');
-  if (!snapshot || snapshot.conversationId !== room.gptConversationBinding) blockers.push('GPT_SNAPSHOT_STALE');
+  if (!snapshot || snapshot.conversationId !== room.gptConversationBinding || !freshSnapshot(snapshot, nowMs)) blockers.push('GPT_SNAPSHOT_STALE');
   if (roomRuntimeBinding(room.branch, room.worktree, facts) !== 'MATCH') blockers.push('RUNTIME_DRIFT');
   const repository = facts?.project.value?.repository;
   if (!facts?.project.available || !repository) blockers.push('PROJECT_FACTS_UNAVAILABLE');

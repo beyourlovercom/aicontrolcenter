@@ -10,7 +10,8 @@ const facts:any={project:{available:true,value:{repository:{identity:'owner/repo
 assert(nextStepEligibility(room,facts,snapshot).ready,'exact bound clean runtime is eligible');
 assert(nextStepEligibility({...room,branch:'drift'},facts,snapshot).blockers.includes('RUNTIME_DRIFT'),'runtime drift blocks');
 assert(nextStepEligibility(room,{...facts,project:{available:true,value:{repository:{...facts.project.value.repository,dirty:true}}}},snapshot).blockers.includes('WORKTREE_DIRTY'),'dirty worktree blocks');
-assert(nextStepEligibility(room,facts,null).blockers.includes('GPT_SNAPSHOT_STALE'),'stale GPT snapshot blocks');
+assert(nextStepEligibility(room,facts,null).blockers.includes('GPT_SNAPSHOT_STALE'),'missing GPT snapshot blocks');
+assert(nextStepEligibility(room,facts,{...snapshot,capturedAt:'2020-01-01T00:00:00.000Z'}).blockers.includes('GPT_SNAPSHOT_STALE'),'aged GPT snapshot blocks');
 let body:any=null;
 const fetcher:any=async(_url:string,init:any)=>{body=JSON.parse(init.body);return new Response(JSON.stringify({request:{requestId:'n1',roomId:'traffic',conversationId:'conv-1',promptSha256:'h',createdAt:'now'},state:{requestId:'n1',state:'PENDING',updatedAt:'now'}}),{status:201,headers:{'content-type':'application/json'}});};
 const queued=await submitNextStep(room,'owner draft',fetcher);assert(body.branch==='feat/v54'&&body.conversationId==='conv-1','submission freezes exact room binding');assert(queued.state.state==='PENDING','submission returns server state');assert(nextStepStatusLabel(queued)==='等待 Profile 12 Bridge','status label reflects queue');

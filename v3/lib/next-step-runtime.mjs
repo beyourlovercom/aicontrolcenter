@@ -5,6 +5,8 @@ import {stateRoot} from './project-context.mjs';
 import {projectStateKey} from './work-store.mjs';
 
 export const NEXT_STEP_STATES=Object.freeze(['PENDING','CLAIMED','EXECUTION_QUEUED','STOP_GATE','ABORTED_BEFORE_SEND','UNCERTAIN']);
+export const NEXT_STEP_SNAPSHOT_MAX_AGE_MS=90000;
+const NEXT_STEP_SNAPSHOT_FUTURE_SKEW_MS=5000;
 function fail(code){const error=new Error(code);error.code=code;throw error;}
 function now(options){return (options.now||(()=>new Date().toISOString()))();}
 function sha256(value){return createHash('sha256').update(value).digest('hex');}
@@ -32,10 +34,12 @@ export function createNextStepRequest(context,input,facts,env=process.env,option
   if(context.repository.dirty)fail('NEXT_STEP_WORKTREE_DIRTY');
   if(!facts?.executorReady)fail('NEXT_STEP_EXECUTOR_NOT_READY');
   if(facts?.activeRun)fail('NEXT_STEP_EXECUTOR_BUSY');
+  const createdAt=now(options);
   const conversationId=text(input?.conversationId,'NEXT_STEP_CONVERSATION_REQUIRED',500);const snapshot=facts?.snapshot;
-  if(!snapshot||snapshot.conversationId!==conversationId)fail('NEXT_STEP_CONVERSATION_STALE');
+  const capturedAt=Date.parse(snapshot?.capturedAt||'');const currentAt=Date.parse(createdAt);
+  if(!snapshot||snapshot.conversationId!==conversationId||!Number.isFinite(capturedAt)||!Number.isFinite(currentAt)||currentAt-capturedAt>NEXT_STEP_SNAPSHOT_MAX_AGE_MS||capturedAt-currentAt>NEXT_STEP_SNAPSHOT_FUTURE_SKEW_MS)fail('NEXT_STEP_CONVERSATION_STALE');
   const existing=latestNextStepForRoom(context,text(input?.roomId,'NEXT_STEP_INPUT_INVALID',240),env);if(existing&&activeState(existing.state.state))fail('NEXT_STEP_ACTIVE');
-  const requestId=(options.uuid||randomUUID)();const createdAt=now(options);
+  const requestId=(options.uuid||randomUUID)();
   const frozen={roomId:input.roomId,roomName:input.roomName,workstreamId:input.workstreamId,branch:expectedBranch,worktree:expectedWorktree,head:context.repository.head,conversationId,draft:input?.draft||''};
   const prompt=nextStepPrompt(frozen);
   const request={schema:'aicc.v5.next-step-request.v1',requestId,projectId:context.project.id,repositoryIdentity:context.repository.identity,...frozen,conversationUrl:snapshot.conversationUrl,prompt,promptSha256:sha256(prompt),createdAt};
