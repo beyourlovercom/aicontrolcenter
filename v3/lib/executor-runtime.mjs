@@ -43,13 +43,17 @@ export function preflightCodex(env=process.env,options={}){
   let report;try{report=JSON.parse(raw);}catch{fail('EXECUTOR_PREFLIGHT_FAILED');}
   const checks=report.checks||{};
   const required=['installation','auth.credentials','network.provider_reachability'];
-  const ready=report.overallStatus==='ok'&&required.every(id=>checks[id]?.status==='ok');
+  const ready=required.every(id=>checks[id]?.status==='ok');
   if(!ready)fail('EXECUTOR_PREFLIGHT_FAILED');
+  const diagnostics=Object.values(checks)
+    .filter(check=>check&&check.status&&check.status!=='ok')
+    .map(check=>({id:check.id||'unknown',status:check.status,summary:check.summary||null}));
   return {
     ready:true,checkedAt:new Date().toISOString(),path:codexPath,
     version:report.codexVersion||null,
     model:checks['config.load']?.details?.model||null,
-    authMode:checks['auth.credentials']?.details?.['stored auth mode']||null
+    authMode:checks['auth.credentials']?.details?.['stored auth mode']||null,
+    doctorStatus:report.overallStatus||null,diagnostics
   };
 }
 function defaultProcessProbe(pid,runId){

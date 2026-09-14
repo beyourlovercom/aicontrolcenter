@@ -12,7 +12,7 @@ export default defineConfig({
     strictPort: true,
     host: host || false,
     hmr: host ? { protocol: 'ws', host, port: 1421 } : undefined,
-    proxy: { '/api/chatgpt': { target: `http://127.0.0.1:${backendPort}`, changeOrigin: false } },
+    proxy: { '/api': { target: `http://127.0.0.1:${backendPort}`, changeOrigin: false } },
     watch: { ignored: ['**/src-tauri/**'] }
   }
 });

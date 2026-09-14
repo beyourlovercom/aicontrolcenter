@@ -55,6 +55,19 @@ if(process.argv[2]==='doctor'){console.log(JSON.stringify({overallStatus:'ok',co
   const result=preflightCodex({PATH:'/usr/bin:/bin'},{codexPath:fake});
   assert.equal(result.ready,true);assert.equal(result.version,'fake-2');assert.equal(result.authMode,'chatgpt');
 });
+test('preflight accepts non-critical doctor warning when required checks are healthy',()=>{
+  const report={overallStatus:'warning',codexVersion:'fake-warning',checks:{
+    installation:{id:'installation',status:'ok',summary:'installed'},
+    'auth.credentials':{id:'auth.credentials',status:'ok',summary:'auth ok',details:{'stored auth mode':'chatgpt'}},
+    'network.provider_reachability':{id:'network.provider_reachability',status:'ok',summary:'reachable'},
+    'config.load':{id:'config.load',status:'ok',summary:'config ok',details:{model:'gpt-test'}},
+    'app_server.status':{id:'app_server.status',status:'warning',summary:'background server is not running'}
+  }};
+  const result=preflightCodex({}, {codexPath:'/tmp/fake-codex',execFile:()=>JSON.stringify(report)});
+  assert.equal(result.ready,true);assert.equal(result.doctorStatus,'warning');
+  assert.equal(result.diagnostics.length,1);assert.equal(result.diagnostics[0].id,'app_server.status');
+});
+
 test('detached worker binds exact cwd, args, session and append-only events',async()=>{
   const f=fixture('exit');const instruction='Implement only the scoped fixture.\n';
   const created=startRun(f.context,{taskId:f.task.id,instruction},f.env,f.options);
