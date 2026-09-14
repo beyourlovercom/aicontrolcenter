@@ -96,8 +96,9 @@ async function publishTabSnapshot(tab){
 }
 function sameConversationSafe(url){try{conversationFromUrl(url);return true;}catch{return false;}}
 async function snapshotOpenChatgptTabs(){
-  let tabs=[];try{tabs=await chrome.tabs.query({url:'https://chatgpt.com/c/*'});}catch{return [];}
-  return Promise.all(tabs.map(tab=>publishTabSnapshot(tab)));
+  let tabs=[];try{tabs=await chrome.tabs.query({url:'https://chatgpt.com/*'});}catch{return [];}
+  const conversations=tabs.filter(tab=>sameConversationSafe(tab.url||''));
+  return Promise.all(conversations.map(tab=>publishTabSnapshot(tab)));
 }
 
 async function listTasks(){
@@ -193,7 +194,7 @@ async function reinjectOpenChatgptTabs(){
 
 chrome.alarms.onAlarm.addListener(alarm=>{if(alarm.name===ALARM){void coordinator.pollAll();void snapshotOpenChatgptTabs();}});
 chrome.runtime.onStartup.addListener(()=>{void ensureAlarm();void reinjectOpenChatgptTabs();void autoPair().then(()=>coordinator.pollAll()).catch(()=>{});
-void snapshotOpenChatgptTabs();void snapshotOpenChatgptTabs();});
+void snapshotOpenChatgptTabs();});
 chrome.runtime.onInstalled.addListener(()=>{void ensureAlarm();void reinjectOpenChatgptTabs();void autoPair().catch(()=>{});void snapshotOpenChatgptTabs();});
 void ensureAlarm();
 void reinjectOpenChatgptTabs();

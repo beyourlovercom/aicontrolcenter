@@ -123,6 +123,7 @@ test('extension manifest and source keep credential privileged and forbid active
   const pairing=readFileSync(join(root,'scripts/copy-bridge-pairing-token.mjs'),'utf8');
   assert.match(content,/Task Name/);assert.match(content,/Task Name is required\. Submission blocked\./);assert.match(content,/dataset\.taskTitle/);assert.match(background,/BRIDGE_TASK_TITLE_MISMATCH/);
   assert.match(background,/TRUSTED_CONTEXTS/);assert.match(background,/x-aicc-bridge-token/);assert.match(background,/api\/bridge\/bootstrap/);assert.match(background,/autoPair/);assert.match(background,/chrome\.scripting\.executeScript/);assert.match(background,/reinjectOpenChatgptTabs/);assert.match(background,/AICC_LIST_TASKS/);
+  assert.match(background,/snapshotOpenChatgptTabs/);assert.match(background,/chrome\.tabs\.query\(\{url:'https:\/\/chatgpt\.com\/\*'\}\)/);assert.equal(background.includes("chrome.tabs.query({url:'https://chatgpt.com/c/*'})"),false,'snapshot discovery must include Project conversation URLs');
   assert.equal(background.split('\n').some(line=>line.length>0&&!/^\s/.test(line)&&/\bawait\b/.test(line)),false,'MV3 service-worker event registration must not be delayed by top-level await');
   assert.match(options,/api\/bridge\/bootstrap/);assert.match(options,/chrome\.storage\.local\.set/);assert.match(options,/aiccBridgeTokenV1/);assert.equal(options.includes('console.log'),false);
   assert.equal(/chrome\.tabs\.query\(\{\s*active\s*:/.test(background),false);assert.equal(background.includes('currentWindow:true'),false);
