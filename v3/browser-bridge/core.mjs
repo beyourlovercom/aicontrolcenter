@@ -57,6 +57,22 @@ export function sameConversation(expected,url){
   try{return conversationFromUrl(url).conversationId===expected;}catch{return false;}
 }
 
+export function parseNextStepDecision(value){
+  if(typeof value!=='string'||!value.includes('AICC_NEXT_STEP_V1'))fail('NEXT_STEP_DECISION_INVALID');
+  const decision=value.match(/^AICC_DECISION:\s*(EXECUTE|STOP_GATE)\s*$/mi)?.[1]||null;
+  const workPackage=value.match(/^AICC_WORK_PACKAGE:\s*(.*?)\s*$/mi)?.[1]?.trim()||'';
+  const taskTitle=value.match(/^AICC_TASK:\s*(.*?)\s*$/mi)?.[1]?.trim()||'';
+  const instruction=value.match(/AICC_INSTRUCTION_BEGIN\s*\n([\s\S]*?)\nAICC_INSTRUCTION_END/i)?.[1]||'';
+  const gateReason=value.match(/^AICC_GATE_REASON:\s*(.*?)\s*$/mi)?.[1]?.trim()||'';
+  if(decision==='STOP_GATE'){
+    if(!gateReason||gateReason==='NONE')fail('NEXT_STEP_DECISION_INVALID');
+    return {decision:'STOP_GATE',gateReason};
+  }
+  if(decision!=='EXECUTE'||!workPackage||!taskTitle||!instruction.trim())fail('NEXT_STEP_DECISION_INVALID');
+  if(workPackage.length>240||taskTitle.length>240||new TextEncoder().encode(instruction).length>60000)fail('NEXT_STEP_DECISION_INVALID');
+  return {decision:'EXECUTE',workPackageTitle:workPackage,taskTitle,instruction};
+}
+
 export function recoveryAction(projection,ledger){
   const state=projection?.state?.deliveryState;
   if(state==='DELIVERED')return 'DONE';

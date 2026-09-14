@@ -1,6 +1,6 @@
 (()=>{
   'use strict';
-  const CONTENT_VERSION='3.8.13';
+  const CONTENT_VERSION='3.8.14';
   if(globalThis.__AICC_V3_BRIDGE_CONTENT_VERSION__===CONTENT_VERSION)return;
   try{globalThis.__AICC_V3_BRIDGE_CLEANUP__?.();}catch{}
   globalThis.__AICC_V3_BRIDGE_CONTENT_VERSION__=CONTENT_VERSION;
@@ -216,18 +216,37 @@
     const proved=await waitFor(()=>conversationId()===message.conversationId&&userTurnCount()>before&&composerValue(box)!==message.content,12000,150);
     return proved?{outcome:'DELIVERED'}:{outcome:'UNCERTAIN',reason:'BRIDGE_SEND_PROOF_UNAVAILABLE'};
   }
+  function assistantNodes(){return [...document.querySelectorAll('[data-message-author-role="assistant"]')];}
+  function completeNextStepProtocol(text){
+    if(typeof text!=='string'||!text.includes('AICC_NEXT_STEP_V1')||!/^AICC_DECISION:\s*(EXECUTE|STOP_GATE)\s*$/mi.test(text)||!/^AICC_GATE_REASON:/mi.test(text))return false;
+    return /^AICC_DECISION:\s*STOP_GATE\s*$/mi.test(text)||(/AICC_INSTRUCTION_BEGIN/i.test(text)&&/AICC_INSTRUCTION_END/i.test(text));
+  }
+  async function planNextStep(message){
+    if(conversationId()!==message.conversationId)return {outcome:'ABORTED_BEFORE_SEND',reason:'BRIDGE_CONVERSATION_MISMATCH'};
+    const before=assistantNodes().length;
+    const sent=await deliverExact(message);if(sent.outcome!=='DELIVERED')return sent;
+    const response=await waitFor(()=>{
+      const nodes=assistantNodes();if(nodes.length<=before)return null;
+      const text=assistantText(nodes.at(-1));return completeNextStepProtocol(text)?text:null;
+    },120000,300);
+    return response?{outcome:'DELIVERED',assistantText:response}:{outcome:'UNCERTAIN',reason:'NEXT_STEP_GPT_DECISION_UNPROVEN'};
+  }
+
+  let nextStepPollTimer=null;
+  function scheduleNextStepPoll(){clearTimeout(nextStepPollTimer);nextStepPollTimer=setTimeout(()=>{void message('AICC_NEXT_STEP_POLL').catch(()=>{});scheduleNextStepPoll();},2500);}
 
   function bridgeListener(message,_sender,sendResponse){
     if(message?.type==='AICC_READ_SNAPSHOT'){sendResponse({ok:true,snapshot:conversationSnapshot()});return false;}
+    if(message?.type==='AICC_PLAN_NEXT_STEP'){void planNextStep(message).then(sendResponse).catch(()=>sendResponse({outcome:'UNCERTAIN',reason:'NEXT_STEP_CONTENT_ADAPTER_ERROR'}));return true;}
     if(message?.type!=='AICC_DELIVER_EXACT')return false;
     void deliverExact(message).then(sendResponse).catch(()=>sendResponse({outcome:'UNCERTAIN',reason:'BRIDGE_CONTENT_ADAPTER_ERROR'}));
     return true;
   }
-  chrome.runtime.onMessage.addListener(bridgeListener);
+  chrome.runtime.onMessage.addListener(bridgeListener);scheduleNextStepPoll();
   globalThis.__AICC_V3_BRIDGE_CLEANUP__=()=>{
     try{observer.disconnect();}catch{}
     try{chrome.runtime.onMessage.removeListener(bridgeListener);}catch{}
-    clearTimeout(snapshotTimer);
+    clearTimeout(snapshotTimer);clearTimeout(nextStepPollTimer);
     for(const stale of document.querySelectorAll(`button[${BUTTON_ATTR}]`))stale.remove();
     document.getElementById('aicc-v3-bridge-modal-host')?.remove();
   };

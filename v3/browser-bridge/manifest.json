@@ -1,9 +1,14 @@
 {
   "manifest_version": 3,
   "name": "AICC ChatGPT Bridge",
-  "version": "3.8.13",
-  "description": "Real-conversation projection and explicit same-conversation transport bridge for AICC.",
-  "permissions": ["storage", "tabs", "alarms", "scripting"],
+  "version": "3.8.14",
+  "description": "Real ChatGPT projection plus exact V5.4 next-step planning and same-conversation managed execution bridge for AICC.",
+  "permissions": [
+    "storage",
+    "tabs",
+    "alarms",
+    "scripting"
+  ],
   "host_permissions": [
     "https://chatgpt.com/*",
     "http://127.0.0.1:1420/*"
@@ -12,11 +17,17 @@
     "service_worker": "background.js",
     "type": "module"
   },
-  "content_scripts": [{
-    "matches": ["https://chatgpt.com/*"],
-    "js": ["content.js"],
-    "run_at": "document_idle"
-  }],
+  "content_scripts": [
+    {
+      "matches": [
+        "https://chatgpt.com/*"
+      ],
+      "js": [
+        "content.js"
+      ],
+      "run_at": "document_idle"
+    }
+  ],
   "action": {
     "default_title": "AICC V3 Bridge",
     "default_popup": "options.html"

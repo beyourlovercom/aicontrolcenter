@@ -11,6 +11,7 @@ import {createDraftPr,readPrDeliveryFacts} from './lib/github-delivery.mjs';
 import {ensureBridgeCredential,verifyBridgeCredential} from './lib/bridge-store.mjs';
 import {bridgeProjection,claimBridgeDelivery,reconcileBridgeStartup,recordBridgeReceipt,submitBridgeRequest} from './lib/bridge-runtime.mjs';
 import {createChatgptProjectionStore} from './lib/chatgpt-projection.mjs';
+import {assertNextStepLocal,claimNextStep,createNextStepRequest,readNextStepRequest,reconcileNextStepStartup,recordNextStepReceipt} from './lib/next-step-runtime.mjs';
 
 const root=dirname(fileURLToPath(import.meta.url));
 const publicRoot=join(root,'public');
@@ -111,6 +112,14 @@ function bridgeErrorStatus(code){
   return 503;
 }
 function bridgeError(res,error){const errorCode=error?.code||'BRIDGE_REQUEST_INVALID';return json(res,bridgeErrorStatus(errorCode),{ok:false,errorCode});}
+function nextStepErrorStatus(code){
+  if(code==='NEXT_STEP_NOT_FOUND')return 404;
+  if(['NEXT_STEP_INPUT_INVALID','NEXT_STEP_CONVERSATION_REQUIRED','REQUEST_JSON_INVALID'].includes(code))return 400;
+  if(code==='NEXT_STEP_LOCAL_ONLY')return 403;
+  if(['NEXT_STEP_RUNTIME_DRIFT','NEXT_STEP_WORKTREE_DIRTY','NEXT_STEP_EXECUTOR_NOT_READY','NEXT_STEP_EXECUTOR_BUSY','NEXT_STEP_CONVERSATION_STALE','NEXT_STEP_ACTIVE','NEXT_STEP_CLAIM_MISMATCH','NEXT_STEP_RECEIPT_INVALID'].includes(code))return 409;
+  return 503;
+}
+function nextStepError(res,error){const errorCode=error?.code||'NEXT_STEP_INVALID';return json(res,nextStepErrorStatus(errorCode),{ok:false,errorCode});}
 function requireBridgeAuth(req,env,options={}){
   const remote=req.socket?.remoteAddress||'';
   if(!['127.0.0.1','::1','::ffff:127.0.0.1'].includes(remote)){const error=new Error('BRIDGE_AUTH_REQUIRED');error.code='BRIDGE_AUTH_REQUIRED';throw error;}
@@ -135,7 +144,7 @@ export function createAiccV3Server(options={}){
   const prDeliveryOptions=options.prDeliveryOptions||{};
   const bridgeOptions={...(options.bridgeOptions||{}),executorOptions:options.bridgeOptions?.executorOptions||executorOptions};
   const chatgptProjection=options.chatgptProjectionStore||createChatgptProjectionStore();
-  try{reconcileBridgeStartup(loadProjectContext(env),env,bridgeOptions);}catch{}
+  try{const context=loadProjectContext(env);reconcileBridgeStartup(context,env,bridgeOptions);reconcileNextStepStartup(context,env,options.nextStepOptions||{});}catch{}
   return createHttpServer(async(req,res)=>{
     const url=new URL(req.url||'/',`http://${req.headers.host||'localhost'}`);
     if(handleExtensionCors(req,res,url,env))return;
@@ -199,6 +208,20 @@ export function createAiccV3Server(options={}){
       catch(error){return prError(res,error);}
     }
 
+    if(req.method==='POST'&&url.pathname==='/api/next-step/requests'){
+      try{
+        assertNextStepLocal(req.socket?.remoteAddress||'');const input=await readJson(req,16384);const context=loadProjectContext(env);
+        const executor=executorStatus(context,env,executorOptions);const snapshot=chatgptProjection.get(input?.conversationId);
+        const created=createNextStepRequest(context,input,{executorReady:Boolean(executor?.readiness?.ready),activeRun:executor?.activeLease?.runId||null,snapshot},env,options.nextStepOptions||{});
+        return json(res,201,{ok:true,...created});
+      }catch(error){return nextStepError(res,error);}
+    }
+    const nextStepRequest=url.pathname.match(/^\/api\/next-step\/requests\/([^/]+)$/);
+    if(req.method==='GET'&&nextStepRequest){
+      try{assertNextStepLocal(req.socket?.remoteAddress||'');const context=loadProjectContext(env);return json(res,200,{available:true,...readNextStepRequest(context,decodeURIComponent(nextStepRequest[1]),env)});}
+      catch(error){return nextStepError(res,error);}
+    }
+
     if(req.method==='GET'&&url.pathname==='/api/chatgpt/snapshots'){
       return json(res,200,{available:true,provider:'chatgpt-web',snapshots:chatgptProjection.list()});
     }
@@ -219,6 +242,15 @@ export function createAiccV3Server(options={}){
     if(req.method==='POST'&&url.pathname==='/api/bridge/snapshots'){
       try{const input=await readJson(req,524288);return json(res,200,{ok:true,snapshot:chatgptProjection.upsert(input)});}
       catch(error){return json(res,400,{ok:false,errorCode:error?.code||'CHATGPT_SNAPSHOT_INVALID'});}
+    }
+    if(req.method==='POST'&&url.pathname==='/api/bridge/next-step/claim'){
+      try{const input=await readJson(req);const context=loadProjectContext(env);const claimed=claimNextStep(context,input,env,options.nextStepOptions||{});return json(res,200,{ok:true,claimed});}
+      catch(error){return nextStepError(res,error);}
+    }
+    const nextStepReceipt=url.pathname.match(/^\/api\/bridge\/next-step\/([^/]+)\/receipt$/);
+    if(req.method==='POST'&&nextStepReceipt){
+      try{const input=await readJson(req,16384);const context=loadProjectContext(env);return json(res,200,{ok:true,...recordNextStepReceipt(context,decodeURIComponent(nextStepReceipt[1]),input,env,options.nextStepOptions||{})});}
+      catch(error){return nextStepError(res,error);}
     }
     if(req.method==='POST'&&url.pathname==='/api/bridge/requests'){
       try{const input=await readJson(req);const context=loadProjectContext(env);return json(res,201,{ok:true,...submitBridgeRequest(context,input,env,bridgeOptions)});}

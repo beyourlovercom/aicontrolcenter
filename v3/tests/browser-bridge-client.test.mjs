@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {join} from 'node:path';
 import {fileURLToPath} from 'node:url';
-import {conversationFromUrl,createOriginBinding,recoveryAction,sameConversation} from '../browser-bridge/core.mjs';
+import {conversationFromUrl,createOriginBinding,parseNextStepDecision,recoveryAction,sameConversation} from '../browser-bridge/core.mjs';
 import {createCoordinator} from '../browser-bridge/coordinator.mjs';
 
 const root=join(fileURLToPath(new URL('..',import.meta.url)));
@@ -43,6 +43,14 @@ test('automatic origin binding carries Assistant WP/Task titles while manual exa
   const manual=createOriginBinding({url:'https://chatgpt.com/c/conv-manual',taskId:'task-existing',taskTitle:'Existing Task',instruction:'manual exact'},ids());
   assert.equal(manual.taskId,'task-existing');assert.equal(manual.workPackageTitle,null);assert.equal(manual.taskTitle,'Existing Task');
   assert.throws(()=>createOriginBinding({url:'https://chatgpt.com/c/conv-manual',taskId:'task-existing',instruction:'manual exact'},ids()),e=>e.code==='BRIDGE_TASK_TITLE_REQUIRED');
+});
+
+test('strict next-step protocol allows EXECUTE or STOP_GATE only',()=>{
+  const execute=parseNextStepDecision(`AICC_NEXT_STEP_V1\nAICC_DECISION: EXECUTE\nAICC_WORK_PACKAGE: V5.4 Closed Loop\nAICC_TASK: Wire exact next step\nAICC_INSTRUCTION_BEGIN\nImplement only the exact task.\nRun tests.\nAICC_INSTRUCTION_END\nAICC_GATE_REASON: NONE`);
+  assert.equal(execute.decision,'EXECUTE');assert.equal(execute.taskTitle,'Wire exact next step');assert.match(execute.instruction,/Run tests/);
+  const stop=parseNextStepDecision(`AICC_NEXT_STEP_V1\nAICC_DECISION: STOP_GATE\nAICC_WORK_PACKAGE:\nAICC_TASK:\nAICC_INSTRUCTION_BEGIN\n\nAICC_INSTRUCTION_END\nAICC_GATE_REASON: Owner merge approval required`);
+  assert.deepEqual(stop,{decision:'STOP_GATE',gateReason:'Owner merge approval required'});
+  assert.throws(()=>parseNextStepDecision('AICC_NEXT_STEP_V1\nAICC_DECISION: EXECUTE\nAICC_TASK: missing wp'),e=>e.code==='NEXT_STEP_DECISION_INVALID');
 });
 
 test('enqueueAction ACKs from durable ledger before any network submission',async()=>{

@@ -1,4 +1,4 @@
-import {conversationFromUrl,sameConversation} from './core.mjs';
+import {conversationFromUrl,parseNextStepDecision,sameConversation} from './core.mjs';
 import {createCoordinator} from './coordinator.mjs';
 
 const BASE='http://127.0.0.1:1420';
@@ -35,7 +35,9 @@ const api={
   async getRequest(requestId){return (await request(`/api/bridge/requests/${encodeURIComponent(requestId)}`)).bridge;},
   async claim(requestId,body){return request(`/api/bridge/requests/${encodeURIComponent(requestId)}/claim`,{method:'POST',body});},
   async receipt(requestId,body){return request(`/api/bridge/requests/${encodeURIComponent(requestId)}/receipt`,{method:'POST',body});},
-  async publishSnapshot(body){return request('/api/bridge/snapshots',{method:'POST',body,timeout:10000});}
+  async publishSnapshot(body){return request('/api/bridge/snapshots',{method:'POST',body,timeout:10000});},
+  async claimNextStep(body){return (await request('/api/bridge/next-step/claim',{method:'POST',body,timeout:10000})).claimed;},
+  async nextStepReceipt(requestId,body){return request(`/api/bridge/next-step/${encodeURIComponent(requestId)}/receipt`,{method:'POST',body,timeout:10000});}
 };
 
 async function waitTabComplete(tabId,timeout=15000){
@@ -65,6 +67,26 @@ async function exactConversationTab(input){
   if(!sameConversation(input.conversationId,loaded.url||''))throw new Error('BRIDGE_CONVERSATION_MISMATCH');
   return loaded;
 }
+async function existingConversationTab(input){
+  if(Number.isInteger(input.tabId)){
+    try{const tab=await chrome.tabs.get(input.tabId);if(sameConversation(input.conversationId,tab.url||''))return tab;}catch{}
+  }
+  const tabs=await chrome.tabs.query({url:'https://chatgpt.com/*'});return tabs.find(tab=>sameConversation(input.conversationId,tab.url||''))||null;
+}
+const planningDestination={
+  async plan(input){
+    const tab=await existingConversationTab(input);if(!tab)return {outcome:'ABORTED_BEFORE_SEND',reason:'NEXT_STEP_BOUND_TAB_NOT_OPEN'};
+    try{
+      const response=await chrome.tabs.sendMessage(tab.id,{type:'AICC_PLAN_NEXT_STEP',conversationId:input.conversationId,content:input.prompt,contentSha256:input.promptSha256});
+      return {...response,tabId:tab.id};
+    }catch(error){
+      const text=String(error?.message||error||'');
+      if(text.includes('Receiving end does not exist')||text.includes('Could not establish connection'))return {outcome:'ABORTED_BEFORE_SEND',reason:'NEXT_STEP_CONTENT_SCRIPT_UNAVAILABLE'};
+      return {outcome:'UNCERTAIN',reason:'NEXT_STEP_PLAN_TRANSPORT_UNCERTAIN'};
+    }
+  }
+};
+
 const destination={
   async deliver(input){
     let tab;try{tab=await exactConversationTab(input);}catch{return {outcome:'ABORTED_BEFORE_SEND'};}
@@ -128,6 +150,48 @@ async function autoPair(){
   if(typeof value?.token!=='string'||value.token.length<32)throw Object.assign(new Error('BRIDGE_AUTH_REQUIRED'),{code:'BRIDGE_AUTH_REQUIRED'});
   return savePairing(value.token);
 }
+const NEXT_STEP_RECEIPTS_KEY='aiccNextStepReceiptsV1';
+async function nextStepReceiptMap(){
+  return (await storage.get(NEXT_STEP_RECEIPTS_KEY))||{};
+}
+async function persistNextStepReceipt(requestId,body){
+  const map=await nextStepReceiptMap();
+  map[requestId]=body;
+  await storage.set(NEXT_STEP_RECEIPTS_KEY,map);
+  return body;
+}
+async function flushNextStepReceipts(){
+  const map=await nextStepReceiptMap();
+  for(const [requestId,body] of Object.entries(map)){
+    try{await api.nextStepReceipt(requestId,body);delete map[requestId];await storage.set(NEXT_STEP_RECEIPTS_KEY,map);}catch{}
+  }
+}
+let nextStepPollRunning=false;
+async function pollNextStep(){
+  if(nextStepPollRunning)return;nextStepPollRunning=true;
+  try{
+    await flushNextStepReceipts();
+    const bridgeInstanceId=await coordinator.instanceId();const claimed=await api.claimNextStep({bridgeInstanceId});if(!claimed?.request||!claimed?.state?.claim)return;
+    const requestValue=claimed.request;const claimId=claimed.state.claim.claimId;
+    const planned=await planningDestination.plan(requestValue);
+    if(planned?.outcome==='ABORTED_BEFORE_SEND'){
+      const body={claimId,outcome:'ABORTED_BEFORE_SEND',errorCode:planned.reason||'NEXT_STEP_ABORTED_BEFORE_SEND'};await persistNextStepReceipt(requestValue.requestId,body);await flushNextStepReceipts();return;
+    }
+    if(planned?.outcome!=='DELIVERED'||typeof planned.assistantText!=='string'){
+      const body={claimId,outcome:'UNCERTAIN',errorCode:planned?.reason||'NEXT_STEP_DECISION_UNCERTAIN'};await persistNextStepReceipt(requestValue.requestId,body);await flushNextStepReceipts();return;
+    }
+    let decision;try{decision=parseNextStepDecision(planned.assistantText);}catch{
+      const body={claimId,outcome:'UNCERTAIN',errorCode:'NEXT_STEP_DECISION_INVALID'};await persistNextStepReceipt(requestValue.requestId,body);await flushNextStepReceipts();return;
+    }
+    if(decision.decision==='STOP_GATE'){
+      const body={claimId,outcome:'STOP_GATE',decision};await persistNextStepReceipt(requestValue.requestId,body);await flushNextStepReceipts();return;
+    }
+    const queued=await coordinator.enqueueAction({url:requestValue.conversationUrl,tabId:planned.tabId,workPackageTitle:decision.workPackageTitle,taskTitle:decision.taskTitle,instruction:decision.instruction});
+    const body={claimId,outcome:'EXECUTION_QUEUED',bridgeRequestId:queued.ledger.requestId,decision};await persistNextStepReceipt(requestValue.requestId,body);await flushNextStepReceipts();
+    void coordinator.pollOne(queued.ledger.requestId).catch(()=>{}).finally(()=>burstPoll());
+  }catch{}finally{nextStepPollRunning=false;}
+}
+
 let burstRunning=false;
 async function burstPoll(){
   if(burstRunning)return;burstRunning=true;
@@ -152,6 +216,7 @@ function errorBody(error){return {ok:false,errorCode:error?.code||error?.message
 chrome.runtime.onMessage.addListener((message,sender,sendResponse)=>{
   void (async()=>{
     if(message?.type==='AICC_LIST_TASKS')return sendResponse({ok:true,tasks:await listTasks()});
+    if(message?.type==='AICC_NEXT_STEP_POLL'){void pollNextStep();return sendResponse({ok:true});}
     if(message?.type==='AICC_SAVE_PAIRING')return sendResponse({ok:true,...await savePairing(message.token)});
     if(message?.type==='AICC_PAIRING_STATUS'){try{await autoPair();}catch{}return sendResponse({ok:true,...await status()});}
     if(message?.type==='AICC_PUBLISH_SNAPSHOT'){
@@ -192,12 +257,12 @@ async function reinjectOpenChatgptTabs(){
   }
 }
 
-chrome.alarms.onAlarm.addListener(alarm=>{if(alarm.name===ALARM){void coordinator.pollAll();void snapshotOpenChatgptTabs();}});
+chrome.alarms.onAlarm.addListener(alarm=>{if(alarm.name===ALARM){void coordinator.pollAll();void snapshotOpenChatgptTabs();void pollNextStep();}});
 chrome.runtime.onStartup.addListener(()=>{void ensureAlarm();void reinjectOpenChatgptTabs();void autoPair().then(()=>coordinator.pollAll()).catch(()=>{});
-void snapshotOpenChatgptTabs();});
-chrome.runtime.onInstalled.addListener(()=>{void ensureAlarm();void reinjectOpenChatgptTabs();void autoPair().catch(()=>{});void snapshotOpenChatgptTabs();});
+void snapshotOpenChatgptTabs();void pollNextStep();});
+chrome.runtime.onInstalled.addListener(()=>{void ensureAlarm();void reinjectOpenChatgptTabs();void autoPair().catch(()=>{});void snapshotOpenChatgptTabs();void pollNextStep();});
 void ensureAlarm();
 void reinjectOpenChatgptTabs();
-void autoPair().then(()=>coordinator.pollAll()).catch(()=>{});
+void autoPair().then(()=>{void coordinator.pollAll();void pollNextStep();}).catch(()=>{});
 
 chrome.tabs.onUpdated.addListener((tabId,info,tab)=>{if(info.status==='complete'&&sameConversationSafe(tab?.url||''))void publishTabSnapshot({...tab,id:tabId});});
