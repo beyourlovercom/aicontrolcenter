@@ -119,6 +119,7 @@ test('extension manifest and source keep credential privileged and forbid active
   assert.equal(manifest.permissions.includes('activeTab'),false);assert.equal(manifest.permissions.includes('scripting'),true);assert.equal(manifest.host_permissions.includes('<all_urls>'),false);
   const background=readFileSync(join(root,'browser-bridge/background.js'),'utf8');
   const options=readFileSync(join(root,'browser-bridge/options.js'),'utf8');
+  assert.match(options,new RegExp(`EXPECTED_VERSION='${manifest.version.replaceAll('.', '\\.')}';`));
   const content=readFileSync(join(root,'browser-bridge/content.js'),'utf8');
   const pairing=readFileSync(join(root,'scripts/copy-bridge-pairing-token.mjs'),'utf8');
   assert.match(content,/Task Name/);assert.match(content,/Task Name is required\. Submission blocked\./);assert.match(content,/dataset\.taskTitle/);assert.match(background,/BRIDGE_TASK_TITLE_MISMATCH/);
