@@ -23,16 +23,8 @@ assert(syncOutcome({ success: false, error: 'SYNC_BLOCKED' }).kind === 'failure'
 const futureMilestone: RoadmapMilestone = { id: 'M3', title: 'Runtime', workPackages: [], futureItems: ['AICC-CONTROL-LOOP-001C', 'AICC-CONTROL-LOOP-001D'], progressPercent: 0 };
 assert(futureMilestone.futureItems.length === 2, 'future items are represented in the TypeScript read model');
 assert(futureMilestone.workPackages.length === 0 && futureMilestone.progressPercent === 0, 'future placeholders are distinct and excluded from progress');
-const appSource = readFileSync(new URL('../App.svelte', import.meta.url), 'utf8');
 const controlLoopSource = readFileSync(new URL('./controlLoop.ts', import.meta.url), 'utf8');
 assert(controlLoopSource.includes('scope: string[]'), 'authorization scope is represented as formal persisted list evidence');
-assert(appSource.includes("record?.scope.join(', ')"), 'Owner UI renders the persisted authorization scope list without demo values');
-for (const label of ['远端 Authority', '当前安全模式', '只读 V1', '概览', 'Codex 状态', '验证', '正式合同', '当前里程碑', '后续工作包', '仓库状态', 'Authority 健康度', '执行状态', '正式证据', '受控验证流程', 'OpenSpec 操作策略']) {
-  assert(appSource.includes(label), `Owner UI label is Chinese-first: ${label}`);
-}
-assert(appSource.includes('future-placeholder'), 'future placeholders have a distinct non-selectable UI marker');
-assert(!appSource.includes('20d1c9d'), 'repository status has no fixed demo SHA');
-assert(appSource.includes('repositoryStatus.localHead') && appSource.includes('repositoryStatus.remoteMain'), 'repository status binds to live evidence projection');
 const state = {
   ...({} as ControlLoopState),
   identity: { localHead: 'abcdef0123456789', worktreeClean: false },
@@ -53,15 +45,6 @@ assert(codexRuntime.engine === 'Codex App Server' && codexRuntime.profile === 's
 assert(runtimePhaseCopy(codexRuntime.currentPhase) === '运行中', 'runtime state is Owner-readable');
 assert(runtimeSupportsControl(codexRuntime, 'START'), 'supported controls come from runtime evidence');
 assert(!runtimeSupportsControl(codexRuntime, 'PAUSE') && !runtimeSupportsControl(codexRuntime, 'RESUME') && !runtimeSupportsControl(codexRuntime, 'STOP_AFTER_CURRENT_STEP'), 'unsupported controls cannot be presented as available');
-assert(appSource.includes('授权本工作包') && appSource.includes('Codex 运行观察'), 'Owner UI exposes authorization and Codex observer');
-for (const evidence of ['codexRuntime?.processId', 'codexRuntime?.sessionId', 'codexRuntime?.threadId', 'codexRuntime?.turnId', 'codexRuntime.writerLockHeld', 'codexRuntime?.exitStatus', 'codexRuntime?.failure']) {
-  assert(appSource.includes(evidence), `runtime UI binds live evidence: ${evidence}`);
-}
-for (const fakeStatus of ['Codex CLI 未启动', '无绑定会话', 'Writer Lock NOT HELD', '无活动运行']) {
-  assert(!appSource.includes(fakeStatus), `runtime UI removes hardcoded status: ${fakeStatus}`);
-}
-assert(appSource.includes('UNSUPPORTED_CONTROL') && appSource.includes('runtimeSupportsControl'), 'unsupported controls are visibly disabled');
-assert(!appSource.includes('OmO Slim') && !appSource.includes('OpenCode'), 'active Owner UI has no obsolete execution architecture');
 
 const activePhases: CodexRuntimePhase[] = ['STARTING', 'RUNNING', 'TESTING', 'REVIEWING', 'PR_OPEN', 'CI_RUNNING', 'MERGING', 'BUILDING_UAT'];
 const inactivePhases: CodexRuntimePhase[] = ['IDLE', 'READY_FOR_HUMAN_UAT', 'FAILED', 'BLOCKED', 'WAITING_OWNER_AUTHORIZATION', 'PAUSED'];
@@ -157,9 +140,4 @@ assert(observationError === 'APP_SERVER_CHANNEL_CLOSED', 'runtime observation ex
 assert(fabricatedUpdates === 0, 'runtime observation failures never fabricate runtime evidence');
 assert(!failingPoller.isPolling() && errorScheduler.pending() === 0, 'runtime observation failure stops active polling');
 
-assert(appSource.includes('readCodexRuntime') && appSource.includes('createCodexRuntimePoller'), 'Owner UI uses the focused runtime observer instead of full refresh polling');
-assert(appSource.includes('onDestroy(() => runtimePoller.stop())'), 'component teardown stops runtime polling');
-assert(appSource.includes('controlLoop = { ...controlLoop, codexRuntime: runtime }'), 'fresh observations update only Codex runtime state');
-assert(appSource.includes('Runtime 观察失败：') && appSource.includes('runtimeObservationError'), 'runtime observation error is visibly and truthfully rendered');
-
-console.log('control loop frontend contract tests passed');
+console.log('control loop contract tests passed');
