@@ -4,6 +4,7 @@ import {
   MAX_ACTIVE_ROOMS,
   closeExecutionRoom,
   createDefaultExecutionRoomStore,
+  createExecutionRoom,
   loadExecutionRoomStore,
   patchExecutionRoomUi,
   persistExecutionRoomStore,
@@ -50,7 +51,15 @@ assert.equal(inquiryClosed.rooms.inquiry.branch, defaults.rooms.inquiry.branch);
 assert.equal(inquiryClosed.rooms.inquiry.worktree, defaults.rooms.inquiry.worktree);
 
 assert.throws(() => reopenExecutionRoom(defaults, 'missing'), /ROOM_NOT_FOUND/);
-assert.throws(() => reopenExecutionRoom(defaults, 'inquiry'), undefined);
+const fifthRoom = {
+  ...defaults.rooms.traffic,
+  roomId: 'fifth',
+  name: 'Fifth Room',
+  workstreamId: 'fifth-room',
+  branch: 'feature/fifth-room',
+  worktree: '/worktrees/fifth-room'
+};
+assert.throws(() => createExecutionRoom(defaults, fifthRoom), /ACTIVE_ROOM_LIMIT_REACHED/);
 
 const inquiryReopened = reopenExecutionRoom(inquiryClosed, 'inquiry');
 assert.equal(inquiryReopened.activeRoomIds.length, MAX_ACTIVE_ROOMS);
