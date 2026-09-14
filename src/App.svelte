@@ -47,7 +47,7 @@
     commit(selectMainlineView(roomStore));
   }
 
-  function closeRoom(event: MouseEvent, id: string) {
+  function closeRoom(event: Event, id: string) {
     event.stopPropagation();
     commit(closeExecutionRoom(roomStore, id));
   }
@@ -121,7 +121,7 @@
         <button class:active={room.roomId === activeViewId} class="room-tab" type="button" onclick={() => selectRoom(room.roomId)}>
           <span class="room-running-dot" aria-hidden="true"></span>
           <span>{room.name}</span>
-          <span class="tab-close" role="button" tabindex="0" aria-label={`关闭 ${room.name}`} onclick={(event) => closeRoom(event, room.roomId)}>×</span>
+          <span class="tab-close" role="button" tabindex="0" aria-label={`关闭 ${room.name}`} onclick={(event) => closeRoom(event, room.roomId)} onkeydown={(event) => { if (event.key === 'Enter' || event.key === ' ') closeRoom(event, room.roomId); }}>×</span>
         </button>
       {/each}
       <button class="add-room" type="button" onclick={addOrReopenRoom}>+</button>
@@ -271,7 +271,7 @@
         </div>
 
         <div class="composer-shell">
-          <div class="composer-input"><span class="composer-plus">＋</span><input class="composer-draft" value={activeRoom.ui.draft} oninput={updateDraft} placeholder="输入当前 Room 的独立测试草稿…" /><span class="composer-mic">⌁</span></div>
+          <div class="composer-input"><span class="composer-plus">＋</span><input class="composer-draft" style="width:100%;border:0;outline:0;background:transparent;color:#111;font:inherit;" value={activeRoom.ui.draft} oninput={updateDraft} placeholder="输入当前 Room 的独立测试草稿…" /><span class="composer-mic">⌁</span></div>
           <button class="next-step-button" type="button" onclick={() => announce('V5.1 STOP Gate：Owner Isolation UAT PASS 前不进入 V5.2')}>推进下一步</button>
         </div>
       </main>
