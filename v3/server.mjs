@@ -10,6 +10,7 @@ import {readOrMaterializeResult} from './lib/result-store.mjs';
 import {createDraftPr,readPrDeliveryFacts} from './lib/github-delivery.mjs';
 import {ensureBridgeCredential,verifyBridgeCredential} from './lib/bridge-store.mjs';
 import {bridgeProjection,claimBridgeDelivery,reconcileBridgeStartup,recordBridgeReceipt,submitBridgeRequest} from './lib/bridge-runtime.mjs';
+import {createChatgptProjectionStore} from './lib/chatgpt-projection.mjs';
 
 const root=dirname(fileURLToPath(import.meta.url));
 const publicRoot=join(root,'public');
@@ -44,6 +45,18 @@ function handleExtensionCors(req,res,url,env){
   res.setHeader('access-control-allow-headers','content-type, x-aicc-bridge-token');
   res.setHeader('access-control-max-age','600');
   if(req.headers['access-control-request-private-network']==='true')res.setHeader('access-control-allow-private-network','true');
+  if(req.method==='OPTIONS'){res.writeHead(204,{'cache-control':'no-store'});res.end();return true;}
+  return false;
+}
+function handleLocalUiCors(req,res,url){
+  if(!url.pathname.startsWith('/api/chatgpt/'))return false;
+  const rawOrigin=req.headers.origin;
+  if(typeof rawOrigin!=='string')return false;
+  if(!/^http:\/\/(127\.0\.0\.1|localhost):\d+$/.test(rawOrigin)){json(res,403,{ok:false,errorCode:'CHATGPT_PROJECTION_ORIGIN_DENIED'});return true;}
+  res.setHeader('access-control-allow-origin',rawOrigin);
+  res.setHeader('vary','Origin');
+  res.setHeader('access-control-allow-methods','GET, OPTIONS');
+  res.setHeader('access-control-allow-headers','content-type');
   if(req.method==='OPTIONS'){res.writeHead(204,{'cache-control':'no-store'});res.end();return true;}
   return false;
 }
@@ -105,11 +118,11 @@ function requireBridgeAuth(req,env,options={}){
   verifyBridgeCredential(token,env,options.credentialOptions||{});
 }
 
-async function readJson(req){
+async function readJson(req,maxBytes=65536){
   let body='';
   for await(const chunk of req){
     body+=chunk;
-    if(body.length>65536){const error=new Error('REQUEST_JSON_INVALID');error.code='REQUEST_JSON_INVALID';throw error;}
+    if(body.length>maxBytes){const error=new Error('REQUEST_JSON_INVALID');error.code='REQUEST_JSON_INVALID';throw error;}
   }
   try{return JSON.parse(body||'{}');}
   catch{const error=new Error('REQUEST_JSON_INVALID');error.code='REQUEST_JSON_INVALID';throw error;}
@@ -121,10 +134,12 @@ export function createAiccV3Server(options={}){
   const executorOptions=options.executorOptions||{};
   const prDeliveryOptions=options.prDeliveryOptions||{};
   const bridgeOptions={...(options.bridgeOptions||{}),executorOptions:options.bridgeOptions?.executorOptions||executorOptions};
+  const chatgptProjection=options.chatgptProjectionStore||createChatgptProjectionStore();
   try{reconcileBridgeStartup(loadProjectContext(env),env,bridgeOptions);}catch{}
   return createHttpServer(async(req,res)=>{
     const url=new URL(req.url||'/',`http://${req.headers.host||'localhost'}`);
     if(handleExtensionCors(req,res,url,env))return;
+    if(handleLocalUiCors(req,res,url))return;
     if(req.method==='GET'&&url.pathname==='/api/health'){
       try{
         const context=loadProjectContext(env);
@@ -184,6 +199,15 @@ export function createAiccV3Server(options={}){
       catch(error){return prError(res,error);}
     }
 
+    if(req.method==='GET'&&url.pathname==='/api/chatgpt/snapshots'){
+      return json(res,200,{available:true,provider:'chatgpt-web',snapshots:chatgptProjection.list()});
+    }
+    const chatgptSnapshot=url.pathname.match(/^\/api\/chatgpt\/snapshots\/([^/]+)$/);
+    if(req.method==='GET'&&chatgptSnapshot){
+      const conversationId=decodeURIComponent(chatgptSnapshot[1]);const snapshot=chatgptProjection.get(conversationId);
+      return snapshot?json(res,200,{available:true,snapshot}):json(res,404,{available:false,errorCode:'CHATGPT_SNAPSHOT_NOT_FOUND'});
+    }
+
     if(req.method==='POST'&&url.pathname==='/api/bridge/bootstrap'){
       const remote=req.socket?.remoteAddress||'';const origin=extensionOrigin(req,env);
       if(!['127.0.0.1','::1','::ffff:127.0.0.1'].includes(remote)||!origin)return json(res,403,{ok:false,errorCode:'BRIDGE_ORIGIN_DENIED'});
@@ -191,6 +215,10 @@ export function createAiccV3Server(options={}){
     }
     if(url.pathname.startsWith('/api/bridge/')){
       try{requireBridgeAuth(req,env,bridgeOptions);}catch(error){return bridgeError(res,error);}
+    }
+    if(req.method==='POST'&&url.pathname==='/api/bridge/snapshots'){
+      try{const input=await readJson(req,524288);return json(res,200,{ok:true,snapshot:chatgptProjection.upsert(input)});}
+      catch(error){return json(res,400,{ok:false,errorCode:error?.code||'CHATGPT_SNAPSHOT_INVALID'});}
     }
     if(req.method==='POST'&&url.pathname==='/api/bridge/requests'){
       try{const input=await readJson(req);const context=loadProjectContext(env);return json(res,201,{ok:true,...submitBridgeRequest(context,input,env,bridgeOptions)});}

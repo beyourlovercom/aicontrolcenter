@@ -340,3 +340,13 @@ body { color: #111814; }
   .mainline-kpis { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .room-overview-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
+
+/* V5.2 real Chrome ChatGPT binding / projection */
+.binding-actions { display:flex; align-items:center; gap:8px; max-width:46%; }
+.live-binding { overflow:hidden; text-overflow:ellipsis; color:#0d4b32; background:#e7f4ec; border-color:#cae5d5; }
+.binding-link { border:1px solid #d8dfd9; background:#fff; color:#222; border-radius:9px; padding:6px 9px; cursor:pointer; font:inherit; font-size:11.5px; }
+.conversation-select { max-width:360px; min-width:240px; height:34px; border:1px solid #d8dfd9; border-radius:10px; background:#fff; color:#111; padding:0 10px; font:inherit; font-size:12px; }
+.live-conversation-notice { border-color:#cde5d5; background:#f4faf6; }
+.stale-conversation-notice { border-color:#eadbb5; background:#fffaf0; }
+.projected-message { white-space:pre-wrap; overflow-wrap:anywhere; }
+.chat-preview.user-message .message-avatar { color:#222; background:#eef2ef; }

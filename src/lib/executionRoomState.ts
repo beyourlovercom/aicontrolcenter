@@ -23,6 +23,8 @@ export type ExecutionRoomState = {
   branch: string;
   worktree: string;
   gptConversationBinding: string | null;
+  gptConversationUrl: string | null;
+  gptConversationTitle: string | null;
   codexSession: string | null;
   runtime: string | null;
   currentWp: string;
@@ -73,6 +75,8 @@ function room(
     branch,
     worktree,
     gptConversationBinding: null,
+    gptConversationUrl: null,
+    gptConversationTitle: null,
     codexSession: null,
     runtime: null,
     currentWp: 'V5.1 — Room State / Isolation',
@@ -121,12 +125,18 @@ export function normalizeExecutionRoomStore(candidate: ExecutionRoomStore): Exec
     ? candidate.activeViewId
     : 'mainline';
 
+  const rooms = Object.fromEntries(Object.entries(candidate.rooms).map(([id, roomState]) => [id, {
+    ...roomState,
+    gptConversationBinding: typeof roomState.gptConversationBinding === 'string' ? roomState.gptConversationBinding : null,
+    gptConversationUrl: typeof roomState.gptConversationUrl === 'string' ? roomState.gptConversationUrl : null,
+    gptConversationTitle: typeof roomState.gptConversationTitle === 'string' ? roomState.gptConversationTitle : null
+  }]));
   return {
     version: 1,
     activeViewId,
     activeRoomIds,
     roomOrder,
-    rooms: { ...candidate.rooms }
+    rooms
   };
 }
 
@@ -189,6 +199,49 @@ export function createExecutionRoom(store: ExecutionRoomStore, nextRoom: Executi
     roomOrder: [...store.roomOrder, nextRoom.roomId],
     rooms: { ...store.rooms, [nextRoom.roomId]: nextRoom }
   };
+}
+
+export type GptConversationBindingInput = {
+  conversationId: string;
+  conversationUrl: string;
+  title?: string | null;
+};
+
+export function chatgptConversationIdentity(value: string): { conversationId: string; conversationUrl: string } {
+  let url: URL;
+  try { url = new URL(value); } catch { throw new Error('CHATGPT_CONVERSATION_URL_INVALID'); }
+  if (url.protocol !== 'https:' || url.hostname !== 'chatgpt.com') throw new Error('CHATGPT_CONVERSATION_URL_INVALID');
+  const parts = url.pathname.split('/').filter(Boolean);
+  const marker = parts.lastIndexOf('c');
+  const conversationId = marker >= 0 ? decodeURIComponent(parts[marker + 1] ?? '') : '';
+  if (!conversationId || conversationId.includes('/') || /\s/.test(conversationId)) throw new Error('CHATGPT_CONVERSATION_ID_INVALID');
+  return { conversationId, conversationUrl: `https://chatgpt.com/c/${encodeURIComponent(conversationId)}` };
+}
+
+export function bindGptConversation(
+  store: ExecutionRoomStore,
+  roomId: string,
+  binding: GptConversationBindingInput
+): ExecutionRoomStore {
+  const identity = chatgptConversationIdentity(binding.conversationUrl);
+  if (binding.conversationId !== identity.conversationId) throw new Error('CHATGPT_CONVERSATION_ID_MISMATCH');
+  const owner = Object.values(store.rooms).find((roomState) => roomState.roomId !== roomId && roomState.gptConversationBinding === identity.conversationId);
+  if (owner) throw new Error('CHATGPT_CONVERSATION_ALREADY_BOUND');
+  return updateExecutionRoom(store, roomId, (current) => ({
+    ...current,
+    gptConversationBinding: identity.conversationId,
+    gptConversationUrl: identity.conversationUrl,
+    gptConversationTitle: typeof binding.title === 'string' && binding.title.trim() ? binding.title.trim().slice(0, 300) : null
+  }));
+}
+
+export function unbindGptConversation(store: ExecutionRoomStore, roomId: string): ExecutionRoomStore {
+  return updateExecutionRoom(store, roomId, (current) => ({
+    ...current,
+    gptConversationBinding: null,
+    gptConversationUrl: null,
+    gptConversationTitle: null
+  }));
 }
 
 export function updateExecutionRoom(
