@@ -17,11 +17,14 @@
     type RoadmapSection
   } from './lib/executionRoomState';
   import { readChatgptSnapshots, snapshotForConversation, type ChatgptConversationSnapshot } from './lib/chatgptProjection';
+  import { readExecutorFacts, roomRuntimeBinding, type ExecutorFactsProjection } from './lib/executorFacts';
 
   let roomStore: ExecutionRoomStore = createDefaultExecutionRoomStore();
   let toast = '';
   let chatgptSnapshots: ChatgptConversationSnapshot[] = [];
   let projectionError = '';
+  let executorFacts: ExecutorFactsProjection | null = null;
+  let executorFactsError = '';
 
   $: activeViewId = roomStore.activeViewId;
   $: activeRooms = roomStore.activeRoomIds.map((id) => roomStore.rooms[id]).filter(Boolean);
@@ -32,6 +35,10 @@
   $: collapsed = activeRoom?.ui.collapsedSections ?? { blueprint: false, wp: false, pr: false, task: false, gate: false };
   $: activeSnapshot = snapshotForConversation(chatgptSnapshots, activeRoom?.gptConversationBinding ?? null);
   $: boundRoomCount = allRooms.filter((room) => Boolean(room.gptConversationBinding)).length;
+  $: runtimeBinding = activeRoom ? roomRuntimeBinding(activeRoom.branch, activeRoom.worktree, executorFacts) : 'UNAVAILABLE';
+  $: actualRepository = executorFacts?.project.value?.repository ?? null;
+  $: actualExecutor = executorFacts?.executor.value ?? null;
+  $: actualPrDelivery = executorFacts?.prDelivery.value ?? null;
 
   onMount(() => {
     roomStore = loadExecutionRoomStore(window.localStorage);
@@ -47,9 +54,22 @@
         projectionError = error instanceof Error ? error.message : String(error);
       }
     };
+    const refreshFacts = async () => {
+      try {
+        const facts = await readExecutorFacts();
+        if (cancelled) return;
+        executorFacts = facts;
+        executorFactsError = '';
+      } catch (error) {
+        if (cancelled) return;
+        executorFactsError = error instanceof Error ? error.message : String(error);
+      }
+    };
     void refreshProjection();
-    const timer = window.setInterval(() => void refreshProjection(), 1800);
-    return () => { cancelled = true; window.clearInterval(timer); };
+    void refreshFacts();
+    const projectionTimer = window.setInterval(() => void refreshProjection(), 1800);
+    const factsTimer = window.setInterval(() => void refreshFacts(), 6000);
+    return () => { cancelled = true; window.clearInterval(projectionTimer); window.clearInterval(factsTimer); };
   });
 
   function commit(next: ExecutionRoomStore) {
@@ -152,6 +172,29 @@
     const date = new Date(value);
     return Number.isNaN(date.getTime()) ? value : date.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
   }
+
+  function shortSha(value: string | null | undefined) { return value ? value.slice(0, 8) : 'UNAVAILABLE'; }
+  function ciSummary() {
+    if (!executorFacts?.prDelivery.available || !actualPrDelivery) return executorFacts?.prDelivery.errorCode ?? 'UNAVAILABLE';
+    const checks = actualPrDelivery.checks;
+    if (!checks.length) return 'NO CHECKS';
+    const passed = checks.filter((check) => check.conclusion === 'success').length;
+    const failed = checks.filter((check) => check.conclusion === 'failure').length;
+    const running = checks.filter((check) => check.status !== 'completed').length;
+    return `${passed} PASS · ${failed} FAIL · ${running} RUNNING`;
+  }
+  function prSummary() {
+    if (!executorFacts?.prDelivery.available || !actualPrDelivery) return executorFacts?.prDelivery.errorCode ?? 'UNAVAILABLE';
+    const open = actualPrDelivery.pullRequests[0];
+    return open ? `#${open.number} · ${open.isDraft ? 'DRAFT' : open.state}` : 'NONE';
+  }
+  function runSummary() {
+    const run = actualExecutor?.latestRun as Record<string, unknown> | null | undefined;
+    if (!run) return 'IDLE';
+    const runId = typeof run.runId === 'string' ? run.runId.slice(0, 8) : 'UNKNOWN';
+    const state = typeof run.state === 'string' ? run.state : 'UNKNOWN';
+    return `${runId} · ${state}`;
+  }
 </script>
 
 <div class="aicc-v5-shell">
@@ -163,7 +206,7 @@
         <div class="brand-subtitle">Multi-Execution Workbench</div>
       </div>
     </div>
-    <div class="header-status"><span class="status-dot"></span><span>V5.2 · Chrome GPT Binding · {activeRooms.length} / {MAX_ACTIVE_ROOMS} ACTIVE</span></div>
+    <div class="header-status"><span class="status-dot"></span><span>V5.3 · Real Executor Facts · {activeRooms.length} / {MAX_ACTIVE_ROOMS} ACTIVE</span></div>
   </header>
 
   <nav class="room-tabs" aria-label="Execution Rooms">
@@ -188,25 +231,25 @@
       <div class="mainline-scroll">
         <section class="mainline-hero">
           <div><span class="eyebrow">Always-on Mainline View</span><h1>主线面板</h1><p>完整查看 AICC V5 从 Blueprint 到 Gate 的整体推进，并从这里恢复或切换任一 Execution Room。</p></div>
-          <span class="shell-badge">V5.2 Chrome GPT Binding · 真实会话投影</span>
+          <span class="shell-badge">V5.3 Real Executor Facts · 真实执行事实</span>
         </section>
 
         <section class="mainline-kpis">
-          <article><span>当前阶段</span><strong>V5.2</strong><small>Chrome GPT Binding</small></article>
+          <article><span>当前阶段</span><strong>V5.3</strong><small>Real Executor Facts</small></article>
           <article><span>Active Rooms</span><strong>{activeRooms.length} / {MAX_ACTIVE_ROOMS}</strong><small>状态层硬限制</small></article>
           <article><span>GPT Bindings</span><strong>{boundRoomCount} / {allRooms.length}</strong><small>每个 Room 独立 conversationId</small></article>
           <article><span>Detected GPT</span><strong>{chatgptSnapshots.length}</strong><small>Profile 12 实时 snapshot</small></article>
-          <article><span>V5.1</span><strong>MERGED</strong><small>main@3eebdbe</small></article>
+          <article><span>V5.2</span><strong>MERGED</strong><small>main@42a67a8</small></article>
         </section>
 
         <section class="mainline-card">
-          <div class="mainline-section-heading"><div><h2>完整主线进度视图</h2><p>V5 Roadmap · 从产品方向到多 Room Managed Execution</p></div><span class="mini-progress">V5.2 BINDING</span></div>
+          <div class="mainline-section-heading"><div><h2>完整主线进度视图</h2><p>V5 Roadmap · 从产品方向到多 Room Managed Execution</p></div><span class="mini-progress">V5.3 FACTS</span></div>
           <div class="stage-flow">
             <div class="stage done"><b>✓</b><strong>Blueprint</strong><span>产品方向冻结</span><i><em style="width:100%"></em></i><small>100%</small></div>
             <div class="stage done"><b>✓</b><strong>V5.0 Shell</strong><span>PR #26 已合并</span><i><em style="width:100%"></em></i><small>100%</small></div>
             <div class="stage done"><b>✓</b><strong>V5.1 Isolation</strong><span>PR #27 已合并</span><i><em style="width:100%"></em></i><small>100%</small></div>
-            <div class="stage current"><b>●</b><strong>V5.2 GPT</strong><span>Chrome Binding</span><i><em style="width:65%"></em></i><small>65%</small></div>
-            <div class="stage"><b>○</b><strong>V5.3–5.5</strong><span>Facts / Loop / Hardening</span><i><em style="width:0%"></em></i><small>0%</small></div>
+            <div class="stage done"><b>✓</b><strong>V5.2 GPT</strong><span>PR #28 已合并</span><i><em style="width:100%"></em></i><small>100%</small></div>
+            <div class="stage current"><b>●</b><strong>V5.3 Facts</strong><span>Real Executor Facts</span><i><em style="width:55%"></em></i><small>55%</small></div>
           </div>
         </section>
 
@@ -226,18 +269,18 @@
           <article class="mainline-card">
             <div class="mainline-section-heading"><div><h2>主线 Gate</h2><p>不会自动越过 Owner 审批</p></div></div>
             <div class="gate-list">
-              <div class="gate-row current"><span>●</span><div><strong>V5.2 Chrome GPT Binding Gate</strong><small>真实 Profile 12 会话可发现、绑定、投影且不串 Room</small></div><b>UAT NEXT</b></div>
-              <div class="gate-row"><span>○</span><div><strong>V5.3 Executor Facts Gate</strong><small>branch / PR / CI 与 GitHub 事实一致</small></div><b>LATER</b></div>
-              <div class="gate-row"><span>○</span><div><strong>V5.3 Executor Facts Gate</strong><small>branch / PR / CI 与 GitHub 事实一致</small></div><b>LATER</b></div>
+              <div class="gate-row current"><span>●</span><div><strong>V5.3 Executor Facts Gate</strong><small>Project / Git / PR / CI / Codex 全部来自真实 backend facts</small></div><b>UAT NEXT</b></div>
+              <div class="gate-row"><span>○</span><div><strong>V5.4 Closed Loop Gate</strong><small>GPT exact task → managed executor → GitHub → GPT review</small></div><b>LATER</b></div>
+              <div class="gate-row"><span>○</span><div><strong>V5.5 Hardening Gate</strong><small>多 Room 恢复、资源上限、异常恢复</small></div><b>LATER</b></div>
             </div>
           </article>
           <article class="mainline-card">
-            <div class="mainline-section-heading"><div><h2>V5.2 Source of Truth</h2><p>当前 branch 只负责真实 Chrome GPT Binding / Projection</p></div></div>
+            <div class="mainline-section-heading"><div><h2>V5.3 Source of Truth</h2><p>GitHub 仍是代码 / PR / CI 唯一事实源；右栏只展示 backend 实时读取结果</p></div></div>
             <div class="mainline-facts">
-              <div><span>Base SHA</span><strong>3eebdbe</strong></div>
-              <div><span>V5.2 Branch</span><strong>feat/aicc-v5-chrome-gpt-binding</strong></div>
-              <div><span>Projection</span><strong>Profile 12 · chatgpt-web</strong></div>
-              <div><span>Production</span><strong>1420 · READY · 未重启</strong></div>
+              <div><span>Base SHA</span><strong>42a67a8</strong></div>
+              <div><span>V5.3 Branch</span><strong>feat/aicc-v5-real-executor-facts</strong></div>
+              <div><span>Runtime Branch</span><strong>{actualRepository?.branch ?? 'UNAVAILABLE'}</strong></div>
+              <div><span>Runtime HEAD</span><strong>{shortSha(actualRepository?.head)}</strong></div>
             </div>
           </article>
         </section>
@@ -253,12 +296,12 @@
               <span class="eyebrow">当前 Execution Room</span>
               <h2>{activeRoom.name}</h2>
             </div>
-            <span class="phase-pill">V5.2</span>
+            <span class="phase-pill">V5.3</span>
           </div>
 
           <div class="roadmap-title-row">
             <div><strong>支线进度</strong><span>{activeRoom.projectId} / {activeRoom.workstreamId}</span></div>
-            <span class="mini-progress">GPT Binding</span>
+            <span class="mini-progress">Real Facts</span>
           </div>
 
           <div class="roadmap-groups">
@@ -269,12 +312,12 @@
 
             <section class="roadmap-group">
               <button class="group-toggle" type="button" onclick={() => toggle('wp')}><span>WP · 工作包</span><b>1 / 1</b><i>{collapsed.wp ? '›' : '⌄'}</i></button>
-              {#if !collapsed.wp}<div class="roadmap-item current"><span>●</span><div><strong>V5.2 — Chrome GPT Binding</strong><small>Real conversation projection + per-Room binding</small></div></div>{/if}
+              {#if !collapsed.wp}<div class="roadmap-item current"><span>●</span><div><strong>V5.3 — Real Executor Facts</strong><small>Project / Git / PR / CI / Codex live facts</small></div></div>{/if}
             </section>
 
             <section class="roadmap-group">
               <button class="group-toggle" type="button" onclick={() => toggle('pr')}><span>PR · 需求与计划</span><b>0 / 1</b><i>{collapsed.pr ? '›' : '⌄'}</i></button>
-              {#if !collapsed.pr}<div class="roadmap-item pending"><span>○</span><div><strong>V5.2 Chrome GPT Binding PR</strong><small>Binding UAT 后才进入 PR Gate</small></div></div>{/if}
+              {#if !collapsed.pr}<div class="roadmap-item pending"><span>○</span><div><strong>V5.3 Real Executor Facts PR</strong><small>Facts UAT 后才进入 PR Gate</small></div></div>{/if}
             </section>
 
             <section class="roadmap-group">
@@ -290,7 +333,7 @@
 
             <section class="roadmap-group">
               <button class="group-toggle" type="button" onclick={() => toggle('gate')}><span>Gate · 阶段评审</span><b>0 / 1</b><i>{collapsed.gate ? '›' : '⌄'}</i></button>
-              {#if !collapsed.gate}<div class="roadmap-item current"><span>●</span><div><strong>V5.2 Chrome GPT Binding Gate</strong><small>PASS 后才能进入 V5.3</small></div></div>{/if}
+              {#if !collapsed.gate}<div class="roadmap-item current"><span>●</span><div><strong>V5.3 Real Executor Facts Gate</strong><small>PASS 后才能进入 V5.4 Closed Loop</small></div></div>{/if}
             </section>
           </div>
         {/if}
@@ -338,8 +381,8 @@
         </div>
 
         <div class="composer-shell">
-          <div class="composer-input"><span class="composer-plus">＋</span><input class="composer-draft" style="width:100%;border:0;outline:0;background:transparent;color:#111;font:inherit;" value={activeRoom.ui.draft} oninput={updateDraft} placeholder="V5.2 本地草稿 · 真实发送仍受 Owner authorization Gate 控制" /><span class="composer-mic">⌁</span></div>
-          <button class="next-step-button" type="button" onclick={() => announce('V5.2 STOP Gate：当前只做真实会话绑定/投影；自动推进在后续 Closed Loop Gate 接入')}>推进下一步</button>
+          <div class="composer-input"><span class="composer-plus">＋</span><input class="composer-draft" style="width:100%;border:0;outline:0;background:transparent;color:#111;font:inherit;" value={activeRoom.ui.draft} oninput={updateDraft} placeholder="V5.3 本地草稿 · 真实发送仍受 Owner authorization Gate 控制" /><span class="composer-mic">⌁</span></div>
+          <button class="next-step-button" type="button" onclick={() => announce('V5.3 STOP Gate：当前只做真实 Executor Facts；自动推进在 V5.4 Closed Loop Gate 接入')}>推进下一步</button>
         </div>
       </main>
 
@@ -347,31 +390,38 @@
         <button class="panel-collapse panel-collapse-right" type="button" aria-label={rightPanelCollapsed ? '展开右侧事实' : '收起右侧事实'} onclick={toggleRightPanel}>{rightPanelCollapsed ? '‹' : '›'}</button>
         {#if !rightPanelCollapsed}
           <div class="panel-heading facts-heading">
-            <div><span class="eyebrow">Chrome GPT Binding</span><h2>执行详情</h2></div>
-            <span class="live-pill"><i></i>{activeRoom.status}</span>
+            <div><span class="eyebrow">Real Executor Facts</span><h2>执行详情</h2></div>
+            <span class:fact-drift={runtimeBinding === 'DRIFT'} class:fact-ready={runtimeBinding === 'MATCH'} class="live-pill"><i></i>{runtimeBinding}</span>
           </div>
 
           <div class="fact-stack">
-            <div class="fact-row"><span>Room ID</span><strong>{activeRoom.roomId}</strong></div>
-            <div class="fact-row"><span>Project / Workstream</span><strong>{activeRoom.projectId} / {activeRoom.workstreamId}</strong></div>
-            <div class="fact-row"><span>分支名称</span><strong>{activeRoom.branch}</strong></div>
-            <div class="fact-row"><span>工作目录</span><strong>{activeRoom.worktree}</strong></div>
-            <div class="fact-row"><span>Base SHA</span><strong class="mono">{activeRoom.baseSha.slice(0, 8)}</strong></div>
+            <div class="fact-row"><span>Room Expected Branch</span><strong>{activeRoom.branch}</strong></div>
+            <div class="fact-row"><span>Room Expected Worktree</span><strong>{activeRoom.worktree}</strong></div>
+            <div class="fact-row"><span>Runtime Repository</span><strong>{actualRepository?.identity ?? executorFacts?.project.errorCode ?? 'UNAVAILABLE'}</strong></div>
+            <div class="fact-row"><span>Actual Branch</span><strong>{actualRepository?.branch ?? 'UNAVAILABLE'}</strong></div>
+            <div class="fact-row"><span>Actual Worktree</span><strong>{actualRepository?.path ?? 'UNAVAILABLE'}</strong></div>
+            <div class="fact-row"><span>HEAD</span><strong class="mono">{shortSha(actualRepository?.head)}</strong></div>
+            <div class="fact-row"><span>Worktree</span><strong>{actualRepository ? (actualRepository.dirty ? 'DIRTY' : 'CLEAN') : 'UNAVAILABLE'}</strong></div>
+            <div class="fact-row"><span>Remote Head</span><strong class="mono">{shortSha(actualPrDelivery?.origin.remoteHeadSha)}</strong></div>
+            <div class="fact-row"><span>Pull Request</span><strong>{prSummary()}</strong></div>
+            <div class="fact-row"><span>CI · exact HEAD</span><strong>{ciSummary()}</strong></div>
+            <div class="fact-row"><span>Codex</span><strong>{actualExecutor ? (actualExecutor.readiness.ready ? `READY · ${actualExecutor.readiness.version ?? 'version unknown'}${actualExecutor.readiness.doctorStatus && actualExecutor.readiness.doctorStatus !== 'ok' ? ` · ${actualExecutor.readiness.doctorStatus.toUpperCase()}` : ''}` : actualExecutor.readiness.errorCode ?? 'NOT READY') : executorFacts?.executor.errorCode ?? 'UNAVAILABLE'}</strong></div>
+            <div class="fact-row"><span>Codex Diagnostics</span><strong>{actualExecutor?.readiness.diagnostics?.length ? actualExecutor.readiness.diagnostics.map((item) => `${item.id}:${item.status}`).join(' · ') : actualExecutor?.readiness.ready ? 'NONE' : 'UNAVAILABLE'}</strong></div>
+            <div class="fact-row"><span>Active Run</span><strong>{actualExecutor?.activeLease?.runId ? actualExecutor.activeLease.runId.slice(0, 8) : 'IDLE'}</strong></div>
+            <div class="fact-row"><span>Latest Run</span><strong>{runSummary()}</strong></div>
             <div class="fact-row"><span>GPT Conversation</span><strong>{activeRoom.gptConversationBinding ?? 'UNBOUND'}</strong></div>
-            <div class="fact-row"><span>Projection</span><strong>{activeSnapshot ? `LIVE · ${activeSnapshot.messages.length} messages` : activeRoom.gptConversationBinding ? 'WAITING SNAPSHOT' : 'UNBOUND'}</strong></div>
-            <div class="fact-row"><span>Codex Session</span><strong>{activeRoom.codexSession ?? 'UNBOUND'}</strong></div>
-            <div class="fact-row"><span>Next Gate</span><strong>{activeRoom.nextGate}</strong></div>
           </div>
 
           <div class="log-block">
-            <div class="log-heading"><strong>V5.2 Binding Evidence</strong><span>{chatgptSnapshots.length} DETECTED</span></div>
-            <div class="log-line"><span>01</span><p>Profile 12 canonical extension 被复用，不走 OpenAI API</p></div>
-            <div class="log-line"><span>02</span><p>Read path 只读取现有 ChatGPT Tab，不自动创建 Tab</p></div>
-            <div class="log-line"><span>03</span><p>conversationId 在 Room 间唯一绑定</p></div>
-            <div class="log-line current"><span>NOW</span><p>WAITING → Owner Binding UAT</p></div>
+            <div class="log-heading"><strong>V5.3 Fact Sources</strong><span>{executorFacts ? capturedLabel(executorFacts.capturedAt) : 'WAITING'}</span></div>
+            <div class="log-line"><span>GIT</span><p>{executorFacts?.project.available ? `LIVE · ${actualRepository?.branch} @ ${shortSha(actualRepository?.head)}` : executorFacts?.project.errorCode ?? 'WAITING'}</p></div>
+            <div class="log-line"><span>PR/CI</span><p>{executorFacts?.prDelivery.available ? `${prSummary()} · ${ciSummary()}` : executorFacts?.prDelivery.errorCode ?? 'WAITING'}</p></div>
+            <div class="log-line"><span>CODEX</span><p>{executorFacts?.executor.available ? (actualExecutor?.readiness.ready ? `READY · required checks healthy${actualExecutor.readiness.doctorStatus && actualExecutor.readiness.doctorStatus !== 'ok' ? ` · doctor ${actualExecutor.readiness.doctorStatus}` : ''}` : actualExecutor?.readiness.errorCode ?? 'NOT READY') : executorFacts?.executor.errorCode ?? 'WAITING'}</p></div>
+            <div class="log-line"><span>WORK</span><p>{executorFacts?.work.available ? `${executorFacts.work.value?.workPackages.length ?? 0} WP · ${executorFacts.work.value?.tasks.length ?? 0} Task` : executorFacts?.work.errorCode ?? 'WAITING'}</p></div>
+            <div class="log-line current"><span>ROOM</span><p>{runtimeBinding === 'MATCH' ? 'MATCH · Room 与 runtime exact binding 一致' : runtimeBinding === 'DRIFT' ? 'DRIFT · 当前 Room 声明与 runtime 事实不一致，禁止冒充 MATCH' : 'UNAVAILABLE · 尚无 runtime 事实'}</p></div>
           </div>
 
-          <div class="facts-note"><strong>Chrome = GPT Conversation Source</strong><p>中间区只投影真实 Profile 12 会话；GitHub 继续是代码/PR/CI 的唯一事实源，V5.3 再接 Executor Facts。</p></div>
+          <div class="facts-note"><strong>GitHub / Runtime = Executor Source of Truth</strong><p>右栏不再显示静态执行占位。Project / Git / PR / CI / Codex 均由 backend 实时读取；任何 source 不可用都会显式 fail-closed。{executorFactsError ? ` · ${executorFactsError}` : ''}</p></div>
         {/if}
       </aside>
     </section>
