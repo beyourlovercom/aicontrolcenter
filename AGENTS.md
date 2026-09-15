@@ -8,6 +8,20 @@ OpenSpec, Codex sessions, runtime state, dashboards, local workspaces, caches, a
 
 No tool, agent, artifact, task checkbox, local session, or application state may authorize its own execution.
 
+## Global Executor Governance V2
+
+Canonical contract: `docs/00_Governance/AI-EXECUTOR-GOVERNANCE-V2.md`.
+
+`AI_EXECUTOR_GOVERNANCE_V2 = REQUIRED`
+
+- GPT owns task classification, provider routing, decomposition, review, escalation, and STOP gates.
+- Governed US Claude is the default provider for tracked implementation/code-change/remediation/focused implementation regression.
+- Governed Codex is the default provider for deterministic verification, exact-SHA checks, read-only audit/review/analysis, and bounded test-only work.
+- AICC may transport explicit provider intent but must not infer provider choice from free-form task text.
+- Project rules may tighten this contract but may not weaken or bypass it.
+- Historical or subsystem-specific `Codex-only` runtime contracts remain scoped to those exact runtimes and do not override the global provider policy.
+
+
 ## Permanent denials
 
 - Arbitrary shell strings from the application UI or runtime.
