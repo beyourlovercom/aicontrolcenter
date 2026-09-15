@@ -13,11 +13,13 @@
     selectMainline as selectMainlineView,
     toggleRoadmapSection,
     unbindGptConversation,
+    updateExecutionRoom,
     type ExecutionRoomStore,
     type RoadmapSection
   } from './lib/executionRoomState';
   import { readChatgptSnapshots, snapshotForConversation, type ChatgptConversationSnapshot } from './lib/chatgptProjection';
   import { readExecutorFacts, roomRuntimeBinding, type ExecutorFactsProjection } from './lib/executorFacts';
+  import { nextStepEligibility, nextStepStatusLabel, readNextStep, submitNextStep, type NextStepProjection } from './lib/nextStep';
 
   let roomStore: ExecutionRoomStore = createDefaultExecutionRoomStore();
   let toast = '';
@@ -25,6 +27,8 @@
   let projectionError = '';
   let executorFacts: ExecutorFactsProjection | null = null;
   let executorFactsError = '';
+  let nextSteps: Record<string, NextStepProjection> = {};
+  let nextStepBusyRoomId: string | null = null;
 
   $: activeViewId = roomStore.activeViewId;
   $: activeRooms = roomStore.activeRoomIds.map((id) => roomStore.rooms[id]).filter(Boolean);
@@ -39,6 +43,9 @@
   $: actualRepository = executorFacts?.project.value?.repository ?? null;
   $: actualExecutor = executorFacts?.executor.value ?? null;
   $: actualPrDelivery = executorFacts?.prDelivery.value ?? null;
+  $: activeNextStep = activeRoom ? nextSteps[activeRoom.roomId] ?? null : null;
+  $: activeNextStepEligibility = activeRoom ? nextStepEligibility(activeRoom, executorFacts, activeSnapshot) : { ready: false, blockers: ['ROOM_UNAVAILABLE'] };
+  $: nextStepLocked = !activeNextStepEligibility.ready || nextStepBusyRoomId === activeRoom?.roomId || ['PENDING','CLAIMED'].includes(activeNextStep?.state.state ?? '');
 
   onMount(() => {
     roomStore = loadExecutionRoomStore(window.localStorage);
@@ -168,6 +175,46 @@
     announce('已解除当前 Room 的 ChatGPT 会话绑定；Chrome 会话本身未关闭。');
   }
 
+  function adoptCurrentRuntime() {
+    if (!activeRoom || !actualRepository) return;
+    commit(updateExecutionRoom(roomStore, activeRoom.roomId, (room) => ({
+      ...room, repo: actualRepository.identity, branch: actualRepository.branch, worktree: actualRepository.path, baseSha: actualRepository.head
+    })));
+    announce(`Room 已采用真实 Runtime：${actualRepository.branch} @ ${shortSha(actualRepository.head)}`);
+  }
+
+  function setNextStep(roomId: string, projection: NextStepProjection) {
+    nextSteps = { ...nextSteps, [roomId]: projection };
+  }
+
+  async function watchNextStep(roomId: string, requestId: string) {
+    for (let attempt = 0; attempt < 90; attempt += 1) {
+      await new Promise((resolve) => window.setTimeout(resolve, 1500));
+      try {
+        const projection = await readNextStep(requestId); setNextStep(roomId, projection);
+        if (!['PENDING','CLAIMED'].includes(projection.state.state)) {
+          announce(nextStepStatusLabel(projection)); return;
+        }
+      } catch (error) {
+        announce(error instanceof Error ? error.message : String(error)); return;
+      }
+    }
+    announce('NEXT_STEP_WATCH_TIMEOUT · 请求仍保留在 backend，不会自动重放。');
+  }
+
+  async function advanceNextStep() {
+    if (!activeRoom || nextStepBusyRoomId) return;
+    const gate = nextStepEligibility(activeRoom, executorFacts, activeSnapshot);
+    if (!gate.ready) { announce(`Next-Step blocked：${gate.blockers.join(' · ')}`); return; }
+    const roomId = activeRoom.roomId; nextStepBusyRoomId = roomId;
+    try {
+      const projection = await submitNextStep(activeRoom, activeRoom.ui.draft); setNextStep(roomId, projection);
+      announce('Next-Step 已冻结 · 等待 Profile 12 GPT planner'); void watchNextStep(roomId, projection.request.requestId);
+    } catch (error) {
+      announce(error instanceof Error ? error.message : String(error));
+    } finally { nextStepBusyRoomId = null; }
+  }
+
   function capturedLabel(value: string) {
     const date = new Date(value);
     return Number.isNaN(date.getTime()) ? value : date.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
@@ -206,7 +253,7 @@
         <div class="brand-subtitle">Multi-Execution Workbench</div>
       </div>
     </div>
-    <div class="header-status"><span class="status-dot"></span><span>V5.3 · Real Executor Facts · {activeRooms.length} / {MAX_ACTIVE_ROOMS} ACTIVE</span></div>
+    <div class="header-status"><span class="status-dot"></span><span>V5.4 · Next-Step Closed Loop · {activeRooms.length} / {MAX_ACTIVE_ROOMS} ACTIVE</span></div>
   </header>
 
   <nav class="room-tabs" aria-label="Execution Rooms">
@@ -231,11 +278,11 @@
       <div class="mainline-scroll">
         <section class="mainline-hero">
           <div><span class="eyebrow">Always-on Mainline View</span><h1>主线面板</h1><p>完整查看 AICC V5 从 Blueprint 到 Gate 的整体推进，并从这里恢复或切换任一 Execution Room。</p></div>
-          <span class="shell-badge">V5.3 Real Executor Facts · 真实执行事实</span>
+          <span class="shell-badge">V5.4 Next-Step Closed Loop · 一键安全推进</span>
         </section>
 
         <section class="mainline-kpis">
-          <article><span>当前阶段</span><strong>V5.3</strong><small>Real Executor Facts</small></article>
+          <article><span>当前阶段</span><strong>V5.4</strong><small>Next-Step Closed Loop</small></article>
           <article><span>Active Rooms</span><strong>{activeRooms.length} / {MAX_ACTIVE_ROOMS}</strong><small>状态层硬限制</small></article>
           <article><span>GPT Bindings</span><strong>{boundRoomCount} / {allRooms.length}</strong><small>每个 Room 独立 conversationId</small></article>
           <article><span>Detected GPT</span><strong>{chatgptSnapshots.length}</strong><small>Profile 12 实时 snapshot</small></article>
@@ -243,13 +290,14 @@
         </section>
 
         <section class="mainline-card">
-          <div class="mainline-section-heading"><div><h2>完整主线进度视图</h2><p>V5 Roadmap · 从产品方向到多 Room Managed Execution</p></div><span class="mini-progress">V5.3 FACTS</span></div>
+          <div class="mainline-section-heading"><div><h2>完整主线进度视图</h2><p>V5 Roadmap · 从产品方向到多 Room Managed Execution</p></div><span class="mini-progress">V5.4 CLOSED LOOP</span></div>
           <div class="stage-flow">
             <div class="stage done"><b>✓</b><strong>Blueprint</strong><span>产品方向冻结</span><i><em style="width:100%"></em></i><small>100%</small></div>
             <div class="stage done"><b>✓</b><strong>V5.0 Shell</strong><span>PR #26 已合并</span><i><em style="width:100%"></em></i><small>100%</small></div>
             <div class="stage done"><b>✓</b><strong>V5.1 Isolation</strong><span>PR #27 已合并</span><i><em style="width:100%"></em></i><small>100%</small></div>
             <div class="stage done"><b>✓</b><strong>V5.2 GPT</strong><span>PR #28 已合并</span><i><em style="width:100%"></em></i><small>100%</small></div>
-            <div class="stage current"><b>●</b><strong>V5.3 Facts</strong><span>Real Executor Facts</span><i><em style="width:55%"></em></i><small>55%</small></div>
+            <div class="stage done"><b>✓</b><strong>V5.3 Facts</strong><span>PR #29 已合并</span><i><em style="width:100%"></em></i><small>100%</small></div>
+            <div class="stage current"><b>●</b><strong>V5.4 Loop</strong><span>Next-Step Closed Loop</span><i><em style="width:45%"></em></i><small>45%</small></div>
           </div>
         </section>
 
@@ -269,8 +317,8 @@
           <article class="mainline-card">
             <div class="mainline-section-heading"><div><h2>主线 Gate</h2><p>不会自动越过 Owner 审批</p></div></div>
             <div class="gate-list">
-              <div class="gate-row current"><span>●</span><div><strong>V5.3 Executor Facts Gate</strong><small>Project / Git / PR / CI / Codex 全部来自真实 backend facts</small></div><b>UAT NEXT</b></div>
-              <div class="gate-row"><span>○</span><div><strong>V5.4 Closed Loop Gate</strong><small>GPT exact task → managed executor → GitHub → GPT review</small></div><b>LATER</b></div>
+              <div class="gate-row"><span>✓</span><div><strong>V5.3 Executor Facts Gate</strong><small>Owner UAT PASS · PR #29 merged</small></div><b>DONE</b></div>
+              <div class="gate-row current"><span>●</span><div><strong>V5.4 Closed Loop Gate</strong><small>GPT exact task → managed executor → exact conversation review</small></div><b>UAT NEXT</b></div>
               <div class="gate-row"><span>○</span><div><strong>V5.5 Hardening Gate</strong><small>多 Room 恢复、资源上限、异常恢复</small></div><b>LATER</b></div>
             </div>
           </article>
@@ -296,12 +344,12 @@
               <span class="eyebrow">当前 Execution Room</span>
               <h2>{activeRoom.name}</h2>
             </div>
-            <span class="phase-pill">V5.3</span>
+            <span class="phase-pill">V5.4</span>
           </div>
 
           <div class="roadmap-title-row">
             <div><strong>支线进度</strong><span>{activeRoom.projectId} / {activeRoom.workstreamId}</span></div>
-            <span class="mini-progress">Real Facts</span>
+            <span class="mini-progress">Closed Loop</span>
           </div>
 
           <div class="roadmap-groups">
@@ -312,12 +360,12 @@
 
             <section class="roadmap-group">
               <button class="group-toggle" type="button" onclick={() => toggle('wp')}><span>WP · 工作包</span><b>1 / 1</b><i>{collapsed.wp ? '›' : '⌄'}</i></button>
-              {#if !collapsed.wp}<div class="roadmap-item current"><span>●</span><div><strong>V5.3 — Real Executor Facts</strong><small>Project / Git / PR / CI / Codex live facts</small></div></div>{/if}
+              {#if !collapsed.wp}<div class="roadmap-item current"><span>●</span><div><strong>V5.4 — Next-Step Closed Loop</strong><small>Exact GPT planner → managed executor → same conversation review</small></div></div>{/if}
             </section>
 
             <section class="roadmap-group">
               <button class="group-toggle" type="button" onclick={() => toggle('pr')}><span>PR · 需求与计划</span><b>0 / 1</b><i>{collapsed.pr ? '›' : '⌄'}</i></button>
-              {#if !collapsed.pr}<div class="roadmap-item pending"><span>○</span><div><strong>V5.3 Real Executor Facts PR</strong><small>Facts UAT 后才进入 PR Gate</small></div></div>{/if}
+              {#if !collapsed.pr}<div class="roadmap-item pending"><span>○</span><div><strong>V5.4 Next-Step Closed Loop PR</strong><small>Closed Loop Owner UAT 后才进入 PR Gate</small></div></div>{/if}
             </section>
 
             <section class="roadmap-group">
@@ -327,13 +375,13 @@
                 <div class="roadmap-item done"><span>✓</span><div><strong>Read-only Transcript Projection</strong><small>真实 user / assistant DOM snapshot</small></div></div>
                 <div class="roadmap-item done"><span>✓</span><div><strong>Per-Room Conversation Binding</strong><small>conversationId 唯一绑定，不允许串线</small></div></div>
                 <div class="roadmap-item done"><span>✓</span><div><strong>No-Spawn Read Path</strong><small>读取不会创建 Chrome Tab</small></div></div>
-                <div class="roadmap-item current"><span>●</span><div><strong>Owner Binding UAT</strong><small>发现 / 绑定 / 切换 / 真实投影</small></div></div>
+                <div class="roadmap-item current"><span>●</span><div><strong>Owner Closed Loop UAT</strong><small>Next-Step → GPT decision → managed executor → same conversation review</small></div></div>
               {/if}
             </section>
 
             <section class="roadmap-group">
               <button class="group-toggle" type="button" onclick={() => toggle('gate')}><span>Gate · 阶段评审</span><b>0 / 1</b><i>{collapsed.gate ? '›' : '⌄'}</i></button>
-              {#if !collapsed.gate}<div class="roadmap-item current"><span>●</span><div><strong>V5.3 Real Executor Facts Gate</strong><small>PASS 后才能进入 V5.4 Closed Loop</small></div></div>{/if}
+              {#if !collapsed.gate}<div class="roadmap-item current"><span>●</span><div><strong>V5.4 Closed Loop Gate</strong><small>全量回归 PASS 后进入 Owner UAT</small></div></div>{/if}
             </section>
           </div>
         {/if}
@@ -381,8 +429,9 @@
         </div>
 
         <div class="composer-shell">
-          <div class="composer-input"><span class="composer-plus">＋</span><input class="composer-draft" style="width:100%;border:0;outline:0;background:transparent;color:#111;font:inherit;" value={activeRoom.ui.draft} oninput={updateDraft} placeholder="V5.3 本地草稿 · 真实发送仍受 Owner authorization Gate 控制" /><span class="composer-mic">⌁</span></div>
-          <button class="next-step-button" type="button" onclick={() => announce('V5.3 STOP Gate：当前只做真实 Executor Facts；自动推进在 V5.4 Closed Loop Gate 接入')}>推进下一步</button>
+          <div class="composer-input"><span class="composer-plus">＋</span><input class="composer-draft" style="width:100%;border:0;outline:0;background:transparent;color:#111;font:inherit;" value={activeRoom.ui.draft} oninput={updateDraft} placeholder="可选：补充本轮 Owner 意图；Next-Step 会冻结到 exact request" /><span class="composer-mic">⌁</span></div>
+          <button class="next-step-button" class:next-step-disabled={nextStepLocked} disabled={nextStepLocked} type="button" onclick={advanceNextStep}>推进下一步</button>
+          <div class:next-step-blocked={!activeNextStepEligibility.ready} class="next-step-status"><strong>{nextStepStatusLabel(activeNextStep)}</strong><span>{activeNextStepEligibility.ready ? 'Exact GPT + Runtime Gate READY' : `Blocked · ${activeNextStepEligibility.blockers.join(' · ')}`}</span></div>
         </div>
       </main>
 
@@ -391,7 +440,7 @@
         {#if !rightPanelCollapsed}
           <div class="panel-heading facts-heading">
             <div><span class="eyebrow">Real Executor Facts</span><h2>执行详情</h2></div>
-            <span class:fact-drift={runtimeBinding === 'DRIFT'} class:fact-ready={runtimeBinding === 'MATCH'} class="live-pill"><i></i>{runtimeBinding}</span>
+            <div class="facts-actions"><span class:fact-drift={runtimeBinding === 'DRIFT'} class:fact-ready={runtimeBinding === 'MATCH'} class="live-pill"><i></i>{runtimeBinding}</span>{#if runtimeBinding === 'DRIFT' && actualRepository}<button type="button" class="runtime-adopt" onclick={adoptCurrentRuntime}>采用当前 Runtime</button>{/if}</div>
           </div>
 
           <div class="fact-stack">
@@ -410,6 +459,7 @@
             <div class="fact-row"><span>Active Run</span><strong>{actualExecutor?.activeLease?.runId ? actualExecutor.activeLease.runId.slice(0, 8) : 'IDLE'}</strong></div>
             <div class="fact-row"><span>Latest Run</span><strong>{runSummary()}</strong></div>
             <div class="fact-row"><span>GPT Conversation</span><strong>{activeRoom.gptConversationBinding ?? 'UNBOUND'}</strong></div>
+            <div class="fact-row"><span>Next-Step</span><strong>{nextStepStatusLabel(activeNextStep)}</strong></div>
           </div>
 
           <div class="log-block">

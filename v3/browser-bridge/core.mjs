@@ -57,6 +57,33 @@ export function sameConversation(expected,url){
   try{return conversationFromUrl(url).conversationId===expected;}catch{return false;}
 }
 
+export async function settleWithTimeout(promise,timeoutMs,fallback){
+  if(!Number.isFinite(timeoutMs)||timeoutMs<=0)fail('BRIDGE_REQUEST_INVALID');
+  let timer;
+  try{
+    return await Promise.race([Promise.resolve(promise),new Promise(resolve=>{timer=setTimeout(()=>resolve(fallback),timeoutMs);})]);
+  }finally{if(timer)clearTimeout(timer);}
+}
+
+export function parseNextStepDecision(value){
+  if(typeof value!=='string'||!value.includes('AICC_NEXT_STEP_V1'))fail('NEXT_STEP_DECISION_INVALID');
+  const decision=value.match(/^AICC_DECISION:\s*(EXECUTE|STOP_GATE)\s*$/mi)?.[1]||null;
+  const actionClass=value.match(/^AICC_ACTION_CLASS:\s*(CODE_CHANGE|TEST_ONLY|STOP_GATE)\s*$/mi)?.[1]||null;
+  const workPackage=value.match(/^AICC_WORK_PACKAGE:\s*(.*?)\s*$/mi)?.[1]?.trim()||'';
+  const taskTitle=value.match(/^AICC_TASK:\s*(.*?)\s*$/mi)?.[1]?.trim()||'';
+  const instruction=value.match(/AICC_INSTRUCTION_BEGIN\s*\n([\s\S]*?)\nAICC_INSTRUCTION_END/i)?.[1]||'';
+  const gateReason=value.match(/^AICC_GATE_REASON:\s*(.*?)\s*$/mi)?.[1]?.trim()||'';
+  if(decision==='STOP_GATE'){
+    if(actionClass!=='STOP_GATE'||!gateReason||gateReason==='NONE')fail('NEXT_STEP_DECISION_INVALID');
+    return {decision:'STOP_GATE',gateReason};
+  }
+  if(decision!=='EXECUTE'||!['CODE_CHANGE','TEST_ONLY'].includes(actionClass)||!workPackage||!taskTitle||!instruction.trim())fail('NEXT_STEP_DECISION_INVALID');
+  if(workPackage.length>240||taskTitle.length>240||new TextEncoder().encode(instruction).length>60000)fail('NEXT_STEP_DECISION_INVALID');
+  const forbidden=/(?:\bgit\s+merge\b|\bgh\s+pr\s+merge\b|\bmerge\s+(?:pr|pull request)\b|\bdeploy(?:ment)?\b|\bproduction\s+(?:apply|write|data|deploy)\b|(?:^|\s)--apply(?:\s|$)|\bdata\s+write\b)/i;
+  if(forbidden.test(instruction))return {decision:'STOP_GATE',gateReason:'NEXT_STEP_FORBIDDEN_OPERATION'};
+  return {decision:'EXECUTE',actionClass,workPackageTitle:workPackage,taskTitle,instruction};
+}
+
 export function recoveryAction(projection,ledger){
   const state=projection?.state?.deliveryState;
   if(state==='DELIVERED')return 'DONE';

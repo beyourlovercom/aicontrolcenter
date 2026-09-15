@@ -1,6 +1,6 @@
 (()=>{
   'use strict';
-  const CONTENT_VERSION='3.8.13';
+  const CONTENT_VERSION='3.8.18';
   if(globalThis.__AICC_V3_BRIDGE_CONTENT_VERSION__===CONTENT_VERSION)return;
   try{globalThis.__AICC_V3_BRIDGE_CLEANUP__?.();}catch{}
   globalThis.__AICC_V3_BRIDGE_CONTENT_VERSION__=CONTENT_VERSION;
@@ -200,25 +200,64 @@
   async function waitFor(check,timeout=5000,step=100){
     const end=Date.now()+timeout;while(Date.now()<end){const value=check();if(value)return value;await new Promise(resolve=>setTimeout(resolve,step));}return null;
   }
-  async function sendButton(){
-    return waitFor(()=>{const button=document.querySelector('button[data-testid="send-button"]');return button&&!button.disabled?button:null;},5000,100);
+  function clearComposer(node,expected){
+    if(!node||composerValue(node)!==expected)return false;
+    node.focus();
+    if(node instanceof HTMLTextAreaElement||node instanceof HTMLInputElement){
+      const proto=node instanceof HTMLTextAreaElement?HTMLTextAreaElement.prototype:HTMLInputElement.prototype;
+      const setter=Object.getOwnPropertyDescriptor(proto,'value')?.set;if(!setter)return false;
+      setter.call(node,'');node.dispatchEvent(new Event('input',{bubbles:true}));return composerValue(node)==='';
+    }
+    try{document.execCommand('selectAll',false,null);document.execCommand('insertText',false,'');}catch{}
+    if(composerValue(node)!==''){node.textContent='';node.dispatchEvent(new InputEvent('input',{bubbles:true,inputType:'deleteContentBackward',data:null}));}
+    return composerValue(node)==='';
+  }
+  async function sendButton(box){
+    return waitFor(()=>{
+      const scope=box?.closest('form')||document;
+      const buttons=[...scope.querySelectorAll('button')].filter(button=>!button.disabled&&button.getClientRects().length>0);
+      const explicit=buttons.find(button=>{
+        const testid=button.getAttribute('data-testid')||'';
+        const label=`${button.getAttribute('aria-label')||''} ${button.getAttribute('title')||''}`;
+        return testid==='send-button'||testid==='composer-submit-button'||/send|发送|提交|submit/i.test(label);
+      });
+      if(explicit)return explicit;
+      return buttons.find(button=>(button.getAttribute('type')||'').toLowerCase()==='submit')||null;
+    },8000,100);
   }
   async function deliverExact(message){
     if(conversationId()!==message.conversationId)return {outcome:'ABORTED_BEFORE_SEND',reason:'BRIDGE_CONVERSATION_MISMATCH'};
     if(typeof message.content!=='string'||await sha256(message.content)!==message.contentSha256)return {outcome:'ABORTED_BEFORE_SEND',reason:'BRIDGE_CONTENT_HASH_MISMATCH'};
     const box=await waitFor(()=>composer(),5000,100);if(!box)return {outcome:'ABORTED_BEFORE_SEND',reason:'BRIDGE_COMPOSER_NOT_FOUND'};
     if(!writeComposer(box,message.content))return {outcome:'ABORTED_BEFORE_SEND',reason:'BRIDGE_COMPOSER_EXACT_CONTENT_UNAVAILABLE'};
-    if(conversationId()!==message.conversationId)return {outcome:'ABORTED_BEFORE_SEND',reason:'BRIDGE_CONVERSATION_MISMATCH'};
-    const button=await sendButton();if(!button)return {outcome:'ABORTED_BEFORE_SEND',reason:'BRIDGE_SEND_CONTROL_NOT_FOUND'};
-    if(composerValue(box)!==message.content)return {outcome:'ABORTED_BEFORE_SEND',reason:'BRIDGE_COMPOSER_CONTENT_DRIFT'};
+    if(conversationId()!==message.conversationId){clearComposer(box,message.content);return {outcome:'ABORTED_BEFORE_SEND',reason:'BRIDGE_CONVERSATION_MISMATCH'};}
+    const button=await sendButton(box);if(!button){clearComposer(box,message.content);return {outcome:'ABORTED_BEFORE_SEND',reason:'BRIDGE_SEND_CONTROL_NOT_FOUND'};}
+    if(composerValue(box)!==message.content){clearComposer(box,message.content);return {outcome:'ABORTED_BEFORE_SEND',reason:'BRIDGE_COMPOSER_CONTENT_DRIFT'};}
     const before=userTurnCount();
     try{button.click();}catch{return {outcome:'UNCERTAIN',reason:'BRIDGE_SEND_CLICK_UNCERTAIN'};}
     const proved=await waitFor(()=>conversationId()===message.conversationId&&userTurnCount()>before&&composerValue(box)!==message.content,12000,150);
     return proved?{outcome:'DELIVERED'}:{outcome:'UNCERTAIN',reason:'BRIDGE_SEND_PROOF_UNAVAILABLE'};
   }
+  function assistantNodes(){return [...document.querySelectorAll('[data-message-author-role="assistant"]')];}
+  function completeNextStepProtocol(text){
+    if(typeof text!=='string'||!text.includes('AICC_NEXT_STEP_V1')||!/^AICC_DECISION:\s*(EXECUTE|STOP_GATE)\s*$/mi.test(text)||!/^AICC_ACTION_CLASS:\s*(CODE_CHANGE|TEST_ONLY|STOP_GATE)\s*$/mi.test(text)||!/^AICC_GATE_REASON:/mi.test(text))return false;
+    return /^AICC_DECISION:\s*STOP_GATE\s*$/mi.test(text)||(/AICC_INSTRUCTION_BEGIN/i.test(text)&&/AICC_INSTRUCTION_END/i.test(text));
+  }
+  async function planNextStep(message){
+    if(conversationId()!==message.conversationId)return {outcome:'ABORTED_BEFORE_SEND',reason:'BRIDGE_CONVERSATION_MISMATCH'};
+    const before=assistantNodes().length;
+    const sent=await deliverExact(message);if(sent.outcome!=='DELIVERED')return sent;
+    const response=await waitFor(()=>{
+      const nodes=assistantNodes();if(nodes.length<=before)return null;
+      const text=assistantText(nodes.at(-1));return completeNextStepProtocol(text)?text:null;
+    },120000,300);
+    return response?{outcome:'DELIVERED',assistantText:response}:{outcome:'UNCERTAIN',reason:'NEXT_STEP_GPT_DECISION_UNPROVEN'};
+  }
+
 
   function bridgeListener(message,_sender,sendResponse){
     if(message?.type==='AICC_READ_SNAPSHOT'){sendResponse({ok:true,snapshot:conversationSnapshot()});return false;}
+    if(message?.type==='AICC_PLAN_NEXT_STEP'){void planNextStep(message).then(sendResponse).catch(()=>sendResponse({outcome:'UNCERTAIN',reason:'NEXT_STEP_CONTENT_ADAPTER_ERROR'}));return true;}
     if(message?.type!=='AICC_DELIVER_EXACT')return false;
     void deliverExact(message).then(sendResponse).catch(()=>sendResponse({outcome:'UNCERTAIN',reason:'BRIDGE_CONTENT_ADAPTER_ERROR'}));
     return true;

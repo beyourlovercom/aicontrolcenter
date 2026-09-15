@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {join} from 'node:path';
 import {fileURLToPath} from 'node:url';
-import {conversationFromUrl,createOriginBinding,recoveryAction,sameConversation} from '../browser-bridge/core.mjs';
+import {conversationFromUrl,createOriginBinding,parseNextStepDecision,recoveryAction,sameConversation,settleWithTimeout} from '../browser-bridge/core.mjs';
 import {createCoordinator} from '../browser-bridge/coordinator.mjs';
 
 const root=join(fileURLToPath(new URL('..',import.meta.url)));
@@ -43,6 +43,24 @@ test('automatic origin binding carries Assistant WP/Task titles while manual exa
   const manual=createOriginBinding({url:'https://chatgpt.com/c/conv-manual',taskId:'task-existing',taskTitle:'Existing Task',instruction:'manual exact'},ids());
   assert.equal(manual.taskId,'task-existing');assert.equal(manual.workPackageTitle,null);assert.equal(manual.taskTitle,'Existing Task');
   assert.throws(()=>createOriginBinding({url:'https://chatgpt.com/c/conv-manual',taskId:'task-existing',instruction:'manual exact'},ids()),e=>e.code==='BRIDGE_TASK_TITLE_REQUIRED');
+});
+
+test('strict next-step protocol allows EXECUTE or STOP_GATE only',()=>{
+  const execute=parseNextStepDecision(`AICC_NEXT_STEP_V1\nAICC_DECISION: EXECUTE\nAICC_ACTION_CLASS: TEST_ONLY\nAICC_WORK_PACKAGE: V5.4 Closed Loop\nAICC_TASK: Wire exact next step\nAICC_INSTRUCTION_BEGIN\nImplement only the exact task.\nRun tests.\nAICC_INSTRUCTION_END\nAICC_GATE_REASON: NONE`);
+  assert.equal(execute.decision,'EXECUTE');assert.equal(execute.taskTitle,'Wire exact next step');assert.match(execute.instruction,/Run tests/);
+  const stop=parseNextStepDecision(`AICC_NEXT_STEP_V1\nAICC_DECISION: STOP_GATE\nAICC_ACTION_CLASS: STOP_GATE\nAICC_WORK_PACKAGE:\nAICC_TASK:\nAICC_INSTRUCTION_BEGIN\n\nAICC_INSTRUCTION_END\nAICC_GATE_REASON: Owner merge approval required`);
+  assert.deepEqual(stop,{decision:'STOP_GATE',gateReason:'Owner merge approval required'});
+  assert.throws(()=>parseNextStepDecision('AICC_NEXT_STEP_V1\nAICC_DECISION: EXECUTE\nAICC_TASK: missing wp'),e=>e.code==='NEXT_STEP_DECISION_INVALID');
+});
+
+test('next-step planning transport settles to UNCERTAIN fallback instead of hanging forever',async()=>{
+  const never=new Promise(()=>{});
+  const fallback={outcome:'UNCERTAIN',reason:'NEXT_STEP_PLAN_TRANSPORT_TIMEOUT'};
+  const started=Date.now();
+  const value=await settleWithTimeout(never,20,fallback);
+  assert.deepEqual(value,fallback);
+  assert.ok(Date.now()-started>=15);
+  assert.equal(await settleWithTimeout(Promise.resolve('ok'),100,fallback),'ok');
 });
 
 test('enqueueAction ACKs from durable ledger before any network submission',async()=>{
@@ -122,14 +140,14 @@ test('extension manifest and source keep credential privileged and forbid active
   assert.match(options,new RegExp(`EXPECTED_VERSION='${manifest.version.replaceAll('.', '\\.')}';`));
   const content=readFileSync(join(root,'browser-bridge/content.js'),'utf8');
   const pairing=readFileSync(join(root,'scripts/copy-bridge-pairing-token.mjs'),'utf8');
-  assert.match(content,/Task Name/);assert.match(content,/Task Name is required\. Submission blocked\./);assert.match(content,/dataset\.taskTitle/);assert.match(background,/BRIDGE_TASK_TITLE_MISMATCH/);
+  assert.match(content,/Task Name/);assert.equal(content.includes('AICC_NEXT_STEP_POLL'),false,'content script must not poll Next-Step per tab');assert.match(content,/Task Name is required\. Submission blocked\./);assert.match(content,/dataset\.taskTitle/);assert.match(background,/BRIDGE_TASK_TITLE_MISMATCH/);
   assert.match(background,/TRUSTED_CONTEXTS/);assert.match(background,/x-aicc-bridge-token/);assert.match(background,/api\/bridge\/bootstrap/);assert.match(background,/autoPair/);assert.match(background,/chrome\.scripting\.executeScript/);assert.match(background,/reinjectOpenChatgptTabs/);assert.match(background,/AICC_LIST_TASKS/);
   assert.match(background,/snapshotOpenChatgptTabs/);assert.match(background,/chrome\.tabs\.query\(\{url:'https:\/\/chatgpt\.com\/\*'\}\)/);assert.equal(background.includes("chrome.tabs.query({url:'https://chatgpt.com/c/*'})"),false,'snapshot discovery must include Project conversation URLs');
   assert.equal(background.split('\n').some(line=>line.length>0&&!/^\s/.test(line)&&/\bawait\b/.test(line)),false,'MV3 service-worker event registration must not be delayed by top-level await');
   assert.match(options,/api\/bridge\/bootstrap/);assert.match(options,/chrome\.storage\.local\.set/);assert.match(options,/aiccBridgeTokenV1/);assert.equal(options.includes('console.log'),false);
   assert.equal(/chrome\.tabs\.query\(\{\s*active\s*:/.test(background),false);assert.equal(background.includes('currentWindow:true'),false);
   assert.equal(content.includes('x-aicc-bridge-token'),false);assert.equal(content.includes('aiccBridgeTokenV1'),false);assert.equal(content.includes('chrome.storage'),false);assert.match(content,/__AICC_V3_BRIDGE_CONTENT_VERSION__/);assert.match(content,/BRIDGE_BACKGROUND_TIMEOUT/);assert.match(content,/chrome\.runtime\.sendMessage\(\{type,\.\.\.payload\},response=>/);assert.match(background,/AbortController/);assert.match(content,/__AICC_V3_BRIDGE_CLEANUP__/);assert.match(content,/ui\.go\.textContent='Submitted'/);assert.match(content,/ui\.task\.disabled=true/);assert.match(content,/Exact instruction frozen for this request\./);
-  assert.ok((content.match(/conversationId\(\)!==message\.conversationId/g)||[]).length>=2);assert.match(content,/function userTurnCount/);assert.equal(content.includes('function exactUserCount'),false);assert.match(content,/userTurnCount\(\)>before&&composerValue\(box\)!==message\.content/);
+  assert.ok((content.match(/conversationId\(\)!==message\.conversationId/g)||[]).length>=2);assert.match(content,/function userTurnCount/);assert.match(content,/composer-submit-button/);assert.match(content,/type'\)\|\|''\)\.toLowerCase\(\)==='submit'/);assert.match(content,/clearComposer\(box,message\.content\)/);assert.equal(content.includes('function exactUserCount'),false);assert.match(content,/userTurnCount\(\)>before&&composerValue\(box\)!==message\.content/);
   assert.match(content,/data-message-author-role="assistant"/);assert.match(content,/✦ AICC/);
   assert.match(content,/function actionRowFromCopy/);assert.match(content,/function sourceTextForRow/);assert.match(content,/copy-turn-action-button/);assert.match(content,/document\.querySelectorAll\('button'\)\]\.filter\(isCopyButton\)/);assert.match(content,/row\.appendChild\(button\)/);
   assert.equal(content.includes('container.appendChild(button)'),false);assert.equal(content.includes("margin:'8px 0'"),false);
