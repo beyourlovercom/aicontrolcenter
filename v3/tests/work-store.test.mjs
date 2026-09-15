@@ -71,3 +71,15 @@ test('invalid explicit status is rejected without mutation',()=>{
   assert.throws(()=>createWorkPackage(context,{title:'WP',status:'GUESSED'},env),error=>error.code==='WORK_STATUS_INVALID');
   assert.equal(readWorkStore(context,env).revision,1);
 });
+
+test('Room-scoped work projection isolates WP/Task while preserving one project ledger',async()=>{
+  const {env,context}=fixture();const uuid=ids(),now=clock();
+  const {readRoomWorkStore}=await import('../lib/work-store.mjs');
+  const a=createWorkPackage(context,{title:'WP A',status:'ACTIVE',roomId:'room-a',workstreamId:'stream-a'},env,{uuid,now}).workPackage;
+  const b=createWorkPackage(context,{title:'WP B',status:'ACTIVE',roomId:'room-b',workstreamId:'stream-b'},env,{uuid,now}).workPackage;
+  createTask(context,{workPackageId:a.id,title:'Task A',status:'TODO',roomId:'room-a',workstreamId:'stream-a'},env,{uuid,now});
+  createTask(context,{workPackageId:b.id,title:'Task B',status:'TODO',roomId:'room-b',workstreamId:'stream-b'},env,{uuid,now});
+  const all=readWorkStore(context,env);assert.equal(all.workPackages.length,2);assert.equal(all.tasks.length,2);
+  const roomA=readRoomWorkStore(context,'room-a','stream-a',env);assert.deepEqual(roomA.workPackages.map(x=>x.title),['WP A']);assert.deepEqual(roomA.tasks.map(x=>x.title),['Task A']);
+  const roomB=readRoomWorkStore(context,'room-b','stream-b',env);assert.deepEqual(roomB.workPackages.map(x=>x.title),['WP B']);assert.deepEqual(roomB.tasks.map(x=>x.title),['Task B']);
+});

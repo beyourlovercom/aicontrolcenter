@@ -27,10 +27,10 @@ function automaticTaskBinding(context,input,env,options={}){
   const workPackageId=derivedUuid(requestId,'work-package');const taskId=derivedUuid(requestId,'task');
   let store=readWorkStore(context,env);let wp=store.workPackages.find(item=>item.id===workPackageId);
   if(wp&&wp.title!==workPackageTitle)fail('BRIDGE_REQUEST_CONFLICT');
-  if(!wp)wp=createWorkPackage(context,{title:workPackageTitle,status:'ACTIVE'},env,{uuid:()=>workPackageId,now:options.now}).workPackage;
+  if(!wp)wp=createWorkPackage(context,{title:workPackageTitle,status:'ACTIVE',roomId:input?.roomId,workstreamId:input?.workstreamId},env,{uuid:()=>workPackageId,now:options.now}).workPackage;
   store=readWorkStore(context,env);let task=store.tasks.find(item=>item.id===taskId);
   if(task&&(task.workPackageId!==wp.id||task.title!==taskTitle))fail('BRIDGE_REQUEST_CONFLICT');
-  if(!task)task=createTask(context,{workPackageId:wp.id,title:taskTitle,status:'TODO'},env,{uuid:()=>taskId,now:options.now}).task;
+  if(!task)task=createTask(context,{workPackageId:wp.id,title:taskTitle,status:'TODO',roomId:input?.roomId,workstreamId:input?.workstreamId},env,{uuid:()=>taskId,now:options.now}).task;
   return {task,wp};
 }
 function taskBinding(context,input,env,options={}){
@@ -39,10 +39,10 @@ function taskBinding(context,input,env,options={}){
 }
 function requestCandidate(context,input,binding,runId,now){
   const instruction=exactInstruction(input.instruction);
-  return {schema:'aicc.v3.bridge-request.v1',requestId:uuid(input.requestId),provider:input.provider,conversationId:text(input.conversationId,'BRIDGE_CONVERSATION_ID_UNAVAILABLE'),originTurnId:text(input.originTurnId,'BRIDGE_ORIGIN_TURN_ID_REQUIRED'),taskId:binding.task.id,workPackageId:binding.wp.id,instructionSha256:sha256(instruction),runId,projectId:context.project.id,repositoryIdentity:context.repository.identity,repositoryPath:context.repository.path,createdAt:now()};
+  return {schema:'aicc.v3.bridge-request.v1',requestId:uuid(input.requestId),provider:input.provider,conversationId:text(input.conversationId,'BRIDGE_CONVERSATION_ID_UNAVAILABLE'),originTurnId:text(input.originTurnId,'BRIDGE_ORIGIN_TURN_ID_REQUIRED'),taskId:binding.task.id,workPackageId:binding.wp.id,roomId:typeof input?.roomId==='string'&&input.roomId.trim()?input.roomId.trim():null,workstreamId:typeof input?.workstreamId==='string'&&input.workstreamId.trim()?input.workstreamId.trim():null,instructionSha256:sha256(instruction),runId,projectId:context.project.id,repositoryIdentity:context.repository.identity,repositoryPath:context.repository.path,createdAt:now()};
 }
 function sameBinding(existing,input,binding,instructionHash){
-  return existing.provider===input.provider&&existing.conversationId===input.conversationId&&existing.originTurnId===input.originTurnId&&existing.taskId===binding.task.id&&existing.workPackageId===binding.wp.id&&existing.instructionSha256===instructionHash;
+  return existing.provider===input.provider&&existing.conversationId===input.conversationId&&existing.originTurnId===input.originTurnId&&existing.taskId===binding.task.id&&existing.workPackageId===binding.wp.id&&(existing.roomId??null)===(input.roomId??null)&&(existing.workstreamId??null)===(input.workstreamId??null)&&existing.instructionSha256===instructionHash;
 }
 function startExactRun(context,request,instruction,env,options){
   try{return (options.startRun||startRun)(context,{taskId:request.taskId,instruction},env,{...(options.executorOptions||{}),uuid:()=>request.runId});}

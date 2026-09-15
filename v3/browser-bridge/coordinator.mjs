@@ -16,8 +16,12 @@ export function createCoordinator(deps={}){
 
   async function requestMap(){return (await storage.get(REQUESTS_KEY))||{};}
   async function saveMap(map){await storage.set(REQUESTS_KEY,map);return map;}
+  let ledgerMutation=Promise.resolve();
   async function getLedger(requestId){return (await requestMap())[requestId]||null;}
-  async function putLedger(ledger){const map=await requestMap();map[ledger.requestId]=ledger;await saveMap(map);return ledger;}
+  async function putLedger(ledger){
+    const task=ledgerMutation.then(async()=>{const map=await requestMap();map[ledger.requestId]=ledger;await saveMap(map);return ledger;});
+    ledgerMutation=task.catch(()=>{});return task;
+  }
 
   async function instanceId(){
     let value=await storage.get(INSTANCE_KEY);

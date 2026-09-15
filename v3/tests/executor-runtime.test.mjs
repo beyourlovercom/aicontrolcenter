@@ -101,13 +101,13 @@ test('one lease rejects second start and exact stop reaches only owned worker',a
   assert.ok(types.includes('STOP_REQUESTED'));assert.ok(types.includes('PROCESS_STOPPED'));
 });
 
-test('same project identity cannot read a Run from a different worktree inode',()=>{
+test('same project identity cannot discover a Run from a different worktree runtime bucket',()=>{
   const f=fixture('exit');
   const options={...f.options,spawnWorker:()=>31337,processProbe:()=>true,uuid:()=> '00000000-0000-4000-8000-000000000002'};
   const run=startRun(f.context,{taskId:f.task.id,instruction:'binding fixture\n'},f.env,options);
   const other=join(f.root,'other-worktree');mkdirSync(other);
   const foreign={project:{id:f.context.project.id},repository:{identity:f.context.repository.identity,path:other}};
-  assert.throws(()=>readRun(foreign,run.runId,f.env),e=>e.code==='RUN_PROJECT_MISMATCH');
+  assert.throws(()=>readRun(foreign,run.runId,f.env),e=>e.code==='RUN_NOT_FOUND');
 });
 
 test('restart reconciliation marks unprovable active run ORPHANED and releases lease',()=>{

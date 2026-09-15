@@ -153,3 +153,14 @@ test('extension manifest and source keep credential privileged and forbid active
   assert.equal(content.includes('container.appendChild(button)'),false);assert.equal(content.includes("margin:'8px 0'"),false);
   assert.equal(pairing.includes('console.log(token)'),false);assert.match(pairing,/pbcopy/);
 });
+
+
+test('concurrent Room enqueue preserves both durable ledgers and planner permits four in-flight Rooms',async()=>{
+  const storage=memoryStorage();const coordinator=createCoordinator({storage,api:baseApi(),destination:{deliver:async()=>({outcome:'DELIVERED'})},ids:{uuid:(()=>{let n=0;return()=>`10000000-0000-4000-8000-${String(++n).padStart(12,'0')}`;})()}});
+  const [a,b]=await Promise.all([
+    coordinator.enqueueAction({url:'https://chatgpt.com/c/room-a',workPackageTitle:'WP A',taskTitle:'Task A',instruction:'A'}),
+    coordinator.enqueueAction({url:'https://chatgpt.com/c/room-b',workPackageTitle:'WP B',taskTitle:'Task B',instruction:'B'})
+  ]);
+  assert.notEqual(a.ledger.requestId,b.ledger.requestId);assert.equal((await coordinator.ledgers()).length,2);
+  const background=readFileSync(join(root,'browser-bridge/background.js'),'utf8');assert.match(background,/NEXT_STEP_MAX_CONCURRENCY=4/);assert.match(background,/const nextStepInFlight=new Set\(\)/);assert.equal(background.includes('let nextStepPollRunning=false'),false);
+});

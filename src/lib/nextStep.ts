@@ -40,7 +40,7 @@ async function jsonResponse(response: Response) {
 }
 export async function submitNextStep(room: ExecutionRoomState, draft: string, fetcher: typeof fetch = fetch): Promise<NextStepProjection> {
   const response = await fetcher('/api/next-step/requests', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({
-    roomId: room.roomId, roomName: room.name, workstreamId: room.workstreamId, branch: room.branch, worktree: room.worktree,
+    roomId: room.roomId, roomName: room.name, projectId: room.projectId, repositoryIdentity: room.repo, workstreamId: room.workstreamId, branch: room.branch, worktree: room.worktree,
     conversationId: room.gptConversationBinding, draft
   }) });
   const value = await jsonResponse(response); return { request: value.request, state: value.state };
@@ -58,4 +58,9 @@ export function nextStepStatusLabel(value: NextStepProjection | null): string {
   if (state === 'STOP_GATE') return 'STOP Gate · 等待 Owner';
   if (state === 'ABORTED_BEFORE_SEND') return '未发送 · 可安全重试';
   return 'UNCERTAIN · 禁止自动重放';
+}
+
+export async function cancelPendingNextStepForRoom(roomId: string, fetcher: typeof fetch = fetch): Promise<{cancelled:string[];claimed:string[]}> {
+  const value = await jsonResponse(await fetcher(`/api/next-step/rooms/${encodeURIComponent(roomId)}/cancel-pending`, { method: 'POST' }));
+  return { cancelled: Array.isArray(value.cancelled) ? value.cancelled : [], claimed: Array.isArray(value.claimed) ? value.claimed : [] };
 }

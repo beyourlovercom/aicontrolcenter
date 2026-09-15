@@ -41,10 +41,10 @@ test('non-EXITED Run and missing executor final message fail closed',()=>{
   const active=fixture({state:'RUNNING'});assert.throws(()=>materializeResult(active.context,active.runId,active.env),e=>e.code==='RESULT_NOT_READY');
   const missing=fixture({messages:[]});assert.throws(()=>materializeResult(missing.context,missing.runId,missing.env),e=>e.code==='RESULT_SOURCE_NOT_FOUND');
 });
-test('Result validates worktree identity and immutable content evidence',()=>{
+test('Result is undiscoverable from a different worktree and preserves immutable content evidence',()=>{
   const f=fixture();materializeResult(f.context,f.runId,f.env);
   const other=join(f.root,'other-worktree');mkdirSync(other);const foreign={project:{id:f.context.project.id},repository:{identity:f.context.repository.identity,path:other}};
-  assert.throws(()=>readResult(foreign,f.runId,f.env),e=>e.code==='RESULT_PROJECT_MISMATCH');
+  assert.throws(()=>readResult(foreign,f.runId,f.env),e=>e.code==='RESULT_NOT_FOUND');
   const path=resultFile(f.context,f.runId,f.env);const corrupted=JSON.parse(readFileSync(path,'utf8'));corrupted.content='rewritten';writeFileSync(path,JSON.stringify(corrupted));
   assert.throws(()=>readResult(f.context,f.runId,f.env),e=>e.code==='RESULT_INVALID');
 });

@@ -156,45 +156,55 @@ async function autoPair(){
   return savePairing(value.token);
 }
 const NEXT_STEP_RECEIPTS_KEY='aiccNextStepReceiptsV1';
+const NEXT_STEP_MAX_CONCURRENCY=4;
+let nextStepReceiptMutation=Promise.resolve();
 async function nextStepReceiptMap(){
-  return (await storage.get(NEXT_STEP_RECEIPTS_KEY))||{};
+  const value=await storage.get(NEXT_STEP_RECEIPTS_KEY);
+  return value||{};
 }
 async function persistNextStepReceipt(requestId,body){
-  const map=await nextStepReceiptMap();
-  map[requestId]=body;
-  await storage.set(NEXT_STEP_RECEIPTS_KEY,map);
-  return body;
+  const task=nextStepReceiptMutation.then(async()=>{const map=await nextStepReceiptMap();map[requestId]=body;await storage.set(NEXT_STEP_RECEIPTS_KEY,map);return body;});
+  nextStepReceiptMutation=task.catch(()=>{});return task;
 }
 async function flushNextStepReceipts(){
-  const map=await nextStepReceiptMap();
-  for(const [requestId,body] of Object.entries(map)){
-    try{await api.nextStepReceipt(requestId,body);delete map[requestId];await storage.set(NEXT_STEP_RECEIPTS_KEY,map);}catch{}
-  }
+  const task=nextStepReceiptMutation.then(async()=>{
+    const map=await nextStepReceiptMap();let changed=false;
+    for(const [requestId,body] of Object.entries(map)){
+      try{await api.nextStepReceipt(requestId,body);delete map[requestId];changed=true;}catch{}
+    }
+    if(changed)await storage.set(NEXT_STEP_RECEIPTS_KEY,map);
+  });
+  nextStepReceiptMutation=task.catch(()=>{});return task;
 }
-let nextStepPollRunning=false;
-async function pollNextStep(){
-  if(nextStepPollRunning)return;nextStepPollRunning=true;
+async function finishNextStep(requestId,body){
+  await persistNextStepReceipt(requestId,body);
+  await flushNextStepReceipts();
+}
+const nextStepInFlight=new Set();let nextStepClaimLoopRunning=false;
+async function processNextStepClaim(claimed){
+  const requestValue=claimed.request;const claimId=claimed.state.claim.claimId;const requestId=requestValue.requestId;
   try{
-    await flushNextStepReceipts();
-    const bridgeInstanceId=await coordinator.instanceId();const claimed=await api.claimNextStep({bridgeInstanceId});if(!claimed?.request||!claimed?.state?.claim)return;
-    const requestValue=claimed.request;const claimId=claimed.state.claim.claimId;
     const planned=await planningDestination.plan(requestValue);
-    if(planned?.outcome==='ABORTED_BEFORE_SEND'){
-      const body={claimId,outcome:'ABORTED_BEFORE_SEND',errorCode:planned.reason||'NEXT_STEP_ABORTED_BEFORE_SEND'};await persistNextStepReceipt(requestValue.requestId,body);await flushNextStepReceipts();return;
-    }
-    if(planned?.outcome!=='DELIVERED'||typeof planned.assistantText!=='string'){
-      const body={claimId,outcome:'UNCERTAIN',errorCode:planned?.reason||'NEXT_STEP_DECISION_UNCERTAIN'};await persistNextStepReceipt(requestValue.requestId,body);await flushNextStepReceipts();return;
-    }
-    let decision;try{decision=parseNextStepDecision(planned.assistantText);}catch{
-      const body={claimId,outcome:'UNCERTAIN',errorCode:'NEXT_STEP_DECISION_INVALID'};await persistNextStepReceipt(requestValue.requestId,body);await flushNextStepReceipts();return;
-    }
-    if(decision.decision==='STOP_GATE'){
-      const body={claimId,outcome:'STOP_GATE',decision};await persistNextStepReceipt(requestValue.requestId,body);await flushNextStepReceipts();return;
-    }
-    const queued=await coordinator.enqueueAction({url:requestValue.conversationUrl,tabId:planned.tabId,workPackageTitle:decision.workPackageTitle,taskTitle:decision.taskTitle,instruction:decision.instruction});
-    const body={claimId,outcome:'EXECUTION_QUEUED',bridgeRequestId:queued.ledger.requestId,decision};await persistNextStepReceipt(requestValue.requestId,body);await flushNextStepReceipts();
+    if(planned?.outcome==='ABORTED_BEFORE_SEND'){await finishNextStep(requestId,{claimId,outcome:'ABORTED_BEFORE_SEND',errorCode:planned.reason||'NEXT_STEP_ABORTED_BEFORE_SEND'});return;}
+    if(planned?.outcome!=='DELIVERED'||typeof planned.assistantText!=='string'){await finishNextStep(requestId,{claimId,outcome:'UNCERTAIN',errorCode:planned?.reason||'NEXT_STEP_DECISION_UNCERTAIN'});return;}
+    let decision;try{decision=parseNextStepDecision(planned.assistantText);}catch{await finishNextStep(requestId,{claimId,outcome:'UNCERTAIN',errorCode:'NEXT_STEP_DECISION_INVALID'});return;}
+    if(decision.decision==='STOP_GATE'){await finishNextStep(requestId,{claimId,outcome:'STOP_GATE',decision});return;}
+    const queued=await coordinator.enqueueAction({url:requestValue.conversationUrl,tabId:planned.tabId,workPackageTitle:decision.workPackageTitle,taskTitle:decision.taskTitle,instruction:decision.instruction,roomId:requestValue.roomId,workstreamId:requestValue.workstreamId,runtimeBinding:{projectId:requestValue.projectId,projectName:requestValue.projectName||requestValue.projectId,repositoryIdentity:requestValue.repositoryIdentity,repositoryPath:requestValue.worktree,branch:requestValue.branch,head:requestValue.head}});
+    await finishNextStep(requestId,{claimId,outcome:'EXECUTION_QUEUED',bridgeRequestId:queued.ledger.requestId,decision});
     void coordinator.pollOne(queued.ledger.requestId).catch(()=>{}).finally(()=>burstPoll());
-  }catch{}finally{nextStepPollRunning=false;}
+  }catch{await finishNextStep(requestId,{claimId,outcome:'UNCERTAIN',errorCode:'NEXT_STEP_PROCESSING_UNCERTAIN'}).catch(()=>{});}
+  finally{nextStepInFlight.delete(requestId);void pollNextStep();}
+}
+async function pollNextStep(){
+  if(nextStepClaimLoopRunning)return;nextStepClaimLoopRunning=true;
+  try{
+    await flushNextStepReceipts();const bridgeInstanceId=await coordinator.instanceId();
+    while(nextStepInFlight.size<NEXT_STEP_MAX_CONCURRENCY){
+      const claimed=await api.claimNextStep({bridgeInstanceId});if(!claimed?.request||!claimed?.state?.claim)break;
+      const requestId=claimed.request.requestId;if(nextStepInFlight.has(requestId))break;
+      nextStepInFlight.add(requestId);void processNextStepClaim(claimed);
+    }
+  }catch{}finally{nextStepClaimLoopRunning=false;}
 }
 
 let burstRunning=false;

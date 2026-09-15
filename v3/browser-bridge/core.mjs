@@ -19,6 +19,14 @@ export function exactInstruction(value){
   if(typeof value!=='string'||!value.trim()||new TextEncoder().encode(value).length>60000)fail('BRIDGE_REQUEST_INVALID');
   return value;
 }
+function exactRuntimeBinding(value){
+  if(value==null)return null;
+  if(typeof value!=='object')fail('BRIDGE_REQUEST_INVALID');
+  const required=['projectId','repositoryIdentity','repositoryPath','branch','head'];const out={};
+  for(const key of required){if(typeof value[key]!=='string'||!value[key].trim())fail('BRIDGE_REQUEST_INVALID');out[key]=value[key].trim();}
+  out.projectName=typeof value.projectName==='string'&&value.projectName.trim()?value.projectName.trim():out.projectId;
+  return out;
+}
 export function createOriginBinding(input,ids={}){
   const {conversationId,conversationUrl}=conversationFromUrl(input?.url);
   const taskId=typeof input?.taskId==='string'&&input.taskId.trim()?input.taskId.trim():null;
@@ -35,7 +43,10 @@ export function createOriginBinding(input,ids={}){
     taskId,
     workPackageTitle,
     taskTitle,
-    instruction
+    instruction,
+    runtimeBinding:exactRuntimeBinding(input?.runtimeBinding),
+    roomId:typeof input?.roomId==='string'&&input.roomId.trim()?input.roomId.trim():null,
+    workstreamId:typeof input?.workstreamId==='string'&&input.workstreamId.trim()?input.workstreamId.trim():null
   };
 }
 
@@ -50,6 +61,9 @@ export function requestBody(binding){
   body.taskTitle=binding.taskTitle;
   if(binding.taskId)body.taskId=binding.taskId;
   else body.workPackageTitle=binding.workPackageTitle;
+  if(binding.runtimeBinding)body.runtimeBinding=binding.runtimeBinding;
+  if(binding.roomId)body.roomId=binding.roomId;
+  if(binding.workstreamId)body.workstreamId=binding.workstreamId;
   return body;
 }
 

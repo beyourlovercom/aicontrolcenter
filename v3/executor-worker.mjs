@@ -3,19 +3,19 @@ import {createInterface} from 'node:readline';
 import {readFileSync} from 'node:fs';
 import {join} from 'node:path';
 import {stateRoot} from './lib/project-context.mjs';
-import {projectStateKey} from './lib/work-store.mjs';
+import {runtimeStateKey} from './lib/runtime-state.mjs';
 import {appendRunEvent,readLease,readRun,readStopRequest,releaseLease,updateRun} from './lib/run-store.mjs';
 import {materializeResult} from './lib/result-store.mjs';
 
 function arg(name){const prefix=`--${name}=`;return process.argv.find(v=>v.startsWith(prefix))?.slice(prefix.length)||null;}
-const runId=arg('run-id');const projectKey=arg('project-key');
-if(!runId||!projectKey)process.exit(64);
-const runPath=join(stateRoot(process.env),'projects',projectKey,'runs',runId,'run.v1.json');
+const runId=arg('run-id');const runtimeKey=arg('runtime-key');
+if(!runId||!runtimeKey)process.exit(64);
+const runPath=join(stateRoot(process.env),'runtimes',runtimeKey,'runs',runId,'run.v1.json');
 let initial;
 try{initial=JSON.parse(readFileSync(runPath,'utf8'));}catch{process.exit(65);}
 const context={project:{id:initial.projectId},repository:{identity:initial.repositoryIdentity,path:initial.repositoryPath}};
-if(projectStateKey(context)!==projectKey||initial.runId!==runId)process.exit(66);
-const instruction=readFileSync(join(stateRoot(process.env),'projects',projectKey,'runs',runId,'instruction.txt'),'utf8');
+if(runtimeStateKey(context)!==runtimeKey||initial.runId!==runId)process.exit(66);
+const instruction=readFileSync(join(stateRoot(process.env),'runtimes',runtimeKey,'runs',runId,'instruction.txt'),'utf8');
 const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
 async function awaitLease(){
   for(let i=0;i<80;i++){

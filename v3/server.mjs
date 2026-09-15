@@ -2,16 +2,16 @@ import {createServer as createHttpServer} from 'node:http';
 import {readFileSync} from 'node:fs';
 import {fileURLToPath} from 'node:url';
 import {dirname,join} from 'node:path';
-import {loadProjectContext,stateRoot} from './lib/project-context.mjs';
+import {loadProjectContext,loadProjectContextFromBinding,stateRoot} from './lib/project-context.mjs';
 import {loadCanonicalRoadmap} from './lib/roadmap.mjs';
-import {createTask,createWorkPackage,readWorkStore,updateTaskStatus,updateWorkPackageStatus} from './lib/work-store.mjs';
+import {createTask,createWorkPackage,readRoomWorkStore,readWorkStore,updateTaskStatus,updateWorkPackageStatus} from './lib/work-store.mjs';
 import {executorStatus,runEvents,runProjection,startRun,stopRun} from './lib/executor-runtime.mjs';
 import {readOrMaterializeResult} from './lib/result-store.mjs';
 import {createDraftPr,readPrDeliveryFacts} from './lib/github-delivery.mjs';
-import {ensureBridgeCredential,verifyBridgeCredential} from './lib/bridge-store.mjs';
+import {ensureBridgeCredential,listBridgeRequestIds,readBridgeRequestBinding,verifyBridgeCredential} from './lib/bridge-store.mjs';
 import {bridgeProjection,claimBridgeDelivery,reconcileBridgeStartup,recordBridgeReceipt,submitBridgeRequest} from './lib/bridge-runtime.mjs';
 import {createChatgptProjectionStore} from './lib/chatgpt-projection.mjs';
-import {assertNextStepLocal,claimNextStep,createNextStepRequest,readNextStepRequest,reconcileNextStepStartup,recordNextStepReceipt} from './lib/next-step-runtime.mjs';
+import {assertNextStepLocal,cancelPendingNextStepForRoom,claimNextStep,createNextStepRequest,readNextStepRequest,reconcileNextStepStartup,recordNextStepReceipt} from './lib/next-step-runtime.mjs';
 
 const root=dirname(fileURLToPath(import.meta.url));
 const publicRoot=join(root,'public');
@@ -126,6 +126,17 @@ function requireBridgeAuth(req,env,options={}){
   const raw=req.headers['x-aicc-bridge-token'];const token=Array.isArray(raw)?raw[0]:raw;
   verifyBridgeCredential(token,env,options.credentialOptions||{});
 }
+function bridgeRuntimeContext(input,env){
+  const runtime=input?.runtimeBinding;if(!runtime)return loadProjectContext(env);
+  const context=loadProjectContextFromBinding({projectId:runtime.projectId,projectName:runtime.projectName||runtime.projectId,repositoryIdentity:runtime.repositoryIdentity,repositoryPath:runtime.repositoryPath});
+  if(context.repository.branch!==runtime.branch||context.repository.head!==runtime.head){const error=new Error('BRIDGE_PROJECT_MISMATCH');error.code='BRIDGE_PROJECT_MISMATCH';throw error;}
+  if(context.repository.dirty){const error=new Error('BRIDGE_RUN_BINDING_FAILED');error.code='BRIDGE_RUN_BINDING_FAILED';throw error;}
+  return context;
+}
+function bridgeRequestContext(requestId,env){
+  const binding=readBridgeRequestBinding(requestId,env);
+  return loadProjectContextFromBinding({projectId:binding.projectId,projectName:binding.projectId,repositoryIdentity:binding.repositoryIdentity,repositoryPath:binding.repositoryPath});
+}
 
 async function readJson(req,maxBytes=65536){
   let body='';
@@ -144,7 +155,19 @@ export function createAiccV3Server(options={}){
   const prDeliveryOptions=options.prDeliveryOptions||{};
   const bridgeOptions={...(options.bridgeOptions||{}),executorOptions:options.bridgeOptions?.executorOptions||executorOptions};
   const chatgptProjection=options.chatgptProjectionStore||createChatgptProjectionStore();
-  try{const context=loadProjectContext(env);reconcileBridgeStartup(context,env,bridgeOptions);reconcileNextStepStartup(context,env,options.nextStepOptions||{});}catch{}
+  try{
+    const seen=new Set();
+    for(const requestId of listBridgeRequestIds(null,env)){
+      try{
+        const binding=readBridgeRequestBinding(requestId,env);const key=`${binding.projectId}\0${binding.repositoryIdentity}\0${binding.repositoryPath}`;
+        if(seen.has(key))continue;seen.add(key);
+        const context=loadProjectContextFromBinding({projectId:binding.projectId,projectName:binding.projectId,repositoryIdentity:binding.repositoryIdentity,repositoryPath:binding.repositoryPath});
+        reconcileBridgeStartup(context,env,bridgeOptions);
+      }catch{}
+    }
+    if(!seen.size){try{const context=loadProjectContext(env);reconcileBridgeStartup(context,env,bridgeOptions);}catch{}}
+  }catch{}
+  try{reconcileNextStepStartup(null,env,options.nextStepOptions||{});}catch{}
   return createHttpServer(async(req,res)=>{
     const url=new URL(req.url||'/',`http://${req.headers.host||'localhost'}`);
     if(handleExtensionCors(req,res,url,env))return;
@@ -159,6 +182,22 @@ export function createAiccV3Server(options={}){
     if(req.method==='GET'&&url.pathname==='/api/project'){
       try{return json(res,200,{available:true,context:loadProjectContext(env)});}
       catch(error){return json(res,503,projectError(error));}
+    }
+
+    if(req.method==='POST'&&url.pathname==='/api/room-facts'){
+      try{
+        assertNextStepLocal(req.socket?.remoteAddress||'');const input=await readJson(req,16384);
+        const context=loadProjectContextFromBinding(input);
+        const source=(read,fallback)=>{try{return {available:true,value:read(),errorCode:null};}catch(error){return {available:false,value:null,errorCode:error?.code||fallback};}};
+        const facts={
+          capturedAt:new Date().toISOString(),
+          project:{available:true,value:context,errorCode:null},
+          executor:source(()=>executorStatus(context,env,executorOptions),'EXECUTOR_FACTS_UNAVAILABLE'),
+          prDelivery:source(()=>readPrDeliveryFacts(context,env,prDeliveryOptions),'PR_FACTS_UNAVAILABLE'),
+          work:source(()=>readRoomWorkStore(context,input?.roomId,input?.workstreamId,env),'WORK_FACTS_UNAVAILABLE')
+        };
+        return json(res,200,{available:true,facts});
+      }catch(error){return json(res,409,{available:false,errorCode:error?.code||'ROOM_RUNTIME_UNAVAILABLE'});}
     }
 
     if(req.method==='GET'&&url.pathname==='/api/roadmap'){
@@ -210,15 +249,22 @@ export function createAiccV3Server(options={}){
 
     if(req.method==='POST'&&url.pathname==='/api/next-step/requests'){
       try{
-        assertNextStepLocal(req.socket?.remoteAddress||'');const input=await readJson(req,16384);const context=loadProjectContext(env);
+        assertNextStepLocal(req.socket?.remoteAddress||'');const input=await readJson(req,16384);
+        const context=loadProjectContextFromBinding({projectId:input?.projectId,projectName:input?.roomName||input?.projectId,repositoryIdentity:input?.repositoryIdentity,repositoryPath:input?.worktree});
         const executor=executorStatus(context,env,executorOptions);const snapshot=chatgptProjection.get(input?.conversationId);
         const created=createNextStepRequest(context,input,{executorReady:Boolean(executor?.readiness?.ready),activeRun:executor?.activeLease?.runId||null,snapshot},env,options.nextStepOptions||{});
         return json(res,201,{ok:true,...created});
       }catch(error){return nextStepError(res,error);}
     }
+    const nextStepRoomCancel=url.pathname.match(/^\/api\/next-step\/rooms\/([^/]+)\/cancel-pending$/);
+    if(req.method==='POST'&&nextStepRoomCancel){
+      try{assertNextStepLocal(req.socket?.remoteAddress||'');return json(res,200,{ok:true,...cancelPendingNextStepForRoom(null,decodeURIComponent(nextStepRoomCancel[1]),env,options.nextStepOptions||{})});}
+      catch(error){return nextStepError(res,error);}
+    }
+
     const nextStepRequest=url.pathname.match(/^\/api\/next-step\/requests\/([^/]+)$/);
     if(req.method==='GET'&&nextStepRequest){
-      try{assertNextStepLocal(req.socket?.remoteAddress||'');const context=loadProjectContext(env);return json(res,200,{available:true,...readNextStepRequest(context,decodeURIComponent(nextStepRequest[1]),env)});}
+      try{assertNextStepLocal(req.socket?.remoteAddress||'');return json(res,200,{available:true,...readNextStepRequest(null,decodeURIComponent(nextStepRequest[1]),env)});}
       catch(error){return nextStepError(res,error);}
     }
 
@@ -244,31 +290,31 @@ export function createAiccV3Server(options={}){
       catch(error){return json(res,400,{ok:false,errorCode:error?.code||'CHATGPT_SNAPSHOT_INVALID'});}
     }
     if(req.method==='POST'&&url.pathname==='/api/bridge/next-step/claim'){
-      try{const input=await readJson(req);const context=loadProjectContext(env);const claimed=claimNextStep(context,input,env,options.nextStepOptions||{});return json(res,200,{ok:true,claimed});}
+      try{const input=await readJson(req);const claimed=claimNextStep(null,input,env,options.nextStepOptions||{});return json(res,200,{ok:true,claimed});}
       catch(error){return nextStepError(res,error);}
     }
     const nextStepReceipt=url.pathname.match(/^\/api\/bridge\/next-step\/([^/]+)\/receipt$/);
     if(req.method==='POST'&&nextStepReceipt){
-      try{const input=await readJson(req,16384);const context=loadProjectContext(env);return json(res,200,{ok:true,...recordNextStepReceipt(context,decodeURIComponent(nextStepReceipt[1]),input,env,options.nextStepOptions||{})});}
+      try{const input=await readJson(req,16384);return json(res,200,{ok:true,...recordNextStepReceipt(null,decodeURIComponent(nextStepReceipt[1]),input,env,options.nextStepOptions||{})});}
       catch(error){return nextStepError(res,error);}
     }
     if(req.method==='POST'&&url.pathname==='/api/bridge/requests'){
-      try{const input=await readJson(req);const context=loadProjectContext(env);return json(res,201,{ok:true,...submitBridgeRequest(context,input,env,bridgeOptions)});}
+      try{const input=await readJson(req);const context=bridgeRuntimeContext(input,env);return json(res,201,{ok:true,...submitBridgeRequest(context,input,env,bridgeOptions)});}
       catch(error){return bridgeError(res,error);}
     }
     const bridgeClaim=url.pathname.match(/^\/api\/bridge\/requests\/([^/]+)\/claim$/);
     if(req.method==='POST'&&bridgeClaim){
-      try{const input=await readJson(req);const context=loadProjectContext(env);const requestId=decodeURIComponent(bridgeClaim[1]);return json(res,200,{ok:true,...claimBridgeDelivery(context,requestId,input,env,bridgeOptions)});}
+      try{const input=await readJson(req);const requestId=decodeURIComponent(bridgeClaim[1]);const context=bridgeRequestContext(requestId,env);return json(res,200,{ok:true,...claimBridgeDelivery(context,requestId,input,env,bridgeOptions)});}
       catch(error){return bridgeError(res,error);}
     }
     const bridgeReceipt=url.pathname.match(/^\/api\/bridge\/requests\/([^/]+)\/receipt$/);
     if(req.method==='POST'&&bridgeReceipt){
-      try{const input=await readJson(req);const context=loadProjectContext(env);const requestId=decodeURIComponent(bridgeReceipt[1]);return json(res,200,{ok:true,...recordBridgeReceipt(context,requestId,input,env,bridgeOptions)});}
+      try{const input=await readJson(req);const requestId=decodeURIComponent(bridgeReceipt[1]);const context=bridgeRequestContext(requestId,env);return json(res,200,{ok:true,...recordBridgeReceipt(context,requestId,input,env,bridgeOptions)});}
       catch(error){return bridgeError(res,error);}
     }
     const bridgeRequest=url.pathname.match(/^\/api\/bridge\/requests\/([^/]+)$/);
     if(req.method==='GET'&&bridgeRequest){
-      try{const context=loadProjectContext(env);const requestId=decodeURIComponent(bridgeRequest[1]);return json(res,200,{available:true,bridge:bridgeProjection(context,requestId,env,bridgeOptions)});}
+      try{const requestId=decodeURIComponent(bridgeRequest[1]);const context=bridgeRequestContext(requestId,env);return json(res,200,{available:true,bridge:bridgeProjection(context,requestId,env,bridgeOptions)});}
       catch(error){return bridgeError(res,error);}
     }
 
