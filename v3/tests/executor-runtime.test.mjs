@@ -8,7 +8,7 @@ import {loadProjectContext} from '../lib/project-context.mjs';
 import {createTask,createWorkPackage} from '../lib/work-store.mjs';
 import {readLease,readRun,readRunEvents} from '../lib/run-store.mjs';
 import {readResult} from '../lib/result-store.mjs';
-import {preflightCodex,reconcileExecutor,startRun,stopRun} from '../lib/executor-runtime.mjs';
+import {cachedDefaultPreflight,preflightCodex,resetExecutorPreflightCache,reconcileExecutor,startRun,stopRun} from '../lib/executor-runtime.mjs';
 
 function git(cwd,...args){return execFileSync('git',args,{cwd,encoding:'utf8'}).trim();}
 function fixture(mode='exit'){
@@ -119,4 +119,26 @@ test('restart reconciliation marks unprovable active run ORPHANED and releases l
   assert.equal(readRun(f.context,run.runId,f.env).state,'ORPHANED');
   assert.equal(readLease(f.context,f.env),null);
   assert.equal(readRunEvents(f.context,run.runId,0,f.env).at(-1).type,'RUN_ORPHANED');
+});
+
+
+test('default executor readiness cache avoids repeated doctor calls',()=>{
+  const root=mkdtempSync(join(tmpdir(),'aicc-executor-preflight-cache-'));
+  const fake=join(root,'fake-codex-doctor');const count=join(root,'count.txt');
+  writeFileSync(fake,`#!/bin/sh
+COUNT_FILE="$AICC_TEST_COUNT_FILE"
+N=0
+[ -f "$COUNT_FILE" ] && N=$(cat "$COUNT_FILE")
+echo $((N+1)) > "$COUNT_FILE"
+cat <<'JSON'
+{"codexVersion":"fake-cache","overallStatus":"ok","checks":{"installation":{"id":"installation","status":"ok"},"auth.credentials":{"id":"auth.credentials","status":"ok","details":{"stored auth mode":"test"}},"network.provider_reachability":{"id":"network.provider_reachability","status":"ok"}}}
+JSON
+`);
+  chmodSync(fake,0o755);
+  const env={...process.env,AICC_CODEX_PATH:fake,AICC_TEST_COUNT_FILE:count};
+  resetExecutorPreflightCache();
+  const first=cachedDefaultPreflight(env);const second=cachedDefaultPreflight(env);
+  assert.equal(first.version,'fake-cache');assert.equal(second.version,'fake-cache');
+  assert.equal(readFileSync(count,'utf8').trim(),'1');
+  resetExecutorPreflightCache();
 });

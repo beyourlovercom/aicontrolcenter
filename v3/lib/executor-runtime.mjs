@@ -94,8 +94,25 @@ function defaultSpawnWorker(context,run,env){
   if(!child.pid)fail('EXECUTOR_NOT_READY');
   return child.pid;
 }
+const DEFAULT_PREFLIGHT_CACHE_TTL_MS=60_000;
+let defaultPreflightCache=null;
+function defaultPreflightCacheKey(env){return `${env.AICC_CODEX_PATH||''}|${env.HOME||''}`;}
+export function cachedDefaultPreflight(env,options={}){
+  if(options.execFile||options.codexPath)return preflightCodex(env,options);
+  const key=defaultPreflightCacheKey(env);const stamp=Date.now();
+  if(defaultPreflightCache&&defaultPreflightCache.key===key&&stamp-defaultPreflightCache.cachedAt<DEFAULT_PREFLIGHT_CACHE_TTL_MS){
+    if(defaultPreflightCache.errorCode)fail(defaultPreflightCache.errorCode);
+    return defaultPreflightCache.value;
+  }
+  try{
+    const value=preflightCodex(env,options);defaultPreflightCache={key,cachedAt:stamp,value,errorCode:null};return value;
+  }catch(error){
+    const errorCode=error?.code||'EXECUTOR_NOT_READY';defaultPreflightCache={key,cachedAt:stamp,value:null,errorCode};fail(errorCode);
+  }
+}
+export function resetExecutorPreflightCache(){defaultPreflightCache=null;}
 function executorPreflight(env,options){
-  return options.preflight?options.preflight():preflightCodex(env,options);
+  return options.preflight?options.preflight():cachedDefaultPreflight(env,options);
 }
 export function startRun(context,input,env=process.env,options={}){
   if(reconcileExecutor(context,env,options))fail('EXECUTOR_LEASE_ACTIVE');
