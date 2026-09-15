@@ -34,9 +34,9 @@ Restore account/machine-global executor governance after the expired August low-
 
 V2 enforcement files:
 
-- `/Users/a/.aicc-remote/claude-governed`
-- `/Users/a/.aicc-remote/AI_EXECUTOR_GOVERNANCE_V2.md`
-- `/Users/a/.claude/statusline.sh`
+- `~/.aicc-remote/claude-governed`
+- `~/.aicc-remote/AI_EXECUTOR_GOVERNANCE_V2.md`
+- `~/.claude/statusline.sh`
 
 Machine validation:
 

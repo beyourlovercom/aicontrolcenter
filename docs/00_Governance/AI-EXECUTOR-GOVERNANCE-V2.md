@@ -53,7 +53,7 @@ The routing goal is reliable completion, not quota consumption. Claude quota bei
 
 Canonical US-Mac entrypoint:
 
-`/opt/homebrew/bin/claude -> /Users/a/.aicc-remote/claude-governed`
+`/opt/homebrew/bin/claude -> ~/.aicc-remote/claude-governed`
 
 Every governed Claude implementation launch requires:
 
