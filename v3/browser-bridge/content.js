@@ -1,6 +1,6 @@
 (()=>{
   'use strict';
-  const CONTENT_VERSION='3.8.15';
+  const CONTENT_VERSION='3.8.16';
   if(globalThis.__AICC_V3_BRIDGE_CONTENT_VERSION__===CONTENT_VERSION)return;
   try{globalThis.__AICC_V3_BRIDGE_CLEANUP__?.();}catch{}
   globalThis.__AICC_V3_BRIDGE_CONTENT_VERSION__=CONTENT_VERSION;
@@ -232,8 +232,6 @@
     return response?{outcome:'DELIVERED',assistantText:response}:{outcome:'UNCERTAIN',reason:'NEXT_STEP_GPT_DECISION_UNPROVEN'};
   }
 
-  let nextStepPollTimer=null;
-  function scheduleNextStepPoll(){clearTimeout(nextStepPollTimer);nextStepPollTimer=setTimeout(()=>{void message('AICC_NEXT_STEP_POLL').catch(()=>{});scheduleNextStepPoll();},2500);}
 
   function bridgeListener(message,_sender,sendResponse){
     if(message?.type==='AICC_READ_SNAPSHOT'){sendResponse({ok:true,snapshot:conversationSnapshot()});return false;}
@@ -242,11 +240,11 @@
     void deliverExact(message).then(sendResponse).catch(()=>sendResponse({outcome:'UNCERTAIN',reason:'BRIDGE_CONTENT_ADAPTER_ERROR'}));
     return true;
   }
-  chrome.runtime.onMessage.addListener(bridgeListener);scheduleNextStepPoll();
+  chrome.runtime.onMessage.addListener(bridgeListener);
   globalThis.__AICC_V3_BRIDGE_CLEANUP__=()=>{
     try{observer.disconnect();}catch{}
     try{chrome.runtime.onMessage.removeListener(bridgeListener);}catch{}
-    clearTimeout(snapshotTimer);clearTimeout(nextStepPollTimer);
+    clearTimeout(snapshotTimer);
     for(const stale of document.querySelectorAll(`button[${BUTTON_ATTR}]`))stale.remove();
     document.getElementById('aicc-v3-bridge-modal-host')?.remove();
   };
