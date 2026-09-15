@@ -2,7 +2,8 @@ import {randomUUID} from 'node:crypto';
 import {appendFileSync,existsSync,mkdirSync,readFileSync,readdirSync,renameSync,rmSync,statSync,writeFileSync} from 'node:fs';
 import {dirname,join} from 'node:path';
 import {stateRoot} from './project-context.mjs';
-import {projectBinding,projectStateKey} from './work-store.mjs';
+import {projectBinding} from './work-store.mjs';
+import {runtimeStateKey} from './runtime-state.mjs';
 
 export const RUN_SCHEMA='aicc.v3.run.v1';
 export const LEASE_SCHEMA='aicc.v3.executor-lease.v1';
@@ -23,10 +24,10 @@ function atomicJson(path,value){
   renameSync(temp,path);
 }
 export function executorRoot(context,env=process.env){
-  return join(stateRoot(env),'projects',projectStateKey(context),'executor');
+  return join(stateRoot(env),'runtimes',runtimeStateKey(context),'executor');
 }
 export function runsRoot(context,env=process.env){
-  return join(stateRoot(env),'projects',projectStateKey(context),'runs');
+  return join(stateRoot(env),'runtimes',runtimeStateKey(context),'runs');
 }
 export function runDir(context,runId,env=process.env){return join(runsRoot(context,env),runId);}
 export function runFile(context,runId,env=process.env){return join(runDir(context,runId,env),'run.v1.json');}

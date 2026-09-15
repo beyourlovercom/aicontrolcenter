@@ -35,18 +35,19 @@ function emptyStore(context){
 
 function validTimestamp(value){return typeof value==='string'&&!Number.isNaN(Date.parse(value));}
 function validTitle(value){return typeof value==='string'&&value.trim().length>0;}
+function optionalScope(value){return value==null||value===''?null:(typeof value==='string'&&value.trim()?value.trim():false);}
 
 function validateEntityArrays(store){
   if(!Array.isArray(store.workPackages)||!Array.isArray(store.tasks))fail('WORK_STORE_INVALID');
   const wpIds=new Set();
   for(const wp of store.workPackages){
-    if(!wp||typeof wp.id!=='string'||!validTitle(wp.title)||!WORK_PACKAGE_STATUSES.includes(wp.status)||!validTimestamp(wp.createdAt)||!validTimestamp(wp.updatedAt))fail('WORK_STORE_INVALID');
+    if(!wp||typeof wp.id!=='string'||!validTitle(wp.title)||!WORK_PACKAGE_STATUSES.includes(wp.status)||!validTimestamp(wp.createdAt)||!validTimestamp(wp.updatedAt)||optionalScope(wp.roomId)===false||optionalScope(wp.workstreamId)===false)fail('WORK_STORE_INVALID');
     if(wpIds.has(wp.id))fail('WORK_STORE_INVALID');
     wpIds.add(wp.id);
   }
   const taskIds=new Set();
   for(const task of store.tasks){
-    if(!task||typeof task.id!=='string'||typeof task.workPackageId!=='string'||!validTitle(task.title)||!TASK_STATUSES.includes(task.status)||!validTimestamp(task.createdAt)||!validTimestamp(task.updatedAt))fail('WORK_STORE_INVALID');
+    if(!task||typeof task.id!=='string'||typeof task.workPackageId!=='string'||!validTitle(task.title)||!TASK_STATUSES.includes(task.status)||!validTimestamp(task.createdAt)||!validTimestamp(task.updatedAt)||optionalScope(task.roomId)===false||optionalScope(task.workstreamId)===false)fail('WORK_STORE_INVALID');
     if(taskIds.has(task.id)||!wpIds.has(task.workPackageId))fail('WORK_STORE_INVALID');
     taskIds.add(task.id);
   }
@@ -67,6 +68,14 @@ export function readWorkStore(context,env=process.env){
   return validateStore(store,context);
 }
 
+export function readRoomWorkStore(context,roomId,workstreamId,env=process.env){
+  const store=readWorkStore(context,env);const room=optionalScope(roomId),stream=optionalScope(workstreamId);
+  if(!room||!stream)return {...store,workPackages:[],tasks:[]};
+  const workPackages=store.workPackages.filter(item=>item.roomId===room&&item.workstreamId===stream);const ids=new Set(workPackages.map(item=>item.id));
+  const tasks=store.tasks.filter(item=>ids.has(item.workPackageId)&&item.roomId===room&&item.workstreamId===stream);
+  return {...store,workPackages,tasks};
+}
+
 function writeStore(context,store,env){
   const path=workStorePath(context,env);
   mkdirSync(dirname(path),{recursive:true});
@@ -85,7 +94,8 @@ export function createWorkPackage(context,input,env=process.env,options={}){
   const store=readWorkStore(context,env);
   const {now,uuid}=deps(options);
   const stamp=now();
-  const workPackage={id:uuid(),title:requireTitle(input?.title),status:requireStatus(input?.status,WORK_PACKAGE_STATUSES),createdAt:stamp,updatedAt:stamp};
+  const roomId=optionalScope(input?.roomId),workstreamId=optionalScope(input?.workstreamId);
+  const workPackage={id:uuid(),title:requireTitle(input?.title),status:requireStatus(input?.status,WORK_PACKAGE_STATUSES),...(roomId?{roomId}:{}),...(workstreamId?{workstreamId}:{}),createdAt:stamp,updatedAt:stamp};
   const next={...store,revision:store.revision+1,workPackages:[...store.workPackages,workPackage]};
   validateStore(next,context);writeStore(context,next,env);
   return {workPackage,revision:next.revision};
@@ -96,7 +106,8 @@ export function createTask(context,input,env=process.env,options={}){
   const workPackageId=input?.workPackageId;
   if(typeof workPackageId!=='string'||!store.workPackages.some(item=>item.id===workPackageId))fail('TASK_WORK_PACKAGE_NOT_FOUND');
   const {now,uuid}=deps(options);const stamp=now();
-  const task={id:uuid(),workPackageId,title:requireTitle(input?.title),status:requireStatus(input?.status,TASK_STATUSES),createdAt:stamp,updatedAt:stamp};
+  const wp=store.workPackages.find(item=>item.id===workPackageId);const roomId=optionalScope(input?.roomId)??optionalScope(wp?.roomId),workstreamId=optionalScope(input?.workstreamId)??optionalScope(wp?.workstreamId);
+  const task={id:uuid(),workPackageId,title:requireTitle(input?.title),status:requireStatus(input?.status,TASK_STATUSES),...(roomId?{roomId}:{}),...(workstreamId?{workstreamId}:{}),createdAt:stamp,updatedAt:stamp};
   const next={...store,revision:store.revision+1,tasks:[...store.tasks,task]};
   validateStore(next,context);writeStore(context,next,env);
   return {task,revision:next.revision};

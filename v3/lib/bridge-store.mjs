@@ -2,7 +2,7 @@ import {createHash,randomBytes,randomUUID,timingSafeEqual} from 'node:crypto';
 import {appendFileSync,chmodSync,existsSync,linkSync,mkdirSync,readFileSync,readdirSync,renameSync,rmSync,statSync,writeFileSync} from 'node:fs';
 import {dirname,join} from 'node:path';
 import {stateRoot} from './project-context.mjs';
-import {projectBinding,projectStateKey} from './work-store.mjs';
+import {projectBinding} from './work-store.mjs';
 
 export const BRIDGE_REQUEST_SCHEMA='aicc.v3.bridge-request.v1';
 export const BRIDGE_STATE_SCHEMA='aicc.v3.bridge-state.v1';
@@ -30,7 +30,7 @@ function projectMatches(value,context){
   const project=projectBinding(context);
   return value?.projectId===project.id&&value?.repositoryIdentity===project.repositoryIdentity&&sameRepositoryPath(value?.repositoryPath,context?.repository?.path);
 }
-export function bridgeRoot(context,env=process.env){return join(stateRoot(env),'projects',projectStateKey(context),'bridge');}
+export function bridgeRoot(_context,env=process.env){return join(stateRoot(env),'bridge');}
 export function requestsRoot(context,env=process.env){return join(bridgeRoot(context,env),'requests');}
 export function bridgeRequestDir(context,requestId,env=process.env){return join(requestsRoot(context,env),requestId);}
 export function requestFile(context,requestId,env=process.env){return join(bridgeRequestDir(context,requestId,env),'request.v1.json');}
@@ -59,11 +59,18 @@ export function verifyBridgeCredential(candidate,env=process.env,options={}){
   if(a.length!==b.length||!timingSafeEqual(a,b))fail('BRIDGE_AUTH_REQUIRED');return true;
 }
 
-function validateRequest(value,context){
+function validateRequestShape(value){
   if(!value||value.schema!==BRIDGE_REQUEST_SCHEMA||typeof value.requestId!=='string'||typeof value.runId!=='string')fail('BRIDGE_REQUEST_INVALID');
   if(value.provider!=='chatgpt-web'||typeof value.conversationId!=='string'||!value.conversationId||typeof value.originTurnId!=='string'||!value.originTurnId)fail('BRIDGE_REQUEST_INVALID');
   if(typeof value.taskId!=='string'||typeof value.workPackageId!=='string'||typeof value.instructionSha256!=='string'||typeof value.createdAt!=='string')fail('BRIDGE_REQUEST_INVALID');
-  if(!projectMatches(value,context))fail('BRIDGE_PROJECT_MISMATCH');return value;
+  if(typeof value.projectId!=='string'||!value.projectId||typeof value.repositoryIdentity!=='string'||!value.repositoryIdentity||typeof value.repositoryPath!=='string'||!value.repositoryPath)fail('BRIDGE_REQUEST_INVALID');
+  return value;
+}
+function validateRequest(value,context){validateRequestShape(value);if(!projectMatches(value,context))fail('BRIDGE_PROJECT_MISMATCH');return value;}
+export function readBridgeRequestBinding(requestId,env=process.env){
+  const path=requestFile(null,requestId,env);if(!existsSync(path))fail('BRIDGE_REQUEST_INVALID');
+  let value;try{value=JSON.parse(readFileSync(path,'utf8'));}catch{fail('BRIDGE_REQUEST_INVALID');}
+  validateRequestShape(value);return {projectId:value.projectId,repositoryIdentity:value.repositoryIdentity,repositoryPath:value.repositoryPath};
 }
 export function readBridgeRequest(context,requestId,env=process.env){
   const path=requestFile(context,requestId,env);if(!existsSync(path))fail('BRIDGE_REQUEST_INVALID');

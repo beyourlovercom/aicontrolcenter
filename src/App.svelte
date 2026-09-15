@@ -14,19 +14,22 @@
     toggleRoadmapSection,
     unbindGptConversation,
     updateExecutionRoom,
+    type ExecutionRoomState,
     type ExecutionRoomStore,
     type RoadmapSection
   } from './lib/executionRoomState';
   import { readChatgptSnapshots, snapshotForConversation, type ChatgptConversationSnapshot } from './lib/chatgptProjection';
-  import { readExecutorFacts, roomRuntimeBinding, type ExecutorFactsProjection } from './lib/executorFacts';
-  import { nextStepEligibility, nextStepStatusLabel, readNextStep, submitNextStep, type NextStepProjection } from './lib/nextStep';
+  import { readExecutorFacts, readRoomExecutorFacts, roomRuntimeBinding, type ExecutorFactsProjection } from './lib/executorFacts';
+  import { cancelPendingNextStepForRoom, nextStepEligibility, nextStepStatusLabel, readNextStep, submitNextStep, type NextStepProjection } from './lib/nextStep';
 
   let roomStore: ExecutionRoomStore = createDefaultExecutionRoomStore();
   let toast = '';
   let chatgptSnapshots: ChatgptConversationSnapshot[] = [];
   let projectionError = '';
-  let executorFacts: ExecutorFactsProjection | null = null;
-  let executorFactsError = '';
+  let globalExecutorFacts: ExecutorFactsProjection | null = null;
+  let roomExecutorFacts: Record<string, ExecutorFactsProjection> = {};
+  let roomExecutorErrors: Record<string, string> = {};
+  let factsRefreshKey = '';
   let nextSteps: Record<string, NextStepProjection> = {};
   let nextStepBusyRoomId: string | null = null;
 
@@ -39,6 +42,8 @@
   $: collapsed = activeRoom?.ui.collapsedSections ?? { blueprint: false, wp: false, pr: false, task: false, gate: false };
   $: activeSnapshot = snapshotForConversation(chatgptSnapshots, activeRoom?.gptConversationBinding ?? null);
   $: boundRoomCount = allRooms.filter((room) => Boolean(room.gptConversationBinding)).length;
+  $: executorFacts = activeRoom && activeRoom.repo !== 'PENDING_PROJECT_REPO_BINDING' ? (roomExecutorFacts[activeRoom.roomId] ?? null) : globalExecutorFacts;
+  $: executorFactsError = activeRoom ? (roomExecutorErrors[activeRoom.roomId] ?? '') : '';
   $: runtimeBinding = activeRoom ? roomRuntimeBinding(activeRoom.branch, activeRoom.worktree, executorFacts) : 'UNAVAILABLE';
   $: actualRepository = executorFacts?.project.value?.repository ?? null;
   $: actualExecutor = executorFacts?.executor.value ?? null;
@@ -46,6 +51,10 @@
   $: activeNextStep = activeRoom ? nextSteps[activeRoom.roomId] ?? null : null;
   $: activeNextStepEligibility = activeRoom ? nextStepEligibility(activeRoom, executorFacts, activeSnapshot) : { ready: false, blockers: ['ROOM_UNAVAILABLE'] };
   $: nextStepLocked = !activeNextStepEligibility.ready || nextStepBusyRoomId === activeRoom?.roomId || ['PENDING','CLAIMED'].includes(activeNextStep?.state.state ?? '');
+  $: {
+    const key = activeRoom ? `${activeRoom.roomId}\0${activeRoom.projectId}\0${activeRoom.repo}\0${activeRoom.worktree}` : '';
+    if (typeof window !== 'undefined' && key && key !== factsRefreshKey) { factsRefreshKey = key; window.setTimeout(() => window.dispatchEvent(new CustomEvent('aicc-v55-refresh-facts')), 0); }
+  }
 
   onMount(() => {
     roomStore = loadExecutionRoomStore(window.localStorage);
@@ -62,21 +71,34 @@
       }
     };
     const refreshFacts = async () => {
+      const viewId = roomStore.activeViewId;
+      const room = viewId === 'mainline'
+        ? roomStore.activeRoomIds.map((id) => roomStore.rooms[id]).find(Boolean) ?? null
+        : roomStore.rooms[viewId] ?? null;
+      if (!room) return;
       try {
-        const facts = await readExecutorFacts();
-        if (cancelled) return;
-        executorFacts = facts;
-        executorFactsError = '';
+        if (room.repo === 'PENDING_PROJECT_REPO_BINDING') {
+          const facts = await readExecutorFacts();
+          if (cancelled) return;
+          globalExecutorFacts = facts;
+        } else {
+          const facts = await readRoomExecutorFacts({projectId:room.projectId,projectName:room.name,repositoryIdentity:room.repo,repositoryPath:room.worktree,roomId:room.roomId,workstreamId:room.workstreamId});
+          if (cancelled) return;
+          roomExecutorFacts = {...roomExecutorFacts,[room.roomId]:facts};
+        }
+        roomExecutorErrors = {...roomExecutorErrors,[room.roomId]:''};
       } catch (error) {
         if (cancelled) return;
-        executorFactsError = error instanceof Error ? error.message : String(error);
+        roomExecutorErrors = {...roomExecutorErrors,[room.roomId]:error instanceof Error ? error.message : String(error)};
       }
     };
+    const refreshFactsListener = () => void refreshFacts();
+    window.addEventListener('aicc-v55-refresh-facts', refreshFactsListener);
     void refreshProjection();
     void refreshFacts();
     const projectionTimer = window.setInterval(() => void refreshProjection(), 1800);
     const factsTimer = window.setInterval(() => void refreshFacts(), 6000);
-    return () => { cancelled = true; window.clearInterval(projectionTimer); window.clearInterval(factsTimer); };
+    return () => { cancelled = true; window.removeEventListener('aicc-v55-refresh-facts', refreshFactsListener); window.clearInterval(projectionTimer); window.clearInterval(factsTimer); };
   });
 
   function commit(next: ExecutionRoomStore) {
@@ -96,9 +118,16 @@
     commit(selectMainlineView(roomStore));
   }
 
-  function closeRoom(event: Event, id: string) {
+  async function closeRoom(event: Event, id: string) {
     event.stopPropagation();
-    commit(closeExecutionRoom(roomStore, id));
+    const local = nextSteps[id];
+    if (local?.state.state === 'CLAIMED') { announce('ROOM_CLAIMED · GPT planner 已领取请求，当前 Room 不可关闭。'); return; }
+    try {
+      const result = await cancelPendingNextStepForRoom(id);
+      if (result.claimed.length) { announce('ROOM_CLAIMED · backend 已有 planner claim，当前 Room 不可关闭。'); return; }
+      if (result.cancelled.length) nextSteps = { ...nextSteps, [id]: { ...(local as NextStepProjection), state: { ...(local?.state ?? {}), state: 'ABORTED_BEFORE_SEND', errorCode: 'NEXT_STEP_ROOM_INACTIVE' } } as NextStepProjection };
+      commit(closeExecutionRoom(roomStore, id));
+    } catch (error) { announce(error instanceof Error ? error.message : String(error)); }
   }
 
   function openOrReopenRoom(id: string) {
@@ -253,7 +282,7 @@
         <div class="brand-subtitle">Multi-Execution Workbench</div>
       </div>
     </div>
-    <div class="header-status"><span class="status-dot"></span><span>V5.4 · Next-Step Closed Loop · {activeRooms.length} / {MAX_ACTIVE_ROOMS} ACTIVE</span></div>
+    <div class="header-status"><span class="status-dot"></span><span>V5.5 · Multi-Room Hardening · {activeRooms.length} / {MAX_ACTIVE_ROOMS} ACTIVE</span></div>
   </header>
 
   <nav class="room-tabs" aria-label="Execution Rooms">
@@ -278,26 +307,27 @@
       <div class="mainline-scroll">
         <section class="mainline-hero">
           <div><span class="eyebrow">Always-on Mainline View</span><h1>主线面板</h1><p>完整查看 AICC V5 从 Blueprint 到 Gate 的整体推进，并从这里恢复或切换任一 Execution Room。</p></div>
-          <span class="shell-badge">V5.4 Next-Step Closed Loop · 一键安全推进</span>
+          <span class="shell-badge">V5.5 Multi-Room Hardening · 四 Room 独立执行</span>
         </section>
 
         <section class="mainline-kpis">
-          <article><span>当前阶段</span><strong>V5.4</strong><small>Next-Step Closed Loop</small></article>
+          <article><span>当前阶段</span><strong>V5.5</strong><small>Multi-Room Hardening</small></article>
           <article><span>Active Rooms</span><strong>{activeRooms.length} / {MAX_ACTIVE_ROOMS}</strong><small>状态层硬限制</small></article>
           <article><span>GPT Bindings</span><strong>{boundRoomCount} / {allRooms.length}</strong><small>每个 Room 独立 conversationId</small></article>
           <article><span>Detected GPT</span><strong>{chatgptSnapshots.length}</strong><small>Profile 12 实时 snapshot</small></article>
-          <article><span>V5.2</span><strong>MERGED</strong><small>main@42a67a8</small></article>
+          <article><span>V5.4</span><strong>MERGED</strong><small>main@ba223d2</small></article>
         </section>
 
         <section class="mainline-card">
-          <div class="mainline-section-heading"><div><h2>完整主线进度视图</h2><p>V5 Roadmap · 从产品方向到多 Room Managed Execution</p></div><span class="mini-progress">V5.4 CLOSED LOOP</span></div>
+          <div class="mainline-section-heading"><div><h2>完整主线进度视图</h2><p>V5 Roadmap · 从产品方向到多 Room Managed Execution</p></div><span class="mini-progress">V5.5 MULTI-ROOM</span></div>
           <div class="stage-flow">
             <div class="stage done"><b>✓</b><strong>Blueprint</strong><span>产品方向冻结</span><i><em style="width:100%"></em></i><small>100%</small></div>
             <div class="stage done"><b>✓</b><strong>V5.0 Shell</strong><span>PR #26 已合并</span><i><em style="width:100%"></em></i><small>100%</small></div>
             <div class="stage done"><b>✓</b><strong>V5.1 Isolation</strong><span>PR #27 已合并</span><i><em style="width:100%"></em></i><small>100%</small></div>
             <div class="stage done"><b>✓</b><strong>V5.2 GPT</strong><span>PR #28 已合并</span><i><em style="width:100%"></em></i><small>100%</small></div>
             <div class="stage done"><b>✓</b><strong>V5.3 Facts</strong><span>PR #29 已合并</span><i><em style="width:100%"></em></i><small>100%</small></div>
-            <div class="stage current"><b>●</b><strong>V5.4 Loop</strong><span>Next-Step Closed Loop</span><i><em style="width:45%"></em></i><small>45%</small></div>
+            <div class="stage done"><b>✓</b><strong>V5.4 Loop</strong><span>PR #30 已合并</span><i><em style="width:100%"></em></i><small>100%</small></div>
+            <div class="stage current"><b>●</b><strong>V5.5 Multi-Room</strong><span>Runtime / Run / GPT isolation</span><i><em style="width:80%"></em></i><small>80%</small></div>
           </div>
         </section>
 
@@ -318,15 +348,15 @@
             <div class="mainline-section-heading"><div><h2>主线 Gate</h2><p>不会自动越过 Owner 审批</p></div></div>
             <div class="gate-list">
               <div class="gate-row"><span>✓</span><div><strong>V5.3 Executor Facts Gate</strong><small>Owner UAT PASS · PR #29 merged</small></div><b>DONE</b></div>
-              <div class="gate-row current"><span>●</span><div><strong>V5.4 Closed Loop Gate</strong><small>GPT exact task → managed executor → exact conversation review</small></div><b>UAT NEXT</b></div>
-              <div class="gate-row"><span>○</span><div><strong>V5.5 Hardening Gate</strong><small>多 Room 恢复、资源上限、异常恢复</small></div><b>LATER</b></div>
+              <div class="gate-row"><span>✓</span><div><strong>V5.4 Closed Loop Gate</strong><small>Owner UAT PASS · PR #30 merged</small></div><b>DONE</b></div>
+              <div class="gate-row current"><span>●</span><div><strong>V5.5 Hardening Gate</strong><small>多 Room runtime / GPT / Run / recovery 隔离</small></div><b>UAT NEXT</b></div>
             </div>
           </article>
           <article class="mainline-card">
-            <div class="mainline-section-heading"><div><h2>V5.3 Source of Truth</h2><p>GitHub 仍是代码 / PR / CI 唯一事实源；右栏只展示 backend 实时读取结果</p></div></div>
+            <div class="mainline-section-heading"><div><h2>V5.5 Runtime Isolation</h2><p>GitHub 仍是唯一代码事实源；每个 Room 独立读取 exact worktree / Run / GPT Facts</p></div></div>
             <div class="mainline-facts">
-              <div><span>Base SHA</span><strong>42a67a8</strong></div>
-              <div><span>V5.3 Branch</span><strong>feat/aicc-v5-real-executor-facts</strong></div>
+              <div><span>Base SHA</span><strong>ba223d2</strong></div>
+              <div><span>V5.5 Branch</span><strong>feat/aicc-v5-multi-room-hardening</strong></div>
               <div><span>Runtime Branch</span><strong>{actualRepository?.branch ?? 'UNAVAILABLE'}</strong></div>
               <div><span>Runtime HEAD</span><strong>{shortSha(actualRepository?.head)}</strong></div>
             </div>
@@ -344,12 +374,12 @@
               <span class="eyebrow">当前 Execution Room</span>
               <h2>{activeRoom.name}</h2>
             </div>
-            <span class="phase-pill">V5.4</span>
+            <span class="phase-pill">V5.5</span>
           </div>
 
           <div class="roadmap-title-row">
             <div><strong>支线进度</strong><span>{activeRoom.projectId} / {activeRoom.workstreamId}</span></div>
-            <span class="mini-progress">Closed Loop</span>
+            <span class="mini-progress">Multi-Room</span>
           </div>
 
           <div class="roadmap-groups">
@@ -360,28 +390,29 @@
 
             <section class="roadmap-group">
               <button class="group-toggle" type="button" onclick={() => toggle('wp')}><span>WP · 工作包</span><b>1 / 1</b><i>{collapsed.wp ? '›' : '⌄'}</i></button>
-              {#if !collapsed.wp}<div class="roadmap-item current"><span>●</span><div><strong>V5.4 — Next-Step Closed Loop</strong><small>Exact GPT planner → managed executor → same conversation review</small></div></div>{/if}
+              {#if !collapsed.wp}<div class="roadmap-item current"><span>●</span><div><strong>V5.5 — Multi-Room Hardening</strong><small>Exact Room → worktree → GPT → managed executor isolation</small></div></div>{/if}
             </section>
 
             <section class="roadmap-group">
               <button class="group-toggle" type="button" onclick={() => toggle('pr')}><span>PR · 需求与计划</span><b>0 / 1</b><i>{collapsed.pr ? '›' : '⌄'}</i></button>
-              {#if !collapsed.pr}<div class="roadmap-item pending"><span>○</span><div><strong>V5.4 Next-Step Closed Loop PR</strong><small>Closed Loop Owner UAT 后才进入 PR Gate</small></div></div>{/if}
+              {#if !collapsed.pr}<div class="roadmap-item pending"><span>○</span><div><strong>V5.5 Multi-Room Hardening PR</strong><small>Multi-Room Owner UAT 后才进入 PR Gate</small></div></div>{/if}
             </section>
 
             <section class="roadmap-group">
-              <button class="group-toggle" type="button" onclick={() => toggle('task')}><span>Task · 任务执行</span><b>4 / 5</b><i>{collapsed.task ? '›' : '⌄'}</i></button>
+              <button class="group-toggle" type="button" onclick={() => toggle('task')}><span>Task · 任务执行</span><b>5 / 6</b><i>{collapsed.task ? '›' : '⌄'}</i></button>
               {#if !collapsed.task}
                 <div class="roadmap-item done"><span>✓</span><div><strong>Canonical Browser Bridge Reuse</strong><small>Profile 12 · fixed extension identity</small></div></div>
                 <div class="roadmap-item done"><span>✓</span><div><strong>Read-only Transcript Projection</strong><small>真实 user / assistant DOM snapshot</small></div></div>
                 <div class="roadmap-item done"><span>✓</span><div><strong>Per-Room Conversation Binding</strong><small>conversationId 唯一绑定，不允许串线</small></div></div>
                 <div class="roadmap-item done"><span>✓</span><div><strong>No-Spawn Read Path</strong><small>读取不会创建 Chrome Tab</small></div></div>
-                <div class="roadmap-item current"><span>●</span><div><strong>Owner Closed Loop UAT</strong><small>Next-Step → GPT decision → managed executor → same conversation review</small></div></div>
+                <div class="roadmap-item done"><span>✓</span><div><strong>Exact Runtime Isolation</strong><small>每个 Room 独立 worktree / lease / facts / delivery</small></div></div>
+                <div class="roadmap-item current"><span>●</span><div><strong>Owner Multi-Room UAT</strong><small>四 Room 切换、并发与 restart 不串线</small></div></div>
               {/if}
             </section>
 
             <section class="roadmap-group">
               <button class="group-toggle" type="button" onclick={() => toggle('gate')}><span>Gate · 阶段评审</span><b>0 / 1</b><i>{collapsed.gate ? '›' : '⌄'}</i></button>
-              {#if !collapsed.gate}<div class="roadmap-item current"><span>●</span><div><strong>V5.4 Closed Loop Gate</strong><small>全量回归 PASS 后进入 Owner UAT</small></div></div>{/if}
+              {#if !collapsed.gate}<div class="roadmap-item current"><span>●</span><div><strong>V5.5 Multi-Room Gate</strong><small>全量回归 PASS 后进入 Owner UAT</small></div></div>{/if}
             </section>
           </div>
         {/if}
@@ -463,7 +494,7 @@
           </div>
 
           <div class="log-block">
-            <div class="log-heading"><strong>V5.3 Fact Sources</strong><span>{executorFacts ? capturedLabel(executorFacts.capturedAt) : 'WAITING'}</span></div>
+            <div class="log-heading"><strong>V5.5 Room Fact Sources</strong><span>{executorFacts ? capturedLabel(executorFacts.capturedAt) : 'WAITING'}</span></div>
             <div class="log-line"><span>GIT</span><p>{executorFacts?.project.available ? `LIVE · ${actualRepository?.branch} @ ${shortSha(actualRepository?.head)}` : executorFacts?.project.errorCode ?? 'WAITING'}</p></div>
             <div class="log-line"><span>PR/CI</span><p>{executorFacts?.prDelivery.available ? `${prSummary()} · ${ciSummary()}` : executorFacts?.prDelivery.errorCode ?? 'WAITING'}</p></div>
             <div class="log-line"><span>CODEX</span><p>{executorFacts?.executor.available ? (actualExecutor?.readiness.ready ? `READY · required checks healthy${actualExecutor.readiness.doctorStatus && actualExecutor.readiness.doctorStatus !== 'ok' ? ` · doctor ${actualExecutor.readiness.doctorStatus}` : ''}` : actualExecutor?.readiness.errorCode ?? 'NOT READY') : executorFacts?.executor.errorCode ?? 'WAITING'}</p></div>

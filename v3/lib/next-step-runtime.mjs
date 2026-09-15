@@ -2,7 +2,6 @@ import {createHash,randomUUID} from 'node:crypto';
 import {existsSync,mkdirSync,readFileSync,readdirSync,renameSync,writeFileSync} from 'node:fs';
 import {dirname,join} from 'node:path';
 import {stateRoot} from './project-context.mjs';
-import {projectStateKey} from './work-store.mjs';
 
 export const NEXT_STEP_STATES=Object.freeze(['PENDING','CLAIMED','EXECUTION_QUEUED','STOP_GATE','ABORTED_BEFORE_SEND','UNCERTAIN']);
 export const NEXT_STEP_SNAPSHOT_MAX_AGE_MS=90000;
@@ -10,7 +9,7 @@ const NEXT_STEP_SNAPSHOT_FUTURE_SKEW_MS=5000;
 function fail(code){const error=new Error(code);error.code=code;throw error;}
 function now(options){return (options.now||(()=>new Date().toISOString()))();}
 function sha256(value){return createHash('sha256').update(value).digest('hex');}
-function root(context,env){return join(stateRoot(env),'projects',projectStateKey(context),'next-step');}
+function root(_context,env){return join(stateRoot(env),'v5-next-step');}
 function requestDir(context,id,env){return join(root(context,env),'requests',id);}
 function requestFile(context,id,env){return join(requestDir(context,id,env),'request.v1.json');}
 function stateFile(context,id,env){return join(requestDir(context,id,env),'state.v1.json');}
@@ -42,7 +41,7 @@ export function createNextStepRequest(context,input,facts,env=process.env,option
   const requestId=(options.uuid||randomUUID)();
   const frozen={roomId:input.roomId,roomName:input.roomName,workstreamId:input.workstreamId,branch:expectedBranch,worktree:expectedWorktree,head:context.repository.head,conversationId,draft:input?.draft||''};
   const prompt=nextStepPrompt(frozen);
-  const request={schema:'aicc.v5.next-step-request.v1',requestId,projectId:context.project.id,repositoryIdentity:context.repository.identity,...frozen,conversationUrl:snapshot.conversationUrl,prompt,promptSha256:sha256(prompt),createdAt};
+  const request={schema:'aicc.v5.next-step-request.v1',requestId,projectId:context.project.id,projectName:context.project.name,repositoryIdentity:context.repository.identity,...frozen,conversationUrl:snapshot.conversationUrl,prompt,promptSha256:sha256(prompt),createdAt};
   const state={schema:'aicc.v5.next-step-state.v1',requestId,state:'PENDING',claim:null,bridgeRequestId:null,runId:null,decision:null,errorCode:null,updatedAt:createdAt};
   const dir=requestDir(context,requestId,env);mkdirSync(dirname(dir),{recursive:true});mkdirSync(dir,{recursive:false});writeFileSync(requestFile(context,requestId,env),`${JSON.stringify(request,null,2)}\n`,{flag:'wx'});atomic(stateFile(context,requestId,env),state);return {request,state};
 }
@@ -61,3 +60,17 @@ export function recordNextStepReceipt(context,id,input,env=process.env,options={
   if(outcome==='EXECUTION_QUEUED'&&!state.bridgeRequestId)fail('NEXT_STEP_RECEIPT_INVALID');atomic(stateFile(context,id,env),state);return {request:value.request,state};
 }
 export function reconcileNextStepStartup(context,env=process.env,options={}){const changed=[];for(const id of listIds(context,env)){try{const value=readNextStepRequest(context,id,env);if(value.state.state!=='CLAIMED')continue;const state={...value.state,state:'UNCERTAIN',claim:null,errorCode:'NEXT_STEP_RESTART_AFTER_CLAIM',updatedAt:now(options)};atomic(stateFile(context,id,env),state);changed.push(id);}catch{}}return changed;}
+
+export function cancelPendingNextStepForRoom(_context,roomId,env=process.env,options={}){
+  const room=text(roomId,'NEXT_STEP_INPUT_INVALID',240);const cancelled=[];const claimed=[];
+  for(const id of listIds(null,env)){
+    try{
+      const value=readNextStepRequest(null,id,env);if(value.request.roomId!==room)continue;
+      if(value.state.state==='CLAIMED'){claimed.push(id);continue;}
+      if(value.state.state!=='PENDING')continue;
+      const state={...value.state,state:'ABORTED_BEFORE_SEND',claim:null,errorCode:'NEXT_STEP_ROOM_INACTIVE',updatedAt:now(options)};
+      atomic(stateFile(null,id,env),state);cancelled.push(id);
+    }catch{}
+  }
+  return {cancelled,claimed};
+}

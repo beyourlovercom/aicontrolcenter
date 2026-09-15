@@ -4,7 +4,8 @@ import {existsSync} from 'node:fs';
 import {fileURLToPath} from 'node:url';
 import {dirname,join} from 'node:path';
 import {stateRoot} from './project-context.mjs';
-import {projectStateKey,readWorkStore} from './work-store.mjs';
+import {readWorkStore} from './work-store.mjs';
+import {runtimeStateKey} from './runtime-state.mjs';
 import {appendRunEvent,createRunFiles,instructionFile,latestRun,readLease,readRun,readRunEvents,releaseLease,reserveLease,setLeaseWorkerPid,TERMINAL_RUN_STATES,updateRun,writeStopRequest} from './run-store.mjs';
 
 const here=dirname(fileURLToPath(import.meta.url));
@@ -86,7 +87,7 @@ export function reconcileExecutor(context,env=process.env,options={}){
   markOrphaned(context,run,env,options);return null;
 }
 function defaultSpawnWorker(context,run,env){
-  const child=spawn(process.execPath,[workerFile,`--run-id=${run.runId}`,`--project-key=${projectStateKey(context)}`],{
+  const child=spawn(process.execPath,[workerFile,`--run-id=${run.runId}`,`--runtime-key=${runtimeStateKey(context)}`],{
     detached:true,stdio:'ignore',cwd:run.repositoryPath,
     env:{...executorEnvironment(env,run.executorPath),AICC_V3_HOME:stateRoot(env)}
   });

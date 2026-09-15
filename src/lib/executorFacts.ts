@@ -94,3 +94,22 @@ export function roomRuntimeBinding(
   if (!facts?.project.available || !repository) return 'UNAVAILABLE';
   return repository.branch === expectedBranch && repository.path === expectedWorktree ? 'MATCH' : 'DRIFT';
 }
+
+export type RoomRuntimeFactsInput = {
+  projectId: string;
+  projectName: string;
+  repositoryIdentity: string;
+  repositoryPath: string;
+  roomId: string;
+  workstreamId: string;
+};
+
+export async function readRoomExecutorFacts(input: RoomRuntimeFactsInput, fetcher: typeof fetch = fetch): Promise<ExecutorFactsProjection> {
+  const response = await fetcher('/api/room-facts', {
+    method: 'POST', headers: { 'content-type': 'application/json', accept: 'application/json' }, cache: 'no-store',
+    body: JSON.stringify(input)
+  });
+  let body: any = {}; try { body = await response.json(); } catch {}
+  if (!response.ok || body.available === false || !body.facts) throw new Error(errorCode(body, `ROOM_RUNTIME_HTTP_${response.status}`));
+  return body.facts as ExecutorFactsProjection;
+}
