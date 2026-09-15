@@ -46,9 +46,9 @@ test('automatic origin binding carries Assistant WP/Task titles while manual exa
 });
 
 test('strict next-step protocol allows EXECUTE or STOP_GATE only',()=>{
-  const execute=parseNextStepDecision(`AICC_NEXT_STEP_V1\nAICC_DECISION: EXECUTE\nAICC_WORK_PACKAGE: V5.4 Closed Loop\nAICC_TASK: Wire exact next step\nAICC_INSTRUCTION_BEGIN\nImplement only the exact task.\nRun tests.\nAICC_INSTRUCTION_END\nAICC_GATE_REASON: NONE`);
+  const execute=parseNextStepDecision(`AICC_NEXT_STEP_V1\nAICC_DECISION: EXECUTE\nAICC_ACTION_CLASS: TEST_ONLY\nAICC_WORK_PACKAGE: V5.4 Closed Loop\nAICC_TASK: Wire exact next step\nAICC_INSTRUCTION_BEGIN\nImplement only the exact task.\nRun tests.\nAICC_INSTRUCTION_END\nAICC_GATE_REASON: NONE`);
   assert.equal(execute.decision,'EXECUTE');assert.equal(execute.taskTitle,'Wire exact next step');assert.match(execute.instruction,/Run tests/);
-  const stop=parseNextStepDecision(`AICC_NEXT_STEP_V1\nAICC_DECISION: STOP_GATE\nAICC_WORK_PACKAGE:\nAICC_TASK:\nAICC_INSTRUCTION_BEGIN\n\nAICC_INSTRUCTION_END\nAICC_GATE_REASON: Owner merge approval required`);
+  const stop=parseNextStepDecision(`AICC_NEXT_STEP_V1\nAICC_DECISION: STOP_GATE\nAICC_ACTION_CLASS: STOP_GATE\nAICC_WORK_PACKAGE:\nAICC_TASK:\nAICC_INSTRUCTION_BEGIN\n\nAICC_INSTRUCTION_END\nAICC_GATE_REASON: Owner merge approval required`);
   assert.deepEqual(stop,{decision:'STOP_GATE',gateReason:'Owner merge approval required'});
   assert.throws(()=>parseNextStepDecision('AICC_NEXT_STEP_V1\nAICC_DECISION: EXECUTE\nAICC_TASK: missing wp'),e=>e.code==='NEXT_STEP_DECISION_INVALID');
 });

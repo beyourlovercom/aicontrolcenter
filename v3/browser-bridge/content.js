@@ -1,6 +1,6 @@
 (()=>{
   'use strict';
-  const CONTENT_VERSION='3.8.14';
+  const CONTENT_VERSION='3.8.15';
   if(globalThis.__AICC_V3_BRIDGE_CONTENT_VERSION__===CONTENT_VERSION)return;
   try{globalThis.__AICC_V3_BRIDGE_CLEANUP__?.();}catch{}
   globalThis.__AICC_V3_BRIDGE_CONTENT_VERSION__=CONTENT_VERSION;
@@ -218,7 +218,7 @@
   }
   function assistantNodes(){return [...document.querySelectorAll('[data-message-author-role="assistant"]')];}
   function completeNextStepProtocol(text){
-    if(typeof text!=='string'||!text.includes('AICC_NEXT_STEP_V1')||!/^AICC_DECISION:\s*(EXECUTE|STOP_GATE)\s*$/mi.test(text)||!/^AICC_GATE_REASON:/mi.test(text))return false;
+    if(typeof text!=='string'||!text.includes('AICC_NEXT_STEP_V1')||!/^AICC_DECISION:\s*(EXECUTE|STOP_GATE)\s*$/mi.test(text)||!/^AICC_ACTION_CLASS:\s*(CODE_CHANGE|TEST_ONLY|STOP_GATE)\s*$/mi.test(text)||!/^AICC_GATE_REASON:/mi.test(text))return false;
     return /^AICC_DECISION:\s*STOP_GATE\s*$/mi.test(text)||(/AICC_INSTRUCTION_BEGIN/i.test(text)&&/AICC_INSTRUCTION_END/i.test(text));
   }
   async function planNextStep(message){

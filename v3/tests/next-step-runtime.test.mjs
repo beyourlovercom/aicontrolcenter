@@ -14,7 +14,7 @@ function fixture(overrides={}){
 }
 function expectCode(fn,code){assert.throws(fn,error=>error?.code===code);}
 
-test('creates frozen PENDING intent with strict GPT protocol',()=>{const f=fixture();try{const value=createNextStepRequest(f.context,f.input,f.facts,f.env,{uuid:()=> 'req-1'});assert.equal(value.state.state,'PENDING');assert.equal(value.request.head,'abc123');assert.match(value.request.prompt,/AICC_NEXT_STEP_V1/);assert.match(value.request.prompt,/AICC_DECISION: EXECUTE\|STOP_GATE/);assert.equal(readNextStepRequest(f.context,'req-1',f.env).request.promptSha256.length,64);}finally{f.cleanup();}});
+test('creates frozen PENDING intent with strict GPT protocol',()=>{const f=fixture();try{const value=createNextStepRequest(f.context,f.input,f.facts,f.env,{uuid:()=> 'req-1'});assert.equal(value.state.state,'PENDING');assert.equal(value.request.head,'abc123');assert.match(value.request.prompt,/AICC_NEXT_STEP_V1/);assert.match(value.request.prompt,/AICC_DECISION: EXECUTE\|STOP_GATE/);assert.match(value.request.prompt,/AICC_ACTION_CLASS: CODE_CHANGE\|TEST_ONLY\|STOP_GATE/);assert.equal(readNextStepRequest(f.context,'req-1',f.env).request.promptSha256.length,64);}finally{f.cleanup();}});
 test('fails closed on runtime drift, dirty worktree, busy executor and stale conversation',()=>{
   for(const [mutate,code] of [
     [f=>f.input.branch='wrong','NEXT_STEP_RUNTIME_DRIFT'],
