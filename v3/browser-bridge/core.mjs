@@ -57,6 +57,14 @@ export function sameConversation(expected,url){
   try{return conversationFromUrl(url).conversationId===expected;}catch{return false;}
 }
 
+export async function settleWithTimeout(promise,timeoutMs,fallback){
+  if(!Number.isFinite(timeoutMs)||timeoutMs<=0)fail('BRIDGE_REQUEST_INVALID');
+  let timer;
+  try{
+    return await Promise.race([Promise.resolve(promise),new Promise(resolve=>{timer=setTimeout(()=>resolve(fallback),timeoutMs);})]);
+  }finally{if(timer)clearTimeout(timer);}
+}
+
 export function parseNextStepDecision(value){
   if(typeof value!=='string'||!value.includes('AICC_NEXT_STEP_V1'))fail('NEXT_STEP_DECISION_INVALID');
   const decision=value.match(/^AICC_DECISION:\s*(EXECUTE|STOP_GATE)\s*$/mi)?.[1]||null;

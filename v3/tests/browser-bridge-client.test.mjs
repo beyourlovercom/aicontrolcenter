@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {join} from 'node:path';
 import {fileURLToPath} from 'node:url';
-import {conversationFromUrl,createOriginBinding,parseNextStepDecision,recoveryAction,sameConversation} from '../browser-bridge/core.mjs';
+import {conversationFromUrl,createOriginBinding,parseNextStepDecision,recoveryAction,sameConversation,settleWithTimeout} from '../browser-bridge/core.mjs';
 import {createCoordinator} from '../browser-bridge/coordinator.mjs';
 
 const root=join(fileURLToPath(new URL('..',import.meta.url)));
@@ -51,6 +51,16 @@ test('strict next-step protocol allows EXECUTE or STOP_GATE only',()=>{
   const stop=parseNextStepDecision(`AICC_NEXT_STEP_V1\nAICC_DECISION: STOP_GATE\nAICC_ACTION_CLASS: STOP_GATE\nAICC_WORK_PACKAGE:\nAICC_TASK:\nAICC_INSTRUCTION_BEGIN\n\nAICC_INSTRUCTION_END\nAICC_GATE_REASON: Owner merge approval required`);
   assert.deepEqual(stop,{decision:'STOP_GATE',gateReason:'Owner merge approval required'});
   assert.throws(()=>parseNextStepDecision('AICC_NEXT_STEP_V1\nAICC_DECISION: EXECUTE\nAICC_TASK: missing wp'),e=>e.code==='NEXT_STEP_DECISION_INVALID');
+});
+
+test('next-step planning transport settles to UNCERTAIN fallback instead of hanging forever',async()=>{
+  const never=new Promise(()=>{});
+  const fallback={outcome:'UNCERTAIN',reason:'NEXT_STEP_PLAN_TRANSPORT_TIMEOUT'};
+  const started=Date.now();
+  const value=await settleWithTimeout(never,20,fallback);
+  assert.deepEqual(value,fallback);
+  assert.ok(Date.now()-started>=15);
+  assert.equal(await settleWithTimeout(Promise.resolve('ok'),100,fallback),'ok');
 });
 
 test('enqueueAction ACKs from durable ledger before any network submission',async()=>{

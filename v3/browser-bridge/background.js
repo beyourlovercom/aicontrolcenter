@@ -1,9 +1,10 @@
-import {conversationFromUrl,parseNextStepDecision,sameConversation} from './core.mjs';
+import {conversationFromUrl,parseNextStepDecision,sameConversation,settleWithTimeout} from './core.mjs';
 import {createCoordinator} from './coordinator.mjs';
 
 const BASE='http://127.0.0.1:1420';
 const TOKEN_KEY='aiccBridgeTokenV1';
 const ALARM='aicc-v3-bridge-poll';
+const NEXT_STEP_PLAN_TIMEOUT_MS=135000;
 
 try{void chrome.storage.local.setAccessLevel({accessLevel:'TRUSTED_CONTEXTS'}).catch(()=>{});}catch{}
 
@@ -77,7 +78,11 @@ const planningDestination={
   async plan(input){
     const tab=await existingConversationTab(input);if(!tab)return {outcome:'ABORTED_BEFORE_SEND',reason:'NEXT_STEP_BOUND_TAB_NOT_OPEN'};
     try{
-      const response=await chrome.tabs.sendMessage(tab.id,{type:'AICC_PLAN_NEXT_STEP',conversationId:input.conversationId,content:input.prompt,contentSha256:input.promptSha256});
+      const response=await settleWithTimeout(
+        chrome.tabs.sendMessage(tab.id,{type:'AICC_PLAN_NEXT_STEP',conversationId:input.conversationId,content:input.prompt,contentSha256:input.promptSha256}),
+        NEXT_STEP_PLAN_TIMEOUT_MS,
+        {outcome:'UNCERTAIN',reason:'NEXT_STEP_PLAN_TRANSPORT_TIMEOUT'}
+      );
       return {...response,tabId:tab.id};
     }catch(error){
       const text=String(error?.message||error||'');
