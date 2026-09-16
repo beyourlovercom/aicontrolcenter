@@ -7,6 +7,7 @@ import {
   closeExecutionRoom,
   createDefaultExecutionRoomStore,
   createExecutionRoom,
+  createExternalExecutionRoomState,
   loadExecutionRoomStore,
   patchExecutionRoomUi,
   persistExecutionRoomStore,
@@ -98,5 +99,21 @@ storage.setItem(EXECUTION_ROOM_STORAGE_KEY, '{not-json');
 const recovered = loadExecutionRoomStore(storage);
 assert.equal(recovered.activeRoomIds.length, MAX_ACTIVE_ROOMS);
 assert.equal(recovered.activeViewId, 'traffic');
+
+
+const externalBase = closeExecutionRoom(defaults, 'product');
+const familyRoom = createExternalExecutionRoomState({
+  roomId: 'family-web-a1b2c3d4', name: 'Family Web', projectId: 'family-plan', workstreamId: 'family-web',
+  repositoryIdentity: 'beyourlovercom/family-plan', branch: 'feature/family-web-v1-3', worktree: '/worktrees/family-web-v1-3', head: 'a'.repeat(40)
+});
+const withFamily = createExecutionRoom(externalBase, familyRoom);
+assert.equal(withFamily.activeRoomIds.length, MAX_ACTIVE_ROOMS);
+assert.equal(withFamily.activeViewId, familyRoom.roomId);
+assert.equal(withFamily.rooms[familyRoom.roomId].projectId, 'family-plan');
+assert.equal(withFamily.rooms[familyRoom.roomId].repo, 'beyourlovercom/family-plan');
+assert.equal(withFamily.rooms[familyRoom.roomId].branch, 'feature/family-web-v1-3');
+assert.equal(withFamily.rooms[familyRoom.roomId].baseSha, 'a'.repeat(40));
+assert.equal(withFamily.rooms[familyRoom.roomId].gptConversationBinding, null);
+assert.throws(() => createExternalExecutionRoomState({...familyRoom, roomId: ''} as any), /EXTERNAL_ROOM_INPUT_INVALID/);
 
 console.log('executionRoomState.test.ts PASS');

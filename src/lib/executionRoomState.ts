@@ -50,6 +50,51 @@ export type StorageLike = {
   setItem(key: string, value: string): void;
 };
 
+export type ExternalExecutionRoomInput = {
+  roomId: string;
+  name: string;
+  projectId: string;
+  workstreamId: string;
+  repositoryIdentity: string;
+  branch: string;
+  worktree: string;
+  head: string;
+};
+
+export function createExternalExecutionRoomState(input: ExternalExecutionRoomInput): ExecutionRoomState {
+  for (const key of ['roomId','name','projectId','workstreamId','repositoryIdentity','branch','worktree','head'] as const) {
+    if (!input[key]?.trim()) throw new Error('EXTERNAL_ROOM_INPUT_INVALID');
+  }
+  return {
+    roomId: input.roomId.trim(),
+    name: input.name.trim(),
+    projectId: input.projectId.trim(),
+    workstreamId: input.workstreamId.trim(),
+    repo: input.repositoryIdentity.trim(),
+    baseSha: input.head.trim(),
+    branch: input.branch.trim(),
+    worktree: input.worktree.trim(),
+    gptConversationBinding: null,
+    gptConversationUrl: null,
+    gptConversationTitle: null,
+    codexSession: null,
+    runtime: null,
+    currentWp: 'External Project — Runtime Binding',
+    currentPr: null,
+    currentTask: 'EXTERNAL_PROJECT_READY',
+    currentGate: 'EXACT_RUNTIME_GATE',
+    status: 'READY',
+    nextGate: 'GPT_BINDING',
+    ownerUatRequired: true,
+    ui: {
+      leftPanelCollapsed: false,
+      rightPanelCollapsed: false,
+      collapsedSections: emptyCollapsedSections(),
+      draft: ''
+    }
+  };
+}
+
 const emptyCollapsedSections = (): Record<RoadmapSection, boolean> => ({
   blueprint: false,
   wp: false,

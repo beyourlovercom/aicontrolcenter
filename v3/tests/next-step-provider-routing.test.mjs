@@ -8,7 +8,7 @@ import {createNextStepRequest,recordNextStepReceipt,claimNextStep,nextStepPrompt
 function fixture(overrides={}){
   const home=mkdtempSync(join(tmpdir(),'aicc-nspr-'));const env={AICC_V3_HOME:home};
   const context={project:{id:'nspr',name:'NSPR'},repository:{identity:'o/r',path:'/tmp/wt-nspr',branch:'feat/nspr',head:'abc999',dirty:false},...overrides.context};
-  const input={roomId:'room-1',roomName:'Room 1',workstreamId:'ws-1',branch:'feat/nspr',worktree:'/tmp/wt-nspr',conversationId:'conv-nspr',...overrides.input};
+  const input={roomId:'room-1',roomName:'Room 1',workstreamId:'ws-1',branch:'feat/nspr',worktree:'/tmp/wt-nspr',head:'abc999',conversationId:'conv-nspr',...overrides.input};
   const facts={executorReady:true,activeRun:null,snapshot:{conversationId:'conv-nspr',conversationUrl:'https://chatgpt.com/c/conv-nspr',capturedAt:new Date().toISOString()},...overrides.facts};
   return {home,env,context,input,facts,cleanup:()=>rmSync(home,{recursive:true,force:true})};
 }

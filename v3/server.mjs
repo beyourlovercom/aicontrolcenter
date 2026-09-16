@@ -13,6 +13,7 @@ import {bridgeProjectionAsync,claimBridgeDeliveryAsync,reconcileBridgeStartup,re
 import {createChatgptProjectionStore} from './lib/chatgpt-projection.mjs';
 import {assertNextStepLocal,cancelPendingNextStepForRoom,claimNextStep,createNextStepRequest,readNextStepRequest,reconcileNextStepStartup,recordNextStepReceipt} from './lib/next-step-runtime.mjs';
 import {RemoteRunnerClient,remoteRunnerBaseUrl,remoteRepositoryRoot} from './lib/remote-runner-client.mjs';
+import {externalProjectCatalog} from './lib/external-project-registry.mjs';
 
 const root=dirname(fileURLToPath(import.meta.url));
 const publicRoot=join(root,'public');
@@ -201,6 +202,11 @@ export function createAiccV3Server(options={}){
     if(req.method==='GET'&&url.pathname==='/api/project'){
       try{return json(res,200,{available:true,context:loadProjectContext(env)});}
       catch(error){return json(res,503,projectError(error));}
+    }
+
+    if(req.method==='GET'&&url.pathname==='/api/external-projects'){
+      try{assertNextStepLocal(req.socket?.remoteAddress||'');return json(res,200,{available:true,catalog:externalProjectCatalog(env)});}
+      catch(error){return json(res,503,{available:false,errorCode:error?.code||'EXTERNAL_PROJECTS_UNAVAILABLE'});}
     }
 
     if(req.method==='POST'&&url.pathname==='/api/room-facts'){

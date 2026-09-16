@@ -24,7 +24,7 @@ async function withServer(fx,run){
   await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));const {port}=server.address();
   try{await run(`http://127.0.0.1:${port}`,env);}finally{await new Promise(resolve=>server.close(resolve));}
 }
-function requestBody(repo){return {roomId:'room-v54',roomName:'V5.5 Room',projectId:'fixture',repositoryIdentity:'example/next-step',workstreamId:'next-step',branch:'test/next-step',worktree:repo,conversationId:'conv-v54',draft:'advance safely'};}
+function requestBody(repo){return {roomId:'room-v54',roomName:'V5.5 Room',projectId:'fixture',repositoryIdentity:'example/next-step',workstreamId:'next-step',branch:'test/next-step',worktree:repo,head:git(repo,'rev-parse','HEAD'),conversationId:'conv-v54',draft:'advance safely'};}
 
 test('Next-Step HTTP loop freezes intent, allows one authenticated claim, and records STOP_GATE',async()=>{
   const fx=fixture();await withServer(fx,async(base,env)=>{

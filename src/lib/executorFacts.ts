@@ -88,11 +88,13 @@ export async function readExecutorFacts(fetcher: typeof fetch = fetch): Promise<
 export function roomRuntimeBinding(
   expectedBranch: string,
   expectedWorktree: string,
-  facts: ExecutorFactsProjection | null
+  facts: ExecutorFactsProjection | null,
+  expectedHead?: string | null
 ): 'MATCH' | 'DRIFT' | 'UNAVAILABLE' {
   const repository = facts?.project.value?.repository;
   if (!facts?.project.available || !repository) return 'UNAVAILABLE';
-  return repository.branch === expectedBranch && repository.path === expectedWorktree ? 'MATCH' : 'DRIFT';
+  const headMatches = !expectedHead || repository.head === expectedHead;
+  return repository.branch === expectedBranch && repository.path === expectedWorktree && headMatches ? 'MATCH' : 'DRIFT';
 }
 
 export type RoomRuntimeFactsInput = {
