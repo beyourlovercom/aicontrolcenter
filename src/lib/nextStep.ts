@@ -54,7 +54,7 @@ export function nextStepStatusLabel(value: NextStepProjection | null): string {
   const state = value.state.state;
   if (state === 'PENDING') return '等待 Profile 12 Bridge';
   if (state === 'CLAIMED') return 'GPT 正在决定 exact next task';
-  if (state === 'EXECUTION_QUEUED') return 'Codex 已进入 managed execution';
+  if (state === 'EXECUTION_QUEUED') return '执行器已进入 managed execution';
   if (state === 'STOP_GATE') return 'STOP Gate · 等待 Owner';
   if (state === 'ABORTED_BEFORE_SEND') return '未发送 · 可安全重试';
   return 'UNCERTAIN · 禁止自动重放';
