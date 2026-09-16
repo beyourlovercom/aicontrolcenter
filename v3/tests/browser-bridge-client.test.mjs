@@ -46,8 +46,8 @@ test('automatic origin binding carries Assistant WP/Task titles while manual exa
 });
 
 test('strict next-step protocol allows EXECUTE or STOP_GATE only',()=>{
-  const execute=parseNextStepDecision(`AICC_NEXT_STEP_V1\nAICC_DECISION: EXECUTE\nAICC_ACTION_CLASS: TEST_ONLY\nAICC_WORK_PACKAGE: V5.4 Closed Loop\nAICC_TASK: Wire exact next step\nAICC_INSTRUCTION_BEGIN\nImplement only the exact task.\nRun tests.\nAICC_INSTRUCTION_END\nAICC_GATE_REASON: NONE`);
-  assert.equal(execute.decision,'EXECUTE');assert.equal(execute.taskTitle,'Wire exact next step');assert.match(execute.instruction,/Run tests/);
+  const execute=parseNextStepDecision(`AICC_NEXT_STEP_V1\nAICC_DECISION: EXECUTE\nAICC_ACTION_CLASS: TEST_ONLY\nAICC_PROVIDER: CODEX\nAICC_PROVIDER_ROUTING_REASON: deterministic test verification\nAICC_WORK_PACKAGE: V5.4 Closed Loop\nAICC_TASK: Wire exact next step\nAICC_INSTRUCTION_BEGIN\nImplement only the exact task.\nRun tests.\nAICC_INSTRUCTION_END\nAICC_GATE_REASON: NONE`);
+  assert.equal(execute.decision,'EXECUTE');assert.equal(execute.taskTitle,'Wire exact next step');assert.match(execute.instruction,/Run tests/);assert.equal(execute.provider,'CODEX');assert.equal(execute.providerRoutingReason,'deterministic test verification');
   const stop=parseNextStepDecision(`AICC_NEXT_STEP_V1\nAICC_DECISION: STOP_GATE\nAICC_ACTION_CLASS: STOP_GATE\nAICC_WORK_PACKAGE:\nAICC_TASK:\nAICC_INSTRUCTION_BEGIN\n\nAICC_INSTRUCTION_END\nAICC_GATE_REASON: Owner merge approval required`);
   assert.deepEqual(stop,{decision:'STOP_GATE',gateReason:'Owner merge approval required'});
   assert.throws(()=>parseNextStepDecision('AICC_NEXT_STEP_V1\nAICC_DECISION: EXECUTE\nAICC_TASK: missing wp'),e=>e.code==='NEXT_STEP_DECISION_INVALID');
@@ -79,6 +79,21 @@ test('terminal Run without Canonical Result becomes local RUN_FAILED instead of 
   const map=storage.values.aiccBridgeRequestsV1;map[queued.ledger.requestId]={...map[queued.ledger.requestId],status:'WAITING_RESULT',runId:'run-failed'};
   const result=await coordinator.pollOne(queued.ledger.requestId);
   assert.equal(result.ledger.status,'RUN_FAILED');assert.equal(result.ledger.lastError,'BRIDGE_RUN_FAILED');
+});
+
+test('remote Claude FAILED, UNCERTAIN and invalid completed result become terminal local ledger states',async()=>{
+  for(const [projection,expectedStatus,expectedError] of [
+    [{remoteExecution:{state:'FAILED'},delivery:null,state:{deliveryState:'WAITING_RESULT'}},'RUN_FAILED','BRIDGE_REMOTE_EXECUTION_FAILED'],
+    [{remoteExecution:{state:'UNCERTAIN'},delivery:null,state:{deliveryState:'WAITING_RESULT'}},'RUN_UNCERTAIN','BRIDGE_REMOTE_EXECUTION_UNCERTAIN'],
+    [{remoteExecution:{state:'COMPLETED'},remoteErrorCode:'BRIDGE_REMOTE_RESULT_INVALID',delivery:null,state:{deliveryState:'WAITING_RESULT'}},'RUN_FAILED','BRIDGE_REMOTE_RESULT_INVALID']
+  ]){
+    const storage=memoryStorage();const api={...baseApi(),async getRequest(){return projection;}};
+    const coordinator=createCoordinator({storage,api,destination:{deliver:async()=>({outcome:'DELIVERED'})},ids:ids()});
+    const queued=await coordinator.enqueueAction({url:'https://chatgpt.com/c/conv-remote-terminal',tabId:13,taskId:'task-1',taskTitle:'Task 1',instruction:'remote exact'});
+    storage.values.aiccBridgeRequestsV1[queued.ledger.requestId]={...storage.values.aiccBridgeRequestsV1[queued.ledger.requestId],status:'WAITING_RESULT',runId:'remote-run-1'};
+    const first=await coordinator.pollOne(queued.ledger.requestId);assert.equal(first.ledger.status,expectedStatus);assert.equal(first.ledger.lastError,expectedError);
+    const second=await coordinator.pollOne(queued.ledger.requestId);assert.equal(second.ledger.status,expectedStatus);
+  }
 });
 
 test('requestId and originTurnId are persisted before first network submission',async()=>{

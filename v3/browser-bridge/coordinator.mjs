@@ -108,9 +108,21 @@ export function createCoordinator(deps={}){
     let ledger=await getLedger(requestId);if(!ledger)return null;
     if(ledger.pendingReceipt){const flushed=await flushPendingReceipt(ledger);ledger=flushed.ledger;if(flushed.flushed)return flushed;}
     if(ledger.status==='SUBMIT_PENDING'||ledger.status==='SUBMITTING')return submitExisting(ledger);
-    if(['SUBMIT_FAILED','RUN_FAILED','DELIVERED','DELIVERY_UNCERTAIN'].includes(ledger.status))return {ledger};
+    if(['SUBMIT_FAILED','RUN_FAILED','RUN_UNCERTAIN','DELIVERED','DELIVERY_UNCERTAIN'].includes(ledger.status))return {ledger};
 
     const projection=await api.getRequest(requestId);
+    if(projection?.remoteErrorCode&&!projection.delivery){
+      ledger={...ledger,status:'RUN_FAILED',lastError:projection.remoteErrorCode,updatedAt:nowIso(clock)};
+      await putLedger(ledger);return {ledger,projection};
+    }
+    if(projection?.remoteExecution?.state==='FAILED'&&!projection.delivery){
+      ledger={...ledger,status:'RUN_FAILED',lastError:'BRIDGE_REMOTE_EXECUTION_FAILED',updatedAt:nowIso(clock)};
+      await putLedger(ledger);return {ledger,projection};
+    }
+    if(projection?.remoteExecution?.state==='UNCERTAIN'&&!projection.delivery){
+      ledger={...ledger,status:'RUN_UNCERTAIN',lastError:'BRIDGE_REMOTE_EXECUTION_UNCERTAIN',updatedAt:nowIso(clock)};
+      await putLedger(ledger);return {ledger,projection};
+    }
     if(projection?.run&&['EXITED','SPAWN_ERROR','ORPHANED','STOPPED'].includes(projection.run.state)&&!projection.delivery){
       ledger={...ledger,status:'RUN_FAILED',lastError:'BRIDGE_RUN_FAILED',runId:projection.run.runId||ledger.runId,updatedAt:nowIso(clock)};
       await putLedger(ledger);return {ledger,projection};

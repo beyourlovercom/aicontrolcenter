@@ -9,9 +9,10 @@ import {executorStatus,runEvents,runProjection,startRun,stopRun} from './lib/exe
 import {readOrMaterializeResult} from './lib/result-store.mjs';
 import {createDraftPr,readPrDeliveryFacts} from './lib/github-delivery.mjs';
 import {ensureBridgeCredential,listBridgeRequestIds,readBridgeRequestBinding,verifyBridgeCredential} from './lib/bridge-store.mjs';
-import {bridgeProjection,claimBridgeDelivery,reconcileBridgeStartup,recordBridgeReceipt,submitBridgeRequest} from './lib/bridge-runtime.mjs';
+import {bridgeProjectionAsync,claimBridgeDeliveryAsync,reconcileBridgeStartup,recordBridgeReceipt,submitBridgeRequestAsync} from './lib/bridge-runtime.mjs';
 import {createChatgptProjectionStore} from './lib/chatgpt-projection.mjs';
 import {assertNextStepLocal,cancelPendingNextStepForRoom,claimNextStep,createNextStepRequest,readNextStepRequest,reconcileNextStepStartup,recordNextStepReceipt} from './lib/next-step-runtime.mjs';
+import {RemoteRunnerClient,remoteRunnerBaseUrl,remoteRepositoryRoot} from './lib/remote-runner-client.mjs';
 
 const root=dirname(fileURLToPath(import.meta.url));
 const publicRoot=join(root,'public');
@@ -76,7 +77,7 @@ function workError(res,error){
 function executorErrorStatus(code){
   if(['RUN_NOT_FOUND','RUN_TASK_NOT_FOUND'].includes(code))return 404;
   if(['RUN_INSTRUCTION_INVALID'].includes(code))return 400;
-  if(['EXECUTOR_LEASE_ACTIVE','EXECUTOR_LEASE_MISMATCH','RUN_PROJECT_MISMATCH','RUN_ALREADY_TERMINAL','RUN_STOP_TARGET_MISMATCH'].includes(code))return 409;
+  if(['EXECUTOR_LEASE_ACTIVE','EXECUTOR_LEASE_MISMATCH','EXECUTOR_REMOTE_CLAUDE_LEASE_CONFLICT','RUN_PROJECT_MISMATCH','RUN_ALREADY_TERMINAL','RUN_STOP_TARGET_MISMATCH'].includes(code))return 409;
   return 503;
 }
 function executorError(res,error){
@@ -108,7 +109,7 @@ function bridgeErrorStatus(code){
   if(code==='BRIDGE_AUTH_REQUIRED')return 401;
   if(['BRIDGE_TASK_NOT_FOUND','BRIDGE_DELIVERY_NOT_FOUND'].includes(code))return 404;
   if(['BRIDGE_REQUEST_INVALID','BRIDGE_CONVERSATION_ID_UNAVAILABLE','BRIDGE_ORIGIN_TURN_ID_REQUIRED','REQUEST_JSON_INVALID'].includes(code))return 400;
-  if(['BRIDGE_REQUEST_CONFLICT','BRIDGE_PROJECT_MISMATCH','BRIDGE_RUN_BINDING_FAILED','BRIDGE_RESULT_NOT_READY','BRIDGE_DELIVERY_ALREADY_CLAIMED','BRIDGE_DELIVERY_ALREADY_DELIVERED','BRIDGE_DELIVERY_UNCERTAIN','BRIDGE_CONVERSATION_MISMATCH','BRIDGE_RECEIPT_MISMATCH','BRIDGE_RETRY_EXHAUSTED'].includes(code))return 409;
+  if(['BRIDGE_REQUEST_CONFLICT','BRIDGE_PROJECT_MISMATCH','BRIDGE_RUN_BINDING_FAILED','BRIDGE_RESULT_NOT_READY','BRIDGE_DELIVERY_ALREADY_CLAIMED','BRIDGE_DELIVERY_ALREADY_DELIVERED','BRIDGE_DELIVERY_UNCERTAIN','BRIDGE_CONVERSATION_MISMATCH','BRIDGE_RECEIPT_MISMATCH','BRIDGE_RETRY_EXHAUSTED','BRIDGE_REMOTE_EXECUTION_FAILED','BRIDGE_REMOTE_EXECUTION_UNCERTAIN','BRIDGE_REMOTE_RESULT_INVALID'].includes(code))return 409;
   return 503;
 }
 function bridgeError(res,error){const errorCode=error?.code||'BRIDGE_REQUEST_INVALID';return json(res,bridgeErrorStatus(errorCode),{ok:false,errorCode});}
@@ -164,7 +165,14 @@ export function createAiccV3Server(options={}){
     prFactsCache.set(key,{at:now,value});
     return value;
   };
-  const bridgeOptions={...(options.bridgeOptions||{}),executorOptions:options.bridgeOptions?.executorOptions||executorOptions};
+  const runnerBaseUrl=options.remoteRunnerBaseUrl!==undefined?options.remoteRunnerBaseUrl:remoteRunnerBaseUrl(env);
+  const remoteRunner=options.remoteRunner||(runnerBaseUrl?new RemoteRunnerClient(runnerBaseUrl):null);
+  const bridgeOptions={
+    ...(options.bridgeOptions||{}),
+    executorOptions:options.bridgeOptions?.executorOptions||executorOptions,
+    remoteRunner:options.bridgeOptions?.remoteRunner||remoteRunner,
+    remoteRepositoryRoot:options.bridgeOptions?.remoteRepositoryRoot||options.remoteRepositoryRoot||remoteRepositoryRoot(env)
+  };
   const chatgptProjection=options.chatgptProjectionStore||createChatgptProjectionStore();
   try{
     const seen=new Set();
@@ -310,12 +318,12 @@ export function createAiccV3Server(options={}){
       catch(error){return nextStepError(res,error);}
     }
     if(req.method==='POST'&&url.pathname==='/api/bridge/requests'){
-      try{const input=await readJson(req);const context=bridgeRuntimeContext(input,env);return json(res,201,{ok:true,...submitBridgeRequest(context,input,env,bridgeOptions)});}
+      try{const input=await readJson(req);const context=bridgeRuntimeContext(input,env);return json(res,201,{ok:true,...await submitBridgeRequestAsync(context,input,env,bridgeOptions)});}
       catch(error){return bridgeError(res,error);}
     }
     const bridgeClaim=url.pathname.match(/^\/api\/bridge\/requests\/([^/]+)\/claim$/);
     if(req.method==='POST'&&bridgeClaim){
-      try{const input=await readJson(req);const requestId=decodeURIComponent(bridgeClaim[1]);const context=bridgeRequestContext(requestId,env);return json(res,200,{ok:true,...claimBridgeDelivery(context,requestId,input,env,bridgeOptions)});}
+      try{const input=await readJson(req);const requestId=decodeURIComponent(bridgeClaim[1]);const context=bridgeRequestContext(requestId,env);return json(res,200,{ok:true,...await claimBridgeDeliveryAsync(context,requestId,input,env,bridgeOptions)});}
       catch(error){return bridgeError(res,error);}
     }
     const bridgeReceipt=url.pathname.match(/^\/api\/bridge\/requests\/([^/]+)\/receipt$/);
@@ -325,17 +333,33 @@ export function createAiccV3Server(options={}){
     }
     const bridgeRequest=url.pathname.match(/^\/api\/bridge\/requests\/([^/]+)$/);
     if(req.method==='GET'&&bridgeRequest){
-      try{const requestId=decodeURIComponent(bridgeRequest[1]);const context=bridgeRequestContext(requestId,env);return json(res,200,{available:true,bridge:bridgeProjection(context,requestId,env,bridgeOptions)});}
+      try{const requestId=decodeURIComponent(bridgeRequest[1]);const context=bridgeRequestContext(requestId,env);return json(res,200,{available:true,bridge:await bridgeProjectionAsync(context,requestId,env,bridgeOptions)});}
       catch(error){return bridgeError(res,error);}
     }
 
     if(req.method==='GET'&&url.pathname==='/api/executor'){
-      try{const context=loadProjectContext(env);return json(res,200,{available:true,executor:executorStatus(context,env,executorOptions)});}
+      try{
+        const context=loadProjectContext(env);
+        const executor=executorStatus(context,env,executorOptions);
+        let remoteClaudeReadiness={available:false,errorCode:'REMOTE_RUNNER_NOT_CONFIGURED'};
+        if(remoteRunner){
+          try{const s=await remoteRunner.status();remoteClaudeReadiness={available:true,ready:true,...s};}
+          catch(error){remoteClaudeReadiness={available:false,errorCode:error?.code||'REMOTE_RUNNER_UNAVAILABLE'};}
+        }
+        return json(res,200,{available:true,executor,remoteClaudeReadiness});
+      }
       catch(error){return executorError(res,error);}
     }
     if(req.method==='POST'&&url.pathname==='/api/runs'){
-      try{const input=await readJson(req);const context=loadProjectContext(env);return json(res,201,{ok:true,run:startRun(context,input,env,executorOptions)});}
-      catch(error){return executorError(res,error);}
+      try{
+        const input=await readJson(req);const context=loadProjectContext(env);
+        if(remoteRunner){
+          const remoteStatus=await remoteRunner.status();
+          const conflict=(remoteStatus?.activeLeases||[]).some(lease=>lease?.repositoryIdentity===context.repository.identity&&lease?.branch===context.repository.branch);
+          if(conflict){const error=new Error('EXECUTOR_REMOTE_CLAUDE_LEASE_CONFLICT');error.code='EXECUTOR_REMOTE_CLAUDE_LEASE_CONFLICT';throw error;}
+        }
+        return json(res,201,{ok:true,run:startRun(context,input,env,executorOptions)});
+      }catch(error){return executorError(res,error);}
     }
     const runEventsMatch=url.pathname.match(/^\/api\/runs\/([^/]+)\/events$/);
     if(req.method==='GET'&&runEventsMatch){

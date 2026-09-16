@@ -9,6 +9,8 @@ export const BRIDGE_STATE_SCHEMA='aicc.v3.bridge-state.v1';
 export const BRIDGE_EVENT_SCHEMA='aicc.v3.bridge-event.v1';
 export const BRIDGE_DELIVERY_SCHEMA='aicc.v3.bridge-delivery.v1';
 export const BRIDGE_RECEIPT_SCHEMA='aicc.v3.bridge-receipt.v1';
+export const BRIDGE_PROVIDER_EXECUTION_SCHEMA='aicc.v3.bridge-provider-execution.v1';
+export const BRIDGE_PROVIDER_RESULT_SCHEMA='aicc.v3.bridge-provider-result.v1';
 export const BRIDGE_CREDENTIAL_SCHEMA='aicc.v3.bridge-credential.v1';
 export const DELIVERY_STATES=Object.freeze(['WAITING_RESULT','READY','CLAIMED','DELIVERED','DELIVERY_UNCERTAIN']);
 
@@ -38,6 +40,8 @@ export function stateFile(context,requestId,env=process.env){return join(bridgeR
 export function eventsFile(context,requestId,env=process.env){return join(bridgeRequestDir(context,requestId,env),'events.jsonl');}
 export function deliveryFile(context,requestId,env=process.env){return join(bridgeRequestDir(context,requestId,env),'delivery.v1.json');}
 export function receiptFile(context,requestId,env=process.env){return join(bridgeRequestDir(context,requestId,env),'receipt.v1.json');}
+export function providerExecutionFile(context,requestId,env=process.env){return join(bridgeRequestDir(context,requestId,env),'provider-execution.v1.json');}
+export function providerResultFile(context,requestId,env=process.env){return join(bridgeRequestDir(context,requestId,env),'provider-result.v1.json');}
 export function credentialFile(env=process.env){return join(stateRoot(env),'bridge','credential.v1.json');}
 
 export function ensureBridgeCredential(env=process.env,options={}){
@@ -114,6 +118,39 @@ export function appendBridgeEvent(context,requestId,type,payload={},env=process.
   appendFileSync(path,`${JSON.stringify(event)}\n`,{encoding:'utf8'});return event;
 }
 export function readBridgeEvents(context,requestId,env=process.env){readBridgeRequest(context,requestId,env);return parseEvents(eventsFile(context,requestId,env),requestId);}
+function validateProviderExecution(value,request){
+  if(!value||value.schema!==BRIDGE_PROVIDER_EXECUTION_SCHEMA||value.requestId!==request.requestId||value.executionId!==request.runId||value.provider!=='CLAUDE_CODE')fail('BRIDGE_PROVIDER_EXECUTION_INVALID');
+  if(value.taskId!==request.taskId||value.workPackageId!==request.workPackageId||value.repositoryIdentity!==request.repositoryIdentity)fail('BRIDGE_PROJECT_MISMATCH');
+  if(typeof value.branch!=='string'||!value.branch||typeof value.head!=='string'||!value.head||typeof value.createdAt!=='string')fail('BRIDGE_PROVIDER_EXECUTION_INVALID');
+  return value;
+}
+export function readProviderExecution(context,requestId,env=process.env){
+  const request=readBridgeRequest(context,requestId,env);const path=providerExecutionFile(context,requestId,env);if(!existsSync(path))return null;
+  let value;try{value=JSON.parse(readFileSync(path,'utf8'));}catch{fail('BRIDGE_PROVIDER_EXECUTION_INVALID');}
+  return validateProviderExecution(value,request);
+}
+export function createProviderExecution(context,requestId,value,env=process.env){
+  const request=readBridgeRequest(context,requestId,env);validateProviderExecution(value,request);const path=providerExecutionFile(context,requestId,env);
+  if(existsSync(path)){const existing=readProviderExecution(context,requestId,env);if(JSON.stringify({...existing,createdAt:null})!==JSON.stringify({...value,createdAt:null}))fail('BRIDGE_REQUEST_CONFLICT');return existing;}
+  createOnceJson(path,value,'BRIDGE_REQUEST_CONFLICT');return readProviderExecution(context,requestId,env);
+}
+function validateProviderResult(value,request){
+  if(!value||value.schema!==BRIDGE_PROVIDER_RESULT_SCHEMA||value.requestId!==request.requestId||value.executionId!==request.runId||value.provider!=='CLAUDE_CODE')fail('BRIDGE_PROVIDER_RESULT_INVALID');
+  if(value.taskId!==request.taskId||value.workPackageId!==request.workPackageId)fail('BRIDGE_PROJECT_MISMATCH');
+  if(typeof value.resultId!=='string'||!value.resultId||typeof value.content!=='string'||!value.content||typeof value.contentSha256!=='string'||value.contentSha256!==sha256(value.content)||typeof value.createdAt!=='string')fail('BRIDGE_PROVIDER_RESULT_INVALID');
+  return value;
+}
+export function readProviderResult(context,requestId,env=process.env){
+  const request=readBridgeRequest(context,requestId,env);const path=providerResultFile(context,requestId,env);if(!existsSync(path))return null;
+  let value;try{value=JSON.parse(readFileSync(path,'utf8'));}catch{fail('BRIDGE_PROVIDER_RESULT_INVALID');}
+  return validateProviderResult(value,request);
+}
+export function createProviderResult(context,requestId,value,env=process.env){
+  const request=readBridgeRequest(context,requestId,env);validateProviderResult(value,request);const path=providerResultFile(context,requestId,env);
+  if(existsSync(path)){const existing=readProviderResult(context,requestId,env);if(JSON.stringify({...existing,createdAt:null})!==JSON.stringify({...value,createdAt:null}))fail('BRIDGE_REQUEST_CONFLICT');return existing;}
+  createOnceJson(path,value,'BRIDGE_REQUEST_CONFLICT');return readProviderResult(context,requestId,env);
+}
+
 function validateDelivery(value,request){
   if(!value||value.schema!==BRIDGE_DELIVERY_SCHEMA||value.requestId!==request.requestId||typeof value.deliveryId!=='string'||typeof value.resultId!=='string')fail('BRIDGE_DELIVERY_NOT_FOUND');
   for(const key of ['conversationId','originTurnId','taskId','workPackageId','runId'])if(value[key]!==request[key])fail('BRIDGE_PROJECT_MISMATCH');
