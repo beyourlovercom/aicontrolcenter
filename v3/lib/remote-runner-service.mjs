@@ -1,6 +1,6 @@
 import {execFileSync,spawn as nodeSpawn} from 'node:child_process';
 import {createHash,randomUUID} from 'node:crypto';
-import {existsSync,mkdirSync,readFileSync,readdirSync,realpathSync,renameSync,writeFileSync} from 'node:fs';
+import {existsSync,mkdirSync,readFileSync,readdirSync,realpathSync,renameSync,statSync,writeFileSync} from 'node:fs';
 import {join} from 'node:path';
 import {once} from 'node:events';
 import {validateProviderDecision} from './provider-routing.mjs';
@@ -17,6 +17,19 @@ const PUBLIC_STATES=new Set(['QUEUED','RUNNING','COMPLETED','FAILED','UNCERTAIN'
 
 function fail(code){const e=new Error(code);e.code=code;throw e;}
 function sha256(value){return createHash('sha256').update(value,'utf8').digest('hex');}
+function sameInode(a,b){try{const sa=statSync(a),sb=statSync(b);return sa.dev===sb.dev&&sa.ino===sb.ino;}catch{return false;}}
+// Returns true when inode(child) is inode(parent) or is physically beneath it.
+function inodeContains(parent,child){
+  if(sameInode(parent,child))return true;
+  // Walk each prefix segment of child's realpath and compare inodes.
+  const sep='/';let p=child;
+  for(;;){
+    const next=p.lastIndexOf(sep);if(next<=0)break;
+    p=p.slice(0,next);
+    if(sameInode(parent,p))return true;
+  }
+  return false;
+}
 function safeExec(cmd,args,opts={}){
   try{return execFileSync(cmd,args,{encoding:'utf8',stdio:['ignore','pipe','pipe'],...opts}).trim();}
   catch{return null;}
@@ -44,9 +57,9 @@ export function validateRepositoryRoot(repositoryRoot,allowedRoot){
   if(typeof allowedRoot!=='string'||!allowedRoot.trim())fail('REMOTE_RUNNER_ALLOWED_ROOT_MISSING');
   let realRoot;try{realRoot=realpathSync(repositoryRoot.trim());}catch{fail('REMOTE_RUNNER_PATH_NOT_FOUND');}
   let realAllowed;try{realAllowed=realpathSync(allowedRoot.trim());}catch{fail('REMOTE_RUNNER_ALLOWED_ROOT_INVALID');}
-  if(realRoot!==realAllowed&&!realRoot.startsWith(`${realAllowed}/`))fail('REMOTE_RUNNER_PATH_ESCAPE');
+  if(!inodeContains(realAllowed,realRoot))fail('REMOTE_RUNNER_PATH_ESCAPE');
   const gitTop=safeExec('git',['-C',realRoot,'rev-parse','--show-toplevel']);
-  if(!gitTop||realpathSync(gitTop)!==realRoot)fail('REMOTE_RUNNER_NOT_GIT_WORKTREE');
+  if(!gitTop||!sameInode(gitTop,realRoot))fail('REMOTE_RUNNER_NOT_GIT_WORKTREE');
   const symRef=safeExec('git',['-C',realRoot,'symbolic-ref','HEAD']);
   if(!symRef)fail('REMOTE_RUNNER_DETACHED_HEAD');
   return realRoot;

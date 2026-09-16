@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {mkdtempSync,rmSync,mkdirSync,writeFileSync,realpathSync} from 'node:fs';
+import {mkdtempSync,rmSync,mkdirSync,writeFileSync,realpathSync,statSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {execFileSync} from 'node:child_process';
@@ -237,6 +237,71 @@ test('validateRepositoryRoot returns realpath-normalised value',()=>{
     // Compare realpath-normalised values — safe on macOS case-insensitive FS.
     assert.equal(result,realRepo);
     assert.ok(result===realTmp||result.startsWith(realTmp+'/'));
+  }finally{rmSync(tmp,{recursive:true,force:true});}
+});
+
+// ── inode-identity path checks (Darwin case-variant regression) ──────────────
+
+// Detect whether the tmp filesystem is case-insensitive (macOS APFS default).
+function isCaseInsensitiveFs(){
+  const tmp=mkdtempSync(join(tmpdir(),'aicc-ci-'));
+  try{
+    mkdirSync(join(tmp,'Probe'));
+    statSync(join(tmp,'probe')); // throws on case-sensitive FS
+    return true;
+  }catch{return false;}finally{rmSync(tmp,{recursive:true,force:true});}
+}
+const CASE_INSENSITIVE=isCaseInsensitiveFs();
+
+test('validateRepositoryRoot accepts case-variant path on case-insensitive FS',()=>{
+  if(!CASE_INSENSITIVE){return;} // skip on case-sensitive FS
+  const tmp=mkdtempSync(join(tmpdir(),'aicc-rrs-'));
+  try{
+    const repo=makeGitRepo(tmp);
+    // Flip the casing of just the repo leaf directory name; on case-insensitive FS
+    // this addresses the same inode but produces a different string.
+    const repoName=repo.split('/').pop();
+    const flipped=repoName[0]===repoName[0].toUpperCase()
+      ?repoName[0].toLowerCase()+repoName.slice(1)
+      :repoName[0].toUpperCase()+repoName.slice(1);
+    const altPath=join(tmp,flipped);
+    const result=validateRepositoryRoot(altPath,tmp);
+    // Must not throw; returned value is a real resolved path.
+    assert.ok(typeof result==='string'&&result.length>0);
+  }finally{rmSync(tmp,{recursive:true,force:true});}
+});
+
+test('validateRepositoryRoot accepts case-variant allowedRoot on case-insensitive FS',()=>{
+  if(!CASE_INSENSITIVE){return;}
+  const tmp=mkdtempSync(join(tmpdir(),'aicc-rrs-'));
+  try{
+    const repo=makeGitRepo(tmp);
+    // Flip casing of the allowedRoot (tmp dir name last segment).
+    const tmpName=tmp.split('/').pop();
+    const parent=tmp.slice(0,tmp.lastIndexOf('/'));
+    const flipped=tmpName[0]===tmpName[0].toUpperCase()
+      ?tmpName[0].toLowerCase()+tmpName.slice(1)
+      :tmpName[0].toUpperCase()+tmpName.slice(1);
+    const altAllowed=join(parent,flipped);
+    // altAllowed addresses same inode as tmp — must not throw PATH_ESCAPE.
+    const result=validateRepositoryRoot(repo,altAllowed);
+    assert.ok(typeof result==='string'&&result.length>0);
+  }finally{rmSync(tmp,{recursive:true,force:true});}
+});
+
+test('validateRepositoryRoot still rejects path escape with case-variant paths',()=>{
+  const tmp=mkdtempSync(join(tmpdir(),'aicc-rrs-'));
+  try{
+    const repo=makeGitRepo(tmp);
+    const sibling=join(tmp,'sibling');mkdirSync(sibling);
+    execFileSync('git',['init','-b','feat/test'],{cwd:sibling,encoding:'utf8'});
+    execFileSync('git',['config','user.email','t@t'],{cwd:sibling,encoding:'utf8'});
+    execFileSync('git',['config','user.name','T'],{cwd:sibling,encoding:'utf8'});
+    writeFileSync(join(sibling,'f'),'x');
+    execFileSync('git',['add','.'],{cwd:sibling,encoding:'utf8'});
+    execFileSync('git',['commit','-m','init'],{cwd:sibling,encoding:'utf8'});
+    // repo as allowedRoot must reject sibling even on case-insensitive FS.
+    expectCode(()=>validateRepositoryRoot(sibling,repo),'REMOTE_RUNNER_PATH_ESCAPE');
   }finally{rmSync(tmp,{recursive:true,force:true});}
 });
 
