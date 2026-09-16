@@ -86,6 +86,34 @@ function buildGovernanceEnv(rec,base=process.env){
   return env;
 }
 
+/**
+ * Parse strict dry-run governance evidence from stdout.
+ * Requires WP=<expectedWp>, EXECUTION_CLASS=<expectedClass>, ROUTING=CLAUDE_CODE
+ * all present. Returns a deterministic sanitized canonical string on match,
+ * null on any missing or mismatched line.
+ */
+export function extractDryRunEvidence(stdout,expectedWp,expectedExecutionClass){
+  if(typeof stdout!=='string'||!stdout.trim())return null;
+  if(typeof expectedWp!=='string'||!expectedWp.trim())return null;
+  if(typeof expectedExecutionClass!=='string'||!expectedExecutionClass.trim())return null;
+  let wp=null,execClass=null,routing=null;
+  const seen=new Set();
+  for(const raw of stdout.split('\n')){
+    const line=raw.trim();if(!line)continue;
+    let m,key=null,value=null;
+    if((m=line.match(/^WP=(.+)$/))){key='WP';value=m[1].trim();}
+    else if((m=line.match(/^EXECUTION_CLASS=(.+)$/))){key='EXECUTION_CLASS';value=m[1].trim();}
+    else if((m=line.match(/^ROUTING=(.+)$/))){key='ROUTING';value=m[1].trim();}
+    if(!key)continue;
+    if(seen.has(key))return null;seen.add(key);
+    if(key==='WP')wp=value;else if(key==='EXECUTION_CLASS')execClass=value;else routing=value;
+  }
+  if(wp!==expectedWp.trim())return null;
+  if(execClass!==expectedExecutionClass.trim())return null;
+  if(routing!=='CLAUDE_CODE')return null;
+  return `DRY_RUN_OK WP=${wp} EXECUTION_CLASS=${execClass} ROUTING=${routing}`;
+}
+
 /** Extract the deterministic final user-visible result from Claude stream-json. */
 export function extractClaudeFinalResult(stdout){
   if(typeof stdout!=='string'||!stdout.trim())return null;
@@ -185,7 +213,9 @@ export function createRemoteRunnerService(allowedRoot,options={}){
     let code;try{[code]=await once(child,'close');}catch{code=null;}
     rec.exitCode=Number.isInteger(code)?code:null;
     if(code===0){
-      const content=extractClaudeFinalResult(stdout);
+      const content=rec.dryRun
+        ?extractDryRunEvidence(stdout,rec.workPackageId,rec.executionClass)
+        :extractClaudeFinalResult(stdout);
       if(content){rec.state='COMPLETED';rec.resultContent=content;rec.resultContentSha256=sha256(content);rec.error=null;}
       else{rec.state='FAILED';rec.error='REMOTE_RUNNER_RESULT_INVALID';}
     }else{rec.state='FAILED';rec.error='REMOTE_RUNNER_PROCESS_FAILED';}
