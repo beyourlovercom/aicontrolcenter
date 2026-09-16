@@ -30,6 +30,7 @@
   let roomExecutorFacts: Record<string, ExecutorFactsProjection> = {};
   let roomExecutorErrors: Record<string, string> = {};
   let factsRefreshKey = '';
+  const factsRefreshInFlight = new Set<string>();
   let nextSteps: Record<string, NextStepProjection> = {};
   let nextStepBusyRoomId: string | null = null;
 
@@ -76,6 +77,8 @@
         ? roomStore.activeRoomIds.map((id) => roomStore.rooms[id]).find(Boolean) ?? null
         : roomStore.rooms[viewId] ?? null;
       if (!room) return;
+      if (factsRefreshInFlight.has(room.roomId)) return;
+      factsRefreshInFlight.add(room.roomId);
       try {
         if (room.repo === 'PENDING_PROJECT_REPO_BINDING') {
           const facts = await readExecutorFacts();
@@ -90,6 +93,8 @@
       } catch (error) {
         if (cancelled) return;
         roomExecutorErrors = {...roomExecutorErrors,[room.roomId]:error instanceof Error ? error.message : String(error)};
+      } finally {
+        factsRefreshInFlight.delete(room.roomId);
       }
     };
     const refreshFactsListener = () => void refreshFacts();

@@ -154,6 +154,17 @@ export function createAiccV3Server(options={}){
   const storeOptions=options.workStoreOptions||{};
   const executorOptions=options.executorOptions||{};
   const prDeliveryOptions=options.prDeliveryOptions||{};
+  const prFactsCache=new Map();
+  const prFactsTtlMs=Number.isFinite(options.prFactsTtlMs)?Math.max(0,Number(options.prFactsTtlMs)):30000;
+  const readCachedPrDelivery=(context)=>{
+    const repository=context.repository;
+    const key=[context.project.id,repository.identity,repository.path,repository.branch,repository.head,String(repository.dirty)].join('\0');
+    const now=Date.now();const hit=prFactsCache.get(key);
+    if(hit&&now-hit.at<=prFactsTtlMs)return hit.value;
+    const value=readPrDeliveryFacts(context,env,prDeliveryOptions);
+    prFactsCache.set(key,{at:now,value});
+    return value;
+  };
   const runnerBaseUrl=options.remoteRunnerBaseUrl!==undefined?options.remoteRunnerBaseUrl:remoteRunnerBaseUrl(env);
   const remoteRunner=options.remoteRunner||(runnerBaseUrl?new RemoteRunnerClient(runnerBaseUrl):null);
   const bridgeOptions={
@@ -201,7 +212,7 @@ export function createAiccV3Server(options={}){
           capturedAt:new Date().toISOString(),
           project:{available:true,value:context,errorCode:null},
           executor:source(()=>executorStatus(context,env,executorOptions),'EXECUTOR_FACTS_UNAVAILABLE'),
-          prDelivery:source(()=>readPrDeliveryFacts(context,env,prDeliveryOptions),'PR_FACTS_UNAVAILABLE'),
+          prDelivery:source(()=>readCachedPrDelivery(context),'PR_FACTS_UNAVAILABLE'),
           work:source(()=>readRoomWorkStore(context,input?.roomId,input?.workstreamId,env),'WORK_FACTS_UNAVAILABLE')
         };
         return json(res,200,{available:true,facts});
@@ -247,7 +258,7 @@ export function createAiccV3Server(options={}){
     }
 
     if(req.method==='GET'&&url.pathname==='/api/pr-delivery'){
-      try{const context=loadProjectContext(env);return json(res,200,{available:true,delivery:readPrDeliveryFacts(context,env,prDeliveryOptions)});}
+      try{const context=loadProjectContext(env);return json(res,200,{available:true,delivery:readCachedPrDelivery(context)});}
       catch(error){return prError(res,error);}
     }
     if(req.method==='POST'&&url.pathname==='/api/prs/draft'){
