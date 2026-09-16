@@ -46,7 +46,8 @@ export function createOriginBinding(input,ids={}){
     instruction,
     runtimeBinding:exactRuntimeBinding(input?.runtimeBinding),
     roomId:typeof input?.roomId==='string'&&input.roomId.trim()?input.roomId.trim():null,
-    workstreamId:typeof input?.workstreamId==='string'&&input.workstreamId.trim()?input.workstreamId.trim():null
+    workstreamId:typeof input?.workstreamId==='string'&&input.workstreamId.trim()?input.workstreamId.trim():null,
+    executionProvider:input?.executionProvider||null
   };
 }
 
@@ -64,6 +65,7 @@ export function requestBody(binding){
   if(binding.runtimeBinding)body.runtimeBinding=binding.runtimeBinding;
   if(binding.roomId)body.roomId=binding.roomId;
   if(binding.workstreamId)body.workstreamId=binding.workstreamId;
+  if(binding.executionProvider)body.executionProvider=binding.executionProvider;
   return body;
 }
 
@@ -83,6 +85,8 @@ export function parseNextStepDecision(value){
   if(typeof value!=='string'||!value.includes('AICC_NEXT_STEP_V1'))fail('NEXT_STEP_DECISION_INVALID');
   const decision=value.match(/^AICC_DECISION:\s*(EXECUTE|STOP_GATE)\s*$/mi)?.[1]||null;
   const actionClass=value.match(/^AICC_ACTION_CLASS:\s*(CODE_CHANGE|TEST_ONLY|STOP_GATE)\s*$/mi)?.[1]||null;
+  const provider=value.match(/^AICC_PROVIDER:\s*(CLAUDE_CODE|CODEX)\s*$/mi)?.[1]||null;
+  const providerRoutingReason=value.match(/^AICC_PROVIDER_ROUTING_REASON:\s*(.*?)\s*$/mi)?.[1]?.trim()||'';
   const workPackage=value.match(/^AICC_WORK_PACKAGE:\s*(.*?)\s*$/mi)?.[1]?.trim()||'';
   const taskTitle=value.match(/^AICC_TASK:\s*(.*?)\s*$/mi)?.[1]?.trim()||'';
   const instruction=value.match(/AICC_INSTRUCTION_BEGIN\s*\n([\s\S]*?)\nAICC_INSTRUCTION_END/i)?.[1]||'';
@@ -92,10 +96,11 @@ export function parseNextStepDecision(value){
     return {decision:'STOP_GATE',gateReason};
   }
   if(decision!=='EXECUTE'||!['CODE_CHANGE','TEST_ONLY'].includes(actionClass)||!workPackage||!taskTitle||!instruction.trim())fail('NEXT_STEP_DECISION_INVALID');
+  if(!provider||!providerRoutingReason)fail('NEXT_STEP_DECISION_INVALID');
   if(workPackage.length>240||taskTitle.length>240||new TextEncoder().encode(instruction).length>60000)fail('NEXT_STEP_DECISION_INVALID');
   const forbidden=/(?:\bgit\s+merge\b|\bgh\s+pr\s+merge\b|\bmerge\s+(?:pr|pull request)\b|\bdeploy(?:ment)?\b|\bproduction\s+(?:apply|write|data|deploy)\b|(?:^|\s)--apply(?:\s|$)|\bdata\s+write\b)/i;
   if(forbidden.test(instruction))return {decision:'STOP_GATE',gateReason:'NEXT_STEP_FORBIDDEN_OPERATION'};
-  return {decision:'EXECUTE',actionClass,workPackageTitle:workPackage,taskTitle,instruction};
+  return {decision:'EXECUTE',actionClass,provider,providerRoutingReason,workPackageTitle:workPackage,taskTitle,instruction};
 }
 
 export function recoveryAction(projection,ledger){

@@ -241,6 +241,7 @@
   function assistantNodes(){return [...document.querySelectorAll('[data-message-author-role="assistant"]')];}
   function completeNextStepProtocol(text){
     if(typeof text!=='string'||!text.includes('AICC_NEXT_STEP_V1')||!/^AICC_DECISION:\s*(EXECUTE|STOP_GATE)\s*$/mi.test(text)||!/^AICC_ACTION_CLASS:\s*(CODE_CHANGE|TEST_ONLY|STOP_GATE)\s*$/mi.test(text)||!/^AICC_GATE_REASON:/mi.test(text))return false;
+    if(/^AICC_DECISION:\s*EXECUTE\s*$/mi.test(text)&&!/^AICC_PROVIDER:\s*(CLAUDE_CODE|CODEX)\s*$/mi.test(text))return false;
     return /^AICC_DECISION:\s*STOP_GATE\s*$/mi.test(text)||(/AICC_INSTRUCTION_BEGIN/i.test(text)&&/AICC_INSTRUCTION_END/i.test(text));
   }
   async function planNextStep(message){
