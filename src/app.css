@@ -211,6 +211,11 @@ button { color: inherit; }
 .facts-heading { padding: 0 0 14px; }
 .live-pill { padding: 5px 8px; color: #222; background: #f0f3ef; border: 1px solid #e0e5df; }
 .live-pill i { width: 7px; height: 7px; border-radius: 50%; background: #9aa59e; }
+.provider-card { margin-bottom: 12px; border: 1.5px solid #a8d4b8; border-radius: 13px; overflow: hidden; background: #f0faf4; }
+.provider-card-row { padding: 10px 13px; display: grid; gap: 3px; border-bottom: 1px solid #d1ead9; }
+.provider-card-row:last-child { border-bottom: 0; }
+.provider-label { color: #2d6b45; font-size: 11px; font-weight: 600; letter-spacing: .03em; }
+.provider-value { overflow-wrap: anywhere; color: #0e3d22; font-size: 13px; font-weight: 600; line-height: 1.5; }
 .fact-stack { border: 1px solid #e3e8e2; border-radius: 13px; overflow: hidden; background: #fff; }
 .fact-row { padding: 10px 11px; display: grid; gap: 4px; border-bottom: 1px solid #edf0ec; }
 .fact-row:last-child { border-bottom: 0; }

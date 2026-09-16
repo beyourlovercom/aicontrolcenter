@@ -21,6 +21,7 @@
   import { readChatgptSnapshots, snapshotForConversation, type ChatgptConversationSnapshot } from './lib/chatgptProjection';
   import { readExecutorFacts, readRoomExecutorFacts, roomRuntimeBinding, type ExecutorFactsProjection } from './lib/executorFacts';
   import { cancelPendingNextStepForRoom, nextStepEligibility, nextStepStatusLabel, readNextStep, submitNextStep, type NextStepProjection } from './lib/nextStep';
+  import { resolveProviderDecision } from './lib/providerPresentation';
 
   let roomStore: ExecutionRoomStore = createDefaultExecutionRoomStore();
   let toast = '';
@@ -50,6 +51,7 @@
   $: actualExecutor = executorFacts?.executor.value ?? null;
   $: actualPrDelivery = executorFacts?.prDelivery.value ?? null;
   $: activeNextStep = activeRoom ? nextSteps[activeRoom.roomId] ?? null : null;
+  $: activeProviderDecision = resolveProviderDecision(activeNextStep?.state.decision ?? null);
   $: activeNextStepEligibility = activeRoom ? nextStepEligibility(activeRoom, executorFacts, activeSnapshot) : { ready: false, blockers: ['ROOM_UNAVAILABLE'] };
   $: nextStepLocked = !activeNextStepEligibility.ready || nextStepBusyRoomId === activeRoom?.roomId || ['PENDING','CLAIMED'].includes(activeNextStep?.state.state ?? '');
   $: {
@@ -479,6 +481,12 @@
             <div class="facts-actions"><span class:fact-drift={runtimeBinding === 'DRIFT'} class:fact-ready={runtimeBinding === 'MATCH'} class="live-pill"><i></i>{runtimeBinding}</span>{#if runtimeBinding === 'DRIFT' && actualRepository}<button type="button" class="runtime-adopt" onclick={adoptCurrentRuntime}>采用当前 Runtime</button>{/if}</div>
           </div>
 
+          <div class="provider-card">
+            <div class="provider-card-row"><span class="provider-label">当前执行器</span><strong class="provider-value">{activeProviderDecision ? activeProviderDecision.displayLabel : '尚未路由'}</strong></div>
+            {#if activeProviderDecision?.routingReason}<div class="provider-card-row"><span class="provider-label">路由原因</span><strong class="provider-value">{activeProviderDecision.routingReason}</strong></div>{/if}
+            <div class="provider-card-row"><span class="provider-label">当前状态</span><strong class="provider-value">{nextStepStatusLabel(activeNextStep)}</strong></div>
+          </div>
+
           <div class="fact-stack">
             <div class="fact-row"><span>Room Expected Branch</span><strong>{activeRoom.branch}</strong></div>
             <div class="fact-row"><span>Room Expected Worktree</span><strong>{activeRoom.worktree}</strong></div>
@@ -490,8 +498,8 @@
             <div class="fact-row"><span>Remote Head</span><strong class="mono">{shortSha(actualPrDelivery?.origin.remoteHeadSha)}</strong></div>
             <div class="fact-row"><span>Pull Request</span><strong>{prSummary()}</strong></div>
             <div class="fact-row"><span>CI · exact HEAD</span><strong>{ciSummary()}</strong></div>
-            <div class="fact-row"><span>Codex</span><strong>{actualExecutor ? (actualExecutor.readiness.ready ? `READY · ${actualExecutor.readiness.version ?? 'version unknown'}${actualExecutor.readiness.doctorStatus && actualExecutor.readiness.doctorStatus !== 'ok' ? ` · ${actualExecutor.readiness.doctorStatus.toUpperCase()}` : ''}` : actualExecutor.readiness.errorCode ?? 'NOT READY') : executorFacts?.executor.errorCode ?? 'UNAVAILABLE'}</strong></div>
-            <div class="fact-row"><span>Codex Diagnostics</span><strong>{actualExecutor?.readiness.diagnostics?.length ? actualExecutor.readiness.diagnostics.map((item) => `${item.id}:${item.status}`).join(' · ') : actualExecutor?.readiness.ready ? 'NONE' : 'UNAVAILABLE'}</strong></div>
+            <div class="fact-row"><span>Codex 就绪</span><strong>{actualExecutor ? (actualExecutor.readiness.ready ? `READY · ${actualExecutor.readiness.version ?? 'version unknown'}${actualExecutor.readiness.doctorStatus && actualExecutor.readiness.doctorStatus !== 'ok' ? ` · ${actualExecutor.readiness.doctorStatus.toUpperCase()}` : ''}` : actualExecutor.readiness.errorCode ?? 'NOT READY') : executorFacts?.executor.errorCode ?? 'UNAVAILABLE'}</strong></div>
+            <div class="fact-row"><span>Codex 诊断</span><strong>{actualExecutor?.readiness.diagnostics?.length ? actualExecutor.readiness.diagnostics.map((item) => `${item.id}:${item.status}`).join(' · ') : actualExecutor?.readiness.ready ? 'NONE' : 'UNAVAILABLE'}</strong></div>
             <div class="fact-row"><span>Active Run</span><strong>{actualExecutor?.activeLease?.runId ? actualExecutor.activeLease.runId.slice(0, 8) : 'IDLE'}</strong></div>
             <div class="fact-row"><span>Latest Run</span><strong>{runSummary()}</strong></div>
             <div class="fact-row"><span>GPT Conversation</span><strong>{activeRoom.gptConversationBinding ?? 'UNBOUND'}</strong></div>
