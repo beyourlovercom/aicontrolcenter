@@ -2,6 +2,7 @@ import {createHash,randomUUID} from 'node:crypto';
 import {existsSync,mkdirSync,readFileSync,readdirSync,renameSync,writeFileSync} from 'node:fs';
 import {dirname,join} from 'node:path';
 import {stateRoot} from './project-context.mjs';
+import {validateProviderDecision} from './provider-routing.mjs';
 
 export const NEXT_STEP_STATES=Object.freeze(['PENDING','CLAIMED','EXECUTION_QUEUED','STOP_GATE','ABORTED_BEFORE_SEND','UNCERTAIN']);
 export const NEXT_STEP_SNAPSHOT_MAX_AGE_MS=90000;
@@ -21,7 +22,7 @@ export function assertNextStepLocal(remote){if(!localRemote(remote))fail('NEXT_S
 
 export function nextStepPrompt(input){
   const draft=optionalText(input.draft,4000);
-  return `AICC V5.4 NEXT-STEP REQUEST\nYou are the planning/review GPT already bound to this exact AICC Execution Room.\nGitHub and the supplied runtime facts are the only code/execution source of truth. Decide exactly one next action. Do not claim execution yourself.\n\nROOM\nname: ${text(input.roomName,'NEXT_STEP_INPUT_INVALID',240)}\nroom_id: ${text(input.roomId,'NEXT_STEP_INPUT_INVALID',240)}\nworkstream: ${text(input.workstreamId,'NEXT_STEP_INPUT_INVALID',240)}\nbranch: ${text(input.branch,'NEXT_STEP_INPUT_INVALID',500)}\nworktree: ${text(input.worktree,'NEXT_STEP_INPUT_INVALID',2000)}\nhead: ${text(input.head,'NEXT_STEP_INPUT_INVALID',100)}\nconversation_id: ${text(input.conversationId,'NEXT_STEP_INPUT_INVALID',500)}\nowner_draft: ${draft||'(none)'}\n\nReturn ONLY this protocol, with no prose before it:\nAICC_NEXT_STEP_V1\nAICC_DECISION: EXECUTE|STOP_GATE\nAICC_ACTION_CLASS: CODE_CHANGE|TEST_ONLY|STOP_GATE\nAICC_WORK_PACKAGE: <required for EXECUTE; short title>\nAICC_TASK: <required for EXECUTE; exact task name>\nAICC_INSTRUCTION_BEGIN\n<required for EXECUTE; exact executor instruction, bounded to one task, include tests/evidence and STOP gates>\nAICC_INSTRUCTION_END\nAICC_GATE_REASON: <required for STOP_GATE; otherwise NONE>\n\nChoose STOP_GATE for merge/deploy/production data write/Owner UAT/external authorization/architecture changes, or whenever evidence is insufficient. For EXECUTE, ACTION_CLASS must be CODE_CHANGE or TEST_ONLY and the instruction must not contain merge, deploy, production apply/write, or --apply operations.`;
+  return `AICC V5.4 NEXT-STEP REQUEST\nYou are the planning/review GPT already bound to this exact AICC Execution Room.\nGitHub and the supplied runtime facts are the only code/execution source of truth. Decide exactly one next action. Do not claim execution yourself.\n\nROOM\nname: ${text(input.roomName,'NEXT_STEP_INPUT_INVALID',240)}\nroom_id: ${text(input.roomId,'NEXT_STEP_INPUT_INVALID',240)}\nworkstream: ${text(input.workstreamId,'NEXT_STEP_INPUT_INVALID',240)}\nbranch: ${text(input.branch,'NEXT_STEP_INPUT_INVALID',500)}\nworktree: ${text(input.worktree,'NEXT_STEP_INPUT_INVALID',2000)}\nhead: ${text(input.head,'NEXT_STEP_INPUT_INVALID',100)}\nconversation_id: ${text(input.conversationId,'NEXT_STEP_INPUT_INVALID',500)}\nowner_draft: ${draft||'(none)'}\n\nReturn ONLY this protocol, with no prose before it:\nAICC_NEXT_STEP_V1\nAICC_DECISION: EXECUTE|STOP_GATE\nAICC_ACTION_CLASS: CODE_CHANGE|TEST_ONLY|STOP_GATE\nAICC_PROVIDER: CLAUDE_CODE|CODEX\nAICC_PROVIDER_ROUTING_REASON: <required for EXECUTE; routing reason>\nAICC_WORK_PACKAGE: <required for EXECUTE; short title>\nAICC_TASK: <required for EXECUTE; exact task name>\nAICC_INSTRUCTION_BEGIN\n<required for EXECUTE; exact executor instruction, bounded to one task, include tests/evidence and STOP gates>\nAICC_INSTRUCTION_END\nAICC_GATE_REASON: <required for STOP_GATE; otherwise NONE>\n\nDefault routing: CODE_CHANGE -> CLAUDE_CODE; TEST_ONLY -> CODEX. Choose STOP_GATE for merge/deploy/production data write/Owner UAT/external authorization/architecture changes, or whenever evidence is insufficient. For EXECUTE, ACTION_CLASS must be CODE_CHANGE or TEST_ONLY and the instruction must not contain merge, deploy, production apply/write, or --apply operations.`;
 }
 function activeState(state){return ['PENDING','CLAIMED'].includes(state);}
 function listIds(context,env){const dir=join(root(context,env),'requests');if(!existsSync(dir))return [];return readdirSync(dir).sort();}
@@ -56,6 +57,11 @@ export function claimNextStep(context,input,env=process.env,options={}){
 export function recordNextStepReceipt(context,id,input,env=process.env,options={}){
   const value=readNextStepRequest(context,id,env);if(value.state.state!=='CLAIMED'||!value.state.claim||input?.claimId!==value.state.claim.claimId)fail('NEXT_STEP_CLAIM_MISMATCH');
   const outcome=input?.outcome;if(!['EXECUTION_QUEUED','STOP_GATE','ABORTED_BEFORE_SEND','UNCERTAIN'].includes(outcome))fail('NEXT_STEP_RECEIPT_INVALID');
+  if(outcome==='EXECUTION_QUEUED'){
+    const d=input?.decision;
+    try{validateProviderDecision({executionClass:d?.actionClass,provider:d?.provider,providerRoutingReason:d?.providerRoutingReason});}
+    catch{fail('NEXT_STEP_RECEIPT_PROVIDER_MISSING');}
+  }
   const state={...value.state,state:outcome,bridgeRequestId:typeof input?.bridgeRequestId==='string'?input.bridgeRequestId:null,runId:typeof input?.runId==='string'?input.runId:null,decision:input?.decision&&typeof input.decision==='object'?input.decision:null,errorCode:typeof input?.errorCode==='string'?input.errorCode:null,claim:null,updatedAt:now(options)};
   if(outcome==='EXECUTION_QUEUED'&&!state.bridgeRequestId)fail('NEXT_STEP_RECEIPT_INVALID');atomic(stateFile(context,id,env),state);return {request:value.request,state};
 }

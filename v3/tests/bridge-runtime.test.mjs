@@ -7,8 +7,8 @@ import {join} from 'node:path';
 import {loadProjectContext} from '../lib/project-context.mjs';
 import {createTask,createWorkPackage,readWorkStore} from '../lib/work-store.mjs';
 import {appendRunEvent,releaseLease,updateRun} from '../lib/run-store.mjs';
-import {credentialFile,ensureBridgeCredential,readBridgeEvents,readBridgeState} from '../lib/bridge-store.mjs';
-import {bridgeProjection,claimBridgeDelivery,reconcileBridgeStartup,recordBridgeReceipt,submitBridgeRequest} from '../lib/bridge-runtime.mjs';
+import {credentialFile,ensureBridgeCredential,readBridgeEvents,readBridgeState,sha256} from '../lib/bridge-store.mjs';
+import {bridgeProjection,bridgeProjectionAsync,claimBridgeDelivery,reconcileBridgeStartup,recordBridgeReceipt,submitBridgeRequest,submitBridgeRequestAsync} from '../lib/bridge-runtime.mjs';
 import {createAiccV3Server} from '../server.mjs';
 
 function git(cwd,...args){return execFileSync('git',args,{cwd,encoding:'utf8'}).trim();}
@@ -152,6 +152,44 @@ test('restart converts an unreceipted claimed delivery to DELIVERY_UNCERTAIN and
   assert.equal(readBridgeState(f.context,submitted.request.requestId,f.env).deliveryState,'DELIVERY_UNCERTAIN');
   assert.throws(()=>claimBridgeDelivery(f.context,submitted.request.requestId,{bridgeInstanceId:'bridge-again'},f.env,f.bridgeOptions),e=>e.code==='BRIDGE_DELIVERY_UNCERTAIN');
   assert.throws(()=>recordBridgeReceipt(f.context,submitted.request.requestId,{claimId:claimed.claim.claimId,outcome:'DELIVERED',conversationId:'conv-explicit-1',contentSha256:claimed.delivery.contentSha256},f.env,f.bridgeOptions),e=>e.code==='BRIDGE_DELIVERY_UNCERTAIN');
+});
+
+test('Remote Claude completion materializes exact provider result into canonical Bridge Delivery',async()=>{
+  const f=fixture();let remote=null;
+  const remoteRunner={
+    async submit(value){remote={executionId:value.executionId,state:'RUNNING'};return remote;},
+    async get(){return remote;}
+  };
+  const options={...f.bridgeOptions,remoteRunner,remoteRepositoryRoot:f.repo};
+  const remoteInput=input(f,{executionProvider:{executionClass:'CODE_CHANGE',provider:'CLAUDE_CODE',providerRoutingReason:'implementation task'}});
+  const submitted=await submitBridgeRequestAsync(f.context,remoteInput,f.env,options);
+  const content='REMOTE CLAUDE EXACT RESULT\n';remote={executionId:submitted.providerExecution.executionId,state:'COMPLETED',resultContent:content,resultContentSha256:sha256(content),completedAt:'2026-09-16T00:00:00.000Z'};
+  const projection=await bridgeProjectionAsync(f.context,submitted.request.requestId,f.env,options);
+  assert.equal(projection.remoteExecution.state,'COMPLETED');assert.equal(projection.providerResult.content,content);assert.equal(projection.delivery.content,content);assert.equal(projection.state.deliveryState,'READY');
+});
+
+test('Remote Claude FAILED and UNCERTAIN project as observable terminal provider facts without replay',async()=>{
+  for(const terminal of ['FAILED','UNCERTAIN']){
+    const f=fixture();let remote=null;let submits=0;
+    const remoteRunner={
+      async submit(value){submits++;remote={executionId:value.executionId,state:'RUNNING'};return remote;},
+      async get(){return remote;}
+    };
+    const options={...f.bridgeOptions,remoteRunner,remoteRepositoryRoot:f.repo};
+    const remoteInput=input(f,{executionProvider:{executionClass:'CODE_CHANGE',provider:'CLAUDE_CODE',providerRoutingReason:'implementation task'}});
+    const submitted=await submitBridgeRequestAsync(f.context,remoteInput,f.env,options);remote={executionId:submitted.providerExecution.executionId,state:terminal};
+    const first=await bridgeProjectionAsync(f.context,submitted.request.requestId,f.env,options);assert.equal(first.remoteExecution.state,terminal);assert.equal(first.delivery,null);
+    const second=await bridgeProjectionAsync(f.context,submitted.request.requestId,f.env,options);assert.equal(second.remoteExecution.state,terminal);assert.equal(submits,1);
+  }
+});
+
+test('Remote Claude COMPLETED with invalid result becomes explicit terminal result error fact',async()=>{
+  const f=fixture();let remote=null;
+  const remoteRunner={async submit(value){remote={executionId:value.executionId,state:'RUNNING'};return remote;},async get(){return remote;}};
+  const options={...f.bridgeOptions,remoteRunner,remoteRepositoryRoot:f.repo};
+  const remoteInput=input(f,{executionProvider:{executionClass:'CODE_CHANGE',provider:'CLAUDE_CODE',providerRoutingReason:'implementation task'}});
+  const submitted=await submitBridgeRequestAsync(f.context,remoteInput,f.env,options);remote={executionId:submitted.providerExecution.executionId,state:'COMPLETED',resultContent:'bad',resultContentSha256:'wrong'};
+  const projection=await bridgeProjectionAsync(f.context,submitted.request.requestId,f.env,options);assert.equal(projection.remoteErrorCode,'BRIDGE_REMOTE_RESULT_INVALID');assert.equal(projection.delivery,null);
 });
 
 test('credential is owner-only and all four Bridge APIs require it without leaking token',async()=>{
