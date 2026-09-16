@@ -5,7 +5,7 @@ import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {execFileSync} from 'node:child_process';
 import {EventEmitter} from 'node:events';
-import {createRemoteRunnerService,validateRepositoryRoot,normalizeRepositoryIdentity,extractClaudeFinalResult,CLAUDE_BIN} from '../lib/remote-runner-service.mjs';
+import {createRemoteRunnerService,validateRepositoryRoot,normalizeRepositoryIdentity,extractClaudeFinalResult,extractDryRunEvidence,CLAUDE_BIN} from '../lib/remote-runner-service.mjs';
 
 function expectCode(fn,code){assert.throws(fn,e=>e?.code===code);}
 
@@ -62,6 +62,134 @@ test('extractClaudeFinalResult falls back to final assistant text and ignores to
 });
 test('extractClaudeFinalResult returns null without usable text',()=>{
   assert.equal(extractClaudeFinalResult(JSON.stringify({type:'assistant',message:{content:[{type:'tool_use',name:'Read'}]}})),null);
+});
+
+// ── extractDryRunEvidence ────────────────────────────────────────────────────
+
+test('extractDryRunEvidence accepts valid evidence',()=>{
+  const stdout='WP=MY-WP-001\nEXECUTION_CLASS=CODE_CHANGE\nROUTING=CLAUDE_CODE\n';
+  assert.equal(extractDryRunEvidence(stdout,'MY-WP-001','CODE_CHANGE'),'DRY_RUN_OK WP=MY-WP-001 EXECUTION_CLASS=CODE_CHANGE ROUTING=CLAUDE_CODE');
+});
+
+test('extractDryRunEvidence accepts valid evidence with extra lines',()=>{
+  const stdout='some preamble line\nWP=MY-WP-001\nEXECUTION_CLASS=CODE_CHANGE\nROUTING=CLAUDE_CODE\nsome trailing line\n';
+  assert.equal(extractDryRunEvidence(stdout,'MY-WP-001','CODE_CHANGE'),'DRY_RUN_OK WP=MY-WP-001 EXECUTION_CLASS=CODE_CHANGE ROUTING=CLAUDE_CODE');
+});
+
+test('extractDryRunEvidence returns null for empty stdout',()=>{
+  assert.equal(extractDryRunEvidence('','MY-WP-001','CODE_CHANGE'),null);
+  assert.equal(extractDryRunEvidence(null,'MY-WP-001','CODE_CHANGE'),null);
+});
+
+test('extractDryRunEvidence returns null when WP mismatches',()=>{
+  const stdout='WP=WRONG-WP\nEXECUTION_CLASS=CODE_CHANGE\nROUTING=CLAUDE_CODE\n';
+  assert.equal(extractDryRunEvidence(stdout,'MY-WP-001','CODE_CHANGE'),null);
+});
+
+test('extractDryRunEvidence returns null when EXECUTION_CLASS mismatches',()=>{
+  const stdout='WP=MY-WP-001\nEXECUTION_CLASS=TEST_ONLY\nROUTING=CLAUDE_CODE\n';
+  assert.equal(extractDryRunEvidence(stdout,'MY-WP-001','CODE_CHANGE'),null);
+});
+
+test('extractDryRunEvidence returns null when ROUTING is not CLAUDE_CODE',()=>{
+  const stdout='WP=MY-WP-001\nEXECUTION_CLASS=CODE_CHANGE\nROUTING=CODEX\n';
+  assert.equal(extractDryRunEvidence(stdout,'MY-WP-001','CODE_CHANGE'),null);
+});
+
+test('extractDryRunEvidence returns null when any evidence line is missing',()=>{
+  assert.equal(extractDryRunEvidence('EXECUTION_CLASS=CODE_CHANGE\nROUTING=CLAUDE_CODE\n','MY-WP-001','CODE_CHANGE'),null);
+  assert.equal(extractDryRunEvidence('WP=MY-WP-001\nROUTING=CLAUDE_CODE\n','MY-WP-001','CODE_CHANGE'),null);
+  assert.equal(extractDryRunEvidence('WP=MY-WP-001\nEXECUTION_CLASS=CODE_CHANGE\n','MY-WP-001','CODE_CHANGE'),null);
+});
+
+test('extractDryRunEvidence rejects duplicate governance keys',()=>{
+  const duplicateWp='WP=WRONG\nWP=MY-WP-001\nEXECUTION_CLASS=CODE_CHANGE\nROUTING=CLAUDE_CODE\n';
+  const duplicateRouting='WP=MY-WP-001\nEXECUTION_CLASS=CODE_CHANGE\nROUTING=CODEX\nROUTING=CLAUDE_CODE\n';
+  assert.equal(extractDryRunEvidence(duplicateWp,'MY-WP-001','CODE_CHANGE'),null);
+  assert.equal(extractDryRunEvidence(duplicateRouting,'MY-WP-001','CODE_CHANGE'),null);
+});
+
+test('extractDryRunEvidence returns null when stream-json is passed instead of evidence',()=>{
+  const stdout=JSON.stringify({type:'result',subtype:'success',is_error:false,result:'FINAL RESULT'})+'\n';
+  assert.equal(extractDryRunEvidence(stdout,'MY-WP-001','CODE_CHANGE'),null);
+});
+
+test('extractDryRunEvidence returns null for invalid expectedWp/expectedExecutionClass',()=>{
+  const stdout='WP=MY-WP-001\nEXECUTION_CLASS=CODE_CHANGE\nROUTING=CLAUDE_CODE\n';
+  assert.equal(extractDryRunEvidence(stdout,'','CODE_CHANGE'),null);
+  assert.equal(extractDryRunEvidence(stdout,'MY-WP-001',''),null);
+  assert.equal(extractDryRunEvidence(stdout,null,'CODE_CHANGE'),null);
+});
+
+// ── service dry-run result extraction ───────────────────────────────────────
+
+test('dry-run with valid governance evidence completes with sanitized canonical result',async()=>{
+  const tmp=mkdtempSync(join(tmpdir(),'aicc-rrs-'));
+  try{
+    const repo=makeGitRepo(tmp);const head=getHead(repo);
+    const spawner=()=>{const child=hangingSpawner();queueMicrotask(()=>{child.stdout.emit('data','WP=wp-evidence\nEXECUTION_CLASS=CODE_CHANGE\nROUTING=CLAUDE_CODE\n');child.emit('close',0);});return child;};
+    const svc=createRemoteRunnerService(tmp,{spawn:spawner,uuid:()=>'exec-dryrun-ok'});
+    svc.submit({provider:'CLAUDE_CODE',executionClass:'CODE_CHANGE',providerRoutingReason:'r',workPackageId:'wp-evidence',remoteRepositoryRoot:repo,repositoryIdentity:'test/repo',expectedBranch:'feat/test',expectedHead:head,dryRun:true});
+    await new Promise(r=>setTimeout(r,25));
+    const rec=svc.get('exec-dryrun-ok');
+    assert.equal(rec.state,'COMPLETED');
+    assert.equal(rec.resultContent,'DRY_RUN_OK WP=wp-evidence EXECUTION_CLASS=CODE_CHANGE ROUTING=CLAUDE_CODE');
+    assert.equal(rec.resultContentSha256.length,64);
+    for(const forbidden of ['instruction','remoteRepositoryRoot','stdout','stderr'])assert.equal(forbidden in rec,false);
+  }finally{rmSync(tmp,{recursive:true,force:true});}
+});
+
+test('dry-run with mismatched WP in evidence becomes FAILED RESULT_INVALID',async()=>{
+  const tmp=mkdtempSync(join(tmpdir(),'aicc-rrs-'));
+  try{
+    const repo=makeGitRepo(tmp);const head=getHead(repo);
+    const spawner=()=>{const child=hangingSpawner();queueMicrotask(()=>{child.stdout.emit('data','WP=WRONG-WP\nEXECUTION_CLASS=CODE_CHANGE\nROUTING=CLAUDE_CODE\n');child.emit('close',0);});return child;};
+    const svc=createRemoteRunnerService(tmp,{spawn:spawner,uuid:()=>'exec-dryrun-wp-mismatch'});
+    svc.submit({provider:'CLAUDE_CODE',executionClass:'CODE_CHANGE',providerRoutingReason:'r',workPackageId:'wp-evidence',remoteRepositoryRoot:repo,repositoryIdentity:'test/repo',expectedBranch:'feat/test',expectedHead:head,dryRun:true});
+    await new Promise(r=>setTimeout(r,25));
+    const rec=svc.get('exec-dryrun-wp-mismatch');
+    assert.equal(rec.state,'FAILED');assert.equal(rec.error,'REMOTE_RUNNER_RESULT_INVALID');
+  }finally{rmSync(tmp,{recursive:true,force:true});}
+});
+
+test('dry-run with stream-json output (not evidence) becomes FAILED RESULT_INVALID',async()=>{
+  const tmp=mkdtempSync(join(tmpdir(),'aicc-rrs-'));
+  try{
+    const repo=makeGitRepo(tmp);const head=getHead(repo);
+    const spawner=()=>{const child=hangingSpawner();queueMicrotask(()=>{child.stdout.emit('data',JSON.stringify({type:'result',subtype:'success',is_error:false,result:'FINAL'})+'\n');child.emit('close',0);});return child;};
+    const svc=createRemoteRunnerService(tmp,{spawn:spawner,uuid:()=>'exec-dryrun-streamjson'});
+    svc.submit({provider:'CLAUDE_CODE',executionClass:'CODE_CHANGE',providerRoutingReason:'r',workPackageId:'wp-evidence',remoteRepositoryRoot:repo,repositoryIdentity:'test/repo',expectedBranch:'feat/test',expectedHead:head,dryRun:true});
+    await new Promise(r=>setTimeout(r,25));
+    const rec=svc.get('exec-dryrun-streamjson');
+    assert.equal(rec.state,'FAILED');assert.equal(rec.error,'REMOTE_RUNNER_RESULT_INVALID');
+  }finally{rmSync(tmp,{recursive:true,force:true});}
+});
+
+test('non-dry-run with valid stream-json still completes normally (no regression)',async()=>{
+  const tmp=mkdtempSync(join(tmpdir(),'aicc-rrs-'));
+  try{
+    const repo=makeGitRepo(tmp);const head=getHead(repo);
+    const spawner=()=>{const child=hangingSpawner();queueMicrotask(()=>{child.stdout.emit('data',JSON.stringify({type:'result',subtype:'success',is_error:false,result:'NON DRY RUN RESULT'})+'\n');child.emit('close',0);});return child;};
+    const svc=createRemoteRunnerService(tmp,{spawn:spawner,uuid:()=>'exec-nodry-ok'});
+    svc.submit({provider:'CLAUDE_CODE',executionClass:'CODE_CHANGE',providerRoutingReason:'r',workPackageId:'wp-nodry',remoteRepositoryRoot:repo,repositoryIdentity:'test/repo',expectedBranch:'feat/test',expectedHead:head,instruction:'do something',dryRun:false});
+    await new Promise(r=>setTimeout(r,25));
+    const rec=svc.get('exec-nodry-ok');
+    assert.equal(rec.state,'COMPLETED');
+    assert.equal(rec.resultContent,'NON DRY RUN RESULT');
+  }finally{rmSync(tmp,{recursive:true,force:true});}
+});
+
+test('non-dry-run with plain-text evidence (not stream-json) becomes FAILED RESULT_INVALID (no regression)',async()=>{
+  const tmp=mkdtempSync(join(tmpdir(),'aicc-rrs-'));
+  try{
+    const repo=makeGitRepo(tmp);const head=getHead(repo);
+    const spawner=()=>{const child=hangingSpawner();queueMicrotask(()=>{child.stdout.emit('data','WP=wp-nodry\nEXECUTION_CLASS=CODE_CHANGE\nROUTING=CLAUDE_CODE\n');child.emit('close',0);});return child;};
+    const svc=createRemoteRunnerService(tmp,{spawn:spawner,uuid:()=>'exec-nodry-plaintext'});
+    svc.submit({provider:'CLAUDE_CODE',executionClass:'CODE_CHANGE',providerRoutingReason:'r',workPackageId:'wp-nodry',remoteRepositoryRoot:repo,repositoryIdentity:'test/repo',expectedBranch:'feat/test',expectedHead:head,instruction:'do something',dryRun:false});
+    await new Promise(r=>setTimeout(r,25));
+    const rec=svc.get('exec-nodry-plaintext');
+    assert.equal(rec.state,'FAILED');assert.equal(rec.error,'REMOTE_RUNNER_RESULT_INVALID');
+  }finally{rmSync(tmp,{recursive:true,force:true});}
 });
 
 // ── validateRepositoryRoot ───────────────────────────────────────────────────
@@ -289,7 +417,7 @@ test('completed sanitized result survives service restart',async()=>{
   try{
     const repo=makeGitRepo(tmp);const head=getHead(repo);
     const completingSpawner=()=>{const child=hangingSpawner();queueMicrotask(()=>{child.stdout.emit('data',JSON.stringify({type:'result',subtype:'success',is_error:false,result:'PERSISTED RESULT'})+'\n');child.emit('close',0);});return child;};
-    const input={executionId:'complete-exec',provider:'CLAUDE_CODE',executionClass:'CODE_CHANGE',providerRoutingReason:'r',workPackageId:'wp',remoteRepositoryRoot:repo,repositoryIdentity:'test/repo',expectedBranch:'feat/test',expectedHead:head,dryRun:true};
+    const input={executionId:'complete-exec',provider:'CLAUDE_CODE',executionClass:'CODE_CHANGE',providerRoutingReason:'r',workPackageId:'wp',remoteRepositoryRoot:repo,repositoryIdentity:'test/repo',expectedBranch:'feat/test',expectedHead:head,instruction:'persist exact result',dryRun:false};
     const first=createRemoteRunnerService(tmp,{stateRoot:state,spawn:completingSpawner});first.submit(input);
     await new Promise(r=>setTimeout(r,25));assert.equal(first.get('complete-exec').state,'COMPLETED');
     const second=createRemoteRunnerService(tmp,{stateRoot:state,spawn:()=>{throw new Error('must not spawn');}});const restored=second.get('complete-exec');
