@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "AICC ChatGPT Bridge",
-  "version": "3.8.19",
+  "version": "3.8.20",
   "description": "Real ChatGPT projection plus exact V5.4 next-step planning and same-conversation managed execution bridge for AICC.",
   "permissions": [
     "storage",
@@ -23,6 +23,7 @@
         "https://chatgpt.com/*"
       ],
       "js": [
+        "composer-text.js",
         "content.js"
       ],
       "run_at": "document_idle"

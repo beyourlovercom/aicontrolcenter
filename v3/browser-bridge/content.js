@@ -1,6 +1,6 @@
 (()=>{
   'use strict';
-  const CONTENT_VERSION='3.8.18';
+  const CONTENT_VERSION='3.8.20';
   if(globalThis.__AICC_V3_BRIDGE_CONTENT_VERSION__===CONTENT_VERSION)return;
   try{globalThis.__AICC_V3_BRIDGE_CLEANUP__?.();}catch{}
   globalThis.__AICC_V3_BRIDGE_CONTENT_VERSION__=CONTENT_VERSION;
@@ -183,7 +183,8 @@
   function composerValue(node){
     if(!node)return null;
     if(node instanceof HTMLTextAreaElement||node instanceof HTMLInputElement)return node.value;
-    return node.innerText??node.textContent??'';
+    const read=globalThis.__AICC_COMPOSER_PLAIN_TEXT__;
+    return typeof read==='function'?read(node):(node.textContent??'');
   }
   function writeComposer(node,content){
     node.focus();
