@@ -60,6 +60,51 @@ export type ExternalExecutionRoomInput = {
   head: string;
 };
 
+export type ExternalRuntimeCandidate = {
+  path: string;
+  branch: string | null;
+  head: string;
+  dirty: boolean;
+  detached: boolean;
+  executable: boolean;
+  committedAt: string | null;
+};
+
+export type ExternalRoomCatalogLike = {
+  projects: Array<{
+    id: string;
+    repositoryIdentity: string;
+    workstreams: Array<{ id: string; runtimes: ExternalRuntimeCandidate[] }>;
+  }>;
+};
+
+export function preferredExternalRoomRuntime(room: ExecutionRoomState, catalog: ExternalRoomCatalogLike): ExternalRuntimeCandidate | null {
+  const project = catalog.projects.find((item) => item.id === room.projectId && item.repositoryIdentity === room.repo);
+  const workstream = project?.workstreams.find((item) => item.id === room.workstreamId);
+  if (!workstream) return null;
+  return workstream.runtimes.find((runtime) => runtime.executable && Boolean(runtime.branch)) ?? null;
+}
+
+export function refreshExternalRoomRuntime(store: ExecutionRoomStore, roomId: string, catalog: ExternalRoomCatalogLike): { store: ExecutionRoomStore; changed: boolean; code: string } {
+  const room = store.rooms[roomId];
+  if (!room) throw new Error('ROOM_NOT_FOUND');
+  const runtime = preferredExternalRoomRuntime(room, catalog);
+  if (!runtime || !runtime.branch) return { store, changed: false, code: 'EXTERNAL_RUNTIME_UNAVAILABLE' };
+  if (room.branch === runtime.branch && room.worktree === runtime.path && room.baseSha === runtime.head) return { store, changed: false, code: 'EXTERNAL_RUNTIME_CURRENT' };
+  return {
+    changed: true,
+    code: 'EXTERNAL_RUNTIME_REFRESHED',
+    store: updateExecutionRoom(store, roomId, (current) => ({
+      ...current,
+      branch: runtime.branch as string,
+      worktree: runtime.path,
+      baseSha: runtime.head,
+      codexSession: null,
+      runtime: null
+    }))
+  };
+}
+
 export function createExternalExecutionRoomState(input: ExternalExecutionRoomInput): ExecutionRoomState {
   for (const key of ['roomId','name','projectId','workstreamId','repositoryIdentity','branch','worktree','head'] as const) {
     if (!input[key]?.trim()) throw new Error('EXTERNAL_ROOM_INPUT_INVALID');
