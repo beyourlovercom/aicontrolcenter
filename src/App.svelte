@@ -24,6 +24,7 @@
   import { readExecutorFacts, readRoomExecutorFacts, roomRuntimeBinding, type ExecutorFactsProjection } from './lib/executorFacts';
   import { cancelPendingNextStepForRoom, nextStepEligibility, nextStepStatusLabel, readNextStep, submitNextStep, type NextStepProjection } from './lib/nextStep';
   import { resolveProviderDecision } from './lib/providerPresentation';
+  import { projectRoomProgress } from './lib/roomProgress';
   import { readExternalProjects, type ExternalProjectCatalog } from './lib/externalProjects';
 
   let roomStore: ExecutionRoomStore = createDefaultExecutionRoomStore();
@@ -64,6 +65,7 @@
   $: activeCanonicalRefresh = activeRoom?.canonicalRefresh ?? null;
   $: activeNextStep = activeRoom ? nextSteps[activeRoom.roomId] ?? null : null;
   $: activeProviderDecision = resolveProviderDecision(activeNextStep?.state.decision ?? null);
+  $: roomProgress = activeRoom ? projectRoomProgress(activeRoom, executorFacts, activeNextStep, runtimeBinding) : null;
   $: activeNextStepEligibility = activeRoom ? nextStepEligibility(activeRoom, executorFacts, activeSnapshot) : { ready: false, blockers: ['ROOM_UNAVAILABLE'] };
   $: nextStepLocked = !activeNextStepEligibility.ready || nextStepBusyRoomId === activeRoom?.roomId || ['PENDING','CLAIMED'].includes(activeNextStep?.state.state ?? '');
   $: selectedExternalProject = externalCatalog?.projects.find((project) => project.id === selectedExternalProjectId) ?? null;
@@ -530,37 +532,16 @@
           </div>
 
           <div class="roadmap-groups">
-            <section class="roadmap-group">
-              <button class="group-toggle" type="button" onclick={() => toggle('blueprint')}><span>Blueprint · 蓝图</span><b>1 / 1</b><i>{collapsed.blueprint ? '›' : '⌄'}</i></button>
-              {#if !collapsed.blueprint}<div class="roadmap-item done"><span>✓</span><div><strong>V5 产品方向冻结</strong><small>Multi-Execution Workbench</small></div></div>{/if}
-            </section>
-
-            <section class="roadmap-group">
-              <button class="group-toggle" type="button" onclick={() => toggle('wp')}><span>WP · 工作包</span><b>1 / 1</b><i>{collapsed.wp ? '›' : '⌄'}</i></button>
-              {#if !collapsed.wp}<div class="roadmap-item current"><span>●</span><div><strong>V5.5 — Multi-Room Hardening</strong><small>Exact Room → worktree → GPT → managed executor isolation</small></div></div>{/if}
-            </section>
-
-            <section class="roadmap-group">
-              <button class="group-toggle" type="button" onclick={() => toggle('pr')}><span>PR · 需求与计划</span><b>0 / 1</b><i>{collapsed.pr ? '›' : '⌄'}</i></button>
-              {#if !collapsed.pr}<div class="roadmap-item pending"><span>○</span><div><strong>V5.5 Multi-Room Hardening PR</strong><small>Multi-Room Owner UAT 后才进入 PR Gate</small></div></div>{/if}
-            </section>
-
-            <section class="roadmap-group">
-              <button class="group-toggle" type="button" onclick={() => toggle('task')}><span>Task · 任务执行</span><b>5 / 6</b><i>{collapsed.task ? '›' : '⌄'}</i></button>
-              {#if !collapsed.task}
-                <div class="roadmap-item done"><span>✓</span><div><strong>Canonical Browser Bridge Reuse</strong><small>Profile 12 · fixed extension identity</small></div></div>
-                <div class="roadmap-item done"><span>✓</span><div><strong>Read-only Transcript Projection</strong><small>真实 user / assistant DOM snapshot</small></div></div>
-                <div class="roadmap-item done"><span>✓</span><div><strong>Per-Room Conversation Binding</strong><small>conversationId 唯一绑定，不允许串线</small></div></div>
-                <div class="roadmap-item done"><span>✓</span><div><strong>No-Spawn Read Path</strong><small>读取不会创建 Chrome Tab</small></div></div>
-                <div class="roadmap-item done"><span>✓</span><div><strong>Exact Runtime Isolation</strong><small>每个 Room 独立 worktree / lease / facts / delivery</small></div></div>
-                <div class="roadmap-item current"><span>●</span><div><strong>Owner Multi-Room UAT</strong><small>多 Room 切换、并发与 restart 不串线</small></div></div>
-              {/if}
-            </section>
-
-            <section class="roadmap-group">
-              <button class="group-toggle" type="button" onclick={() => toggle('gate')}><span>Gate · 阶段评审</span><b>0 / 1</b><i>{collapsed.gate ? '›' : '⌄'}</i></button>
-              {#if !collapsed.gate}<div class="roadmap-item current"><span>●</span><div><strong>V5.5 Multi-Room Gate</strong><small>全量回归 PASS 后进入 Owner UAT</small></div></div>{/if}
-            </section>
+            {#each [['blueprint','Blueprint · 蓝图',roomProgress?.blueprint ?? []],['wp','WP · 工作包',roomProgress?.workPackages ?? []],['pr','PR · 需求与计划',roomProgress?.pullRequests ?? []],['task','Task · 任务执行',roomProgress?.tasks ?? []],['gate','Gate · 当前门禁',roomProgress?.gates ?? []]] as group}
+              <section class="roadmap-group">
+                <button class="group-toggle" type="button" onclick={() => toggle(group[0] as RoadmapSection)}><span>{group[1]}</span><b>{group[2].length}</b><i>{collapsed[group[0] as RoadmapSection] ? '›' : '⌄'}</i></button>
+                {#if !collapsed[group[0] as RoadmapSection]}
+                  {#each group[2] as item}
+                    <div class="roadmap-item {item.state}"><span>{item.state === 'done' ? '✓' : item.state === 'current' ? '●' : item.state === 'blocked' ? '!' : '○'}</span><div><strong>{item.title}</strong><small>{item.detail}</small></div></div>
+                  {/each}
+                {/if}
+              </section>
+            {/each}
           </div>
         {/if}
       </aside>
