@@ -277,7 +277,8 @@ export function createAiccV3Server(options={}){
         assertNextStepLocal(req.socket?.remoteAddress||'');const input=await readJson(req,16384);
         const context=loadProjectContextFromBinding({projectId:input?.projectId,projectName:input?.roomName||input?.projectId,repositoryIdentity:input?.repositoryIdentity,repositoryPath:input?.worktree});
         const executor=executorStatus(context,env,executorOptions);const snapshot=chatgptProjection.get(input?.conversationId);
-        const created=createNextStepRequest(context,input,{executorReady:Boolean(executor?.readiness?.ready),activeRun:executor?.activeLease?.runId||null,snapshot},env,options.nextStepOptions||{});
+        let work=null,prDelivery=null;try{work=readRoomWorkStore(context,input?.roomId,input?.workstreamId,env);}catch{}try{prDelivery=readCachedPrDelivery(context);}catch{}
+        const created=createNextStepRequest(context,input,{executorReady:Boolean(executor?.readiness?.ready),activeRun:executor?.activeLease?.runId||null,snapshot,work,prDelivery},env,options.nextStepOptions||{});
         return json(res,201,{ok:true,...created});
       }catch(error){return nextStepError(res,error);}
     }

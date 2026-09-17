@@ -214,7 +214,7 @@ export function createRemoteRunnerService(allowedRoot,options={}){
     const env=buildGovernanceEnv(rec);
     const args=rec.dryRun
       ?['-p',`AICC DRY RUN CANARY — governance check only, no task execution. Work Package: ${rec.workPackageId}`,'--output-format','stream-json','--verbose']
-      :['-p',rec._instruction,'--output-format','stream-json','--verbose'];
+      :['-p',rec._instruction,'--permission-mode','acceptEdits','--output-format','stream-json','--verbose'];
     rec.state='RUNNING';rec.startedAt=new Date().toISOString();persist(rec);
     let child;
     try{child=spawn_(CLAUDE_BIN,args,{cwd:rec._remoteRepositoryRoot,env});}
@@ -229,7 +229,9 @@ export function createRemoteRunnerService(allowedRoot,options={}){
       const content=rec.dryRun
         ?extractDryRunEvidence(stdout,rec.workPackageId,rec.executionClass)
         :extractClaudeFinalResult(stdout);
-      if(content){rec.state='COMPLETED';rec.resultContent=content;rec.resultContentSha256=sha256(content);rec.error=null;}
+      const changed=rec.dryRun||rec.executionClass!=='CODE_CHANGE'||Boolean(safeExec('git',['-C',rec._remoteRepositoryRoot,'status','--porcelain']));
+      if(content&&changed){rec.state='COMPLETED';rec.resultContent=content;rec.resultContentSha256=sha256(content);rec.error=null;}
+      else if(content&&!changed){rec.state='FAILED';rec.error='REMOTE_RUNNER_NO_CHANGE';}
       else{rec.state='FAILED';rec.error='REMOTE_RUNNER_RESULT_INVALID';}
     }else{rec.state='FAILED';rec.error='REMOTE_RUNNER_PROCESS_FAILED';}
     rec.pid=null;rec.completedAt=new Date().toISOString();persist(rec);releaseLease(rec);

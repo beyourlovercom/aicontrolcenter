@@ -63,7 +63,7 @@ test('Bridge request is idempotent and cannot drift origin, Task or instruction'
 test('exact Task→Run→Result→Delivery content is preserved and terminal receipt is immutable',()=>{
   const f=fixture();const submitted=submitBridgeRequest(f.context,input(f),f.env,f.bridgeOptions);const exact='  RESULT WITH LEADING SPACE\nAND TRAILING\n';
   completeRun(f,submitted.request.runId,exact);const projection=bridgeProjection(f.context,submitted.request.requestId,f.env,f.bridgeOptions);
-  assert.equal(projection.state.deliveryState,'READY');assert.equal(projection.delivery.content,exact);assert.equal(projection.delivery.runId,submitted.request.runId);
+  assert.equal(projection.state.deliveryState,'READY');assert.equal(projection.delivery.content,exact);assert.equal(projection.delivery.runId,submitted.request.runId);const completed=readWorkStore(f.context,f.env);assert.equal(completed.tasks.find(item=>item.id===submitted.request.taskId).status,'DONE');assert.equal(completed.workPackages.find(item=>item.id===submitted.request.workPackageId).status,'DONE');
   const claimed=claimBridgeDelivery(f.context,submitted.request.requestId,{bridgeInstanceId:'bridge-instance-A'},f.env,f.bridgeOptions);
   assert.equal(claimed.state.deliveryState,'CLAIMED');assert.equal(claimed.delivery.content,exact);
   const receiptInput={claimId:claimed.claim.claimId,outcome:'DELIVERED',conversationId:'conv-explicit-1',contentSha256:claimed.delivery.contentSha256,providerMessageId:'provider-msg-1'};
@@ -165,7 +165,7 @@ test('Remote Claude completion materializes exact provider result into canonical
   const submitted=await submitBridgeRequestAsync(f.context,remoteInput,f.env,options);
   const content='REMOTE CLAUDE EXACT RESULT\n';remote={executionId:submitted.providerExecution.executionId,state:'COMPLETED',resultContent:content,resultContentSha256:sha256(content),completedAt:'2026-09-16T00:00:00.000Z'};
   const projection=await bridgeProjectionAsync(f.context,submitted.request.requestId,f.env,options);
-  assert.equal(projection.remoteExecution.state,'COMPLETED');assert.equal(projection.providerResult.content,content);assert.equal(projection.delivery.content,content);assert.equal(projection.state.deliveryState,'READY');
+  assert.equal(projection.remoteExecution.state,'COMPLETED');assert.equal(projection.providerResult.content,content);assert.equal(projection.delivery.content,content);assert.equal(projection.state.deliveryState,'READY');const completed=readWorkStore(f.context,f.env);assert.equal(completed.tasks.find(item=>item.id===submitted.request.taskId).status,'DONE');assert.equal(completed.workPackages.find(item=>item.id===submitted.request.workPackageId).status,'DONE');
 });
 
 test('Remote Claude FAILED and UNCERTAIN project as observable terminal provider facts without replay',async()=>{
