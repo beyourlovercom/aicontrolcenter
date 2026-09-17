@@ -61,6 +61,7 @@
   $: actualRepository = executorFacts?.project.value?.repository ?? null;
   $: actualExecutor = executorFacts?.executor.value ?? null;
   $: actualPrDelivery = executorFacts?.prDelivery.value ?? null;
+  $: activeCanonicalRefresh = activeRoom?.canonicalRefresh ?? null;
   $: activeNextStep = activeRoom ? nextSteps[activeRoom.roomId] ?? null : null;
   $: activeProviderDecision = resolveProviderDecision(activeNextStep?.state.decision ?? null);
   $: activeNextStepEligibility = activeRoom ? nextStepEligibility(activeRoom, executorFacts, activeSnapshot) : { ready: false, blockers: ['ROOM_UNAVAILABLE'] };
@@ -619,6 +620,14 @@
             <div><span class="eyebrow">Real Executor Facts</span><h2>执行详情</h2></div>
             <div class="facts-actions"><span class:fact-drift={runtimeBinding === 'DRIFT'} class:fact-ready={runtimeBinding === 'MATCH'} class="live-pill"><i></i>{runtimeBinding}</span>{#if runtimeBinding === 'DRIFT' && actualRepository}<button type="button" class="runtime-adopt" onclick={adoptCurrentRuntime}>采用当前 Runtime</button>{/if}</div>
           </div>
+
+          {#if activeCanonicalRefresh}
+            <div class="canonical-refresh-card">
+              <div class="canonical-refresh-head"><span>Canonical refreshed</span><strong>{capturedLabel(activeCanonicalRefresh.refreshedAt)}</strong></div>
+              <div class="canonical-refresh-path"><code>{activeCanonicalRefresh.fromBranch} @ {shortSha(activeCanonicalRefresh.fromHead)}</code><b>→</b><code>{activeCanonicalRefresh.toBranch} @ {shortSha(activeCanonicalRefresh.toHead)}</code></div>
+              <div class="canonical-refresh-meta"><span>Conversation binding</span><strong>{activeCanonicalRefresh.conversationBindingPreserved ? 'PRESERVED' : 'UNBOUND'}</strong></div>
+            </div>
+          {/if}
 
           <div class="provider-card">
             <div class="provider-card-row"><span class="provider-label">当前执行器</span><strong class="provider-value">{activeProviderDecision ? activeProviderDecision.displayLabel : '尚未路由'}</strong></div>

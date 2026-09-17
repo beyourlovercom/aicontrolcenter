@@ -139,6 +139,10 @@ assert.equal(refreshedExternal.store.rooms[familyRoom.roomId].worktree,'/worktre
 assert.equal(refreshedExternal.store.rooms[familyRoom.roomId].baseSha,'b'.repeat(40));
 assert.equal(refreshedExternal.store.rooms[familyRoom.roomId].gptConversationBinding,'family-room-conversation');
 assert.equal(refreshedExternal.store.rooms[familyRoom.roomId].gptConversationUrl,'https://chatgpt.com/c/family-room-conversation');
+assert.equal(refreshedExternal.store.rooms[familyRoom.roomId].canonicalRefresh?.fromBranch,'feature/family-web-v1-3');
+assert.equal(refreshedExternal.store.rooms[familyRoom.roomId].canonicalRefresh?.toBranch,'feature/family-web-v1-4');
+assert.equal(refreshedExternal.store.rooms[familyRoom.roomId].canonicalRefresh?.conversationBindingPreserved,true);
+assert.ok(Date.parse(refreshedExternal.store.rooms[familyRoom.roomId].canonicalRefresh?.refreshedAt ?? ''));
 const currentExternal = refreshExternalRoomRuntime(refreshedExternal.store, familyRoom.roomId, {projects:[{
   id:'family-plan', repositoryIdentity:'beyourlovercom/family-plan', workstreams:[{id:'family-web',runtimes:[
     {path:'/worktrees/family-web-new',branch:'feature/family-web-v1-4',head:'b'.repeat(40),dirty:false,detached:false,executable:true,committedAt:'2026-09-17T10:00:00Z'}

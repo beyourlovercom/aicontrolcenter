@@ -5,6 +5,17 @@ export type RoadmapSection = 'blueprint' | 'wp' | 'pr' | 'task' | 'gate';
 export type ExecutionViewId = 'mainline' | string;
 export type ExecutionRoomStatus = 'READY' | 'RUNNING' | 'WAITING' | 'UAT' | 'BLOCKED';
 
+export type CanonicalRefreshRecord = {
+  refreshedAt: string;
+  fromBranch: string;
+  fromWorktree: string;
+  fromHead: string;
+  toBranch: string;
+  toWorktree: string;
+  toHead: string;
+  conversationBindingPreserved: boolean;
+};
+
 export type ExecutionRoomUiState = {
   leftPanelCollapsed: boolean;
   rightPanelCollapsed: boolean;
@@ -33,6 +44,7 @@ export type ExecutionRoomState = {
   status: ExecutionRoomStatus;
   nextGate: string;
   ownerUatRequired: boolean;
+  canonicalRefresh: CanonicalRefreshRecord | null;
   ui: ExecutionRoomUiState;
 };
 
@@ -100,7 +112,13 @@ export function refreshExternalRoomRuntime(store: ExecutionRoomStore, roomId: st
       worktree: runtime.path,
       baseSha: runtime.head,
       codexSession: null,
-      runtime: null
+      runtime: null,
+      canonicalRefresh: {
+        refreshedAt: new Date().toISOString(),
+        fromBranch: current.branch, fromWorktree: current.worktree, fromHead: current.baseSha,
+        toBranch: runtime.branch as string, toWorktree: runtime.path, toHead: runtime.head,
+        conversationBindingPreserved: Boolean(current.gptConversationBinding)
+      }
     }))
   };
 }
@@ -130,6 +148,7 @@ export function createExternalExecutionRoomState(input: ExternalExecutionRoomInp
     status: 'READY',
     nextGate: 'GPT_BINDING',
     ownerUatRequired: true,
+    canonicalRefresh: null,
     ui: {
       leftPanelCollapsed: false,
       rightPanelCollapsed: false,
@@ -175,6 +194,7 @@ function room(
     status: 'READY',
     nextGate: 'V5.2 — Chrome GPT Binding',
     ownerUatRequired: true,
+    canonicalRefresh: null,
     ui: {
       leftPanelCollapsed: false,
       rightPanelCollapsed: false,
@@ -217,7 +237,8 @@ export function normalizeExecutionRoomStore(candidate: ExecutionRoomStore): Exec
     ...roomState,
     gptConversationBinding: typeof roomState.gptConversationBinding === 'string' ? roomState.gptConversationBinding : null,
     gptConversationUrl: typeof roomState.gptConversationUrl === 'string' ? roomState.gptConversationUrl : null,
-    gptConversationTitle: typeof roomState.gptConversationTitle === 'string' ? roomState.gptConversationTitle : null
+    gptConversationTitle: typeof roomState.gptConversationTitle === 'string' ? roomState.gptConversationTitle : null,
+    canonicalRefresh: roomState.canonicalRefresh && typeof roomState.canonicalRefresh === 'object' ? roomState.canonicalRefresh : null
   }]));
   return {
     version: 1,
