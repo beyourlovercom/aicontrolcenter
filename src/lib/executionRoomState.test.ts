@@ -11,6 +11,7 @@ import {
   patchExecutionRoomUi,
   persistExecutionRoomStore,
   reopenExecutionRoom,
+  refreshExternalRoomRuntime,
   selectExecutionRoom,
   toggleRoadmapSection,
   unbindGptConversation
@@ -118,5 +119,32 @@ assert.equal(withFamily.rooms[familyRoom.roomId].gptConversationBinding, null);
 const normalizedMany = loadExecutionRoomStore({ getItem: () => JSON.stringify(withFamily), setItem: () => {} });
 assert.equal(normalizedMany.activeRoomIds.length, 5);
 assert.throws(() => createExternalExecutionRoomState({...familyRoom, roomId: ''} as any), /EXTERNAL_ROOM_INPUT_INVALID/);
+
+
+const boundExternal = bindGptConversation(withFamily, familyRoom.roomId, {
+  conversationId: 'family-room-conversation',
+  conversationUrl: 'https://chatgpt.com/c/family-room-conversation',
+  title: 'Family Room GPT'
+});
+const refreshedExternal = refreshExternalRoomRuntime(boundExternal, familyRoom.roomId, {projects:[{
+  id:'family-plan', repositoryIdentity:'beyourlovercom/family-plan', workstreams:[{id:'family-web',runtimes:[
+    {path:'/worktrees/family-web-new',branch:'feature/family-web-v1-4',head:'b'.repeat(40),dirty:false,detached:false,executable:true,committedAt:'2026-09-17T10:00:00Z'},
+    {path:'/worktrees/family-web-v1-3',branch:'feature/family-web-v1-3',head:'a'.repeat(40),dirty:false,detached:false,executable:true,committedAt:'2026-09-16T10:00:00Z'}
+  ]}]
+}]});
+assert.equal(refreshedExternal.changed,true);
+assert.equal(refreshedExternal.code,'EXTERNAL_RUNTIME_REFRESHED');
+assert.equal(refreshedExternal.store.rooms[familyRoom.roomId].branch,'feature/family-web-v1-4');
+assert.equal(refreshedExternal.store.rooms[familyRoom.roomId].worktree,'/worktrees/family-web-new');
+assert.equal(refreshedExternal.store.rooms[familyRoom.roomId].baseSha,'b'.repeat(40));
+assert.equal(refreshedExternal.store.rooms[familyRoom.roomId].gptConversationBinding,'family-room-conversation');
+assert.equal(refreshedExternal.store.rooms[familyRoom.roomId].gptConversationUrl,'https://chatgpt.com/c/family-room-conversation');
+const currentExternal = refreshExternalRoomRuntime(refreshedExternal.store, familyRoom.roomId, {projects:[{
+  id:'family-plan', repositoryIdentity:'beyourlovercom/family-plan', workstreams:[{id:'family-web',runtimes:[
+    {path:'/worktrees/family-web-new',branch:'feature/family-web-v1-4',head:'b'.repeat(40),dirty:false,detached:false,executable:true,committedAt:'2026-09-17T10:00:00Z'}
+  ]}]
+}]});
+assert.equal(currentExternal.changed,false);
+assert.equal(currentExternal.code,'EXTERNAL_RUNTIME_CURRENT');
 
 console.log('executionRoomState.test.ts PASS');

@@ -10,6 +10,7 @@
     patchExecutionRoomUi,
     persistExecutionRoomStore,
     reopenExecutionRoom,
+    refreshExternalRoomRuntime,
     selectExecutionRoom,
     selectMainline as selectMainlineView,
     toggleRoadmapSection,
@@ -95,6 +96,38 @@
       if (factsRefreshInFlight.has(room.roomId)) return;
       factsRefreshInFlight.add(room.roomId);
       try {
+        if (room.repo !== 'PENDING_PROJECT_REPO_BINDING') {
+          const localNextStep = nextSteps[room.roomId];
+          const busyNextStep = ['PENDING','CLAIMED'].includes(localNextStep?.state.state ?? '');
+          const activeLease = roomExecutorFacts[room.roomId]?.executor.value?.activeLease?.runId ?? null;
+          if (!busyNextStep && !activeLease) {
+            const catalog = await readExternalProjects();
+            if (cancelled) return;
+            externalCatalog = catalog;
+            const refreshed = refreshExternalRoomRuntime(roomStore, room.roomId, catalog);
+            if (refreshed.changed) {
+              const pending = await cancelPendingNextStepForRoom(room.roomId);
+              if (cancelled) return;
+              if (pending.claimed.length) {
+                roomExecutorErrors = {...roomExecutorErrors,[room.roomId]:'CANONICAL_REFRESH_BLOCKED_BY_CLAIMED_NEXT_STEP'};
+                return;
+              }
+              commit(refreshed.store);
+              const { [room.roomId]: _facts, ...remainingFacts } = roomExecutorFacts;
+              roomExecutorFacts = remainingFacts;
+              const { [room.roomId]: _error, ...remainingErrors } = roomExecutorErrors;
+              roomExecutorErrors = remainingErrors;
+              if (nextSteps[room.roomId] || pending.cancelled.length) {
+                const { [room.roomId]: _stale, ...rest } = nextSteps;
+                nextSteps = rest;
+              }
+              const updated = refreshed.store.rooms[room.roomId];
+              announce(`Room canonical 已刷新：${updated.branch} @ ${shortSha(updated.baseSha)}`);
+              window.setTimeout(() => window.dispatchEvent(new CustomEvent('aicc-v55-refresh-facts')), 0);
+              return;
+            }
+          }
+        }
         if (room.repo === 'PENDING_PROJECT_REPO_BINDING') {
           const facts = await readExecutorFacts();
           if (cancelled) return;
