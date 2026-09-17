@@ -1,7 +1,7 @@
 import {createHash,randomUUID} from 'node:crypto';
 import {readRun} from './run-store.mjs';
 import {readOrMaterializeResult} from './result-store.mjs';
-import {createTask,createWorkPackage,readWorkStore} from './work-store.mjs';
+import {createTask,createWorkPackage,readWorkStore,updateTaskStatus,updateWorkPackageStatus} from './work-store.mjs';
 import {startRun,executorStatus} from './executor-runtime.mjs';
 import {appendBridgeEvent,createBridgeRequest,createDelivery,createProviderExecution,createProviderResult,createReceipt,listBridgeRequestIds,readBridgeRequest,readBridgeState,readDelivery,readProviderExecution,readProviderResult,readReceipt,sha256,updateBridgeState} from './bridge-store.mjs';
 import {validateProviderDecision} from './provider-routing.mjs';
@@ -38,6 +38,11 @@ function taskBinding(context,input,env,options={}){
   if(typeof input?.taskId==='string'&&input.taskId.trim())return existingTaskBinding(context,input.taskId.trim(),input?.taskTitle,env);
   return automaticTaskBinding(context,input,env,options);
 }
+function safeWorkStatus(context,binding,taskStatus,wpStatus,env,options={}){
+  const now=options.now||(()=>new Date().toISOString());
+  if(taskStatus)try{updateTaskStatus(context,binding.task.id,taskStatus,env,{now});}catch(error){if(!['WORK_STATUS_UNCHANGED','WORK_STATUS_TERMINAL'].includes(error?.code))throw error;}
+  if(wpStatus)try{updateWorkPackageStatus(context,binding.wp.id,wpStatus,env,{now});}catch(error){if(!['WORK_STATUS_UNCHANGED','WORK_STATUS_TERMINAL'].includes(error?.code))throw error;}
+}
 function requestCandidate(context,input,binding,runId,now){
   const instruction=exactInstruction(input.instruction);
   return {schema:'aicc.v3.bridge-request.v1',requestId:uuid(input.requestId),provider:input.provider,conversationId:text(input.conversationId,'BRIDGE_CONVERSATION_ID_UNAVAILABLE'),originTurnId:text(input.originTurnId,'BRIDGE_ORIGIN_TURN_ID_REQUIRED'),taskId:binding.task.id,workPackageId:binding.wp.id,roomId:typeof input?.roomId==='string'&&input.roomId.trim()?input.roomId.trim():null,workstreamId:typeof input?.workstreamId==='string'&&input.workstreamId.trim()?input.workstreamId.trim():null,instructionSha256:sha256(instruction),runId,projectId:context.project.id,repositoryIdentity:context.repository.identity,repositoryPath:context.repository.path,createdAt:now()};
@@ -67,7 +72,7 @@ export function submitBridgeRequest(context,input,env=process.env,options={}){
   if(useRemoteClaude)fail('BRIDGE_ASYNC_REQUIRED');
   let run;try{run=readRun(context,request.runId,env);}catch(error){if(error?.code!=='RUN_NOT_FOUND')throw error;}
   if(!run){
-    try{run=startExactRun(context,request,instruction,env,options);appendBridgeEvent(context,request.requestId,'RUN_BOUND',{runId:run.runId},env,options);}
+    try{safeWorkStatus(context,binding,'IN_PROGRESS',null,env,options);run=startExactRun(context,request,instruction,env,options);appendBridgeEvent(context,request.requestId,'RUN_BOUND',{runId:run.runId},env,options);}
     catch(error){appendBridgeEvent(context,request.requestId,'RUN_BINDING_FAILED',{errorCode:error?.code||'BRIDGE_RUN_BINDING_FAILED'},env,options);throw error;}
   }
   return {created,request,run,state:readBridgeState(context,request.requestId,env)};
@@ -95,6 +100,7 @@ export async function submitBridgeRequestAsync(context,input,env=process.env,opt
   }
   let remoteExecution;
   try{
+    safeWorkStatus(context,binding,'IN_PROGRESS',null,env,options);
     remoteExecution=await remoteRunner.submit({executionId:request.runId,workPackageId:binding.wp.id,executionClass:executionProvider.executionClass,provider:'CLAUDE_CODE',providerRoutingReason:executionProvider.providerRoutingReason,remoteRepositoryRoot,repositoryIdentity:context.repository.identity,expectedBranch:context.repository.branch,expectedHead:context.repository.head,instruction,dryRun:Boolean(input?.dryRun),escalationEvidence:input?.escalationEvidence||null});
   }catch(error){
     appendBridgeEvent(context,request.requestId,'RUN_BINDING_FAILED',{errorCode:error?.code||'BRIDGE_RUN_BINDING_FAILED'},env,options);
@@ -112,6 +118,7 @@ function materializeDelivery(context,request,env,options={}){
     if(String(error?.code||'').startsWith('RESULT_'))fail('BRIDGE_RUN_BINDING_FAILED');throw error;
   }
   if(result.runId!==request.runId||result.taskId!==request.taskId||result.workPackageId!==request.workPackageId)fail('BRIDGE_RUN_BINDING_FAILED');
+  if(result.exitCode===0){const store=readWorkStore(context,env),task=store.tasks.find(item=>item.id===request.taskId),wp=store.workPackages.find(item=>item.id===request.workPackageId);if(task&&wp)safeWorkStatus(context,{task,wp},'DONE','DONE',env,options);}
   const delivery={schema:'aicc.v3.bridge-delivery.v1',deliveryId:`delivery:${request.requestId}:${result.resultId}`,requestId:request.requestId,conversationId:request.conversationId,originTurnId:request.originTurnId,taskId:request.taskId,workPackageId:request.workPackageId,runId:request.runId,resultId:result.resultId,contentSha256:result.contentSha256,content:result.content,createdAt:(options.now||(()=>new Date().toISOString()))()};
   let existing;try{existing=readDelivery(context,request.requestId,env);}catch(error){if(error?.code!=='BRIDGE_DELIVERY_NOT_FOUND')throw error;}
   const saved=existing||createDelivery(context,request.requestId,delivery,env);
@@ -153,6 +160,7 @@ export async function bridgeProjectionAsync(context,requestId,env=process.env,op
   if(!remoteExecution||remoteExecution.executionId!==projection.providerExecution.executionId)fail('BRIDGE_REMOTE_EXECUTION_UNAVAILABLE');
   if(remoteExecution.state==='COMPLETED'){
     if(typeof remoteExecution.resultContent!=='string'||!remoteExecution.resultContent||remoteExecution.resultContentSha256!==sha256(remoteExecution.resultContent))return {...projection,remoteExecution,remoteErrorCode:'BRIDGE_REMOTE_RESULT_INVALID'};
+    const store=readWorkStore(context,env),task=store.tasks.find(item=>item.id===projection.request.taskId),wp=store.workPackages.find(item=>item.id===projection.request.workPackageId);if(task&&wp)safeWorkStatus(context,{task,wp},'DONE','DONE',env,options);
     createProviderResult(context,requestId,{schema:'aicc.v3.bridge-provider-result.v1',requestId,executionId:projection.providerExecution.executionId,provider:'CLAUDE_CODE',taskId:projection.request.taskId,workPackageId:projection.request.workPackageId,resultId:`provider-result:${projection.providerExecution.executionId}`,content:remoteExecution.resultContent,contentSha256:remoteExecution.resultContentSha256,createdAt:remoteExecution.completedAt||(options.now||(()=>new Date().toISOString()))()},env);
     projection=bridgeProjection(context,requestId,env,options);
   }
