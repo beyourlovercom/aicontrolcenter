@@ -50,9 +50,11 @@ button { color: inherit; }
   padding: 6px 16px 0;
   background: #eef2eb;
   border-bottom: 1px solid #dfe6de;
-  overflow: hidden;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: thin;
 }
-.room-tabs-track { display: flex; align-items: flex-end; gap: 3px; min-width: 0; }
+.room-tabs-track { display: flex; align-items: flex-end; gap: 3px; min-width: max-content; flex: 0 0 auto; }
 .room-tab, .add-room {
   height: 40px;
   border: 0;
@@ -61,6 +63,7 @@ button { color: inherit; }
 .room-tab {
   min-width: 154px;
   max-width: 210px;
+  flex: 0 0 auto;
   padding: 0 12px;
   display: flex;
   align-items: center;

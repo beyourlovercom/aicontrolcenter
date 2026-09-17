@@ -1,7 +1,6 @@
 import assert from 'node:assert/strict';
 import {
   EXECUTION_ROOM_STORAGE_KEY,
-  MAX_ACTIVE_ROOMS,
   bindGptConversation,
   chatgptConversationIdentity,
   closeExecutionRoom,
@@ -30,8 +29,8 @@ class MemoryStorage {
 }
 
 const defaults = createDefaultExecutionRoomStore();
-assert.equal(defaults.activeRoomIds.length, MAX_ACTIVE_ROOMS);
-assert.equal(new Set(defaults.activeRoomIds).size, MAX_ACTIVE_ROOMS);
+assert.equal(defaults.activeRoomIds.length, 4);
+assert.equal(new Set(defaults.activeRoomIds).size, 4);
 assert.equal(defaults.activeViewId, 'traffic');
 
 const trafficCollapsed = patchExecutionRoomUi(defaults, 'traffic', { leftPanelCollapsed: true });
@@ -80,10 +79,12 @@ const fifthRoom = {
   branch: 'feature/fifth-room',
   worktree: '/worktrees/fifth-room'
 };
-assert.throws(() => createExecutionRoom(defaults, fifthRoom), /ACTIVE_ROOM_LIMIT_REACHED/);
+const fiveRooms = createExecutionRoom(defaults, fifthRoom);
+assert.equal(fiveRooms.activeRoomIds.length, 5);
+assert.equal(fiveRooms.activeViewId, 'fifth');
 
 const inquiryReopened = reopenExecutionRoom(inquiryClosed, 'inquiry');
-assert.equal(inquiryReopened.activeRoomIds.length, MAX_ACTIVE_ROOMS);
+assert.equal(inquiryReopened.activeRoomIds.length, 4);
 assert.equal(inquiryReopened.activeViewId, 'inquiry');
 assert.equal(inquiryReopened.rooms.inquiry.branch, defaults.rooms.inquiry.branch);
 
@@ -97,23 +98,25 @@ assert.equal(restored.rooms.inquiry.ui.leftPanelCollapsed, false);
 
 storage.setItem(EXECUTION_ROOM_STORAGE_KEY, '{not-json');
 const recovered = loadExecutionRoomStore(storage);
-assert.equal(recovered.activeRoomIds.length, MAX_ACTIVE_ROOMS);
+assert.equal(recovered.activeRoomIds.length, 4);
 assert.equal(recovered.activeViewId, 'traffic');
 
 
-const externalBase = closeExecutionRoom(defaults, 'product');
+const externalBase = defaults;
 const familyRoom = createExternalExecutionRoomState({
   roomId: 'family-web-a1b2c3d4', name: 'Family Web', projectId: 'family-plan', workstreamId: 'family-web',
   repositoryIdentity: 'beyourlovercom/family-plan', branch: 'feature/family-web-v1-3', worktree: '/worktrees/family-web-v1-3', head: 'a'.repeat(40)
 });
 const withFamily = createExecutionRoom(externalBase, familyRoom);
-assert.equal(withFamily.activeRoomIds.length, MAX_ACTIVE_ROOMS);
+assert.equal(withFamily.activeRoomIds.length, 5);
 assert.equal(withFamily.activeViewId, familyRoom.roomId);
 assert.equal(withFamily.rooms[familyRoom.roomId].projectId, 'family-plan');
 assert.equal(withFamily.rooms[familyRoom.roomId].repo, 'beyourlovercom/family-plan');
 assert.equal(withFamily.rooms[familyRoom.roomId].branch, 'feature/family-web-v1-3');
 assert.equal(withFamily.rooms[familyRoom.roomId].baseSha, 'a'.repeat(40));
 assert.equal(withFamily.rooms[familyRoom.roomId].gptConversationBinding, null);
+const normalizedMany = loadExecutionRoomStore({ getItem: () => JSON.stringify(withFamily), setItem: () => {} });
+assert.equal(normalizedMany.activeRoomIds.length, 5);
 assert.throws(() => createExternalExecutionRoomState({...familyRoom, roomId: ''} as any), /EXTERNAL_ROOM_INPUT_INVALID/);
 
 console.log('executionRoomState.test.ts PASS');

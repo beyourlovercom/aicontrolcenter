@@ -1,7 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import {
-    MAX_ACTIVE_ROOMS,
     bindGptConversation,
     closeExecutionRoom,
     createDefaultExecutionRoomStore,
@@ -169,10 +168,6 @@
   }
 
   async function addOrReopenRoom() {
-    if (activeRooms.length >= MAX_ACTIVE_ROOMS) {
-      announce(`ACTIVE ROOM 已达上限 ${MAX_ACTIVE_ROOMS}；请先关闭一个 Room。`);
-      return;
-    }
     projectPickerOpen = true;
     projectPickerBusy = true;
     externalProjectError = '';
@@ -368,7 +363,7 @@
         <div class="brand-subtitle">Multi-Execution Workbench</div>
       </div>
     </div>
-    <div class="header-status"><span class="status-dot"></span><span>V5.5 · Multi-Room Hardening · {activeRooms.length} / {MAX_ACTIVE_ROOMS} ACTIVE</span></div>
+    <div class="header-status"><span class="status-dot"></span><span>V5.5 · Multi-Room Hardening · {activeRooms.length} Rooms</span></div>
   </header>
 
   <nav class="room-tabs" aria-label="Execution Rooms">
@@ -425,12 +420,12 @@
       <div class="mainline-scroll">
         <section class="mainline-hero">
           <div><span class="eyebrow">Always-on Mainline View</span><h1>主线面板</h1><p>完整查看 AICC V5 从 Blueprint 到 Gate 的整体推进，并从这里恢复或切换任一 Execution Room。</p></div>
-          <span class="shell-badge">V5.5 Multi-Room Hardening · 四 Room 独立执行</span>
+          <span class="shell-badge">V5.5 Multi-Room Hardening · Room 独立执行</span>
         </section>
 
         <section class="mainline-kpis">
           <article><span>当前阶段</span><strong>V5.5</strong><small>Multi-Room Hardening</small></article>
-          <article><span>Active Rooms</span><strong>{activeRooms.length} / {MAX_ACTIVE_ROOMS}</strong><small>状态层硬限制</small></article>
+          <article><span>Open Rooms</span><strong>{activeRooms.length}</strong><small>Room / Tab 不设硬上限</small></article>
           <article><span>GPT Bindings</span><strong>{boundRoomCount} / {allRooms.length}</strong><small>每个 Room 独立 conversationId</small></article>
           <article><span>Detected GPT</span><strong>{chatgptSnapshots.length}</strong><small>Profile 12 实时 snapshot</small></article>
           <article><span>V5.4</span><strong>MERGED</strong><small>main@ba223d2</small></article>
@@ -524,7 +519,7 @@
                 <div class="roadmap-item done"><span>✓</span><div><strong>Per-Room Conversation Binding</strong><small>conversationId 唯一绑定，不允许串线</small></div></div>
                 <div class="roadmap-item done"><span>✓</span><div><strong>No-Spawn Read Path</strong><small>读取不会创建 Chrome Tab</small></div></div>
                 <div class="roadmap-item done"><span>✓</span><div><strong>Exact Runtime Isolation</strong><small>每个 Room 独立 worktree / lease / facts / delivery</small></div></div>
-                <div class="roadmap-item current"><span>●</span><div><strong>Owner Multi-Room UAT</strong><small>四 Room 切换、并发与 restart 不串线</small></div></div>
+                <div class="roadmap-item current"><span>●</span><div><strong>Owner Multi-Room UAT</strong><small>多 Room 切换、并发与 restart 不串线</small></div></div>
               {/if}
             </section>
 
