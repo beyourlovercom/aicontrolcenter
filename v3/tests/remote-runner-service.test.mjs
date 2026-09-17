@@ -169,13 +169,27 @@ test('non-dry-run with valid stream-json still completes normally (no regression
   const tmp=mkdtempSync(join(tmpdir(),'aicc-rrs-'));
   try{
     const repo=makeGitRepo(tmp);const head=getHead(repo);
-    const spawner=()=>{const child=hangingSpawner();queueMicrotask(()=>{child.stdout.emit('data',JSON.stringify({type:'result',subtype:'success',is_error:false,result:'NON DRY RUN RESULT'})+'\n');child.emit('close',0);});return child;};
+    const spawner=()=>{const child=hangingSpawner();queueMicrotask(()=>{writeFileSync(join(repo,'changed.txt'),'changed\n');child.stdout.emit('data',JSON.stringify({type:'result',subtype:'success',is_error:false,result:'NON DRY RUN RESULT'})+'\n');child.emit('close',0);});return child;};
     const svc=createRemoteRunnerService(tmp,{spawn:spawner,uuid:()=>'exec-nodry-ok'});
     svc.submit({provider:'CLAUDE_CODE',executionClass:'CODE_CHANGE',providerRoutingReason:'r',workPackageId:'wp-nodry',remoteRepositoryRoot:repo,repositoryIdentity:'test/repo',expectedBranch:'feat/test',expectedHead:head,instruction:'do something',dryRun:false});
     await new Promise(r=>setTimeout(r,25));
     const rec=svc.get('exec-nodry-ok');
     assert.equal(rec.state,'COMPLETED');
     assert.equal(rec.resultContent,'NON DRY RUN RESULT');
+  }finally{rmSync(tmp,{recursive:true,force:true});}
+});
+
+
+
+test('non-dry CODE_CHANGE with result text but no repository change fails closed',async()=>{
+  const tmp=mkdtempSync(join(tmpdir(),'aicc-rrs-'));
+  try{
+    const repo=makeGitRepo(tmp);const head=getHead(repo);
+    const spawner=()=>{const child=hangingSpawner();queueMicrotask(()=>{child.stdout.emit('data',JSON.stringify({type:'result',subtype:'success',is_error:false,result:'CLAIMED SUCCESS'})+'\n');child.emit('close',0);});return child;};
+    const svc=createRemoteRunnerService(tmp,{spawn:spawner,uuid:()=>'exec-no-change'});
+    svc.submit({provider:'CLAUDE_CODE',executionClass:'CODE_CHANGE',providerRoutingReason:'r',workPackageId:'wp',remoteRepositoryRoot:repo,repositoryIdentity:'test/repo',expectedBranch:'feat/test',expectedHead:head,instruction:'change code',dryRun:false});
+    await new Promise(r=>setTimeout(r,25));const rec=svc.get('exec-no-change');
+    assert.equal(rec.state,'FAILED');assert.equal(rec.error,'REMOTE_RUNNER_NO_CHANGE');
   }finally{rmSync(tmp,{recursive:true,force:true});}
 });
 
@@ -481,7 +495,7 @@ test('completed sanitized result survives service restart',async()=>{
   const tmp=mkdtempSync(join(tmpdir(),'aicc-rrs-'));const state=join(tmp,'state');
   try{
     const repo=makeGitRepo(tmp);const head=getHead(repo);
-    const completingSpawner=()=>{const child=hangingSpawner();queueMicrotask(()=>{child.stdout.emit('data',JSON.stringify({type:'result',subtype:'success',is_error:false,result:'PERSISTED RESULT'})+'\n');child.emit('close',0);});return child;};
+    const completingSpawner=()=>{const child=hangingSpawner();queueMicrotask(()=>{writeFileSync(join(repo,'changed.txt'),'changed\n');child.stdout.emit('data',JSON.stringify({type:'result',subtype:'success',is_error:false,result:'PERSISTED RESULT'})+'\n');child.emit('close',0);});return child;};
     const input={executionId:'complete-exec',provider:'CLAUDE_CODE',executionClass:'CODE_CHANGE',providerRoutingReason:'r',workPackageId:'wp',remoteRepositoryRoot:repo,repositoryIdentity:'test/repo',expectedBranch:'feat/test',expectedHead:head,instruction:'persist exact result',dryRun:false};
     const first=createRemoteRunnerService(tmp,{stateRoot:state,spawn:completingSpawner});first.submit(input);
     await new Promise(r=>setTimeout(r,25));assert.equal(first.get('complete-exec').state,'COMPLETED');
