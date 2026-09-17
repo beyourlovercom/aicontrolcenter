@@ -1,10 +1,11 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import {
-    MAX_ACTIVE_ROOMS,
     bindGptConversation,
     closeExecutionRoom,
     createDefaultExecutionRoomStore,
+    createExecutionRoom,
+    createExternalExecutionRoomState,
     loadExecutionRoomStore,
     patchExecutionRoomUi,
     persistExecutionRoomStore,
@@ -22,6 +23,7 @@
   import { readExecutorFacts, readRoomExecutorFacts, roomRuntimeBinding, type ExecutorFactsProjection } from './lib/executorFacts';
   import { cancelPendingNextStepForRoom, nextStepEligibility, nextStepStatusLabel, readNextStep, submitNextStep, type NextStepProjection } from './lib/nextStep';
   import { resolveProviderDecision } from './lib/providerPresentation';
+  import { readExternalProjects, type ExternalProjectCatalog } from './lib/externalProjects';
 
   let roomStore: ExecutionRoomStore = createDefaultExecutionRoomStore();
   let toast = '';
@@ -35,6 +37,14 @@
   let nextSteps: Record<string, NextStepProjection> = {};
   let nextStepBusyRoomId: string | null = null;
 
+  let projectPickerOpen = false;
+  let projectPickerBusy = false;
+  let externalCatalog: ExternalProjectCatalog | null = null;
+  let externalProjectError = '';
+  let selectedExternalProjectId = '';
+  let selectedExternalWorkstreamId = '';
+  let selectedExternalRuntimePath = '';
+
   $: activeViewId = roomStore.activeViewId;
   $: activeRooms = roomStore.activeRoomIds.map((id) => roomStore.rooms[id]).filter(Boolean);
   $: allRooms = roomStore.roomOrder.map((id) => roomStore.rooms[id]).filter(Boolean);
@@ -46,7 +56,7 @@
   $: boundRoomCount = allRooms.filter((room) => Boolean(room.gptConversationBinding)).length;
   $: executorFacts = activeRoom && activeRoom.repo !== 'PENDING_PROJECT_REPO_BINDING' ? (roomExecutorFacts[activeRoom.roomId] ?? null) : globalExecutorFacts;
   $: executorFactsError = activeRoom ? (roomExecutorErrors[activeRoom.roomId] ?? '') : '';
-  $: runtimeBinding = activeRoom ? roomRuntimeBinding(activeRoom.branch, activeRoom.worktree, executorFacts) : 'UNAVAILABLE';
+  $: runtimeBinding = activeRoom ? roomRuntimeBinding(activeRoom.branch, activeRoom.worktree, executorFacts, activeRoom.baseSha) : 'UNAVAILABLE';
   $: actualRepository = executorFacts?.project.value?.repository ?? null;
   $: actualExecutor = executorFacts?.executor.value ?? null;
   $: actualPrDelivery = executorFacts?.prDelivery.value ?? null;
@@ -54,6 +64,9 @@
   $: activeProviderDecision = resolveProviderDecision(activeNextStep?.state.decision ?? null);
   $: activeNextStepEligibility = activeRoom ? nextStepEligibility(activeRoom, executorFacts, activeSnapshot) : { ready: false, blockers: ['ROOM_UNAVAILABLE'] };
   $: nextStepLocked = !activeNextStepEligibility.ready || nextStepBusyRoomId === activeRoom?.roomId || ['PENDING','CLAIMED'].includes(activeNextStep?.state.state ?? '');
+  $: selectedExternalProject = externalCatalog?.projects.find((project) => project.id === selectedExternalProjectId) ?? null;
+  $: selectedExternalWorkstream = selectedExternalProject?.workstreams.find((workstream) => workstream.id === selectedExternalWorkstreamId) ?? null;
+  $: selectedExternalRuntime = selectedExternalWorkstream?.runtimes.find((runtime) => runtime.path === selectedExternalRuntimePath) ?? null;
   $: {
     const key = activeRoom ? `${activeRoom.roomId}\0${activeRoom.projectId}\0${activeRoom.repo}\0${activeRoom.worktree}` : '';
     if (typeof window !== 'undefined' && key && key !== factsRefreshKey) { factsRefreshKey = key; window.setTimeout(() => window.dispatchEvent(new CustomEvent('aicc-v55-refresh-facts')), 0); }
@@ -146,13 +159,74 @@
     }
   }
 
-  function addOrReopenRoom() {
-    const inactiveRoomId = roomStore.roomOrder.find((id) => !roomStore.activeRoomIds.includes(id));
-    if (inactiveRoomId) {
-      openOrReopenRoom(inactiveRoomId);
+  function chooseFirstExternalRuntime(projectId: string, workstreamId?: string) {
+    const project = externalCatalog?.projects.find((item) => item.id === projectId) ?? null;
+    const workstream = project?.workstreams.find((item) => item.id === workstreamId) ?? project?.workstreams[0] ?? null;
+    selectedExternalProjectId = project?.id ?? '';
+    selectedExternalWorkstreamId = workstream?.id ?? '';
+    selectedExternalRuntimePath = workstream?.runtimes.find((runtime) => runtime.executable)?.path ?? workstream?.runtimes[0]?.path ?? '';
+  }
+
+  async function addOrReopenRoom() {
+    projectPickerOpen = true;
+    projectPickerBusy = true;
+    externalProjectError = '';
+    try {
+      externalCatalog = await readExternalProjects();
+      if (!externalCatalog.projects.length) externalProjectError = 'EXTERNAL_PROJECT_REGISTRY_EMPTY';
+      else chooseFirstExternalRuntime(externalCatalog.projects[0].id);
+    } catch (error) {
+      externalProjectError = error instanceof Error ? error.message : String(error);
+    } finally {
+      projectPickerBusy = false;
+    }
+  }
+
+  function selectExternalProject(event: Event) {
+    chooseFirstExternalRuntime((event.currentTarget as HTMLSelectElement).value);
+  }
+
+  function selectExternalWorkstream(event: Event) {
+    chooseFirstExternalRuntime(selectedExternalProjectId, (event.currentTarget as HTMLSelectElement).value);
+  }
+
+  function selectExternalRuntime(event: Event) {
+    selectedExternalRuntimePath = (event.currentTarget as HTMLSelectElement).value;
+  }
+
+  function closeProjectPicker() { projectPickerOpen = false; }
+
+  function createExternalRoomFromSelection() {
+    const project = selectedExternalProject, workstream = selectedExternalWorkstream, runtime = selectedExternalRuntime;
+    if (!project || !workstream || !runtime || !runtime.executable || !runtime.branch) {
+      announce('EXTERNAL_RUNTIME_NOT_EXECUTABLE · 请选择 CLEAN 且非 detached 的 worktree。');
       return;
     }
-    announce(`ACTIVE ROOM 已达上限 ${MAX_ACTIVE_ROOMS}；请先关闭一个 Room。`);
+    const existing = allRooms.find((room) => room.projectId === project.id && room.workstreamId === workstream.id && room.worktree === runtime.path);
+    if (existing) {
+      projectPickerOpen = false;
+      openOrReopenRoom(existing.roomId);
+      announce(`已恢复 ${existing.name}`);
+      return;
+    }
+    const slug = `${project.id}-${workstream.id}-${runtime.head.slice(0, 8)}`.replace(/[^a-zA-Z0-9_-]/g, '-');
+    const room = createExternalExecutionRoomState({
+      roomId: `ext-${slug}`,
+      name: workstream.name,
+      projectId: project.id,
+      workstreamId: workstream.id,
+      repositoryIdentity: project.repositoryIdentity,
+      branch: runtime.branch,
+      worktree: runtime.path,
+      head: runtime.head
+    });
+    try {
+      commit(createExecutionRoom(roomStore, room));
+      projectPickerOpen = false;
+      announce(`已创建 ${room.name} · ${room.branch}`);
+    } catch (error) {
+      announce(error instanceof Error ? error.message : String(error));
+    }
   }
 
   function announce(message: string) {
@@ -289,7 +363,7 @@
         <div class="brand-subtitle">Multi-Execution Workbench</div>
       </div>
     </div>
-    <div class="header-status"><span class="status-dot"></span><span>V5.5 · Multi-Room Hardening · {activeRooms.length} / {MAX_ACTIVE_ROOMS} ACTIVE</span></div>
+    <div class="header-status"><span class="status-dot"></span><span>V5.5 · Multi-Room Hardening · {activeRooms.length} Rooms</span></div>
   </header>
 
   <nav class="room-tabs" aria-label="Execution Rooms">
@@ -309,17 +383,49 @@
     </div>
   </nav>
 
+  {#if projectPickerOpen}
+    <div class="external-project-backdrop" role="presentation">
+      <div class="external-project-dialog" role="dialog" aria-modal="true" aria-label="新建 Execution Room">
+        <div class="external-project-dialog-head">
+          <div><span class="eyebrow">External Project Loading V1</span><h2>新建 Execution Room</h2><p>选择真实项目与 CLEAN worktree；创建后会冻结 exact branch / HEAD。</p></div>
+          <button type="button" class="dialog-close" onclick={closeProjectPicker}>×</button>
+        </div>
+        {#if projectPickerBusy}
+          <div class="external-project-loading">正在读取 Project Registry 与 Git worktrees…</div>
+        {:else if externalProjectError}
+          <div class="external-project-error">{externalProjectError}</div>
+        {:else if externalCatalog}
+          <div class="external-project-form">
+            <label><span>项目</span><select value={selectedExternalProjectId} onchange={selectExternalProject}>{#each externalCatalog.projects as project}<option value={project.id}>{project.name} · {project.repositoryIdentity}</option>{/each}</select></label>
+            <label><span>工作流</span><select value={selectedExternalWorkstreamId} onchange={selectExternalWorkstream}>{#each selectedExternalProject?.workstreams ?? [] as workstream}<option value={workstream.id}>{workstream.name}</option>{/each}</select></label>
+            <label><span>Runtime / Worktree</span><select value={selectedExternalRuntimePath} onchange={selectExternalRuntime}>{#each selectedExternalWorkstream?.runtimes ?? [] as runtime}<option value={runtime.path} disabled={!runtime.executable}>{runtime.executable ? 'CLEAN' : runtime.dirty ? 'DIRTY' : 'BLOCKED'} · {runtime.branch ?? 'DETACHED'} · {runtime.head.slice(0, 8)}</option>{/each}</select></label>
+          </div>
+          {#if selectedExternalRuntime}
+            <div class="external-runtime-preview">
+              <div><span>Repository</span><strong>{selectedExternalProject?.repositoryIdentity}</strong></div>
+              <div><span>Branch</span><strong>{selectedExternalRuntime.branch ?? 'DETACHED'}</strong></div>
+              <div><span>HEAD</span><strong>{selectedExternalRuntime.head}</strong></div>
+              <div><span>Worktree</span><strong>{selectedExternalRuntime.path}</strong></div>
+              <div><span>Gate</span><strong class:runtime-blocked={!selectedExternalRuntime.executable}>{selectedExternalRuntime.executable ? 'CLEAN · EXECUTABLE' : 'BLOCKED'}</strong></div>
+            </div>
+          {/if}
+          <div class="external-project-actions"><button type="button" class="binding-link" onclick={closeProjectPicker}>取消</button><button type="button" class="next-step-button" disabled={!selectedExternalRuntime?.executable} onclick={createExternalRoomFromSelection}>创建 Room</button></div>
+        {/if}
+      </div>
+    </div>
+  {/if}
+
   {#if activeViewId === 'mainline'}
     <main class="mainline-panel">
       <div class="mainline-scroll">
         <section class="mainline-hero">
           <div><span class="eyebrow">Always-on Mainline View</span><h1>主线面板</h1><p>完整查看 AICC V5 从 Blueprint 到 Gate 的整体推进，并从这里恢复或切换任一 Execution Room。</p></div>
-          <span class="shell-badge">V5.5 Multi-Room Hardening · 四 Room 独立执行</span>
+          <span class="shell-badge">V5.5 Multi-Room Hardening · Room 独立执行</span>
         </section>
 
         <section class="mainline-kpis">
           <article><span>当前阶段</span><strong>V5.5</strong><small>Multi-Room Hardening</small></article>
-          <article><span>Active Rooms</span><strong>{activeRooms.length} / {MAX_ACTIVE_ROOMS}</strong><small>状态层硬限制</small></article>
+          <article><span>Open Rooms</span><strong>{activeRooms.length}</strong><small>Room / Tab 不设硬上限</small></article>
           <article><span>GPT Bindings</span><strong>{boundRoomCount} / {allRooms.length}</strong><small>每个 Room 独立 conversationId</small></article>
           <article><span>Detected GPT</span><strong>{chatgptSnapshots.length}</strong><small>Profile 12 实时 snapshot</small></article>
           <article><span>V5.4</span><strong>MERGED</strong><small>main@ba223d2</small></article>
@@ -413,7 +519,7 @@
                 <div class="roadmap-item done"><span>✓</span><div><strong>Per-Room Conversation Binding</strong><small>conversationId 唯一绑定，不允许串线</small></div></div>
                 <div class="roadmap-item done"><span>✓</span><div><strong>No-Spawn Read Path</strong><small>读取不会创建 Chrome Tab</small></div></div>
                 <div class="roadmap-item done"><span>✓</span><div><strong>Exact Runtime Isolation</strong><small>每个 Room 独立 worktree / lease / facts / delivery</small></div></div>
-                <div class="roadmap-item current"><span>●</span><div><strong>Owner Multi-Room UAT</strong><small>四 Room 切换、并发与 restart 不串线</small></div></div>
+                <div class="roadmap-item current"><span>●</span><div><strong>Owner Multi-Room UAT</strong><small>多 Room 切换、并发与 restart 不串线</small></div></div>
               {/if}
             </section>
 

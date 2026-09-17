@@ -8,7 +8,7 @@ import {cancelPendingNextStepForRoom,claimNextStep,createNextStepRequest,readNex
 function fixture(overrides={}){
   const home=mkdtempSync(join(tmpdir(),'aicc-v54-next-step-'));const env={AICC_V3_HOME:home};
   const context={project:{id:'v54',name:'V5.4'},repository:{identity:'owner/repo',path:'/tmp/wt-v54',branch:'feat/v54',head:'abc123',dirty:false},...overrides.context};
-  const input={roomId:'traffic',roomName:'Traffic / Ads',workstreamId:'traffic-ads',branch:'feat/v54',worktree:'/tmp/wt-v54',conversationId:'conv-1',draft:'continue safely',...overrides.input};
+  const input={roomId:'traffic',roomName:'Traffic / Ads',workstreamId:'traffic-ads',branch:'feat/v54',worktree:'/tmp/wt-v54',head:'abc123',conversationId:'conv-1',draft:'continue safely',...overrides.input};
   const facts={executorReady:true,activeRun:null,snapshot:{conversationId:'conv-1',conversationUrl:'https://chatgpt.com/c/conv-1',capturedAt:new Date().toISOString()},...overrides.facts};
   return {home,env,context,input,facts,cleanup:()=>rmSync(home,{recursive:true,force:true})};
 }
@@ -18,6 +18,7 @@ test('creates frozen PENDING intent with strict GPT protocol',()=>{const f=fixtu
 test('fails closed on runtime drift, dirty worktree, busy executor and stale conversation',()=>{
   for(const [mutate,code] of [
     [f=>f.input.branch='wrong','NEXT_STEP_RUNTIME_DRIFT'],
+    [f=>f.input.head='wrong-head','NEXT_STEP_RUNTIME_DRIFT'],
     [f=>f.context.repository.dirty=true,'NEXT_STEP_WORKTREE_DIRTY'],
     [f=>f.facts.activeRun='run-1','NEXT_STEP_EXECUTOR_BUSY'],
     [f=>f.facts.snapshot=null,'NEXT_STEP_CONVERSATION_STALE'],
@@ -31,7 +32,7 @@ test('global queue keeps different Room/project intents isolated from current pr
   const home=mkdtempSync(join(tmpdir(),'aicc-v55-global-next-step-'));const env={AICC_V3_HOME:home};
   const make=(id,room,path,conv)=>({
     context:{project:{id,name:id},repository:{identity:`owner/${id}`,path,branch:`feat/${room}`,head:`head-${room}`,dirty:false}},
-    input:{roomId:room,roomName:room,workstreamId:room,branch:`feat/${room}`,worktree:path,conversationId:conv,draft:''},
+    input:{roomId:room,roomName:room,workstreamId:room,branch:`feat/${room}`,worktree:path,head:`head-${room}`,conversationId:conv,draft:''},
     facts:{executorReady:true,activeRun:null,snapshot:{conversationId:conv,conversationUrl:`https://chatgpt.com/c/${conv}`,capturedAt:new Date().toISOString()}}
   });
   const a=make('project-a','room-a','/tmp/wt-a','conv-a'),b=make('project-b','room-b','/tmp/wt-b','conv-b');

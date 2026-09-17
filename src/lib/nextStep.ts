@@ -23,7 +23,7 @@ export function nextStepEligibility(room: ExecutionRoomState, facts: ExecutorFac
   const blockers: string[] = [];
   if (!room.gptConversationBinding || !room.gptConversationUrl) blockers.push('GPT_UNBOUND');
   if (!snapshot || snapshot.conversationId !== room.gptConversationBinding || !freshSnapshot(snapshot, nowMs)) blockers.push('GPT_SNAPSHOT_STALE');
-  if (roomRuntimeBinding(room.branch, room.worktree, facts) !== 'MATCH') blockers.push('RUNTIME_DRIFT');
+  if (roomRuntimeBinding(room.branch, room.worktree, facts, room.baseSha) !== 'MATCH') blockers.push('RUNTIME_DRIFT');
   const repository = facts?.project.value?.repository;
   if (!facts?.project.available || !repository) blockers.push('PROJECT_FACTS_UNAVAILABLE');
   else if (repository.dirty) blockers.push('WORKTREE_DIRTY');
@@ -40,7 +40,7 @@ async function jsonResponse(response: Response) {
 }
 export async function submitNextStep(room: ExecutionRoomState, draft: string, fetcher: typeof fetch = fetch): Promise<NextStepProjection> {
   const response = await fetcher('/api/next-step/requests', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({
-    roomId: room.roomId, roomName: room.name, projectId: room.projectId, repositoryIdentity: room.repo, workstreamId: room.workstreamId, branch: room.branch, worktree: room.worktree,
+    roomId: room.roomId, roomName: room.name, projectId: room.projectId, repositoryIdentity: room.repo, workstreamId: room.workstreamId, branch: room.branch, worktree: room.worktree, head: room.baseSha,
     conversationId: room.gptConversationBinding, draft
   }) });
   const value = await jsonResponse(response); return { request: value.request, state: value.state };

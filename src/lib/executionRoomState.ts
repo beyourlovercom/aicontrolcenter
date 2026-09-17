@@ -1,5 +1,4 @@
 export const EXECUTION_ROOM_STORAGE_KEY = 'aicc.v5.execution-rooms.v1';
-export const MAX_ACTIVE_ROOMS = 4;
 export const V5_1_BASE_SHA = '301d176cf7a10e2a9fe8f83490d9a28196a0ddde';
 
 export type RoadmapSection = 'blueprint' | 'wp' | 'pr' | 'task' | 'gate';
@@ -49,6 +48,51 @@ export type StorageLike = {
   getItem(key: string): string | null;
   setItem(key: string, value: string): void;
 };
+
+export type ExternalExecutionRoomInput = {
+  roomId: string;
+  name: string;
+  projectId: string;
+  workstreamId: string;
+  repositoryIdentity: string;
+  branch: string;
+  worktree: string;
+  head: string;
+};
+
+export function createExternalExecutionRoomState(input: ExternalExecutionRoomInput): ExecutionRoomState {
+  for (const key of ['roomId','name','projectId','workstreamId','repositoryIdentity','branch','worktree','head'] as const) {
+    if (!input[key]?.trim()) throw new Error('EXTERNAL_ROOM_INPUT_INVALID');
+  }
+  return {
+    roomId: input.roomId.trim(),
+    name: input.name.trim(),
+    projectId: input.projectId.trim(),
+    workstreamId: input.workstreamId.trim(),
+    repo: input.repositoryIdentity.trim(),
+    baseSha: input.head.trim(),
+    branch: input.branch.trim(),
+    worktree: input.worktree.trim(),
+    gptConversationBinding: null,
+    gptConversationUrl: null,
+    gptConversationTitle: null,
+    codexSession: null,
+    runtime: null,
+    currentWp: 'External Project — Runtime Binding',
+    currentPr: null,
+    currentTask: 'EXTERNAL_PROJECT_READY',
+    currentGate: 'EXACT_RUNTIME_GATE',
+    status: 'READY',
+    nextGate: 'GPT_BINDING',
+    ownerUatRequired: true,
+    ui: {
+      leftPanelCollapsed: false,
+      rightPanelCollapsed: false,
+      collapsedSections: emptyCollapsedSections(),
+      draft: ''
+    }
+  };
+}
 
 const emptyCollapsedSections = (): Record<RoadmapSection, boolean> => ({
   blueprint: false,
@@ -119,8 +163,7 @@ function unique(values: string[]): string[] {
 export function normalizeExecutionRoomStore(candidate: ExecutionRoomStore): ExecutionRoomStore {
   const roomOrder = unique(candidate.roomOrder.filter((id) => Boolean(candidate.rooms[id])));
   const activeRoomIds = unique(candidate.activeRoomIds)
-    .filter((id) => Boolean(candidate.rooms[id]))
-    .slice(0, MAX_ACTIVE_ROOMS);
+    .filter((id) => Boolean(candidate.rooms[id]));
   const activeViewId = candidate.activeViewId === 'mainline' || activeRoomIds.includes(candidate.activeViewId)
     ? candidate.activeViewId
     : 'mainline';
@@ -181,7 +224,6 @@ export function closeExecutionRoom(store: ExecutionRoomStore, roomId: string): E
 export function reopenExecutionRoom(store: ExecutionRoomStore, roomId: string): ExecutionRoomStore {
   if (!store.rooms[roomId]) throw new Error('ROOM_NOT_FOUND');
   if (store.activeRoomIds.includes(roomId)) return selectExecutionRoom(store, roomId);
-  if (store.activeRoomIds.length >= MAX_ACTIVE_ROOMS) throw new Error('ACTIVE_ROOM_LIMIT_REACHED');
   return {
     ...store,
     activeRoomIds: [...store.activeRoomIds, roomId],
@@ -190,7 +232,6 @@ export function reopenExecutionRoom(store: ExecutionRoomStore, roomId: string): 
 }
 
 export function createExecutionRoom(store: ExecutionRoomStore, nextRoom: ExecutionRoomState): ExecutionRoomStore {
-  if (store.activeRoomIds.length >= MAX_ACTIVE_ROOMS) throw new Error('ACTIVE_ROOM_LIMIT_REACHED');
   if (store.rooms[nextRoom.roomId]) return reopenExecutionRoom(store, nextRoom.roomId);
   return {
     ...store,

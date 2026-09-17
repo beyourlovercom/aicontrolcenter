@@ -29,8 +29,8 @@ function listIds(context,env){const dir=join(root(context,env),'requests');if(!e
 export function readNextStepRequest(context,id,env=process.env){let req,state;try{req=JSON.parse(readFileSync(requestFile(context,id,env),'utf8'));state=JSON.parse(readFileSync(stateFile(context,id,env),'utf8'));}catch{fail('NEXT_STEP_NOT_FOUND');}if(req?.schema!=='aicc.v5.next-step-request.v1'||state?.schema!=='aicc.v5.next-step-state.v1'||req.requestId!==id||state.requestId!==id||!NEXT_STEP_STATES.includes(state.state))fail('NEXT_STEP_INVALID');return {request:req,state};}
 export function latestNextStepForRoom(context,roomId,env=process.env){let latest=null;for(const id of listIds(context,env)){try{const value=readNextStepRequest(context,id,env);if(value.request.roomId!==roomId)continue;if(!latest||value.request.createdAt>latest.request.createdAt)latest=value;}catch{}}return latest;}
 export function createNextStepRequest(context,input,facts,env=process.env,options={}){
-  const expectedBranch=text(input?.branch,'NEXT_STEP_INPUT_INVALID',500);const expectedWorktree=text(input?.worktree,'NEXT_STEP_INPUT_INVALID',2000);
-  if(context.repository.branch!==expectedBranch||context.repository.path!==expectedWorktree)fail('NEXT_STEP_RUNTIME_DRIFT');
+  const expectedBranch=text(input?.branch,'NEXT_STEP_INPUT_INVALID',500);const expectedWorktree=text(input?.worktree,'NEXT_STEP_INPUT_INVALID',2000);const expectedHead=text(input?.head,'NEXT_STEP_INPUT_INVALID',100);
+  if(context.repository.branch!==expectedBranch||context.repository.path!==expectedWorktree||context.repository.head!==expectedHead)fail('NEXT_STEP_RUNTIME_DRIFT');
   if(context.repository.dirty)fail('NEXT_STEP_WORKTREE_DIRTY');
   if(!facts?.executorReady)fail('NEXT_STEP_EXECUTOR_NOT_READY');
   if(facts?.activeRun)fail('NEXT_STEP_EXECUTOR_BUSY');

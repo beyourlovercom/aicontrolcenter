@@ -24,7 +24,8 @@ assert(facts.executor.available && facts.executor.value?.readiness.ready === tru
 assert(!facts.prDelivery.available && facts.prDelivery.errorCode === 'CI_FACTS_UNAVAILABLE', 'PR/CI failure is isolated instead of fabricating facts');
 assert(facts.work.available, 'work facts remain available when PR facts fail');
 
-assert(roomRuntimeBinding('feat/v5.3', '/wt', facts) === 'MATCH', 'exact runtime binding reports MATCH');
+assert(roomRuntimeBinding('feat/v5.3', '/wt', facts, 'a'.repeat(40)) === 'MATCH', 'exact runtime binding reports MATCH');
+assert(roomRuntimeBinding('feat/v5.3', '/wt', facts, 'b'.repeat(40)) === 'DRIFT', 'HEAD drift is explicit');
 assert(roomRuntimeBinding('feature/other', '/worktrees/other', facts) === 'DRIFT', 'declared room binding drift is explicit');
 assert(roomRuntimeBinding('feat/v5.3', '/wt', null) === 'UNAVAILABLE', 'missing facts never fabricate a match');
 
