@@ -620,7 +620,7 @@
             <button class="composer-send" class:composer-send-disabled={nextStepLocked || !activeRoom.ui.draft.trim()} disabled={nextStepLocked || !activeRoom.ui.draft.trim()} type="button" aria-label="确认 Owner 指令并推进下一步" title="确认 Owner 指令并推进下一步" onclick={submitOwnerCommand}>↑</button>
           </div>
           <button class="next-step-button" class:next-step-disabled={nextStepLocked} disabled={nextStepLocked} type="button" onclick={advanceNextStep}>推进下一步</button>
-          <div class:next-step-blocked={!activeNextStepEligibility.ready} class="next-step-status"><strong>{nextStepStatusLabel(activeNextStep)}</strong><span>{activeNextStepEligibility.ready ? 'Exact GPT + Runtime Gate READY' : `Blocked · ${activeNextStepEligibility.blockers.join(' · ')}`}</span></div>
+          <div class:next-step-blocked={!activeNextStepEligibility.ready} class="next-step-status"><strong>{nextStepStatusLabel(activeNextStep, actualExecutor)}</strong><span>{activeNextStepEligibility.ready ? 'Exact GPT + Runtime Gate READY' : `Blocked · ${activeNextStepEligibility.blockers.join(' · ')}`}</span></div>
         </div>
       </main>
 
@@ -643,7 +643,7 @@
           <div class="provider-card">
             <div class="provider-card-row"><span class="provider-label">当前执行器</span><strong class="provider-value">{activeProviderDecision ? activeProviderDecision.displayLabel : '尚未路由'}</strong></div>
             {#if activeProviderDecision?.routingReason}<div class="provider-card-row"><span class="provider-label">路由原因</span><strong class="provider-value">{activeProviderDecision.routingReason}</strong></div>{/if}
-            <div class="provider-card-row"><span class="provider-label">当前状态</span><strong class="provider-value">{nextStepStatusLabel(activeNextStep)}</strong></div>
+            <div class="provider-card-row"><span class="provider-label">当前状态</span><strong class="provider-value">{nextStepStatusLabel(activeNextStep, actualExecutor)}</strong></div>
           </div>
 
           <div class="fact-stack">

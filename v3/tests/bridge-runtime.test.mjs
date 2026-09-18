@@ -45,6 +45,20 @@ test('automatic Bridge binding materializes deterministic WP and Task without Ow
   assert.throws(()=>submitBridgeRequest(f.context,{...auto,taskTitle:'Drifted Task'},f.env,f.bridgeOptions),e=>e.code==='BRIDGE_REQUEST_CONFLICT');
 });
 
+test('automatic Bridge binding reuses the same non-terminal Room Task across different request ids',()=>{
+  const f=fixture();
+  const firstInput={provider:'chatgpt-web',requestId:'30000000-0000-4000-8000-000000000088',conversationId:'conv-auto-1',originTurnId:'origin-auto-1',roomId:'room-1',workstreamId:'stream-1',workPackageTitle:'Assistant planned WP',taskTitle:'Assistant planned Task',instruction:'First diagnostic.\n'};
+  const first=submitBridgeRequest(f.context,firstInput,f.env,{...f.bridgeOptions,runUuid:()=> '10000000-0000-4000-8000-000000000088'});
+  completeRun(f,first.request.runId,'FIRST EXIT\n');
+  const secondInput={...firstInput,requestId:'30000000-0000-4000-8000-000000000089',conversationId:'conv-auto-2',originTurnId:'origin-auto-2',instruction:'Second diagnostic.\n'};
+  const second=submitBridgeRequest(f.context,secondInput,f.env,{...f.bridgeOptions,runUuid:()=> '10000000-0000-4000-8000-000000000089'});
+  assert.equal(second.request.taskId,first.request.taskId);
+  assert.equal(second.request.workPackageId,first.request.workPackageId);
+  const store=readWorkStore(f.context,f.env);
+  assert.equal(store.workPackages.filter(item=>item.roomId==='room-1'&&item.workstreamId==='stream-1'&&item.title==='Assistant planned WP'&&item.status!=='DONE').length,1);
+  assert.equal(store.tasks.filter(item=>item.roomId==='room-1'&&item.workstreamId==='stream-1'&&item.title==='Assistant planned Task'&&['TODO','IN_PROGRESS','BLOCKED'].includes(item.status)).length,1);
+});
+
 test('existing Task execution requires exact Task Name',()=>{
   const f=fixture();
   assert.throws(()=>submitBridgeRequest(f.context,input(f,{taskTitle:''}),f.env,f.bridgeOptions),e=>e.code==='BRIDGE_TASK_TITLE_REQUIRED');

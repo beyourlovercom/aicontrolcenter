@@ -49,12 +49,12 @@ export async function readNextStep(requestId: string, fetcher: typeof fetch = fe
   const value = await jsonResponse(await fetcher(`/api/next-step/requests/${encodeURIComponent(requestId)}`));
   return { request: value.request, state: value.state };
 }
-export function nextStepStatusLabel(value: NextStepProjection | null): string {
+export function nextStepStatusLabel(value: NextStepProjection | null, executor: { activeLease?: { runId?: string } | null } | null = null): string {
   if (!value) return 'READY';
   const state = value.state.state;
   if (state === 'PENDING') return '等待 Profile 12 Bridge';
   if (state === 'CLAIMED') return 'GPT 正在决定 exact next task';
-  if (state === 'EXECUTION_QUEUED') return '执行器已进入 managed execution';
+  if (state === 'EXECUTION_QUEUED') return executor?.activeLease?.runId ? '执行器正在运行' : '已路由 · 等待执行器状态';
   if (state === 'STOP_GATE') return 'STOP Gate · 等待 Owner';
   if (state === 'ABORTED_BEFORE_SEND') return '未发送 · 可安全重试';
   return 'UNCERTAIN · 禁止自动重放';
