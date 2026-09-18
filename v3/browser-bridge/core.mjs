@@ -99,7 +99,9 @@ export function parseNextStepDecision(value){
   if(!provider||!providerRoutingReason)fail('NEXT_STEP_DECISION_INVALID');
   if(workPackage.length>240||taskTitle.length>240||new TextEncoder().encode(instruction).length>60000)fail('NEXT_STEP_DECISION_INVALID');
   const forbidden=/(?:\bgit\s+merge\b|\bgh\s+pr\s+merge\b|\bmerge\s+(?:pr|pull request)\b|\bdeploy(?:ment)?\b|\bproduction\s+(?:apply|write|data|deploy)\b|(?:^|\s)--apply(?:\s|$)|\bdata\s+write\b)/i;
-  if(forbidden.test(instruction))return {decision:'STOP_GATE',gateReason:'NEXT_STEP_FORBIDDEN_OPERATION'};
+  const negatedConstraint=/^\s*(?:[-*]\s*)?(?:\d+[.)]\s*)?(?:do\s+not|don't|must\s+not|never|no\b)/i;
+  const actionableInstruction=instruction.split(/\r?\n/).filter(line=>!negatedConstraint.test(line)).join('\n');
+  if(forbidden.test(actionableInstruction))return {decision:'STOP_GATE',gateReason:'NEXT_STEP_FORBIDDEN_OPERATION'};
   return {decision:'EXECUTE',actionClass,provider,providerRoutingReason,workPackageTitle:workPackage,taskTitle,instruction};
 }
 
