@@ -1,6 +1,6 @@
 (()=>{
   'use strict';
-  const CONTENT_VERSION='3.8.24';
+  const CONTENT_VERSION='3.8.29';
   if(globalThis.__AICC_V3_BRIDGE_CONTENT_VERSION__===CONTENT_VERSION)return;
   try{globalThis.__AICC_V3_BRIDGE_CLEANUP__?.();}catch{}
   globalThis.__AICC_V3_BRIDGE_CONTENT_VERSION__=CONTENT_VERSION;
@@ -23,14 +23,26 @@
     const turn=node.closest('[data-testid^="conversation-turn-"],[data-message-id],article');
     return turn?.getAttribute('data-message-id')||turn?.getAttribute('data-testid')||`${role}-${index}`;
   }
+  let transientPlanner=false;
+  function normalizeTurnText(value){return String(value||'').replace(/\u00a0/g,' ').trim();}
+  function turnNodes(role){return [...document.querySelectorAll(`[data-testid^="conversation-turn-"][data-turn="${role}"]`)];}
+  function turnRecord(node,role,index){
+    if(!node)return null;
+    const content=node.querySelector(`[data-message-author-role="${role}"]`);
+    const text=normalizeTurnText(content?.innerText||content?.textContent||node.innerText||node.textContent).slice(0,6000);
+    const messageId=node.getAttribute('data-turn-id')||node.getAttribute('data-turn-id-container')||node.getAttribute('data-testid')||`${role}-${index}`;
+    return text?{messageId,role,text}:null;
+  }
+  function latestTurn(role){const nodes=turnNodes(role);const node=nodes.at(-1);return node?turnRecord(node,role,nodes.length-1):null;}
   function conversationSnapshot(){
+    if(transientPlanner)return null;
     const id=conversationId();if(!id)return null;
-    const nodes=[...document.querySelectorAll('[data-message-author-role="user"],[data-message-author-role="assistant"]')];
-    const messages=nodes.slice(-120).map((node,index)=>({
-      messageId:snapshotMessageId(node,index,node.getAttribute('data-message-author-role')||'unknown'),
-      role:node.getAttribute('data-message-author-role'),
-      text:(node.innerText||node.textContent||'').trim().slice(0,6000)
-    })).filter(item=>(item.role==='user'||item.role==='assistant')&&item.text);
+    const turns=[...document.querySelectorAll('[data-testid^="conversation-turn-"][data-turn]')];
+    let messages=turns.slice(-120).map((node,index)=>{const role=node.getAttribute('data-turn');return role==='user'||role==='assistant'?turnRecord(node,role,index):null;}).filter(Boolean);
+    if(!messages.length){
+      const nodes=[...document.querySelectorAll('[data-message-author-role="user"],[data-message-author-role="assistant"]')];
+      messages=nodes.slice(-120).map((node,index)=>({messageId:snapshotMessageId(node,index,node.getAttribute('data-message-author-role')||'unknown'),role:node.getAttribute('data-message-author-role'),text:normalizeTurnText(node.innerText||node.textContent).slice(0,6000)})).filter(item=>(item.role==='user'||item.role==='assistant')&&item.text);
+    }
     return {conversationId:id,conversationUrl:`https://chatgpt.com/c/${encodeURIComponent(id)}`,title:(document.title||'ChatGPT Conversation').replace(/\s*[-–—]\s*ChatGPT\s*$/i,'').trim()||'ChatGPT Conversation',capturedAt:new Date().toISOString(),messages};
   }
   function message(type,payload={},timeout=5000){
@@ -64,60 +76,6 @@
   const snapshotHeartbeat=setInterval(scheduleSnapshot,1500);
 
 
-  const PLANNER_STYLE_ID='aicc-planner-transport-style';
-  const PLANNER_BODY_ATTR='data-aicc-planner-body';
-  const PLANNER_SUMMARY_ATTR='data-aicc-planner-summary';
-  function ensurePlannerStyle(){
-    if(document.getElementById(PLANNER_STYLE_ID))return;
-    const style=document.createElement('style');style.id=PLANNER_STYLE_ID;
-    style.textContent=[
-      '['+PLANNER_BODY_ATTR+'="collapsed"]{display:none!important}',
-      '['+PLANNER_SUMMARY_ATTR+']{display:flex!important;align-items:center!important;gap:10px!important;min-height:42px!important;margin:6px 0!important;padding:0 14px!important;color:#17382d!important;background:linear-gradient(90deg,rgba(241,248,244,.98),rgba(249,252,250,.98))!important;border:1px solid rgba(0,98,65,.14)!important;border-radius:12px!important;font:12px/1.2 system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif!important}',
-      '['+PLANNER_SUMMARY_ATTR+'] strong{font-weight:700!important;color:#006241!important}',
-      '['+PLANNER_SUMMARY_ATTR+'] span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#47554f!important}',
-      '['+PLANNER_SUMMARY_ATTR+'] button{margin-left:auto!important;border:0!important;background:transparent!important;color:#006241!important;font:600 12px system-ui!important;cursor:pointer!important;padding:6px 8px!important;border-radius:8px!important}'
-    ].join('');
-    document.documentElement.appendChild(style);
-  }
-  function plannerKind(text,role){
-    const value=(text||'').trim();
-    if(role==='user'&&value.includes('AICC V5.4 NEXT-STEP REQUEST'))return 'request';
-    if(role==='assistant'&&value.includes('AICC_NEXT_STEP_V1'))return 'response';
-    return null;
-  }
-  function plannerSummaryText(text,kind){
-    if(kind==='request'){
-      const room=text.match(/^name:\s*(.+)$/mi)?.[1]?.trim()||'Execution Room';
-      const task=text.match(/^\s*"title":\s*"([^"]+)"\s*,?$/mi)?.[1]?.trim();
-      return task?room+' · '+task:room;
-    }
-    const action=text.match(/^AICC_ACTION_CLASS:\s*(.+)$/mi)?.[1]?.trim();
-    const provider=text.match(/^AICC_PROVIDER:\s*(.+)$/mi)?.[1]?.trim();
-    const task=text.match(/^AICC_TASK:\s*(.+)$/mi)?.[1]?.trim();
-    return [action,provider,task].filter(Boolean).join(' · ')||'Planner decision';
-  }
-  function collapsePlannerTurns(){
-    ensurePlannerStyle();
-    const nodes=[...document.querySelectorAll('[data-message-author-role="user"],[data-message-author-role="assistant"]')];
-    for(const node of nodes){
-      const role=node.getAttribute('data-message-author-role')||'';
-      const text=(node.innerText||node.textContent||'').trim();
-      const kind=plannerKind(text,role);if(!kind||node.getAttribute(PLANNER_BODY_ATTR))continue;
-      const parent=node.parentElement;if(!parent)continue;
-      node.setAttribute(PLANNER_BODY_ATTR,'collapsed');
-      const bar=document.createElement('div');bar.setAttribute(PLANNER_SUMMARY_ATTR,'1');
-      const badge=document.createElement('strong');badge.textContent=kind==='request'?'AICC Planner Request':'AICC Planner Decision';
-      const summary=document.createElement('span');summary.textContent=plannerSummaryText(text,kind);
-      const toggle=document.createElement('button');toggle.type='button';toggle.textContent='展开协议';
-      toggle.addEventListener('click',event=>{
-        event.preventDefault();event.stopPropagation();
-        const collapsed=node.getAttribute(PLANNER_BODY_ATTR)==='collapsed';
-        node.setAttribute(PLANNER_BODY_ATTR,collapsed?'expanded':'collapsed');
-        toggle.textContent=collapsed?'收起协议':'展开协议';
-      });
-      bar.append(badge,summary,toggle);parent.insertBefore(bar,node);
-    }
-  }
 
   let modal=null;
   function ensureModal(){
@@ -240,7 +198,7 @@
     }
   }
 
-  const observer=new MutationObserver(()=>{injectButtons();collapsePlannerTurns();scheduleSnapshot();});observer.observe(document.documentElement,{childList:true,subtree:true});injectButtons();collapsePlannerTurns();scheduleSnapshot();
+  const observer=new MutationObserver(()=>{injectButtons();scheduleSnapshot();});observer.observe(document.documentElement,{childList:true,subtree:true});injectButtons();scheduleSnapshot();
   function composer(){return document.querySelector('#prompt-textarea');}
   function composerValue(node){
     if(!node)return null;
@@ -259,7 +217,8 @@
     if(composerValue(node)!==content){node.textContent=content;node.dispatchEvent(new InputEvent('input',{bubbles:true,inputType:'insertText',data:content}));}
     return composerValue(node)===content;
   }
-  function userTurnCount(){return document.querySelectorAll('[data-message-author-role="user"]').length;}
+  function userTurnCount(){const turns=turnNodes('user');return turns.length||document.querySelectorAll('[data-message-author-role="user"]').length;}
+  function latestTurnMatches(role,beforeId,expectedText){const turn=latestTurn(role);if(!turn||turn.messageId===beforeId)return null;return normalizeTurnText(turn.text)===normalizeTurnText(expectedText)?turn:null;}
   async function waitFor(check,timeout=5000,step=100){
     const end=Date.now()+timeout;while(Date.now()<end){const value=check();if(value)return value;await new Promise(resolve=>setTimeout(resolve,step));}return null;
   }
@@ -288,6 +247,11 @@
       return buttons.find(button=>(button.getAttribute('type')||'').toLowerCase()==='submit')||null;
     },8000,100);
   }
+  function submitComposer(box,button){
+    const form=box?.closest('form');
+    if(form&&typeof form.requestSubmit==='function'){form.requestSubmit(button);return true;}
+    button.click();return true;
+  }
   async function deliverExact(message){
     if(conversationId()!==message.conversationId)return {outcome:'ABORTED_BEFORE_SEND',reason:'BRIDGE_CONVERSATION_MISMATCH'};
     if(typeof message.content!=='string'||await sha256(message.content)!==message.contentSha256)return {outcome:'ABORTED_BEFORE_SEND',reason:'BRIDGE_CONTENT_HASH_MISMATCH'};
@@ -296,32 +260,41 @@
     if(conversationId()!==message.conversationId){clearComposer(box,message.content);return {outcome:'ABORTED_BEFORE_SEND',reason:'BRIDGE_CONVERSATION_MISMATCH'};}
     const button=await sendButton(box);if(!button){clearComposer(box,message.content);return {outcome:'ABORTED_BEFORE_SEND',reason:'BRIDGE_SEND_CONTROL_NOT_FOUND'};}
     if(composerValue(box)!==message.content){clearComposer(box,message.content);return {outcome:'ABORTED_BEFORE_SEND',reason:'BRIDGE_COMPOSER_CONTENT_DRIFT'};}
-    const before=userTurnCount();
-    try{button.click();}catch{return {outcome:'UNCERTAIN',reason:'BRIDGE_SEND_CLICK_UNCERTAIN'};}
-    const proved=await waitFor(()=>conversationId()===message.conversationId&&userTurnCount()>before&&composerValue(box)!==message.content,12000,150);
-    return proved?{outcome:'DELIVERED'}:{outcome:'UNCERTAIN',reason:'BRIDGE_SEND_PROOF_UNAVAILABLE'};
+    const beforeTurn=latestTurn('user');
+    try{submitComposer(box,button);}catch{return {outcome:'UNCERTAIN',reason:'BRIDGE_SEND_SUBMIT_UNCERTAIN'};}
+    const proved=await waitFor(()=>conversationId()===message.conversationId&&latestTurnMatches('user',beforeTurn?.messageId||null,message.content),12000,150);
+    return proved?{outcome:'DELIVERED',providerMessageId:proved.messageId}:{outcome:'UNCERTAIN',reason:'BRIDGE_SEND_PROOF_UNAVAILABLE'};
   }
-  function assistantNodes(){return [...document.querySelectorAll('[data-message-author-role="assistant"]')];}
+  async function submitTransientPrompt(message){
+    if(typeof message.content!=='string'||await sha256(message.content)!==message.contentSha256)return {outcome:'ABORTED_BEFORE_SEND',reason:'BRIDGE_CONTENT_HASH_MISMATCH'};
+    const box=await waitFor(()=>composer(),20000,100);if(!box)return {outcome:'ABORTED_BEFORE_SEND',reason:'BRIDGE_COMPOSER_NOT_FOUND'};
+    if(!writeComposer(box,message.content))return {outcome:'ABORTED_BEFORE_SEND',reason:'BRIDGE_COMPOSER_EXACT_CONTENT_UNAVAILABLE'};
+    const button=await sendButton(box);if(!button){clearComposer(box,message.content);return {outcome:'ABORTED_BEFORE_SEND',reason:'BRIDGE_SEND_CONTROL_NOT_FOUND'};}
+    if(composerValue(box)!==message.content){clearComposer(box,message.content);return {outcome:'ABORTED_BEFORE_SEND',reason:'BRIDGE_COMPOSER_CONTENT_DRIFT'};}
+    const beforeAssistant=latestTurn('assistant');
+    transientPlanner=true;
+    try{submitComposer(box,button);}catch{return {outcome:'UNCERTAIN',reason:'BRIDGE_SEND_SUBMIT_UNCERTAIN'};}
+    return {outcome:'SUBMITTED',beforeAssistantId:beforeAssistant?.messageId||null};
+  }
+
   function completeNextStepProtocol(text){
     if(typeof text!=='string'||!text.includes('AICC_NEXT_STEP_V1')||!/^AICC_DECISION:\s*(EXECUTE|STOP_GATE)\s*$/mi.test(text)||!/^AICC_ACTION_CLASS:\s*(CODE_CHANGE|TEST_ONLY|STOP_GATE)\s*$/mi.test(text)||!/^AICC_GATE_REASON:/mi.test(text))return false;
     if(/^AICC_DECISION:\s*EXECUTE\s*$/mi.test(text)&&!/^AICC_PROVIDER:\s*(CLAUDE_CODE|CODEX)\s*$/mi.test(text))return false;
     return /^AICC_DECISION:\s*STOP_GATE\s*$/mi.test(text)||(/AICC_INSTRUCTION_BEGIN/i.test(text)&&/AICC_INSTRUCTION_END/i.test(text));
   }
-  async function planNextStep(message){
-    if(conversationId()!==message.conversationId)return {outcome:'ABORTED_BEFORE_SEND',reason:'BRIDGE_CONVERSATION_MISMATCH'};
-    const before=assistantNodes().length;
-    const sent=await deliverExact(message);if(sent.outcome!=='DELIVERED')return sent;
-    const response=await waitFor(()=>{
-      const nodes=assistantNodes();if(nodes.length<=before)return null;
-      const text=assistantText(nodes.at(-1));return completeNextStepProtocol(text)?text:null;
-    },120000,300);
-    return response?{outcome:'DELIVERED',assistantText:response}:{outcome:'UNCERTAIN',reason:'NEXT_STEP_GPT_DECISION_UNPROVEN'};
+  function readPlannerDecision(afterMessageId){
+    transientPlanner=true;
+    const turn=latestTurn('assistant');
+    if(!turn||turn.messageId===afterMessageId||!completeNextStepProtocol(turn.text))return {outcome:'PENDING'};
+    return {outcome:'DELIVERED',assistantText:turn.text,assistantMessageId:turn.messageId};
   }
+
 
 
   function bridgeListener(message,_sender,sendResponse){
     if(message?.type==='AICC_READ_SNAPSHOT'){sendResponse({ok:true,snapshot:conversationSnapshot()});return false;}
-    if(message?.type==='AICC_PLAN_NEXT_STEP'){void planNextStep(message).then(sendResponse).catch(()=>sendResponse({outcome:'UNCERTAIN',reason:'NEXT_STEP_CONTENT_ADAPTER_ERROR'}));return true;}
+    if(message?.type==='AICC_SUBMIT_TRANSIENT'){void submitTransientPrompt(message).then(sendResponse).catch(()=>sendResponse({outcome:'UNCERTAIN',reason:'NEXT_STEP_CONTENT_ADAPTER_ERROR'}));return true;}
+    if(message?.type==='AICC_READ_PLANNER_DECISION'){sendResponse(readPlannerDecision(message.afterMessageId??null));return false;}
     if(message?.type!=='AICC_DELIVER_EXACT')return false;
     void deliverExact(message).then(sendResponse).catch(()=>sendResponse({outcome:'UNCERTAIN',reason:'BRIDGE_CONTENT_ADAPTER_ERROR'}));
     return true;
@@ -332,9 +305,6 @@
     try{chrome.runtime.onMessage.removeListener(bridgeListener);}catch{}
     clearTimeout(snapshotTimer);clearInterval(snapshotHeartbeat);
     for(const stale of document.querySelectorAll(`button[${BUTTON_ATTR}]`))stale.remove();
-    for(const bar of document.querySelectorAll('['+PLANNER_SUMMARY_ATTR+']'))bar.remove();
-    for(const body of document.querySelectorAll('['+PLANNER_BODY_ATTR+']'))body.removeAttribute(PLANNER_BODY_ATTR);
-    document.getElementById(PLANNER_STYLE_ID)?.remove();
     document.getElementById('aicc-v3-bridge-modal-host')?.remove();
   };
 })();

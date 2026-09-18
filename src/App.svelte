@@ -20,11 +20,12 @@
     type ExecutionRoomStore,
     type RoadmapSection
   } from './lib/executionRoomState';
-  import { displayMessages, readChatgptSnapshots, snapshotForConversation, type ChatgptConversationSnapshot } from './lib/chatgptProjection';
+  import { readChatgptSnapshots, snapshotForConversation, type ChatgptConversationSnapshot } from './lib/chatgptProjection';
   import { readExecutorFacts, readRoomExecutorFacts, roomRuntimeBinding, type ExecutorFactsProjection } from './lib/executorFacts';
   import { cancelPendingNextStepForRoom, nextStepEligibility, nextStepStatusLabel, readNextStep, submitNextStep, type NextStepProjection } from './lib/nextStep';
   import { resolveProviderDecision } from './lib/providerPresentation';
   import { projectRoomProgress } from './lib/roomProgress';
+  import { submitHumanChat } from './lib/humanChat';
   import { readExternalProjects, type ExternalProjectCatalog } from './lib/externalProjects';
 
   let roomStore: ExecutionRoomStore = createDefaultExecutionRoomStore();
@@ -38,6 +39,7 @@
   const factsRefreshInFlight = new Set<string>();
   let nextSteps: Record<string, NextStepProjection> = {};
   let nextStepBusyRoomId: string | null = null;
+  let humanChatBusyRoomId: string | null = null;
 
   let projectPickerOpen = false;
   let projectPickerBusy = false;
@@ -55,7 +57,6 @@
   $: rightPanelCollapsed = activeRoom?.ui.rightPanelCollapsed ?? false;
   $: collapsed = activeRoom?.ui.collapsedSections ?? { blueprint: false, wp: false, pr: false, task: false, gate: false };
   $: activeSnapshot = snapshotForConversation(chatgptSnapshots, activeRoom?.gptConversationBinding ?? null);
-  $: activeDisplayMessages = activeSnapshot ? displayMessages(activeSnapshot.messages) : [];
   $: boundRoomCount = allRooms.filter((room) => Boolean(room.gptConversationBinding)).length;
   $: executorFacts = activeRoom && activeRoom.repo !== 'PENDING_PROJECT_REPO_BINDING' ? (roomExecutorFacts[activeRoom.roomId] ?? null) : globalExecutorFacts;
   $: executorFactsError = activeRoom ? (roomExecutorErrors[activeRoom.roomId] ?? '') : '';
@@ -100,38 +101,6 @@
       if (factsRefreshInFlight.has(room.roomId)) return;
       factsRefreshInFlight.add(room.roomId);
       try {
-        if (room.repo !== 'PENDING_PROJECT_REPO_BINDING') {
-          const localNextStep = nextSteps[room.roomId];
-          const busyNextStep = ['PENDING','CLAIMED'].includes(localNextStep?.state.state ?? '');
-          const activeLease = roomExecutorFacts[room.roomId]?.executor.value?.activeLease?.runId ?? null;
-          if (!busyNextStep && !activeLease) {
-            const catalog = await readExternalProjects();
-            if (cancelled) return;
-            externalCatalog = catalog;
-            const refreshed = refreshExternalRoomRuntime(roomStore, room.roomId, catalog);
-            if (refreshed.changed) {
-              const pending = await cancelPendingNextStepForRoom(room.roomId);
-              if (cancelled) return;
-              if (pending.claimed.length) {
-                roomExecutorErrors = {...roomExecutorErrors,[room.roomId]:'CANONICAL_REFRESH_BLOCKED_BY_CLAIMED_NEXT_STEP'};
-                return;
-              }
-              commit(refreshed.store);
-              const { [room.roomId]: _facts, ...remainingFacts } = roomExecutorFacts;
-              roomExecutorFacts = remainingFacts;
-              const { [room.roomId]: _error, ...remainingErrors } = roomExecutorErrors;
-              roomExecutorErrors = remainingErrors;
-              if (nextSteps[room.roomId] || pending.cancelled.length) {
-                const { [room.roomId]: _stale, ...rest } = nextSteps;
-                nextSteps = rest;
-              }
-              const updated = refreshed.store.rooms[room.roomId];
-              announce(`Room canonical 已刷新：${updated.branch} @ ${shortSha(updated.baseSha)}`);
-              window.setTimeout(() => window.dispatchEvent(new CustomEvent('aicc-v55-refresh-facts')), 0);
-              return;
-            }
-          }
-        }
         if (room.repo === 'PENDING_PROJECT_REPO_BINDING') {
           const facts = await readExecutorFacts();
           if (cancelled) return;
@@ -355,30 +324,34 @@
     announce('NEXT_STEP_WATCH_TIMEOUT · 请求仍保留在 backend，不会自动重放。');
   }
 
-  async function submitActiveNextStep(draft: string, clearDraftAfterFreeze = false, ownerCommand = false) {
+  async function submitActiveNextStep() {
     if (!activeRoom || nextStepBusyRoomId) return;
     const room = activeRoom;
     const gate = nextStepEligibility(room, executorFacts, activeSnapshot);
     if (!gate.ready) { announce(`Next-Step blocked：${gate.blockers.join(' · ')}`); return; }
     const roomId = room.roomId; nextStepBusyRoomId = roomId;
     try {
-      const projection = await submitNextStep(room, draft); setNextStep(roomId, projection);
-      if (clearDraftAfterFreeze) commit(patchExecutionRoomUi(roomStore, roomId, { draft: '' }));
-      announce(ownerCommand ? 'Owner 指令已冻结 · 等待 Profile 12 GPT planner' : 'Next-Step 已冻结 · 等待 Profile 12 GPT planner');
+      const projection = await submitNextStep(room, ''); setNextStep(roomId, projection);
+      announce('Next-Step 已提交到后台 Planner');
+      window.postMessage({ type: 'AICC_BRIDGE_WAKE', kind: 'next-step' }, window.location.origin);
       void watchNextStep(roomId, projection.request.requestId);
     } catch (error) {
       announce(error instanceof Error ? error.message : String(error));
     } finally { nextStepBusyRoomId = null; }
   }
 
-  async function advanceNextStep() {
-    if (!activeRoom) return;
-    await submitActiveNextStep(activeRoom.ui.draft);
-  }
+  async function advanceNextStep() { await submitActiveNextStep(); }
 
   async function submitOwnerCommand() {
-    if (!activeRoom || !activeRoom.ui.draft.trim() || nextStepLocked) return;
-    await submitActiveNextStep(activeRoom.ui.draft, true, true);
+    if (!activeRoom || !activeRoom.ui.draft.trim() || humanChatBusyRoomId) return;
+    const room = activeRoom; const draft = room.ui.draft; humanChatBusyRoomId = room.roomId;
+    try {
+      await submitHumanChat(room, draft);
+      commit(patchExecutionRoomUi(roomStore, room.roomId, { draft: '' }));
+      window.postMessage({ type: 'AICC_BRIDGE_WAKE', kind: 'human-chat' }, window.location.origin);
+      announce('消息已发送到绑定 ChatGPT 会话');
+    } catch (error) { announce(error instanceof Error ? error.message : String(error)); }
+    finally { humanChatBusyRoomId = null; }
   }
 
   function ownerCommandKeydown(event: KeyboardEvent) {
@@ -597,10 +570,10 @@
               <div class="notice-icon">✦</div>
               <div><strong>真实 ChatGPT Transcript · {activeSnapshot.title}</strong><p>conversationId：{activeSnapshot.conversationId} · snapshot {capturedLabel(activeSnapshot.capturedAt)} · {activeSnapshot.messages.length} 条可见消息。内容来自 Profile 12 页面 DOM，不使用 OpenAI API。</p></div>
             </div>
-            {#each activeDisplayMessages as message}
-              <div class="chat-preview" class:user-message={message.role === 'user'} class:machine-message={message.machineTransport}>
+            {#each activeSnapshot.messages as message}
+              <div class="chat-preview" class:user-message={message.role === 'user'}>
                 <span class:assistant={message.role === 'assistant'} class="message-avatar">{message.role === 'user' ? '你' : '✦'}</span>
-                <div><strong>{message.label}</strong><p class="projected-message">{message.text}</p></div>
+                <div><strong>{message.role === 'user' ? 'You · Chrome' : 'ChatGPT · Chrome'}</strong><p class="projected-message">{message.text}</p></div>
               </div>
             {/each}
           {:else if activeRoom.gptConversationBinding}
@@ -616,8 +589,8 @@
         <div class="composer-shell">
           <div class="composer-input">
             <span class="composer-plus">＋</span>
-            <input class="composer-draft" value={activeRoom.ui.draft} oninput={updateDraft} onkeydown={ownerCommandKeydown} placeholder="可选：补充本轮 Owner 指令；Enter 或 ↑ 确认并推进" aria-label="Owner 指令" />
-            <button class="composer-send" class:composer-send-disabled={nextStepLocked || !activeRoom.ui.draft.trim()} disabled={nextStepLocked || !activeRoom.ui.draft.trim()} type="button" aria-label="确认 Owner 指令并推进下一步" title="确认 Owner 指令并推进下一步" onclick={submitOwnerCommand}>↑</button>
+            <input class="composer-draft" value={activeRoom.ui.draft} oninput={updateDraft} onkeydown={ownerCommandKeydown} placeholder="输入消息，Enter 或 ↑ 发送到 ChatGPT" aria-label="聊天消息" />
+            <button class="composer-send" class:composer-send-disabled={Boolean(humanChatBusyRoomId) || !activeRoom.ui.draft.trim() || !activeRoom.gptConversationBinding} disabled={Boolean(humanChatBusyRoomId) || !activeRoom.ui.draft.trim() || !activeRoom.gptConversationBinding} type="button" aria-label="发送到 ChatGPT" title="发送消息" onclick={submitOwnerCommand}>↑</button>
           </div>
           <button class="next-step-button" class:next-step-disabled={nextStepLocked} disabled={nextStepLocked} type="button" onclick={advanceNextStep}>推进下一步</button>
           <div class:next-step-blocked={!activeNextStepEligibility.ready} class="next-step-status"><strong>{nextStepStatusLabel(activeNextStep, actualExecutor)}</strong><span>{activeNextStepEligibility.ready ? 'Exact GPT + Runtime Gate READY' : `Blocked · ${activeNextStepEligibility.blockers.join(' · ')}`}</span></div>

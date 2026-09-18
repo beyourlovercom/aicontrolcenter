@@ -12,6 +12,7 @@ import {ensureBridgeCredential,listBridgeRequestIds,readBridgeRequestBinding,ver
 import {bridgeProjectionAsync,claimBridgeDeliveryAsync,reconcileBridgeStartup,recordBridgeReceipt,submitBridgeRequestAsync} from './lib/bridge-runtime.mjs';
 import {createChatgptProjectionStore} from './lib/chatgpt-projection.mjs';
 import {assertNextStepLocal,cancelPendingNextStepForRoom,claimNextStep,createNextStepRequest,readNextStepRequest,reconcileNextStepStartup,recordNextStepReceipt} from './lib/next-step-runtime.mjs';
+import {createHumanChatRequest,claimHumanChat,readHumanChatRequest,reconcileHumanChatStartup,recordHumanChatReceipt} from './lib/human-chat-runtime.mjs';
 import {RemoteRunnerClient,remoteRunnerBaseUrl,remoteRepositoryRoot} from './lib/remote-runner-client.mjs';
 import {externalProjectCatalog} from './lib/external-project-registry.mjs';
 
@@ -122,6 +123,7 @@ function nextStepErrorStatus(code){
   return 503;
 }
 function nextStepError(res,error){const errorCode=error?.code||'NEXT_STEP_INVALID';return json(res,nextStepErrorStatus(errorCode),{ok:false,errorCode});}
+function humanChatError(res,error){const errorCode=error?.code||'HUMAN_CHAT_INVALID';const status=errorCode==='HUMAN_CHAT_NOT_FOUND'?404:['HUMAN_CHAT_INPUT_INVALID','REQUEST_JSON_INVALID'].includes(errorCode)?400:['HUMAN_CHAT_CLAIM_MISMATCH','HUMAN_CHAT_RECEIPT_INVALID'].includes(errorCode)?409:503;return json(res,status,{ok:false,errorCode});}
 function requireBridgeAuth(req,env,options={}){
   const remote=req.socket?.remoteAddress||'';
   if(!['127.0.0.1','::1','::ffff:127.0.0.1'].includes(remote)){const error=new Error('BRIDGE_AUTH_REQUIRED');error.code='BRIDGE_AUTH_REQUIRED';throw error;}
@@ -188,6 +190,7 @@ export function createAiccV3Server(options={}){
     if(!seen.size){try{const context=loadProjectContext(env);reconcileBridgeStartup(context,env,bridgeOptions);}catch{}}
   }catch{}
   try{reconcileNextStepStartup(null,env,options.nextStepOptions||{});}catch{}
+  try{reconcileHumanChatStartup(env,options.humanChatOptions||{});}catch{}
   return createHttpServer(async(req,res)=>{
     const url=new URL(req.url||'/',`http://${req.headers.host||'localhost'}`);
     if(handleExtensionCors(req,res,url,env))return;
@@ -294,6 +297,15 @@ export function createAiccV3Server(options={}){
       catch(error){return nextStepError(res,error);}
     }
 
+    if(req.method==='POST'&&url.pathname==='/api/chat/requests'){
+      try{assertNextStepLocal(req.socket?.remoteAddress||'');const input=await readJson(req,16384);return json(res,201,{ok:true,...createHumanChatRequest(input,env,options.humanChatOptions||{})});}
+      catch(error){return humanChatError(res,error);}
+    }
+    const humanChatRequest=url.pathname.match(/^\/api\/chat\/requests\/([^/]+)$/);
+    if(req.method==='GET'&&humanChatRequest){
+      try{assertNextStepLocal(req.socket?.remoteAddress||'');return json(res,200,{available:true,...readHumanChatRequest(decodeURIComponent(humanChatRequest[1]),env)});}
+      catch(error){return humanChatError(res,error);}
+    }
     if(req.method==='GET'&&url.pathname==='/api/chatgpt/snapshots'){
       return json(res,200,{available:true,provider:'chatgpt-web',snapshots:chatgptProjection.list()});
     }
@@ -314,6 +326,15 @@ export function createAiccV3Server(options={}){
     if(req.method==='POST'&&url.pathname==='/api/bridge/snapshots'){
       try{const input=await readJson(req,524288);return json(res,200,{ok:true,snapshot:chatgptProjection.upsert(input)});}
       catch(error){return json(res,400,{ok:false,errorCode:error?.code||'CHATGPT_SNAPSHOT_INVALID'});}
+    }
+    if(req.method==='POST'&&url.pathname==='/api/bridge/chat/claim'){
+      try{const input=await readJson(req);return json(res,200,{ok:true,claimed:claimHumanChat(input,env,options.humanChatOptions||{})});}
+      catch(error){return humanChatError(res,error);}
+    }
+    const humanChatReceipt=url.pathname.match(/^\/api\/bridge\/chat\/([^/]+)\/receipt$/);
+    if(req.method==='POST'&&humanChatReceipt){
+      try{const input=await readJson(req,16384);return json(res,200,{ok:true,...recordHumanChatReceipt(decodeURIComponent(humanChatReceipt[1]),input,env,options.humanChatOptions||{})});}
+      catch(error){return humanChatError(res,error);}
     }
     if(req.method==='POST'&&url.pathname==='/api/bridge/next-step/claim'){
       try{const input=await readJson(req);const claimed=claimNextStep(null,input,env,options.nextStepOptions||{});return json(res,200,{ok:true,claimed});}
