@@ -1,6 +1,6 @@
 (()=>{
   'use strict';
-  const CONTENT_VERSION='3.8.20';
+  const CONTENT_VERSION='3.8.21';
   if(globalThis.__AICC_V3_BRIDGE_CONTENT_VERSION__===CONTENT_VERSION)return;
   try{globalThis.__AICC_V3_BRIDGE_CLEANUP__?.();}catch{}
   globalThis.__AICC_V3_BRIDGE_CONTENT_VERSION__=CONTENT_VERSION;
@@ -235,7 +235,7 @@
     const button=await sendButton(box);if(!button){clearComposer(box,message.content);return {outcome:'ABORTED_BEFORE_SEND',reason:'BRIDGE_SEND_CONTROL_NOT_FOUND'};}
     if(composerValue(box)!==message.content){clearComposer(box,message.content);return {outcome:'ABORTED_BEFORE_SEND',reason:'BRIDGE_COMPOSER_CONTENT_DRIFT'};}
     const before=userTurnCount();
-    try{button.click();}catch{return {outcome:'UNCERTAIN',reason:'BRIDGE_SEND_CLICK_UNCERTAIN'};}
+    try{const form=box?.closest('form');if(form&&typeof form.requestSubmit==='function')form.requestSubmit(button);else button.click();}catch{return {outcome:'UNCERTAIN',reason:'BRIDGE_SEND_CLICK_UNCERTAIN'};}
     const proved=await waitFor(()=>conversationId()===message.conversationId&&userTurnCount()>before&&composerValue(box)!==message.content,12000,150);
     return proved?{outcome:'DELIVERED'}:{outcome:'UNCERTAIN',reason:'BRIDGE_SEND_PROOF_UNAVAILABLE'};
   }
