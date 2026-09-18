@@ -78,6 +78,14 @@ async function existingConversationTab(input){
   }
   const tabs=await chrome.tabs.query({url:'https://chatgpt.com/*'});return tabs.find(tab=>sameConversation(input.conversationId,tab.url||''))||null;
 }
+async function ensureHumanConversationTab(input){
+  const existing=await existingConversationTab(input);if(existing)return existing;
+  const created=await chrome.tabs.create({url:input.conversationUrl,active:false});
+  const loaded=await waitTabComplete(created.id);
+  if(!sameConversation(input.conversationId,loaded.url||'')){try{await chrome.tabs.remove(created.id);}catch{}throw new Error('BRIDGE_CONVERSATION_MISMATCH');}
+  await installContentAdapter(loaded.id);
+  return loaded;
+}
 const PLANNER_CONVERSATIONS_KEY='aiccPlannerConversationsV1';
 const plannerTabIds=new Set();
 async function waitConversationTab(tabId,timeout=20000){
@@ -226,10 +234,12 @@ const humanChatInFlight=new Set();let humanChatClaimLoopRunning=false;
 async function processHumanChatClaim(claimed){
   const requestValue=claimed.request;const claimId=claimed.state.claim.claimId;const requestId=requestValue.requestId;
   try{
-    const tab=await existingConversationTab(requestValue);
-    if(!tab){await api.humanChatReceipt(requestId,{claimId,outcome:'ABORTED_BEFORE_SEND',errorCode:'HUMAN_CHAT_BOUND_TAB_NOT_OPEN'});return;}
+    const tab=await ensureHumanConversationTab(requestValue);
     let result;
-    try{result=await chrome.tabs.sendMessage(tab.id,{type:'AICC_DELIVER_EXACT',conversationId:requestValue.conversationId,content:requestValue.content,contentSha256:requestValue.contentSha256});}
+    try{
+      await installContentAdapter(tab.id);
+      result=await chrome.tabs.sendMessage(tab.id,{type:'AICC_DELIVER_EXACT',conversationId:requestValue.conversationId,content:requestValue.content,contentSha256:requestValue.contentSha256});
+    }
     catch{result={outcome:'UNCERTAIN',reason:'HUMAN_CHAT_DELIVERY_UNCERTAIN'};}
     if(result?.outcome==='DELIVERED')await api.humanChatReceipt(requestId,{claimId,outcome:'DELIVERED'});
     else if(result?.outcome==='ABORTED_BEFORE_SEND')await api.humanChatReceipt(requestId,{claimId,outcome:'ABORTED_BEFORE_SEND',errorCode:result.reason||'HUMAN_CHAT_ABORTED_BEFORE_SEND'});
