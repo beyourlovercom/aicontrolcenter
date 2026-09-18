@@ -11,4 +11,5 @@ const fakeFetch = async () => new Response(JSON.stringify({ available: true, pro
 assert.equal((await readChatgptSnapshots(fakeFetch as typeof fetch)).length, 1);
 const badFetch = async () => new Response('{}', { status: 200, headers: { 'content-type': 'application/json' } });
 await assert.rejects(() => readChatgptSnapshots(badFetch as typeof fetch), /CHATGPT_PROJECTION_INVALID/);
+
 console.log('chatgptProjection.test.ts PASS');

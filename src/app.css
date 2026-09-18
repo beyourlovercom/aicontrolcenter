@@ -185,14 +185,32 @@ button { color: inherit; }
   margin: 0 auto 10px;
   padding: 0 12px;
   display: grid;
-  grid-template-columns: 28px 1fr 28px;
+  grid-template-columns: 28px minmax(0, 1fr) 34px;
   align-items: center;
   border: 1px solid #dce4de;
   border-radius: 16px;
   background: #fff;
   box-shadow: 0 5px 20px rgba(41, 72, 55, .06);
 }
-.composer-plus, .composer-mic { color: #333; font-size: 18px; text-align: center; }
+.composer-plus { color: #333; font-size: 18px; text-align: center; }
+.composer-draft { width: 100%; min-width: 0; border: 0; outline: 0; background: transparent; color: #111; font: inherit; }
+.composer-send {
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 10px;
+  color: #fff;
+  background: #006241;
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+}
+.composer-send:hover:not(:disabled) { background: #004f34; }
+.composer-send:focus-visible { outline: 2px solid #006241; outline-offset: 2px; }
+.composer-send:disabled, .composer-send-disabled { color: #89928d; background: #eef2ef; cursor: default; }
 .composer-placeholder { color: #555; font-size: 12.5px; }
 .next-step-button {
   display: block;

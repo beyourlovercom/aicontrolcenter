@@ -37,6 +37,11 @@ test('div and pre blocks preserve unicode punctuation and spacing',()=>{
   assert.equal(read(node),value);
 });
 
+test('ProseMirror NBSP artifacts normalize back to ordinary spaces',()=>{
+  assert.equal(read(composerRoot(el('p',[text('a\u00a0b')]))),'a b');
+  assert.equal(read(composerRoot(el('p',[text('\u00a0\u00a0"runtime": {')]))),'  "runtime": {');
+});
+
 test('serializer does not trim, collapse, or normalize character drift',()=>{
   assert.equal(read(composerRoot(el('p',[text(' x  y ')]))),' x  y ');
   assert.notEqual(read(composerRoot(el('p',[text('x y')]))),'x  y');

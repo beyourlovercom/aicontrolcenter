@@ -15,4 +15,7 @@ assert(nextStepEligibility(room,facts,{...snapshot,capturedAt:'2020-01-01T00:00:
 let body:any=null;
 const fetcher:any=async(_url:string,init:any)=>{body=JSON.parse(init.body);return new Response(JSON.stringify({request:{requestId:'n1',roomId:'traffic',conversationId:'conv-1',promptSha256:'h',createdAt:'now'},state:{requestId:'n1',state:'PENDING',updatedAt:'now'}}),{status:201,headers:{'content-type':'application/json'}});};
 const queued=await submitNextStep(room,'owner draft',fetcher);assert(body.branch==='feat/v54'&&body.head==='abc'&&body.conversationId==='conv-1','submission freezes exact room binding including HEAD');assert(queued.state.state==='PENDING','submission returns server state');assert(nextStepStatusLabel(queued)==='等待 Profile 12 Bridge','status label reflects queue');
+const routed:any={...queued,state:{...queued.state,state:'EXECUTION_QUEUED'}};
+assert(nextStepStatusLabel(routed)==='已路由 · 等待执行器状态','queued execution does not claim active execution without a lease');
+assert(nextStepStatusLabel(routed,{activeLease:{runId:'run-1'}})==='执行器正在运行','active lease is required before claiming executor is running');
 console.log('nextStep.test.ts PASS');

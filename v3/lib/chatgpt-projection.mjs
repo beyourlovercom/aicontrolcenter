@@ -43,7 +43,11 @@ export function createChatgptProjectionStore(options={}){
   const snapshots=new Map();
   const now=options.now||(()=>new Date().toISOString());
   return {
-    upsert(input){const snapshot=normalizeChatgptSnapshot(input,now);snapshots.set(snapshot.conversationId,snapshot);return snapshot;},
+    upsert(input){
+      const snapshot=normalizeChatgptSnapshot(input,now);const existing=snapshots.get(snapshot.conversationId)||null;
+      if(existing?.messages?.length>0&&snapshot.messages.length===0)return existing;
+      snapshots.set(snapshot.conversationId,snapshot);return snapshot;
+    },
     get(conversationId){return snapshots.get(conversationId)||null;},
     list(){return [...snapshots.values()].sort((a,b)=>String(b.capturedAt).localeCompare(String(a.capturedAt)));},
     clear(){snapshots.clear();}

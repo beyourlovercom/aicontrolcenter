@@ -22,4 +22,7 @@ assert.equal(store.get('abc-123')?.messages[1]?.text,'world');
 store.upsert({...snapshot,title:'Updated',messages:[{role:'assistant',text:'latest'}],capturedAt:'2026-09-14T03:00:00.000Z'});
 assert.equal(store.list()[0]?.title,'Updated');
 assert.equal(store.list()[0]?.messages.length,1);
+store.upsert({...snapshot,title:'Transient Empty',messages:[],capturedAt:'2026-09-14T04:00:00.000Z'});
+assert.equal(store.get('abc-123')?.title,'Updated');
+assert.equal(store.get('abc-123')?.messages.length,1);
 console.log('chatgpt-projection.test.mjs PASS');

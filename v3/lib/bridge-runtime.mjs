@@ -23,15 +23,30 @@ function derivedUuid(requestId,label){
 }
 function automaticTaskBinding(context,input,env,options={}){
   const requestId=uuid(input?.requestId);
-  const workPackageTitle=text(input?.workPackageTitle,'BRIDGE_WORK_PACKAGE_TITLE_REQUIRED',240);
-  const taskTitle=text(input?.taskTitle,'BRIDGE_TASK_TITLE_REQUIRED',240);
-  const workPackageId=derivedUuid(requestId,'work-package');const taskId=derivedUuid(requestId,'task');
-  let store=readWorkStore(context,env);let wp=store.workPackages.find(item=>item.id===workPackageId);
+  const workPackageTitle=text(input?.workPackageTitle,'BRIDGE_WORK_PACKAGE_TITLE_REQUIRED',240).trim();
+  const taskTitle=text(input?.taskTitle,'BRIDGE_TASK_TITLE_REQUIRED',240).trim();
+  const roomId=typeof input?.roomId==='string'&&input.roomId.trim()?input.roomId.trim():null;
+  const workstreamId=typeof input?.workstreamId==='string'&&input.workstreamId.trim()?input.workstreamId.trim():null;
+  let store=readWorkStore(context,env);
+  const reusableTask=store.tasks.find(task=>
+    task.title===taskTitle&&['TODO','IN_PROGRESS','BLOCKED'].includes(task.status)&&
+    (task.roomId??null)===roomId&&(task.workstreamId??null)===workstreamId&&
+    store.workPackages.some(wp=>wp.id===task.workPackageId&&wp.title===workPackageTitle&&wp.status!=='DONE'&&(wp.roomId??null)===roomId&&(wp.workstreamId??null)===workstreamId)
+  );
+  if(reusableTask){
+    const wp=store.workPackages.find(item=>item.id===reusableTask.workPackageId);
+    if(!wp)fail('BRIDGE_TASK_NOT_FOUND');
+    return {task:reusableTask,wp};
+  }
+  const reusableWp=store.workPackages.find(wp=>wp.title===workPackageTitle&&wp.status!=='DONE'&&(wp.roomId??null)===roomId&&(wp.workstreamId??null)===workstreamId);
+  const workPackageId=reusableWp?.id||derivedUuid(requestId,'work-package');
+  const taskId=derivedUuid(requestId,'task');
+  let wp=reusableWp||store.workPackages.find(item=>item.id===workPackageId);
   if(wp&&wp.title!==workPackageTitle)fail('BRIDGE_REQUEST_CONFLICT');
-  if(!wp)wp=createWorkPackage(context,{title:workPackageTitle,status:'ACTIVE',roomId:input?.roomId,workstreamId:input?.workstreamId},env,{uuid:()=>workPackageId,now:options.now}).workPackage;
+  if(!wp)wp=createWorkPackage(context,{title:workPackageTitle,status:'ACTIVE',roomId,workstreamId},env,{uuid:()=>workPackageId,now:options.now}).workPackage;
   store=readWorkStore(context,env);let task=store.tasks.find(item=>item.id===taskId);
   if(task&&(task.workPackageId!==wp.id||task.title!==taskTitle))fail('BRIDGE_REQUEST_CONFLICT');
-  if(!task)task=createTask(context,{workPackageId:wp.id,title:taskTitle,status:'TODO',roomId:input?.roomId,workstreamId:input?.workstreamId},env,{uuid:()=>taskId,now:options.now}).task;
+  if(!task)task=createTask(context,{workPackageId:wp.id,title:taskTitle,status:'TODO',roomId,workstreamId},env,{uuid:()=>taskId,now:options.now}).task;
   return {task,wp};
 }
 function taskBinding(context,input,env,options={}){

@@ -1,6 +1,6 @@
 (()=>{
   'use strict';
-  const CONTENT_VERSION='3.8.20';
+  const CONTENT_VERSION='3.8.29';
   if(globalThis.__AICC_V3_BRIDGE_CONTENT_VERSION__===CONTENT_VERSION)return;
   try{globalThis.__AICC_V3_BRIDGE_CLEANUP__?.();}catch{}
   globalThis.__AICC_V3_BRIDGE_CONTENT_VERSION__=CONTENT_VERSION;
@@ -23,14 +23,26 @@
     const turn=node.closest('[data-testid^="conversation-turn-"],[data-message-id],article');
     return turn?.getAttribute('data-message-id')||turn?.getAttribute('data-testid')||`${role}-${index}`;
   }
+  let transientPlanner=false;
+  function normalizeTurnText(value){return String(value||'').replace(/\u00a0/g,' ').trim();}
+  function turnNodes(role){return [...document.querySelectorAll(`[data-testid^="conversation-turn-"][data-turn="${role}"]`)];}
+  function turnRecord(node,role,index){
+    if(!node)return null;
+    const content=node.querySelector(`[data-message-author-role="${role}"]`);
+    const text=normalizeTurnText(content?.innerText||content?.textContent||node.innerText||node.textContent).slice(0,6000);
+    const messageId=node.getAttribute('data-turn-id')||node.getAttribute('data-turn-id-container')||node.getAttribute('data-testid')||`${role}-${index}`;
+    return text?{messageId,role,text}:null;
+  }
+  function latestTurn(role){const nodes=turnNodes(role);const node=nodes.at(-1);return node?turnRecord(node,role,nodes.length-1):null;}
   function conversationSnapshot(){
+    if(transientPlanner)return null;
     const id=conversationId();if(!id)return null;
-    const nodes=[...document.querySelectorAll('[data-message-author-role="user"],[data-message-author-role="assistant"]')];
-    const messages=nodes.slice(-120).map((node,index)=>({
-      messageId:snapshotMessageId(node,index,node.getAttribute('data-message-author-role')||'unknown'),
-      role:node.getAttribute('data-message-author-role'),
-      text:(node.innerText||node.textContent||'').trim().slice(0,6000)
-    })).filter(item=>(item.role==='user'||item.role==='assistant')&&item.text);
+    const turns=[...document.querySelectorAll('[data-testid^="conversation-turn-"][data-turn]')];
+    let messages=turns.slice(-120).map((node,index)=>{const role=node.getAttribute('data-turn');return role==='user'||role==='assistant'?turnRecord(node,role,index):null;}).filter(Boolean);
+    if(!messages.length){
+      const nodes=[...document.querySelectorAll('[data-message-author-role="user"],[data-message-author-role="assistant"]')];
+      messages=nodes.slice(-120).map((node,index)=>({messageId:snapshotMessageId(node,index,node.getAttribute('data-message-author-role')||'unknown'),role:node.getAttribute('data-message-author-role'),text:normalizeTurnText(node.innerText||node.textContent).slice(0,6000)})).filter(item=>(item.role==='user'||item.role==='assistant')&&item.text);
+    }
     return {conversationId:id,conversationUrl:`https://chatgpt.com/c/${encodeURIComponent(id)}`,title:(document.title||'ChatGPT Conversation').replace(/\s*[-–—]\s*ChatGPT\s*$/i,'').trim()||'ChatGPT Conversation',capturedAt:new Date().toISOString(),messages};
   }
   function message(type,payload={},timeout=5000){
@@ -48,14 +60,22 @@
     });
   }
 
-  let snapshotTimer=null;let lastSnapshotSignature='';
+  let snapshotTimer=null;let lastSnapshotSignature='';let lastSnapshotPublishAt=0;
   async function publishSnapshot(){
     const snapshot=conversationSnapshot();if(!snapshot)return;
-    const last=snapshot.messages.at(-1);const signature=`${snapshot.conversationId}:${snapshot.messages.length}:${last?.role||''}:${(last?.text||'').slice(-240)}`;
-    if(signature===lastSnapshotSignature)return;lastSnapshotSignature=signature;
+    const last=snapshot.messages.at(-1);const signature=snapshot.conversationId+':'+snapshot.messages.length+':'+(last?.role||'')+':'+(last?.text||'').slice(-240);
+    if(signature===lastSnapshotSignature)return;
+    lastSnapshotSignature=signature;lastSnapshotPublishAt=Date.now();
     try{await message('AICC_PUBLISH_SNAPSHOT',{snapshot},8000);}catch{}
   }
-  function scheduleSnapshot(){clearTimeout(snapshotTimer);snapshotTimer=setTimeout(()=>void publishSnapshot(),900);}
+  function scheduleSnapshot(){
+    if(snapshotTimer)return;
+    const delay=Math.max(0,500-(Date.now()-lastSnapshotPublishAt));
+    snapshotTimer=setTimeout(()=>{snapshotTimer=null;void publishSnapshot();},delay);
+  }
+  const snapshotHeartbeat=setInterval(scheduleSnapshot,1500);
+
+
 
   let modal=null;
   function ensureModal(){
@@ -197,7 +217,8 @@
     if(composerValue(node)!==content){node.textContent=content;node.dispatchEvent(new InputEvent('input',{bubbles:true,inputType:'insertText',data:content}));}
     return composerValue(node)===content;
   }
-  function userTurnCount(){return document.querySelectorAll('[data-message-author-role="user"]').length;}
+  function userTurnCount(){const turns=turnNodes('user');return turns.length||document.querySelectorAll('[data-message-author-role="user"]').length;}
+  function latestTurnMatches(role,beforeId,expectedText){const turn=latestTurn(role);if(!turn||turn.messageId===beforeId)return null;return normalizeTurnText(turn.text)===normalizeTurnText(expectedText)?turn:null;}
   async function waitFor(check,timeout=5000,step=100){
     const end=Date.now()+timeout;while(Date.now()<end){const value=check();if(value)return value;await new Promise(resolve=>setTimeout(resolve,step));}return null;
   }
@@ -226,6 +247,11 @@
       return buttons.find(button=>(button.getAttribute('type')||'').toLowerCase()==='submit')||null;
     },8000,100);
   }
+  function submitComposer(box,button){
+    const form=box?.closest('form');
+    if(form&&typeof form.requestSubmit==='function'){form.requestSubmit(button);return true;}
+    button.click();return true;
+  }
   async function deliverExact(message){
     if(conversationId()!==message.conversationId)return {outcome:'ABORTED_BEFORE_SEND',reason:'BRIDGE_CONVERSATION_MISMATCH'};
     if(typeof message.content!=='string'||await sha256(message.content)!==message.contentSha256)return {outcome:'ABORTED_BEFORE_SEND',reason:'BRIDGE_CONTENT_HASH_MISMATCH'};
@@ -234,32 +260,41 @@
     if(conversationId()!==message.conversationId){clearComposer(box,message.content);return {outcome:'ABORTED_BEFORE_SEND',reason:'BRIDGE_CONVERSATION_MISMATCH'};}
     const button=await sendButton(box);if(!button){clearComposer(box,message.content);return {outcome:'ABORTED_BEFORE_SEND',reason:'BRIDGE_SEND_CONTROL_NOT_FOUND'};}
     if(composerValue(box)!==message.content){clearComposer(box,message.content);return {outcome:'ABORTED_BEFORE_SEND',reason:'BRIDGE_COMPOSER_CONTENT_DRIFT'};}
-    const before=userTurnCount();
-    try{button.click();}catch{return {outcome:'UNCERTAIN',reason:'BRIDGE_SEND_CLICK_UNCERTAIN'};}
-    const proved=await waitFor(()=>conversationId()===message.conversationId&&userTurnCount()>before&&composerValue(box)!==message.content,12000,150);
-    return proved?{outcome:'DELIVERED'}:{outcome:'UNCERTAIN',reason:'BRIDGE_SEND_PROOF_UNAVAILABLE'};
+    const beforeTurn=latestTurn('user');
+    try{submitComposer(box,button);}catch{return {outcome:'UNCERTAIN',reason:'BRIDGE_SEND_SUBMIT_UNCERTAIN'};}
+    const proved=await waitFor(()=>conversationId()===message.conversationId&&latestTurnMatches('user',beforeTurn?.messageId||null,message.content),12000,150);
+    return proved?{outcome:'DELIVERED',providerMessageId:proved.messageId}:{outcome:'UNCERTAIN',reason:'BRIDGE_SEND_PROOF_UNAVAILABLE'};
   }
-  function assistantNodes(){return [...document.querySelectorAll('[data-message-author-role="assistant"]')];}
+  async function submitTransientPrompt(message){
+    if(typeof message.content!=='string'||await sha256(message.content)!==message.contentSha256)return {outcome:'ABORTED_BEFORE_SEND',reason:'BRIDGE_CONTENT_HASH_MISMATCH'};
+    const box=await waitFor(()=>composer(),20000,100);if(!box)return {outcome:'ABORTED_BEFORE_SEND',reason:'BRIDGE_COMPOSER_NOT_FOUND'};
+    if(!writeComposer(box,message.content))return {outcome:'ABORTED_BEFORE_SEND',reason:'BRIDGE_COMPOSER_EXACT_CONTENT_UNAVAILABLE'};
+    const button=await sendButton(box);if(!button){clearComposer(box,message.content);return {outcome:'ABORTED_BEFORE_SEND',reason:'BRIDGE_SEND_CONTROL_NOT_FOUND'};}
+    if(composerValue(box)!==message.content){clearComposer(box,message.content);return {outcome:'ABORTED_BEFORE_SEND',reason:'BRIDGE_COMPOSER_CONTENT_DRIFT'};}
+    const beforeAssistant=latestTurn('assistant');
+    transientPlanner=true;
+    try{submitComposer(box,button);}catch{return {outcome:'UNCERTAIN',reason:'BRIDGE_SEND_SUBMIT_UNCERTAIN'};}
+    return {outcome:'SUBMITTED',beforeAssistantId:beforeAssistant?.messageId||null};
+  }
+
   function completeNextStepProtocol(text){
     if(typeof text!=='string'||!text.includes('AICC_NEXT_STEP_V1')||!/^AICC_DECISION:\s*(EXECUTE|STOP_GATE)\s*$/mi.test(text)||!/^AICC_ACTION_CLASS:\s*(CODE_CHANGE|TEST_ONLY|STOP_GATE)\s*$/mi.test(text)||!/^AICC_GATE_REASON:/mi.test(text))return false;
     if(/^AICC_DECISION:\s*EXECUTE\s*$/mi.test(text)&&!/^AICC_PROVIDER:\s*(CLAUDE_CODE|CODEX)\s*$/mi.test(text))return false;
     return /^AICC_DECISION:\s*STOP_GATE\s*$/mi.test(text)||(/AICC_INSTRUCTION_BEGIN/i.test(text)&&/AICC_INSTRUCTION_END/i.test(text));
   }
-  async function planNextStep(message){
-    if(conversationId()!==message.conversationId)return {outcome:'ABORTED_BEFORE_SEND',reason:'BRIDGE_CONVERSATION_MISMATCH'};
-    const before=assistantNodes().length;
-    const sent=await deliverExact(message);if(sent.outcome!=='DELIVERED')return sent;
-    const response=await waitFor(()=>{
-      const nodes=assistantNodes();if(nodes.length<=before)return null;
-      const text=assistantText(nodes.at(-1));return completeNextStepProtocol(text)?text:null;
-    },120000,300);
-    return response?{outcome:'DELIVERED',assistantText:response}:{outcome:'UNCERTAIN',reason:'NEXT_STEP_GPT_DECISION_UNPROVEN'};
+  function readPlannerDecision(afterMessageId){
+    transientPlanner=true;
+    const turn=latestTurn('assistant');
+    if(!turn||turn.messageId===afterMessageId||!completeNextStepProtocol(turn.text))return {outcome:'PENDING'};
+    return {outcome:'DELIVERED',assistantText:turn.text,assistantMessageId:turn.messageId};
   }
+
 
 
   function bridgeListener(message,_sender,sendResponse){
     if(message?.type==='AICC_READ_SNAPSHOT'){sendResponse({ok:true,snapshot:conversationSnapshot()});return false;}
-    if(message?.type==='AICC_PLAN_NEXT_STEP'){void planNextStep(message).then(sendResponse).catch(()=>sendResponse({outcome:'UNCERTAIN',reason:'NEXT_STEP_CONTENT_ADAPTER_ERROR'}));return true;}
+    if(message?.type==='AICC_SUBMIT_TRANSIENT'){void submitTransientPrompt(message).then(sendResponse).catch(()=>sendResponse({outcome:'UNCERTAIN',reason:'NEXT_STEP_CONTENT_ADAPTER_ERROR'}));return true;}
+    if(message?.type==='AICC_READ_PLANNER_DECISION'){sendResponse(readPlannerDecision(message.afterMessageId??null));return false;}
     if(message?.type!=='AICC_DELIVER_EXACT')return false;
     void deliverExact(message).then(sendResponse).catch(()=>sendResponse({outcome:'UNCERTAIN',reason:'BRIDGE_CONTENT_ADAPTER_ERROR'}));
     return true;
@@ -268,7 +303,7 @@
   globalThis.__AICC_V3_BRIDGE_CLEANUP__=()=>{
     try{observer.disconnect();}catch{}
     try{chrome.runtime.onMessage.removeListener(bridgeListener);}catch{}
-    clearTimeout(snapshotTimer);
+    clearTimeout(snapshotTimer);clearInterval(snapshotHeartbeat);
     for(const stale of document.querySelectorAll(`button[${BUTTON_ATTR}]`))stale.remove();
     document.getElementById('aicc-v3-bridge-modal-host')?.remove();
   };

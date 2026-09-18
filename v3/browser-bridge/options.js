@@ -2,7 +2,7 @@ const $=id=>document.getElementById(id);
 const BASE='http://127.0.0.1:1420';
 const TOKEN_KEY='aiccBridgeTokenV1';
 const INSTANCE_KEY='aiccBridgeInstanceIdV1';
-const EXPECTED_VERSION='3.8.20';
+const EXPECTED_VERSION='3.8.29';
 function render(value){
   const node=$('status');node.className=`status ${value?.ok&&value?.paired?'ok':value?.ok?'':'bad'}`;
   if(!value?.ok){node.textContent=`Not paired · ${value?.errorCode||'BRIDGE_CLIENT_ERROR'}`;return;}
