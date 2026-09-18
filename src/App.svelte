@@ -338,7 +338,13 @@
       await new Promise((resolve) => window.setTimeout(resolve, 1500));
       try {
         const projection = await readNextStep(requestId); setNextStep(roomId, projection);
+        if (projection.state.state === 'EXECUTION_QUEUED') {
+          window.dispatchEvent(new CustomEvent('aicc-v55-refresh-facts'));
+          announce(nextStepStatusLabel(projection));
+          return;
+        }
         if (!['PENDING','CLAIMED'].includes(projection.state.state)) {
+          window.dispatchEvent(new CustomEvent('aicc-v55-refresh-facts'));
           announce(nextStepStatusLabel(projection)); return;
         }
       } catch (error) {
