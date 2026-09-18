@@ -34,3 +34,10 @@ No automatic browser opening. No auth retry loop. No cross-device fallback.
 - Reserved final hostname: mcp.beyourlover.com
 - Final hostname currently publishes AAAA only; do not cut over until IPv4 A generation is corrected.
 - Public health is intentionally non-privileged; all execution/status APIs require bearer auth.
+## R3 Device Router
+- Canonical device IDs: us-macmini, china-mac, windows.
+- Every execution/status lookup requires an explicit deviceId.
+- Unknown device IDs fail closed; there is no cross-device fallback.
+- us-macmini is READY and routes to the existing US runner.
+- china-mac and windows are registered as PENDING_AGENT until R4.
+- US Gateway Tailscale probes PASS: china-mac reachable, windows reachable.
