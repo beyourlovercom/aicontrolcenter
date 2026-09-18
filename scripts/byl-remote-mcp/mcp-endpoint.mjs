@@ -74,7 +74,7 @@ function getServer(){
   return server;
 }
 
-const app=createMcpExpressApp({host:'127.0.0.1',allowedHosts:['127.0.0.1','localhost','erp.beyourlover.com']});
+const app=createMcpExpressApp({host:'127.0.0.1',allowedHosts:['127.0.0.1','localhost','erp.beyourlover.com','mcp.beyourlover.com']});
 function auth(req,res,next){
   if((req.headers.authorization||'')!==`Bearer ${TOKEN}`){
     return res.status(401).json({jsonrpc:'2.0',error:{code:-32001,message:'Unauthorized'},id:null});

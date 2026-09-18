@@ -92,3 +92,13 @@ No automatic browser opening. No auth retry loop. No cross-device fallback.
 - The self-test invokes Desktop Commander start_process with the fixed command "hostname"; callers cannot supply an arbitrary command through this tool.
 - Public Streamable HTTP MCP canary PASS on us-macmini, china-mac, and windows.
 - R8 is now fully PASS, including start_process transport validation.
+## R9 Cutover Canary
+- Final public endpoint is now https://mcp.beyourlover.com/mcp.
+- DNS is dual-stack (A + AAAA) and IPv4 public health is 200.
+- Legacy canary path under erp.beyourlover.com remains available only as rollback fallback.
+- Final endpoint MCP client canary PASS: tool discovery plus get_config and fixed process self-test on all three devices.
+- A 7-day parallel canary started at 2026-09-18T06:00:43Z.
+- Canary interval: 15 minutes. Each run validates standard MCP handshake, tool discovery, get_config, and fixed process self-test on US/China/Windows.
+- Canary log: /Users/a/.byl-remote-mcp/cutover-canary.jsonl, 5 MiB rotation.
+- Official Desktop Commander Remote remains enabled during the canary and is not part of normal self-hosted canary calls.
+- Cutover gate: do not cancel official Remote before 2026-09-25T06:00:43Z and only if there are no duplicate agents, unexpected restarts, authentication loops, cross-device routing errors, or failed canary runs.
