@@ -51,6 +51,14 @@ test('strict next-step protocol allows EXECUTE or STOP_GATE only',()=>{
   const stop=parseNextStepDecision(`AICC_NEXT_STEP_V1\nAICC_DECISION: STOP_GATE\nAICC_ACTION_CLASS: STOP_GATE\nAICC_WORK_PACKAGE:\nAICC_TASK:\nAICC_INSTRUCTION_BEGIN\n\nAICC_INSTRUCTION_END\nAICC_GATE_REASON: Owner merge approval required`);
   assert.deepEqual(stop,{decision:'STOP_GATE',gateReason:'Owner merge approval required'});
   assert.throws(()=>parseNextStepDecision('AICC_NEXT_STEP_V1\nAICC_DECISION: EXECUTE\nAICC_TASK: missing wp'),e=>e.code==='NEXT_STEP_DECISION_INVALID');
+  const negated=parseNextStepDecision('AICC_NEXT_STEP_V1\nAICC_DECISION: EXECUTE\nAICC_ACTION_CLASS: TEST_ONLY\nAICC_PROVIDER: CODEX\nAICC_PROVIDER_ROUTING_REASON: safe diagnostic\nAICC_WORK_PACKAGE: CI Diagnosis\nAICC_TASK: Reproduce failures\nAICC_INSTRUCTION_BEGIN\nRun local tests only.\n7. Do not edit files, commit, push, merge, deploy, perform production writes, or use --apply operations.\nAICC_INSTRUCTION_END\nAICC_GATE_REASON: NONE');
+  assert.equal(negated.decision,'EXECUTE');assert.equal(negated.provider,'CODEX');
+  for(const dangerous of ['git merge feature/x','deploy production now','run tool --apply now','production write records']){
+    const protocol='AICC_NEXT_STEP_V1\nAICC_DECISION: EXECUTE\nAICC_ACTION_CLASS: CODE_CHANGE\nAICC_PROVIDER: CLAUDE_CODE\nAICC_PROVIDER_ROUTING_REASON: implementation\nAICC_WORK_PACKAGE: Dangerous\nAICC_TASK: Dangerous task\nAICC_INSTRUCTION_BEGIN\n'+dangerous+'\nAICC_INSTRUCTION_END\nAICC_GATE_REASON: NONE';
+    const parsed=parseNextStepDecision(protocol);
+    assert.equal(parsed.decision,'STOP_GATE');assert.equal(parsed.gateReason,'NEXT_STEP_FORBIDDEN_OPERATION');
+  }
+
 });
 
 test('next-step planning transport settles to UNCERTAIN fallback instead of hanging forever',async()=>{
