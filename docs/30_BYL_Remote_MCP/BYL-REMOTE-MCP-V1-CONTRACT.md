@@ -49,3 +49,12 @@ No automatic browser opening. No auth retry loop. No cross-device fallback.
 - Cross-device health and tool discovery PASS on both devices: 26 tools exposed.
 - Cross-device get_config PASS: China DC 0.2.51 / macOS; Windows DC 0.2.51 / win32.
 - All three canonical devices are now READY in the static router.
+## R5 Security
+- Gateway owns the only Ed25519 private key; China/Windows agents store the public key only.
+- Agent privileged requests require: Tailscale peer allowlist + Ed25519 signature + 60s timestamp window.
+- Signed canonical form: method + path + timestamp + SHA-256(body).
+- Agent tool policy is explicit deny-first for administrative escape hatches.
+- R5 deny set: set_config_value, force_terminate.
+- Audit logs are JSONL and store timestamp, peer, event, tool, and success only; arguments and secrets are never logged.
+- China signed get_config canary PASS; denied tool returned 403.
+- Windows signed get_config canary PASS; denied tool returned 403.
