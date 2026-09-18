@@ -20,7 +20,7 @@
     type ExecutionRoomStore,
     type RoadmapSection
   } from './lib/executionRoomState';
-  import { readChatgptSnapshots, snapshotForConversation, type ChatgptConversationSnapshot } from './lib/chatgptProjection';
+  import { aiccVisibleMessages, readChatgptSnapshots, snapshotForConversation, type ChatgptConversationSnapshot } from './lib/chatgptProjection';
   import { readExecutorFacts, readRoomExecutorFacts, roomRuntimeBinding, type ExecutorFactsProjection } from './lib/executorFacts';
   import { cancelPendingNextStepForRoom, nextStepEligibility, nextStepStatusLabel, readNextStep, submitNextStep, type NextStepProjection } from './lib/nextStep';
   import { resolveProviderDecision } from './lib/providerPresentation';
@@ -57,6 +57,7 @@
   $: rightPanelCollapsed = activeRoom?.ui.rightPanelCollapsed ?? false;
   $: collapsed = activeRoom?.ui.collapsedSections ?? { blueprint: false, wp: false, pr: false, task: false, gate: false };
   $: activeSnapshot = snapshotForConversation(chatgptSnapshots, activeRoom?.gptConversationBinding ?? null);
+  $: activeVisibleMessages = activeSnapshot ? aiccVisibleMessages(activeSnapshot.messages) : [];
   $: boundRoomCount = allRooms.filter((room) => Boolean(room.gptConversationBinding)).length;
   $: executorFacts = activeRoom && activeRoom.repo !== 'PENDING_PROJECT_REPO_BINDING' ? (roomExecutorFacts[activeRoom.roomId] ?? null) : globalExecutorFacts;
   $: executorFactsError = activeRoom ? (roomExecutorErrors[activeRoom.roomId] ?? '') : '';
@@ -259,7 +260,7 @@
 
   function updateDraft(event: Event) {
     if (!activeRoom) return;
-    const input = event.currentTarget as HTMLInputElement;
+    const input = event.currentTarget as HTMLTextAreaElement;
     commit(patchExecutionRoomUi(roomStore, activeRoom.roomId, { draft: input.value }));
   }
 
@@ -355,7 +356,7 @@
   }
 
   function ownerCommandKeydown(event: KeyboardEvent) {
-    if (event.key !== 'Enter' || event.isComposing) return;
+    if (event.key !== 'Enter' || event.isComposing || event.shiftKey) return;
     event.preventDefault();
     void submitOwnerCommand();
   }
@@ -568,9 +569,9 @@
           {#if activeSnapshot}
             <div class="conversation-notice live-conversation-notice">
               <div class="notice-icon">✦</div>
-              <div><strong>真实 ChatGPT Transcript · {activeSnapshot.title}</strong><p>conversationId：{activeSnapshot.conversationId} · snapshot {capturedLabel(activeSnapshot.capturedAt)} · {activeSnapshot.messages.length} 条可见消息。内容来自 Profile 12 页面 DOM，不使用 OpenAI API。</p></div>
+              <div><strong>真实 ChatGPT Transcript · {activeSnapshot.title}</strong><p>conversationId：{activeSnapshot.conversationId} · snapshot {capturedLabel(activeSnapshot.capturedAt)} · {activeVisibleMessages.length} 条可见消息。内容来自 Profile 12 页面 DOM，不使用 OpenAI API。</p></div>
             </div>
-            {#each activeSnapshot.messages as message}
+            {#each activeVisibleMessages as message}
               <div class="chat-preview" class:user-message={message.role === 'user'}>
                 <span class:assistant={message.role === 'assistant'} class="message-avatar">{message.role === 'user' ? '你' : '✦'}</span>
                 <div><strong>{message.role === 'user' ? 'You · Chrome' : 'ChatGPT · Chrome'}</strong><p class="projected-message">{message.text}</p></div>
@@ -589,7 +590,7 @@
         <div class="composer-shell">
           <div class="composer-input">
             <span class="composer-plus">＋</span>
-            <input class="composer-draft" value={activeRoom.ui.draft} oninput={updateDraft} onkeydown={ownerCommandKeydown} placeholder="输入消息，Enter 或 ↑ 发送到 ChatGPT" aria-label="聊天消息" />
+            <textarea class="composer-draft" rows="1" value={activeRoom.ui.draft} oninput={updateDraft} onkeydown={ownerCommandKeydown} placeholder="输入消息，Enter 发送 · Shift+Enter 换行" aria-label="聊天消息"></textarea>
             <button class="composer-send" class:composer-send-disabled={Boolean(humanChatBusyRoomId) || !activeRoom.ui.draft.trim() || !activeRoom.gptConversationBinding} disabled={Boolean(humanChatBusyRoomId) || !activeRoom.ui.draft.trim() || !activeRoom.gptConversationBinding} type="button" aria-label="发送到 ChatGPT" title="发送消息" onclick={submitOwnerCommand}>↑</button>
           </div>
           <button class="next-step-button" class:next-step-disabled={nextStepLocked} disabled={nextStepLocked} type="button" onclick={advanceNextStep}>推进下一步</button>
@@ -602,7 +603,7 @@
         {#if !rightPanelCollapsed}
           <div class="panel-heading facts-heading">
             <div><span class="eyebrow">Real Executor Facts</span><h2>执行详情</h2></div>
-            <div class="facts-actions"><span class:fact-drift={runtimeBinding === 'DRIFT'} class:fact-ready={runtimeBinding === 'MATCH'} class="live-pill"><i></i>{runtimeBinding}</span>{#if runtimeBinding === 'DRIFT' && actualRepository}<button type="button" class="runtime-adopt" onclick={adoptCurrentRuntime}>采用当前 Runtime</button>{/if}</div>
+            <div class="facts-actions">{#if activeRoom.gptConversationUrl}<a class="gpt-origin-link" href={activeRoom.gptConversationUrl} target="_blank" rel="noopener noreferrer" title="打开当前 Room 的原始 ChatGPT 会话" aria-label="打开原始 ChatGPT 会话">↗ GPT</a>{/if}<span class:fact-drift={runtimeBinding === 'DRIFT'} class:fact-ready={runtimeBinding === 'MATCH'} class="live-pill"><i></i>{runtimeBinding}</span>{#if runtimeBinding === 'DRIFT' && actualRepository}<button type="button" class="runtime-adopt" onclick={adoptCurrentRuntime}>采用当前 Runtime</button>{/if}</div>
           </div>
 
           {#if activeCanonicalRefresh}

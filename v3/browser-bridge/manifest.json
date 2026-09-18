@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "AICC ChatGPT Bridge",
-  "version": "3.8.29",
+  "version": "3.8.30",
   "description": "AICC bridge for real ChatGPT chat, isolated planner transport, and managed execution.",
   "permissions": [
     "storage",

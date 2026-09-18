@@ -181,7 +181,8 @@ button { color: inherit; }
 .composer-shell { padding: 14px 20px 18px; border-top: 1px solid #eef1ed; background: rgba(255,255,255,.96); }
 .composer-input {
   max-width: 900px;
-  height: 46px;
+  min-height: 46px;
+  height: auto;
   margin: 0 auto 10px;
   padding: 0 12px;
   display: grid;
@@ -193,7 +194,7 @@ button { color: inherit; }
   box-shadow: 0 5px 20px rgba(41, 72, 55, .06);
 }
 .composer-plus { color: #333; font-size: 18px; text-align: center; }
-.composer-draft { width: 100%; min-width: 0; border: 0; outline: 0; background: transparent; color: #111; font: inherit; }
+.composer-draft { width: 100%; min-width: 0; min-height: 22px; max-height: 96px; border: 0; outline: 0; padding: 2px 0; resize: none; overflow-y: auto; field-sizing: content; background: transparent; color: #111; font: inherit; line-height: 1.45; }
 .composer-send {
   width: 30px;
   height: 30px;
@@ -397,6 +398,8 @@ body { color: #111814; }
 .canonical-refresh-path b { color:#2d6b4c; font-size:12px; }
 .facts-actions { display:flex; align-items:center; gap:7px; }
 .runtime-adopt { border:1px solid #cbd7cf; background:#fff; color:#164f39; border-radius:8px; padding:5px 7px; font:inherit; font-size:10px; cursor:pointer; }
+.gpt-origin-link { display:inline-flex; align-items:center; justify-content:center; min-height:26px; padding:0 8px; border:1px solid #cbd7cf; border-radius:8px; background:#fff; color:#164f39; font-size:10px; font-weight:700; text-decoration:none; white-space:nowrap; }
+.gpt-origin-link:hover { background:#f1f7f3; border-color:#b8cbbf; }
 
 
 /* External Project Loading V1 */
