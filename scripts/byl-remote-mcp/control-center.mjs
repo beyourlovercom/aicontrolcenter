@@ -9,7 +9,8 @@ const HOST='127.0.0.1';
 const PORT=8793;
 const PRIVATE_KEY=readFileSync('/Users/a/.byl-remote-mcp/keys/gateway-ed25519-private.pem','utf8');
 const CANARY_LOG='/Users/a/.byl-remote-mcp/cutover-canary.jsonl';
-const ACCESS_ACTIVE=process.env.BYL_CONTROL_ACCESS_ACTIVE==='1';
+const CONTROL_PASSWORD=process.env.BYL_CONTROL_PASSWORD||'';
+const SESSION_KEY=createHash('sha256').update(CONTROL_PASSWORD+readFileSync('/Users/a/.byl-remote-mcp/gateway.token','utf8')).digest('hex');
 
 const DEVICES=Object.freeze({
   'us-macmini':{name:'US Mac mini',subtitle:'美国网关机',upstream:'http://127.0.0.1:8791'},
@@ -27,21 +28,24 @@ function requestPeer(req){return (req.socket.remoteAddress||'').replace(/^::ffff
 function accessAllowed(req){
   const peer=requestPeer(req);
   const host=String(req.headers.host||'').split(':')[0].toLowerCase();
-  const localHost=host==='127.0.0.1'||host==='localhost';
-  if(localHost&&(peer==='127.0.0.1'||peer==='::1'))return true;
-  return Boolean(req.headers['cf-access-authenticated-user-email']);
+  if((host==='127.0.0.1'||host==='localhost')&&(peer==='127.0.0.1'||peer==='::1'))return true;
+  return Boolean(CONTROL_PASSWORD)&&String(req.headers.cookie||'').split(';').some(v=>v.trim()==='byl_control_session='+SESSION_KEY);
 }
+function loginPage(error=''){
+  return '<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="robots" content="noindex,nofollow,noarchive"><meta name="viewport" content="width=device-width,initial-scale=1"><title>BYL Remote MCP</title><style>body{margin:0;background:#0b0d10;color:#f5f7f8;font-family:-apple-system,BlinkMacSystemFont,sans-serif;display:grid;place-items:center;min-height:100vh}.box{width:340px;max-width:calc(100vw - 56px);background:#15181d;border:1px solid #2a2f37;border-radius:16px;padding:28px}h1{font-size:22px;margin:0 0 8px}p{color:#9ca5b1;font-size:13px}input,button{width:100%;box-sizing:border-box;border-radius:9px;padding:12px;margin-top:12px}input{background:#0d1014;border:1px solid #343a43;color:#fff}button{border:0;background:#2ea6ff;color:#fff;font-weight:700}.err{color:#ff8585}</style></head><body><form class="box" method="post" action="/control/login"><h1>BYL Remote MCP</h1><p>请输入控制台密码</p>'+(error?'<div class="err">'+error+'</div>':'')+'<input type="password" name="password" autofocus><button>登录</button></form></body></html>';
+}
+
 function sameOrigin(req){
   const origin=req.headers.origin;
   if(!origin)return true;
   return origin==='https://mcp.beyourlover.com'||origin==='http://127.0.0.1:8793'||origin==='http://localhost:8793';
 }
 function json(res,status,body){
-  res.writeHead(status,{'content-type':'application/json; charset=utf-8','cache-control':'no-store'});
+  res.writeHead(status,{'content-type':'application/json; charset=utf-8','cache-control':'no-store','x-robots-tag':'noindex, nofollow, noarchive'});
   res.end(JSON.stringify(body));
 }
 function text(res,status,body,type='text/plain; charset=utf-8'){
-  res.writeHead(status,{'content-type':type,'cache-control':'no-store'});
+  res.writeHead(status,{'content-type':type,'cache-control':'no-store','x-robots-tag':'noindex, nofollow, noarchive'});
   res.end(body);
 }
 async function readJson(req){
@@ -133,7 +137,15 @@ createServer(async(req,res)=>{
     if((req.method==='GET'||req.method==='HEAD')&&url.pathname==='/'){
       res.writeHead(302,{location:'/control/','cache-control':'no-store'});return res.end();
     }
-    if(!accessAllowed(req))return json(res,401,{error:'ACCESS_LOGIN_REQUIRED'});
+    if(req.method==='GET'&&url.pathname==='/robots.txt')return text(res,200,'User-agent: *\nDisallow: /control/\n');
+    if(req.method==='GET'&&url.pathname==='/control/login')return text(res,200,loginPage(),'text/html; charset=utf-8');
+    if(req.method==='POST'&&url.pathname==='/control/login'){
+      const parts=[];for await(const chunk of req)parts.push(chunk);
+      const form=new URLSearchParams(Buffer.concat(parts).toString('utf8'));
+      if(!CONTROL_PASSWORD||form.get('password')!==CONTROL_PASSWORD)return text(res,401,loginPage('密码错误'),'text/html; charset=utf-8');
+      res.writeHead(303,{location:'/control/','set-cookie':'byl_control_session='+SESSION_KEY+'; Path=/control/; HttpOnly; Secure; SameSite=Strict; Max-Age=86400','cache-control':'no-store','x-robots-tag':'noindex, nofollow, noarchive'});return res.end();
+    }
+    if(!accessAllowed(req))return text(res,401,loginPage(),'text/html; charset=utf-8');
     if(req.method==='GET'&&staticFiles[url.pathname]){
       const asset=staticFiles[url.pathname];
       return text(res,200,readFileSync(join(ROOT,asset.file),'utf8'),asset.type);
