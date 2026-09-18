@@ -4,6 +4,20 @@ export type ChatgptProjectedMessage = {
   text: string;
 };
 
+
+export function filterAiccTranscriptText(text: string): string {
+  return text
+    .split(/\r?\n/)
+    .filter((line) => line.trim() !== '已调用工具')
+    .join('\n');
+}
+
+export function aiccVisibleMessages(messages: ChatgptProjectedMessage[]): ChatgptProjectedMessage[] {
+  return messages
+    .map((message) => ({ ...message, text: filterAiccTranscriptText(message.text) }))
+    .filter((message) => message.text.trim().length > 0);
+}
+
 export type ChatgptConversationSnapshot = {
   provider: 'chatgpt-web';
   conversationId: string;
