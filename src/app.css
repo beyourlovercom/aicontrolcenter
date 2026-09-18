@@ -420,3 +420,6 @@ body { color: #111814; }
 .external-runtime-preview .runtime-blocked { color:#9a513f; }
 .external-project-actions { display:flex; justify-content:flex-end; gap:8px; margin-top:18px; }
 @media (max-width:720px) { .external-project-form { grid-template-columns:1fr; } .external-project-form label:last-child { grid-column:auto; } }
+
+.chat-preview.machine-message { background: rgba(0,98,65,.035); border-radius: 12px; padding: 10px 12px; }
+.chat-preview.machine-message strong { color: #006241; }

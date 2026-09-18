@@ -1,6 +1,6 @@
 (()=>{
   'use strict';
-  const CONTENT_VERSION='3.8.23';
+  const CONTENT_VERSION='3.8.24';
   if(globalThis.__AICC_V3_BRIDGE_CONTENT_VERSION__===CONTENT_VERSION)return;
   try{globalThis.__AICC_V3_BRIDGE_CLEANUP__?.();}catch{}
   globalThis.__AICC_V3_BRIDGE_CONTENT_VERSION__=CONTENT_VERSION;
@@ -48,14 +48,21 @@
     });
   }
 
-  let snapshotTimer=null;let lastSnapshotSignature='';
+  let snapshotTimer=null;let lastSnapshotSignature='';let lastSnapshotPublishAt=0;
   async function publishSnapshot(){
     const snapshot=conversationSnapshot();if(!snapshot)return;
-    const last=snapshot.messages.at(-1);const signature=`${snapshot.conversationId}:${snapshot.messages.length}:${last?.role||''}:${(last?.text||'').slice(-240)}`;
-    if(signature===lastSnapshotSignature)return;lastSnapshotSignature=signature;
+    const last=snapshot.messages.at(-1);const signature=snapshot.conversationId+':'+snapshot.messages.length+':'+(last?.role||'')+':'+(last?.text||'').slice(-240);
+    if(signature===lastSnapshotSignature)return;
+    lastSnapshotSignature=signature;lastSnapshotPublishAt=Date.now();
     try{await message('AICC_PUBLISH_SNAPSHOT',{snapshot},8000);}catch{}
   }
-  function scheduleSnapshot(){clearTimeout(snapshotTimer);snapshotTimer=setTimeout(()=>void publishSnapshot(),900);}
+  function scheduleSnapshot(){
+    if(snapshotTimer)return;
+    const delay=Math.max(0,500-(Date.now()-lastSnapshotPublishAt));
+    snapshotTimer=setTimeout(()=>{snapshotTimer=null;void publishSnapshot();},delay);
+  }
+  const snapshotHeartbeat=setInterval(scheduleSnapshot,1500);
+
 
   const PLANNER_STYLE_ID='aicc-planner-transport-style';
   const PLANNER_BODY_ATTR='data-aicc-planner-body';
@@ -323,7 +330,7 @@
   globalThis.__AICC_V3_BRIDGE_CLEANUP__=()=>{
     try{observer.disconnect();}catch{}
     try{chrome.runtime.onMessage.removeListener(bridgeListener);}catch{}
-    clearTimeout(snapshotTimer);
+    clearTimeout(snapshotTimer);clearInterval(snapshotHeartbeat);
     for(const stale of document.querySelectorAll(`button[${BUTTON_ATTR}]`))stale.remove();
     for(const bar of document.querySelectorAll('['+PLANNER_SUMMARY_ATTR+']'))bar.remove();
     for(const body of document.querySelectorAll('['+PLANNER_BODY_ATTR+']'))body.removeAttribute(PLANNER_BODY_ATTR);

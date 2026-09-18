@@ -20,7 +20,7 @@
     type ExecutionRoomStore,
     type RoadmapSection
   } from './lib/executionRoomState';
-  import { readChatgptSnapshots, snapshotForConversation, type ChatgptConversationSnapshot } from './lib/chatgptProjection';
+  import { displayMessages, readChatgptSnapshots, snapshotForConversation, type ChatgptConversationSnapshot } from './lib/chatgptProjection';
   import { readExecutorFacts, readRoomExecutorFacts, roomRuntimeBinding, type ExecutorFactsProjection } from './lib/executorFacts';
   import { cancelPendingNextStepForRoom, nextStepEligibility, nextStepStatusLabel, readNextStep, submitNextStep, type NextStepProjection } from './lib/nextStep';
   import { resolveProviderDecision } from './lib/providerPresentation';
@@ -55,6 +55,7 @@
   $: rightPanelCollapsed = activeRoom?.ui.rightPanelCollapsed ?? false;
   $: collapsed = activeRoom?.ui.collapsedSections ?? { blueprint: false, wp: false, pr: false, task: false, gate: false };
   $: activeSnapshot = snapshotForConversation(chatgptSnapshots, activeRoom?.gptConversationBinding ?? null);
+  $: activeDisplayMessages = activeSnapshot ? displayMessages(activeSnapshot.messages) : [];
   $: boundRoomCount = allRooms.filter((room) => Boolean(room.gptConversationBinding)).length;
   $: executorFacts = activeRoom && activeRoom.repo !== 'PENDING_PROJECT_REPO_BINDING' ? (roomExecutorFacts[activeRoom.roomId] ?? null) : globalExecutorFacts;
   $: executorFactsError = activeRoom ? (roomExecutorErrors[activeRoom.roomId] ?? '') : '';
@@ -596,10 +597,10 @@
               <div class="notice-icon">✦</div>
               <div><strong>真实 ChatGPT Transcript · {activeSnapshot.title}</strong><p>conversationId：{activeSnapshot.conversationId} · snapshot {capturedLabel(activeSnapshot.capturedAt)} · {activeSnapshot.messages.length} 条可见消息。内容来自 Profile 12 页面 DOM，不使用 OpenAI API。</p></div>
             </div>
-            {#each activeSnapshot.messages as message}
-              <div class="chat-preview" class:user-message={message.role === 'user'}>
+            {#each activeDisplayMessages as message}
+              <div class="chat-preview" class:user-message={message.role === 'user'} class:machine-message={message.machineTransport}>
                 <span class:assistant={message.role === 'assistant'} class="message-avatar">{message.role === 'user' ? '你' : '✦'}</span>
-                <div><strong>{message.role === 'user' ? 'You · Chrome' : 'ChatGPT · Chrome'}</strong><p class="projected-message">{message.text}</p></div>
+                <div><strong>{message.label}</strong><p class="projected-message">{message.text}</p></div>
               </div>
             {/each}
           {:else if activeRoom.gptConversationBinding}

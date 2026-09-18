@@ -40,3 +40,40 @@ export function snapshotForConversation(
   if (!conversationId) return null;
   return snapshots.find((snapshot) => snapshot.conversationId === conversationId) ?? null;
 }
+
+export type ChatgptDisplayMessage = {
+  messageId: string;
+  role: 'user' | 'assistant';
+  label: string;
+  text: string;
+  machineTransport: boolean;
+};
+
+function displayMarker(text: string, name: string): string | null {
+  const match = text.match(new RegExp('^' + name + '\s*:\s*(.*)$', 'mi'));
+  return match?.[1]?.trim() ?? null;
+}
+
+export function displayMessages(messages: ChatgptProjectedMessage[]): ChatgptDisplayMessage[] {
+  const visible: ChatgptDisplayMessage[] = [];
+  for (const message of messages) {
+    const text = message.text.trim();
+    if (message.role === 'user' && text.includes('AICC V5.4 NEXT-STEP REQUEST')) {
+      const draft = displayMarker(text, 'owner_draft');
+      if (draft && draft !== '(none)') visible.push({ messageId: message.messageId, role: 'user', label: 'Owner · AICC', text: draft, machineTransport: true });
+      continue;
+    }
+    if (message.role === 'assistant' && text.includes('AICC_NEXT_STEP_V1')) {
+      const decision = displayMarker(text, 'AICC_DECISION');
+      const action = displayMarker(text, 'AICC_ACTION_CLASS');
+      const provider = displayMarker(text, 'AICC_PROVIDER');
+      const task = displayMarker(text, 'AICC_TASK');
+      const gate = displayMarker(text, 'AICC_GATE_REASON');
+      const parts = decision === 'STOP_GATE' ? ['STOP Gate', gate && gate !== 'NONE' ? gate : null] : [action, provider, task];
+      visible.push({ messageId: message.messageId, role: 'assistant', label: 'AICC · Planner', text: parts.filter(Boolean).join(' → ') || 'Planner decision received', machineTransport: true });
+      continue;
+    }
+    visible.push({ messageId: message.messageId, role: message.role, label: message.role === 'user' ? 'You · Chrome' : 'ChatGPT · Chrome', text: message.text, machineTransport: false });
+  }
+  return visible;
+}
