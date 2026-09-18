@@ -79,3 +79,11 @@ No automatic browser opening. No auth retry loop. No cross-device fallback.
 - Public MCP callTool get_config PASS on all three devices; each reported Desktop Commander 0.2.51.
 - Endpoint host validation explicitly permits only localhost and erp.beyourlover.com for the canary path.
 - AICC integration is explicitly out of scope for this workstream.
+## R8 Three-device UAT
+- Public MCP path used: https://erp.beyourlover.com/__byl_remote_mcp/mcp
+- UAT used only the self-hosted Remote MCP path for device operations.
+- Five consecutive rounds completed across us-macmini, china-mac, and windows.
+- Per round per device: read_file + list_processes + get_config.
+- Result: 45/45 checks PASS, zero cross-device routing errors, zero timeouts, zero state drift.
+- Latest central health probes remained PASS after UAT for gateway, US runner, China agent, and Windows agent.
+- start_process remains pending final external-client acceptance because the platform safety layer blocks constructing that remote process-start canary from this chat environment; do not mark that subtest PASS yet.
