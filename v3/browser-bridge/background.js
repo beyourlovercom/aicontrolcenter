@@ -268,7 +268,7 @@ async function reinjectOpenChatgptTabs(){
   let tabs=[];try{tabs=await chrome.tabs.query({url:'https://chatgpt.com/*'});}catch{return;}
   for(const tab of tabs){
     if(!Number.isInteger(tab.id))continue;
-    try{await chrome.scripting.executeScript({target:{tabId:tab.id},files:['content.js']});}catch{}
+    try{await chrome.scripting.executeScript({target:{tabId:tab.id},files:['composer-text.js','content.js']});}catch{}
   }
 }
 
