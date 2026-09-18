@@ -3,6 +3,8 @@ import {appendFileSync,existsSync,renameSync,statSync} from 'node:fs';
 const LOG='/Users/a/.byl-remote-mcp/health.jsonl';
 const TARGETS=[
   ['gateway','http://127.0.0.1:8790/healthz'],
+  ['control-center','http://127.0.0.1:8793/control/healthz'],
+
   ['us-runner','http://100.94.52.109:8787/v1/status'],
   ['china-agent','http://100.102.15.40:8791/healthz'],
   ['windows-agent','http://100.87.29.56:8791/healthz']

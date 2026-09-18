@@ -30,6 +30,7 @@ createServer(async(req,res)=>{
     if(req.method==='POST')body=await readBody(req);
     if(!signed(req,url.pathname,body)){audit(req,'signature_denied');return json(res,401,{errorCode:'DC_AGENT_SIGNATURE_INVALID'});}
     if(req.method==='GET'&&url.pathname==='/v1/tools'){const tools=await (await ensureClient()).listTools();return json(res,200,{tools:tools.tools.filter(t=>!DENY.has(t.name)).map(t=>({name:t.name,description:t.description||''}))});}
+    if(req.method==='POST'&&url.pathname==='/v1/restart'){audit(req,'restart_requested');json(res,202,{ok:true,restarting:true});setTimeout(()=>process.exit(0),250);return;}
     if(req.method==='POST'&&url.pathname==='/v1/call'){
       let input;try{input=JSON.parse(body.toString('utf8')||'{}');}catch{return json(res,400,{errorCode:'DC_AGENT_JSON_INVALID'});}
       if(typeof input.name!=='string'||!input.name)return json(res,400,{errorCode:'DC_AGENT_TOOL_REQUIRED'});

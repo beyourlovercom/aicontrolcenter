@@ -102,3 +102,15 @@ No automatic browser opening. No auth retry loop. No cross-device fallback.
 - Canary log: /Users/a/.byl-remote-mcp/cutover-canary.jsonl, 5 MiB rotation.
 - Official Desktop Commander Remote remains enabled during the canary and is not part of normal self-hosted canary calls.
 - Cutover gate: do not cancel official Remote before 2026-09-25T06:00:43Z and only if there are no duplicate agents, unexpected restarts, authentication loops, cross-device routing errors, or failed canary runs.
+## R10 Remote Control Center V1
+- Single public hostname only: mcp.beyourlover.com.
+- Browser entry: https://mcp.beyourlover.com/ redirects to /control/.
+- Human UI and API live under /control/* and must be protected by Cloudflare Access.
+- Machine endpoint remains https://mcp.beyourlover.com/mcp and is not part of the browser login gate.
+- Public health remains https://mcp.beyourlover.com/healthz and exposes only minimal liveness.
+- Control Center origin: 127.0.0.1:8793, launchd label com.byl.remote-mcp-control-center.
+- Public dashboard is fail-closed until BYL_CONTROL_ACCESS_ACTIVE=1.
+- Dashboard actions are fixed only: status refresh and agent reconnect. No arbitrary web terminal.
+- Reconnect is a signed /v1/restart request; launchd / Windows watchdog restores the agent.
+- Local browser UAT PASS: three devices rendered, 3/3 ready, Canary PASS, endpoint visible.
+- Action UAT PASS: reconnect US, China, Windows all recovered to 26-tool healthy state.

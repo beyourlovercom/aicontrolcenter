@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>BYL Remote MCP</title>
+  <link rel="stylesheet" href="/control/styles.css">
+</head>
+<body>
+  <div class="shell">
+    <aside class="sidebar">
+      <div class="brand"><div class="brand-mark">DC</div><div><strong>BYL Remote</strong><span>MCP Control</span></div></div>
+      <nav>
+        <button class="nav-item active" data-view="devices">▣ <span>设备</span></button>
+        <button class="nav-item" data-view="health">◉ <span>健康状态</span></button>
+        <button class="nav-item" data-view="canary">◫ <span>Canary</span></button>
+      </nav>
+      <div class="sidebar-foot">
+        <div class="mini-status"><span id="sideDot" class="dot"></span><span id="sideText">检查中…</span></div>
+        <div id="loginUser" class="login-user">Cloudflare Access</div>
+      </div>
+    </aside>
+    <main class="main">
+      <header class="topbar">
+        <div><h1>Remote MCP 控制中心</h1><p>查看三台设备的 Desktop Commander 在线状态与恢复能力。</p></div>
+        <button id="refreshBtn" class="primary">立即检查</button>
+      </header>
+      <section id="devicesView" class="view active">
+        <div class="summary-grid">
+          <article class="summary-card"><span>Gateway</span><strong id="gatewayStatus">检查中</strong><small id="gatewayLatency">—</small></article>
+          <article class="summary-card"><span>设备</span><strong id="deviceSummary">0 / 3</strong><small>Ready</small></article>
+          <article class="summary-card"><span>Canary</span><strong id="canaryStatus">—</strong><small id="canaryChecks">等待数据</small></article>
+        </div>
+        <section class="panel">
+          <div class="panel-head"><div><h2>我的设备</h2><p>AI 客户端可通过 Remote MCP 访问的机器。</p></div><span id="updatedAt" class="updated">—</span></div>
+          <div id="deviceList" class="device-list"></div>
+        </section>
+        <section class="panel endpoint-panel">
+          <div><h2>MCP Endpoint</h2><p>标准 Streamable HTTP MCP 入口</p></div>
+          <code>https://mcp.beyourlover.com/mcp</code>
+        </section>
+      </section>
+      <section id="healthView" class="view">
+        <section class="panel">
+          <div class="panel-head"><div><h2>健康状态</h2><p>Gateway → Tailscale → Agent → Desktop Commander</p></div></div>
+          <div id="healthRows" class="health-list"></div>
+        </section>
+      </section>
+      <section id="canaryView" class="view">
+        <section class="panel">
+          <div class="panel-head"><div><h2>7 天 Cutover Canary</h2><p>正式关闭官方 DC Remote 前的稳定性观察。</p></div></div>
+          <div class="canary-grid">
+            <div><span>检查次数</span><strong id="cChecks">0</strong></div>
+            <div><span>通过</span><strong id="cPassed">0</strong></div>
+            <div><span>失败</span><strong id="cFailed">0</strong></div>
+            <div><span>最近结果</span><strong id="cLatest">—</strong></div>
+          </div>
+          <div class="timeline"><div id="canaryBar" class="timeline-fill"></div></div>
+          <p id="canaryTime" class="muted">—</p>
+        </section>
+      </section>
+    </main>
+  </div>
+  <div id="toast" class="toast"></div>
+  <script src="/control/app.js"></script>
+</body>
+</html>
