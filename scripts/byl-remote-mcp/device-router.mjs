@@ -1,7 +1,7 @@
 export const DEVICE_REGISTRY=Object.freeze({
   'us-macmini':Object.freeze({id:'us-macmini',state:'READY',upstream:'http://100.94.52.109:8787'}),
-  'china-mac':Object.freeze({id:'china-mac',state:'PENDING_AGENT',upstream:null}),
-  'windows':Object.freeze({id:'windows',state:'PENDING_AGENT',upstream:null})
+  'china-mac':Object.freeze({id:'china-mac',state:'READY',upstream:'http://100.102.15.40:8791'}),
+  'windows':Object.freeze({id:'windows',state:'READY',upstream:'http://100.87.29.56:8791'})
 });
 
 export function listDevices(){

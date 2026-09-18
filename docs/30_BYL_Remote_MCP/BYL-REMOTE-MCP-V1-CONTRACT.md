@@ -41,3 +41,11 @@ No automatic browser opening. No auth retry loop. No cross-device fallback.
 - us-macmini is READY and routes to the existing US runner.
 - china-mac and windows are registered as PENDING_AGENT until R4.
 - US Gateway Tailscale probes PASS: china-mac reachable, windows reachable.
+## R4 Private DC Agents
+- china-mac agent: http://100.102.15.40:8791, peer allowlist = us-macmini only.
+- windows agent: http://100.87.29.56:8791, peer allowlist = us-macmini only.
+- Both agents are private Tailscale listeners and expose no public socket.
+- Both agents use MCP Client + StdioClientTransport to call the local Desktop Commander MCP.
+- Cross-device health and tool discovery PASS on both devices: 26 tools exposed.
+- Cross-device get_config PASS: China DC 0.2.51 / macOS; Windows DC 0.2.51 / win32.
+- All three canonical devices are now READY in the static router.
