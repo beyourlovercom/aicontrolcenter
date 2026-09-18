@@ -87,3 +87,8 @@ No automatic browser opening. No auth retry loop. No cross-device fallback.
 - Result: 45/45 checks PASS, zero cross-device routing errors, zero timeouts, zero state drift.
 - Latest central health probes remained PASS after UAT for gateway, US runner, China agent, and Windows agent.
 - start_process remains pending final external-client acceptance because the platform safety layer blocks constructing that remote process-start canary from this chat environment; do not mark that subtest PASS yet.
+## R8 Final process gate
+- Added a fixed read-only MCP tool: remote_process_selftest(deviceId).
+- The self-test invokes Desktop Commander start_process with the fixed command "hostname"; callers cannot supply an arbitrary command through this tool.
+- Public Streamable HTTP MCP canary PASS on us-macmini, china-mac, and windows.
+- R8 is now fully PASS, including start_process transport validation.

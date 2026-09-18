@@ -64,6 +64,13 @@ function getServer(){
     const out=await agentCall(deviceId,name,args||{});
     return textResult(out.result??out);
   });
+  server.registerTool('remote_process_selftest',{
+    description:'Run a fixed read-only hostname process self-test on a selected device.',
+    inputSchema:{deviceId:z.enum(['us-macmini','china-mac','windows'])}
+  },async({deviceId})=>{
+    const out=await agentCall(deviceId,'start_process',{command:'hostname',timeout_ms:8000});
+    return textResult(out.result??out);
+  });
   return server;
 }
 
