@@ -1,6 +1,6 @@
 (()=>{
   'use strict';
-  const CONTENT_VERSION='3.8.20';
+  const CONTENT_VERSION='3.8.22';
   if(globalThis.__AICC_V3_BRIDGE_CONTENT_VERSION__===CONTENT_VERSION)return;
   try{globalThis.__AICC_V3_BRIDGE_CLEANUP__?.();}catch{}
   globalThis.__AICC_V3_BRIDGE_CONTENT_VERSION__=CONTENT_VERSION;
@@ -56,6 +56,65 @@
     try{await message('AICC_PUBLISH_SNAPSHOT',{snapshot},8000);}catch{}
   }
   function scheduleSnapshot(){clearTimeout(snapshotTimer);snapshotTimer=setTimeout(()=>void publishSnapshot(),900);}
+
+  const PLANNER_STYLE_ID='aicc-planner-transport-style';
+  const PLANNER_TURN_ATTR='data-aicc-planner-turn';
+  const PLANNER_SUMMARY_ATTR='data-aicc-planner-summary';
+  function ensurePlannerStyle(){
+    if(document.getElementById(PLANNER_STYLE_ID))return;
+    const style=document.createElement('style');style.id=PLANNER_STYLE_ID;
+    style.textContent=[
+      '['+PLANNER_TURN_ATTR+'="collapsed"]{position:relative!important;max-height:46px!important;min-height:46px!important;overflow:hidden!important;border-radius:12px!important;background:rgba(0,98,65,.055)!important}',
+      '['+PLANNER_TURN_ATTR+'="collapsed"] [data-message-author-role]{opacity:.02!important;pointer-events:none!important}',
+      '['+PLANNER_SUMMARY_ATTR+']{position:absolute!important;inset:0!important;z-index:20!important;display:flex!important;align-items:center!important;gap:10px!important;padding:0 14px!important;color:#17382d!important;background:linear-gradient(90deg,rgba(241,248,244,.98),rgba(249,252,250,.98))!important;border:1px solid rgba(0,98,65,.14)!important;border-radius:12px!important;font:12px/1.2 system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif!important}',
+      '['+PLANNER_SUMMARY_ATTR+'] strong{font-weight:700!important;color:#006241!important}',
+      '['+PLANNER_SUMMARY_ATTR+'] span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#47554f!important}',
+      '['+PLANNER_SUMMARY_ATTR+'] button{margin-left:auto!important;border:0!important;background:transparent!important;color:#006241!important;font:600 12px system-ui!important;cursor:pointer!important;padding:6px 8px!important;border-radius:8px!important}',
+      '['+PLANNER_SUMMARY_ATTR+'] button:hover{background:rgba(0,98,65,.08)!important}',
+      '['+PLANNER_TURN_ATTR+'="expanded"] ['+PLANNER_SUMMARY_ATTR+']{position:relative!important;inset:auto!important;margin:0 0 10px!important;min-height:40px!important}'
+    ].join('');
+    document.documentElement.appendChild(style);
+  }
+  function plannerKind(text,role){
+    const value=(text||'').trim();
+    if(role==='user'&&value.startsWith('AICC V5.4 NEXT-STEP REQUEST'))return 'request';
+    if(role==='assistant'&&value.startsWith('AICC_NEXT_STEP_V1'))return 'response';
+    return null;
+  }
+  function plannerSummaryText(text,kind){
+    if(kind==='request'){
+      const room=text.match(/^name:\s*(.+)$/mi)?.[1]?.trim()||'Execution Room';
+      const task=text.match(/^\s*"title":\s*"([^"]+)"\s*,?$/mi)?.[1]?.trim();
+      return task?room+' · '+task:room;
+    }
+    const action=text.match(/^AICC_ACTION_CLASS:\s*(.+)$/mi)?.[1]?.trim();
+    const provider=text.match(/^AICC_PROVIDER:\s*(.+)$/mi)?.[1]?.trim();
+    const task=text.match(/^AICC_TASK:\s*(.+)$/mi)?.[1]?.trim();
+    return [action,provider,task].filter(Boolean).join(' · ')||'Planner decision';
+  }
+  function collapsePlannerTurns(){
+    ensurePlannerStyle();
+    const nodes=[...document.querySelectorAll('[data-message-author-role="user"],[data-message-author-role="assistant"]')];
+    for(const node of nodes){
+      const role=node.getAttribute('data-message-author-role')||'';
+      const text=(node.innerText||node.textContent||'').trim();
+      const kind=plannerKind(text,role);if(!kind)continue;
+      const turn=node.closest('[data-testid^="conversation-turn-"],[data-message-id],article')||node.parentElement;
+      if(!turn||turn.querySelector('['+PLANNER_SUMMARY_ATTR+']'))continue;
+      turn.setAttribute(PLANNER_TURN_ATTR,'collapsed');
+      const bar=document.createElement('div');bar.setAttribute(PLANNER_SUMMARY_ATTR,'1');
+      const badge=document.createElement('strong');badge.textContent=kind==='request'?'AICC Planner Request':'AICC Planner Decision';
+      const summary=document.createElement('span');summary.textContent=plannerSummaryText(text,kind);
+      const toggle=document.createElement('button');toggle.type='button';toggle.textContent='展开协议';
+      toggle.addEventListener('click',event=>{
+        event.preventDefault();event.stopPropagation();
+        const expanded=turn.getAttribute(PLANNER_TURN_ATTR)==='expanded';
+        turn.setAttribute(PLANNER_TURN_ATTR,expanded?'collapsed':'expanded');
+        toggle.textContent=expanded?'展开协议':'收起协议';
+      });
+      bar.append(badge,summary,toggle);turn.prepend(bar);
+    }
+  }
 
   let modal=null;
   function ensureModal(){
@@ -178,7 +237,7 @@
     }
   }
 
-  const observer=new MutationObserver(()=>{injectButtons();scheduleSnapshot();});observer.observe(document.documentElement,{childList:true,subtree:true});injectButtons();scheduleSnapshot();
+  const observer=new MutationObserver(()=>{injectButtons();collapsePlannerTurns();scheduleSnapshot();});observer.observe(document.documentElement,{childList:true,subtree:true});injectButtons();collapsePlannerTurns();scheduleSnapshot();
   function composer(){return document.querySelector('#prompt-textarea');}
   function composerValue(node){
     if(!node)return null;
@@ -270,6 +329,9 @@
     try{chrome.runtime.onMessage.removeListener(bridgeListener);}catch{}
     clearTimeout(snapshotTimer);
     for(const stale of document.querySelectorAll(`button[${BUTTON_ATTR}]`))stale.remove();
+    for(const bar of document.querySelectorAll('['+PLANNER_SUMMARY_ATTR+']'))bar.remove();
+    for(const turn of document.querySelectorAll('['+PLANNER_TURN_ATTR+']'))turn.removeAttribute(PLANNER_TURN_ATTR);
+    document.getElementById(PLANNER_STYLE_ID)?.remove();
     document.getElementById('aicc-v3-bridge-modal-host')?.remove();
   };
 })();
