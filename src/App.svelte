@@ -348,17 +348,36 @@
     announce('NEXT_STEP_WATCH_TIMEOUT · 请求仍保留在 backend，不会自动重放。');
   }
 
-  async function advanceNextStep() {
+  async function submitActiveNextStep(draft: string, clearDraftAfterFreeze = false, ownerCommand = false) {
     if (!activeRoom || nextStepBusyRoomId) return;
-    const gate = nextStepEligibility(activeRoom, executorFacts, activeSnapshot);
+    const room = activeRoom;
+    const gate = nextStepEligibility(room, executorFacts, activeSnapshot);
     if (!gate.ready) { announce(`Next-Step blocked：${gate.blockers.join(' · ')}`); return; }
-    const roomId = activeRoom.roomId; nextStepBusyRoomId = roomId;
+    const roomId = room.roomId; nextStepBusyRoomId = roomId;
     try {
-      const projection = await submitNextStep(activeRoom, activeRoom.ui.draft); setNextStep(roomId, projection);
-      announce('Next-Step 已冻结 · 等待 Profile 12 GPT planner'); void watchNextStep(roomId, projection.request.requestId);
+      const projection = await submitNextStep(room, draft); setNextStep(roomId, projection);
+      if (clearDraftAfterFreeze) commit(patchExecutionRoomUi(roomStore, roomId, { draft: '' }));
+      announce(ownerCommand ? 'Owner 指令已冻结 · 等待 Profile 12 GPT planner' : 'Next-Step 已冻结 · 等待 Profile 12 GPT planner');
+      void watchNextStep(roomId, projection.request.requestId);
     } catch (error) {
       announce(error instanceof Error ? error.message : String(error));
     } finally { nextStepBusyRoomId = null; }
+  }
+
+  async function advanceNextStep() {
+    if (!activeRoom) return;
+    await submitActiveNextStep(activeRoom.ui.draft);
+  }
+
+  async function submitOwnerCommand() {
+    if (!activeRoom || !activeRoom.ui.draft.trim() || nextStepLocked) return;
+    await submitActiveNextStep(activeRoom.ui.draft, true, true);
+  }
+
+  function ownerCommandKeydown(event: KeyboardEvent) {
+    if (event.key !== 'Enter' || event.isComposing) return;
+    event.preventDefault();
+    void submitOwnerCommand();
   }
 
   function capturedLabel(value: string) {
@@ -588,7 +607,11 @@
         </div>
 
         <div class="composer-shell">
-          <div class="composer-input"><span class="composer-plus">＋</span><input class="composer-draft" style="width:100%;border:0;outline:0;background:transparent;color:#111;font:inherit;" value={activeRoom.ui.draft} oninput={updateDraft} placeholder="可选：补充本轮 Owner 意图；Next-Step 会冻结到 exact request" /><span class="composer-mic">⌁</span></div>
+          <div class="composer-input">
+            <span class="composer-plus">＋</span>
+            <input class="composer-draft" value={activeRoom.ui.draft} oninput={updateDraft} onkeydown={ownerCommandKeydown} placeholder="可选：补充本轮 Owner 指令；Enter 或 ↑ 确认并推进" aria-label="Owner 指令" />
+            <button class="composer-send" class:composer-send-disabled={nextStepLocked || !activeRoom.ui.draft.trim()} disabled={nextStepLocked || !activeRoom.ui.draft.trim()} type="button" aria-label="确认 Owner 指令并推进下一步" title="确认 Owner 指令并推进下一步" onclick={submitOwnerCommand}>↑</button>
+          </div>
           <button class="next-step-button" class:next-step-disabled={nextStepLocked} disabled={nextStepLocked} type="button" onclick={advanceNextStep}>推进下一步</button>
           <div class:next-step-blocked={!activeNextStepEligibility.ready} class="next-step-status"><strong>{nextStepStatusLabel(activeNextStep)}</strong><span>{activeNextStepEligibility.ready ? 'Exact GPT + Runtime Gate READY' : `Blocked · ${activeNextStepEligibility.blockers.join(' · ')}`}</span></div>
         </div>
