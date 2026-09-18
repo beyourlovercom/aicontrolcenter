@@ -58,3 +58,13 @@ No automatic browser opening. No auth retry loop. No cross-device fallback.
 - Audit logs are JSONL and store timestamp, peer, event, tool, and success only; arguments and secrets are never logged.
 - China signed get_config canary PASS; denied tool returned 403.
 - Windows signed get_config canary PASS; denied tool returned 403.
+## R6 Always-On
+- US Gateway: launchd RunAtLoad + KeepAlive, single label, controlled restart PASS.
+- China Agent: launchd RunAtLoad + KeepAlive, single label, controlled restart PASS.
+- Windows Agent: Scheduled Task BYLRemoteMCPAgent with AtStartup + AtLogOn, MultipleInstances=IgnoreNew, plus Global Mutex.
+- Windows watchdog restart backoff: 10 seconds; child crash recovery verified.
+- Windows log rotation threshold: 5 MiB for watchdog/stdout/stderr/audit logs.
+- US central health monitor runs every 60 seconds via launchd and checks gateway, US runner, China agent, Windows agent.
+- Health history is JSONL with 5 MiB rotation and contains only status/latency/small health payloads.
+- Controlled recovery evidence: US Gateway 55019->56982; China Agent 1498->42990; Windows Agent 11528->18492.
+- No duplicate agent chains observed after recovery tests.
