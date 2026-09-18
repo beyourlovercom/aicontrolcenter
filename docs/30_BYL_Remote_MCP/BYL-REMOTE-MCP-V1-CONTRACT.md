@@ -68,3 +68,14 @@ No automatic browser opening. No auth retry loop. No cross-device fallback.
 - Health history is JSONL with 5 MiB rotation and contains only status/latency/small health payloads.
 - Controlled recovery evidence: US Gateway 55019->56982; China Agent 1498->42990; Windows Agent 11528->18492.
 - No duplicate agent chains observed after recovery tests.
+## R7 Remote Client Compatibility
+- Standard MCP transport: Streamable HTTP, stateless JSON response mode.
+- Temporary public MCP endpoint: https://erp.beyourlover.com/__byl_remote_mcp/mcp
+- Public endpoint requires the existing Gateway bearer credential.
+- MCP tools: remote_list_devices, remote_list_tools, remote_call.
+- Device IDs: us-macmini, china-mac, windows.
+- US Mac mini now has a local signed DC agent on 127.0.0.1:8791 so all three devices expose equivalent DC capability.
+- Independent MCP SDK client handshake PASS locally and through Cloudflare public ingress.
+- Public MCP callTool get_config PASS on all three devices; each reported Desktop Commander 0.2.51.
+- Endpoint host validation explicitly permits only localhost and erp.beyourlover.com for the canary path.
+- AICC integration is explicitly out of scope for this workstream.
