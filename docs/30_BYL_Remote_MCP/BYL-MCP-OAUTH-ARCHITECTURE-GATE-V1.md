@@ -35,7 +35,27 @@ B. Owner's ChatGPT Plus plugin performs OAuth interactive login and tool discove
 C. Complete `initialize`, `tools/list`, `remote_list_devices`, and fixed `remote_process_selftest` hostname on `us-macmini`, `china-mac`, and `windows`.
 D. Out-of-scope devices/actions are rejected. Leave existing control console, Cloudflare tunnel, production env, Tailscale peers, and online agents unchanged during development.
 
+## Recommended implementation: Cloudflare Access Managed OAuth (2026-10 update)
+
+Cloudflare documents **Managed OAuth** for MCP server applications. Prefer this managed authorization server over hand-rolling OAuth or reusing the console password. References:
+- https://developers.cloudflare.com/cloudflare-one/access-controls/applications/http-apps/managed-oauth/
+- https://developers.cloudflare.com/agents/model-context-protocol/protocol/authorization/
+- https://developers.openai.com/plugins/build/auth
+
+**Prerequisites, not yet verified in BYL account:** a dedicated Cloudflare Access MCP application protecting the MCP hostname; explicit permitted owner identity and MFA policy; Managed OAuth capability enabled and plan/feature eligibility; authorized ChatGPT OAuth client callback and RFC8707 resource support. Do not assume Cloudflare Tunnel alone means Access is configured.
+
+**Important:** Cloudflare Managed OAuth issues opaque client tokens and forwards a signed `Cf-Access-Jwt-Assertion` to the protected origin. Current BYL `mcp-endpoint.mjs` checks only the internal gateway Bearer token and would still reject this request with 401. The MCP origin therefore needs a separately tested cryptographic JWT verifier for Access issuer, application audience, expiry, signing key and allowlisted operator identity; a matching application Access policy; and route-level permission enforcement. Cloudflare explicitly requires validation of Access JWTs. Never trust a header merely because its name begins with `Cf-Access-`. Keep the existing internal bearer-token and signed agent path separate.
+
+**Rollout:**
+1. Read-only Cloudflare Access account inventory and plan/feature entitlement verification.
+2. Development code: Access JWT validation and read-only MCP tool policy with mock signed-token regression tests; the default current Bearer behavior stays unchanged.
+3. Configure a separate staging MCP hostname + Access app with restrictive owner login and Managed OAuth, not the live `mcp.beyourlover.com`. Stage Cloudflare route carefully.
+4. ChatGPT Plus custom MCP plugin login, initialize, tools/list, fixed hostname UAT and rejection tests.
+5. Separate explicit production rollout/rollback authorization; never turn Managed OAuth on for the live domain without a vetted origin change and gate.
+
+**Why not custom OAuth server:** Cloudflare can handle PKCE, client registration and metadata, reducing long-lived authentication and discovery code maintained by BYL.
+
 ## Current blocker
-No verified compatible OAuth issuer, registered ChatGPT client and validated signing configuration have been provided. This is an **identity architecture decision**, not a Plus-plan entitlement issue. The separate credential-safe MCP read-only test harness is merged; authenticated real-device UAT and ChatGPT direct OAuth UAT remain pending.
+A Cloudflare-managed compatible OAuth option now exists, but BYL Access application setup, availability, callback configuration and trusted origin JWT validation are not yet confirmed. This is an **identity architecture decision**, not a Plus-plan entitlement issue. The separate credential-safe MCP read-only test harness is merged; authenticated real-device UAT and ChatGPT direct OAuth UAT remain pending.
 
 No secret values or credentials belong in this record.
