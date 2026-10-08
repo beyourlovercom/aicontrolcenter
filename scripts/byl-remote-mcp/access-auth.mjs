@@ -26,13 +26,13 @@ function parseEmails(csv){
 }
 
 /** jose verifies signature, algorithm, issuer, audience, temporal claims and key rotations. */
-export async function verifyAccessJwt(assertion,config){
+export async function verifyAccessJwt(assertion,config,{testJwks}={}){
   const {createRemoteJWKSet,jwtVerify}=await import('jose');
   const jwksUri=config.issuer+'/cdn-cgi/access/certs';
   if(!jwksCache||jwksCache.uri!==jwksUri){
     jwksCache={uri:jwksUri,keys:createRemoteJWKSet(new URL(jwksUri),{timeoutDuration:5000,cooldownDuration:30000})};
   }
-  const {payload}=await jwtVerify(assertion,jwksCache.keys,{
+  const {payload}=await jwtVerify(assertion,testJwks||jwksCache.keys,{
     algorithms:['RS256'],issuer:config.issuer,audience:config.audience,clockTolerance:'30s'
   });
   return payload;
