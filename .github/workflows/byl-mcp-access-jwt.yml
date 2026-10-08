@@ -1,0 +1,28 @@
+name: BYL MCP Cloudflare Access JWT guard
+
+on:
+  pull_request:
+    paths:
+      - 'scripts/byl-remote-mcp/access-*.mjs'
+      - 'scripts/byl-remote-mcp/mcp-endpoint.mjs'
+      - 'scripts/byl-remote-mcp/package.json'
+      - '.github/workflows/byl-mcp-access-jwt.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  jwt-policy-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install isolated auth dependency
+        run: npm install --prefix scripts/byl-remote-mcp --ignore-scripts --no-audit --no-fund
+      - name: Run Access identity and signed-token tests
+        run: node --test scripts/byl-remote-mcp/access-auth.test.mjs scripts/byl-remote-mcp/access-crypto.test.mjs
+      - name: Syntax check MCP integration
+        run: node --check scripts/byl-remote-mcp/mcp-endpoint.mjs
