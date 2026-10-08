@@ -1,0 +1,28 @@
+name: BYL Remote MCP read-only test harness
+
+on:
+  push:
+    branches:
+      - test/byl-remote-mcp-readonly-uat-v1
+    paths:
+      - 'scripts/byl-remote-mcp/uat-mcp-readonly*.mjs'
+      - '.github/workflows/byl-mcp-readonly-uat.yml'
+  pull_request:
+    paths:
+      - 'scripts/byl-remote-mcp/uat-mcp-readonly*.mjs'
+      - '.github/workflows/byl-mcp-readonly-uat.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  offline-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Run credential-free mock UAT
+        run: node --test scripts/byl-remote-mcp/uat-mcp-readonly.test.mjs
