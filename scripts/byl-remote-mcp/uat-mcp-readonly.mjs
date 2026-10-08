@@ -13,7 +13,7 @@ export const EXPECTED_DEVICES = Object.freeze({
   'windows': /YST-241030SSD/i
 });
 export const REQUIRED_TOOLS = Object.freeze([
-  'remote_list_devices','remote_list_tools','remote_process_selftest'
+  'remote_list_devices','remote_list_tools','remote_call','remote_process_selftest'
 ]);
 const DEFAULT_ENDPOINT='http://127.0.0.1:8792/mcp';
 const TIMEOUT_MS=15_000;
