@@ -65,7 +65,9 @@ export async function runUat({endpoint=DEFAULT_ENDPOINT,token='',fetchImpl=fetch
   }catch{record('reject_anonymous_mcp','FAIL','UNREACHABLE');}
   if(!token){
     record('authenticated_mcp','BLOCKED','NO_LOCAL_TEST_CREDENTIAL');
-    return {status:'BLOCKED',checks};
+    const status=checks.some(c=>c.status==='FAIL')?'FAIL':'BLOCKED';
+    record('overall',status);
+    return {status,checks};
   }
   let rpcId=1;
   async function call(method,params){
