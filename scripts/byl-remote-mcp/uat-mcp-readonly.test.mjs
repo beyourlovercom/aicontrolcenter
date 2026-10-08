@@ -72,3 +72,9 @@ test('rejects non-TLS nonloopback endpoints',async()=>{
 test('rejects credentials embedded in URLs',async()=>{
   await assert.rejects(runUat({endpoint:'http://test:secret@127.0.0.1:8792/mcp',fetchImpl:mockServer().fetchImpl,write:()=>{}}),/UNSAFE_URL/);
 });
+
+test('network errors cannot be masked as a credential-only block',async()=>{
+  const result=await runUat({fetchImpl:async()=>{throw new Error('simulated network outage');},write:()=>{}});
+  assert.equal(result.status,'FAIL');
+  assert.ok(result.checks.some(c=>c.name==='health'&&c.status==='FAIL'));
+});
