@@ -79,7 +79,8 @@ function getServer(principal){
       }
       console.info('[operator-audit]',JSON.stringify({
         decision:'allow',principal:principal.subjectHash||'unknown',
-        deviceId,action:'remote_call',approvedTool:call.name
+        deviceId,action:'remote_call',approvedTool:call.name,
+        argumentSha256:sha(Buffer.from(JSON.stringify(call.arguments||{}))).slice(0,24)
       }));
     }
     const out=await agentCall(deviceId,call.name,call.arguments);
