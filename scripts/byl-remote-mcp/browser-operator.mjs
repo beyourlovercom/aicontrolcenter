@@ -38,11 +38,11 @@ function url(value){
 }
 function checkTab(id){
   const script=`on run argv
-  set targetId to (item 1 of argv) as integer
+  set targetId to item 1 of argv
   tell application "Google Chrome"
     repeat with w in windows
       repeat with t in tabs of w
-        if (id of t) is targetId then
+        if ((id of t) as text) = targetId then
           return URL of t
         end if
       end repeat
@@ -67,11 +67,11 @@ end run`;
   const id=tabId(first);const dest=url(second);
   checkTab(id);
   const script=`on run argv
-  set targetId to (item 1 of argv) as integer
+  set targetId to item 1 of argv
   tell application "Google Chrome"
     repeat with w in windows
       repeat with t in tabs of w
-        if id of t is targetId then
+        if ((id of t) as text) = targetId then
           set URL of t to item 2 of argv
           return URL of t
         end if
@@ -88,11 +88,11 @@ end run`;
     throw Error('BROWSER_SCREENSHOT_PATH_DENIED');
   checkTab(id);
   const activate=`on run argv
-  set targetId to (item 1 of argv) as integer
+  set targetId to item 1 of argv
   tell application "Google Chrome"
     repeat with w in windows
       repeat with t in tabs of w
-        if id of t is targetId then
+        if ((id of t) as text) = targetId then
           set active tab index of w to index of t
           set index of w to 1
           activate
@@ -111,12 +111,12 @@ end run`;
   if(!selector||selector.length>500)throw Error('BROWSER_SELECTOR_INVALID');
   checkTab(id);
   const script=`on run argv
-  set targetId to (item 1 of argv) as integer
+  set targetId to item 1 of argv
   set query to item 2 of argv
   tell application "Google Chrome"
     repeat with w in windows
       repeat with t in tabs of w
-        if id of t is targetId then
+        if ((id of t) as text) = targetId then
           set js to "(function(){const el=document.querySelector(" & query & ");if(!el)return 'NOT_FOUND';el.click();return 'CLICKED';})()"
           return execute t javascript js
         end if
@@ -130,11 +130,11 @@ end run`;
   const id=tabId(first);
   checkTab(id);
   const script=`on run argv
-  set targetId to (item 1 of argv) as integer
+  set targetId to item 1 of argv
   tell application "Google Chrome"
     repeat with w in windows
       repeat with t in tabs of w
-        if id of t is targetId then
+        if ((id of t) as text) = targetId then
           close t
           return "CLOSED"
         end if
