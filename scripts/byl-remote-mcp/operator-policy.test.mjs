@@ -101,3 +101,26 @@ test('P6-E isolated IO canary permits only exact projects, scratch writes and wh
  assert.throws(()=>authorizeRemoteCall({kind:'cloudflare-access',canOperate:false},'us-macmini',
    'write_file',{path:exact['us-macmini'].scratch,content},io),/OPERATOR_DENIED/);
 });
+
+test('P6-F read-only Chrome telemetry probes are exact and China Mac only',()=>{
+ const browser={...enabled,BYL_MCP_OPERATOR_BROWSER_READ_CANARY_ENABLED:'1'};
+ const probes=[
+  "osascript -e 'tell application \"Google Chrome\" to count windows'",
+  "osascript -e 'tell application \"Google Chrome\" to count tabs of front window'"
+ ];
+ for(const command of probes){
+  assert.deepEqual(authorizeRemoteCall(op,'china-mac','start_process',{command,timeout_ms:8000},browser),
+    {name:'start_process',arguments:{command,timeout_ms:8000}});
+  assert.throws(()=>authorizeRemoteCall(op,'china-mac','start_process',{command},enabled),/OPERATOR_ARGUMENTS_DENIED/);
+  for(const id of ['us-macmini','windows'])
+   assert.throws(()=>authorizeRemoteCall(op,id,'start_process',{command},browser),/OPERATOR_ARGUMENTS_DENIED/);
+ }
+ for(const command of [
+  "osascript -e 'tell application \"Google Chrome\" to close windows'",
+  "osascript -e 'tell application \"Google Chrome\" to get URL of active tab'",
+  "osascript -e 'tell application \"Google Chrome\" to count windows';whoami",
+  "osascript -e 'tell application \"Google Chrome\" to count windows' # comment"
+ ])assert.throws(()=>authorizeRemoteCall(op,'china-mac','start_process',{command},browser),/OPERATOR_ARGUMENTS_DENIED/);
+ assert.throws(()=>authorizeRemoteCall(op,'china-mac','start_process',{command:probes[0],timeout_ms:8000,cwd:'/tmp'},browser),/OPERATOR_ARGUMENTS_DENIED/);
+ assert.throws(()=>authorizeRemoteCall({kind:'cloudflare-access',canOperate:false},'china-mac','start_process',{command:probes[0]},browser),/OPERATOR_DENIED/);
+});
