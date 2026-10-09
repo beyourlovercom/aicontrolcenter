@@ -36,3 +36,17 @@ test('OAuth operator cannot expose remote_call outside explicit candidate with c
  assert.equal(canExposeRemoteCall({kind:'cloudflare-access',canOperate:false},enabled),false);
  assert.equal(canExposeRemoteCall({kind:'internal',canOperate:true},{}),true);
 });
+
+test('fixed harmless file read requires independent read Canary flag',()=>{
+ const readEnv={...enabled,BYL_MCP_OPERATOR_READ_CANARY_ENABLED:'1'};
+ for(const id of ['us-macmini','china-mac','windows']){
+  const path=id==='windows'?'C:\\Windows\\win.ini':'/etc/hosts';
+  assert.deepEqual(authorizeRemoteCall(op,id,'read_file',{path},readEnv),
+   {name:'read_file',arguments:{path}});
+  assert.throws(()=>authorizeRemoteCall(op,id,'read_file',{path},enabled),/TOOL_DENIED/);
+  for(const args of [{path:'/etc/passwd'},{path:path+'/../secret'}, {path,extra:true}, {path,encoding:'utf8'}, {}, null])
+   assert.throws(()=>authorizeRemoteCall(op,id,'read_file',args,readEnv),/ARGUMENTS_DENIED/);
+ }
+ for(const name of ['write_file','edit_block','list_directory','start_process'])
+  assert.throws(()=>authorizeRemoteCall(op,'us-macmini',name,{path:'/etc/hosts'},readEnv),/TOOL_DENIED|ARGUMENTS_DENIED/);
+});
