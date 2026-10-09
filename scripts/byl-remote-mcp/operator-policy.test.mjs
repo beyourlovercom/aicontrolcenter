@@ -181,3 +181,23 @@ test('P6-G full DC execution is owner-only, staging candidate-only, opt-in',()=>
  assert.throws(()=>authorizeRemoteCall(op,'china-mac','read_file',null,full),/ARGUMENTS_DENIED/);
  assert.equal(canExposeRemoteCall({kind:'internal',canOperate:true},{}),true);
 });
+
+test('P7 OAuth compatibility full execution requires all independent production flags',()=>{
+ const ready={
+  BYL_MCP_STAGING:'0',BYL_MCP_ACCESS_ENABLED:'1',
+  BYL_MCP_OAUTH_COMPAT_CANDIDATE:'1',
+  BYL_MCP_OAUTH_COMPAT_FULL_EXEC_ENABLED:'1',
+  BYL_MCP_PRODUCTION_OAUTH_ENABLED:'1',
+  BYL_MCP_PRODUCTION_OPERATOR_ENABLED:'1',
+  BYL_MCP_OPERATOR_CANARY_ENABLED:'1',
+  BYL_MCP_OPERATOR_FULL_EXEC_ENABLED:'1'
+ };
+ const request={command:'git --version',timeout_ms:8000};
+ assert.deepEqual(authorizeRemoteCall(op,'us-macmini','start_process',request,ready),{name:'start_process',arguments:request});
+ for(const key of Object.keys(ready)){
+  const disabled={...ready};delete disabled[key];
+  assert.throws(()=>authorizeRemoteCall(op,'us-macmini','start_process',request,disabled),/OPERATOR_DENIED|OPERATOR_ARGUMENTS_DENIED/,'missing '+key);
+ }
+ assert.throws(()=>authorizeRemoteCall({...op,canOperate:false},'us-macmini','start_process',request,ready),/OPERATOR_DENIED/);
+ assert.equal(canExposeRemoteCall(op,{...ready,BYL_MCP_STAGING:'1'}),false);
+});
