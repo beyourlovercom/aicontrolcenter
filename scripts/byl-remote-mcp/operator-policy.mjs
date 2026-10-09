@@ -38,12 +38,42 @@ export function authorizeRemoteCall(principal,deviceId,name,args,env=process.env
       throw Error('OPERATOR_ARGUMENTS_DENIED');
     return {name:'list_directory',arguments:{path:permittedPath,depth:1}};
   }
+  // P6-E owner-approved controlled I/O Canary (staging-only).
+  // Exact filenames prevent path traversal, symlink-following through arbitrary
+  // directories, read URLs, and access to credentials or unrelated projects.
+  if(env.BYL_MCP_OPERATOR_IO_CANARY_ENABLED==='1'){
+    const projectFiles={
+      'us-macmini':['/Users/a/AI/007/AIcontrolcenter/README.md','/Users/a/AI/007/AIcontrolcenter/package.json'],
+      'china-mac':['/Users/a/AI/007/AIcontrolcenter/README.md'],
+      'windows':[]
+    }[deviceId];
+    const scratch={
+      'us-macmini':'/tmp/byl-operator-uat-canary-20261009.txt',
+      'china-mac':'/tmp/byl-operator-uat-canary-20261009.txt',
+      'windows':'C:\\Users\\Public\\Documents\\byl-operator-uat-canary-20261009.txt'
+    }[deviceId];
+    if(name==='read_file'){
+      if(!args||typeof args!=='object'||Array.isArray(args)||
+         Object.keys(args).length!==1||
+         ![...projectFiles,scratch].includes(args.path))
+        throw Error('OPERATOR_ARGUMENTS_DENIED');
+      return {name:'read_file',arguments:{path:args.path}};
+    }
+    if(name==='write_file'){
+      if(!args||typeof args!=='object'||Array.isArray(args)||
+         Object.keys(args).length!==2||
+         args.path!==scratch||args.content!=='BYL_OPERATOR_UAT_V1_20261009\n')
+        throw Error('OPERATOR_ARGUMENTS_DENIED');
+      return {name:'write_file',arguments:{path:scratch,content:args.content}};
+    }
+  }
   if(name!=='start_process')throw Error('OPERATOR_TOOL_DENIED');
   if(!args||typeof args!=='object'||Array.isArray(args))throw Error('OPERATOR_ARGUMENTS_DENIED');
   const keys=Object.keys(args);
   if(keys.some(k=>!['command','timeout_ms'].includes(k))||
-     args.command!=='hostname'||
+     !(['hostname','whoami'].includes(args.command)&&
+       (args.command==='hostname'||env.BYL_MCP_OPERATOR_IO_CANARY_ENABLED==='1'))||
      (args.timeout_ms!==undefined&&args.timeout_ms!==8000))
     throw Error('OPERATOR_ARGUMENTS_DENIED');
-  return {name:'start_process',arguments:{command:'hostname',timeout_ms:8000}};
+  return {name:'start_process',arguments:{command:args.command,timeout_ms:8000}};
 }
