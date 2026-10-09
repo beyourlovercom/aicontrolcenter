@@ -24,6 +24,20 @@ export function authorizeRemoteCall(principal,deviceId,name,args,env=process.env
       throw Error('OPERATOR_ARGUMENTS_DENIED');
     return {name:'read_file',arguments:{path:fixture}};
   }
+  // Explicit single-directory UAT probe; do not grant arbitrary traversal.
+  if(name==='list_directory'&&env.BYL_MCP_OPERATOR_LIST_CANARY_ENABLED==='1'){
+    const permittedPath={
+      'us-macmini':'/Users/a/AI/007/AIcontrolcenter',
+      'china-mac':'/Users/a/AI/007',
+      'windows':'C:\\Windows'
+    }[deviceId];
+    if(!args||typeof args!=='object'||Array.isArray(args)||
+       Object.keys(args).some(k=>!['path','depth'].includes(k))||
+       Object.keys(args).length<1||args.path!==permittedPath||
+       (args.depth!==undefined&&args.depth!==1))
+      throw Error('OPERATOR_ARGUMENTS_DENIED');
+    return {name:'list_directory',arguments:{path:permittedPath,depth:1}};
+  }
   if(name!=='start_process')throw Error('OPERATOR_TOOL_DENIED');
   if(!args||typeof args!=='object'||Array.isArray(args))throw Error('OPERATOR_ARGUMENTS_DENIED');
   const keys=Object.keys(args);
