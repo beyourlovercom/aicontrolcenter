@@ -117,7 +117,7 @@ end run`;
     repeat with w in windows
       repeat with t in tabs of w
         if id of t is targetId then
-          set js to "(function(){const el=document.querySelector(" & quoted form of query & ");if(!el)return 'NOT_FOUND';el.click();return 'CLICKED';})()"
+          set js to "(function(){const el=document.querySelector(" & query & ");if(!el)return 'NOT_FOUND';el.click();return 'CLICKED';})()"
           return execute t javascript js
         end if
       end repeat
