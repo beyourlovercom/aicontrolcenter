@@ -4,6 +4,7 @@ on:
   pull_request:
     paths:
       - 'scripts/byl-remote-mcp/access-*.mjs'
+      - 'scripts/byl-remote-mcp/operator-policy*.mjs'
       - 'scripts/byl-remote-mcp/mcp-endpoint.mjs'
       - 'scripts/byl-remote-mcp/package.json'
       - '.github/workflows/byl-mcp-access-jwt.yml'
@@ -23,6 +24,6 @@ jobs:
       - name: Install isolated auth dependency
         run: npm install --prefix scripts/byl-remote-mcp --ignore-scripts --no-audit --no-fund
       - name: Run Access identity and signed-token tests
-        run: node --test scripts/byl-remote-mcp/access-auth.test.mjs scripts/byl-remote-mcp/access-crypto.test.mjs
+        run: node --test scripts/byl-remote-mcp/access-auth.test.mjs scripts/byl-remote-mcp/access-crypto.test.mjs scripts/byl-remote-mcp/operator-policy.test.mjs
       - name: Syntax check MCP integration
-        run: node --check scripts/byl-remote-mcp/mcp-endpoint.mjs
+        run: node --check scripts/byl-remote-mcp/mcp-endpoint.mjs && node --check scripts/byl-remote-mcp/operator-policy.mjs
