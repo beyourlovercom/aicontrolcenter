@@ -24,8 +24,18 @@ export function authorizeRemoteCall(principal,deviceId,name,args,env=process.env
   // P6-G Owner-approved full remote DC execution, isolated UAT only.
   // This reuses the device agent's existing 24 tools and its own filesystem,
   // command, process and audit protections; never touches internal Bearer flow.
-  if(env.BYL_MCP_STAGING==='1'&&env.BYL_MCP_UAT_CANDIDATE==='1'&&
-     env.BYL_MCP_OPERATOR_FULL_EXEC_ENABLED==='1'){
+  const isolatedFullExec=
+    env.BYL_MCP_STAGING==='1'&&
+    env.BYL_MCP_UAT_CANDIDATE==='1'&&
+    env.BYL_MCP_OPERATOR_FULL_EXEC_ENABLED==='1';
+  const compatFullExec=
+    env.BYL_MCP_STAGING==='0'&&
+    env.BYL_MCP_OAUTH_COMPAT_CANDIDATE==='1'&&
+    env.BYL_MCP_OAUTH_COMPAT_FULL_EXEC_ENABLED==='1'&&
+    env.BYL_MCP_PRODUCTION_OAUTH_ENABLED==='1'&&
+    env.BYL_MCP_PRODUCTION_OPERATOR_ENABLED==='1'&&
+    env.BYL_MCP_OPERATOR_FULL_EXEC_ENABLED==='1';
+  if(isolatedFullExec||compatFullExec){
     if(!args||typeof args!=='object'||Array.isArray(args))
       throw Error('OPERATOR_ARGUMENTS_DENIED');
     const allowed=new Set([
