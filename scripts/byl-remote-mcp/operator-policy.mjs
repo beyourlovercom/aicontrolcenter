@@ -5,8 +5,16 @@
 export const OPERATOR_DEVICES=Object.freeze(['us-macmini','china-mac','windows']);
 export function canExposeRemoteCall(principal,env=process.env){
   if(principal?.kind==='internal')return principal.canOperate===true;
-  return principal?.kind==='cloudflare-access'&&principal.canOperate===true&&
-    env.BYL_MCP_STAGING==='1'&&env.BYL_MCP_UAT_CANDIDATE==='1'&&
+  if(principal?.kind!=='cloudflare-access'||principal.canOperate!==true)return false;
+  // Staging remains independently gated. Production is default-denied and
+  // requires THREE explicit production-only approvals, not staging flags.
+  if(env.BYL_MCP_STAGING==='1')
+    return env.BYL_MCP_UAT_CANDIDATE==='1'&&
+      env.BYL_MCP_OPERATOR_CANARY_ENABLED==='1';
+  return env.BYL_MCP_STAGING==='0'&&
+    env.BYL_MCP_ACCESS_ENABLED==='1'&&
+    env.BYL_MCP_PRODUCTION_OAUTH_ENABLED==='1'&&
+    env.BYL_MCP_PRODUCTION_OPERATOR_ENABLED==='1'&&
     env.BYL_MCP_OPERATOR_CANARY_ENABLED==='1';
 }
 export function authorizeRemoteCall(principal,deviceId,name,args,env=process.env){
