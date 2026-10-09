@@ -53,3 +53,29 @@ Status: **DESIGN / NOT OPERATOR-ENABLED**. Environment: independent `mcp-uat.bey
 7. Re-run public legacy Bearer initialize/tools/list, production health, original UAT live 3/3 and control-console login; then rollback candidate route/flags and confirm read-only behavior.
 
 **Blocker as of this audit:** no connected Cloudflare account write integration to verify/create isolated Access app; Cloudflare app/DNS and exact Operator OAuth callback have not been established. Therefore P6-C operator online UAT remains PENDING. Do not substitute an unprotected public tunnel route or copy production Bearer token into the ChatGPT app.
+
+## 2026-10-09 Owner architecture correction — REUSE EXISTING OAUTH HOSTNAME
+
+The owner rejected the extra `mcp-operator-uat.beyourlover.com` domain/Access application. The previous section proposing that hostname is **superseded and must not be implemented**. The existing production `/control/` password/session flow is separate from MCP OAuth; no additional console password/hostname is needed for Operator testing.
+
+**New approved same-host split:**
+- Existing `https://mcp-uat.beyourlover.com/mcp` → localhost **8794** (read-only OAuth UAT, preserve as-is).
+- Existing code path `https://mcp-uat.beyourlover.com/__byl_remote_mcp/mcp` → localhost **8795** (isolated Operator candidate after private OAuth configuration and Canary activation).
+- Keep the *same* existing hostname-scoped Cloudflare Access Managed OAuth application, Owner Only policy and OAuth discovery. No new Access app, domain or public password flow.
+- OAuth per-user tool authorization is independently enforced by MCP origin. Only candidate service can advertise remote_call when `BYL_MCP_STAGING=1`, `BYL_MCP_UAT_CANDIDATE=1`, `BYL_MCP_OPERATOR_CANARY_ENABLED=1` and JWT-validated owner is on both read/operator allowlists. The allowed call is exclusively `start_process` with `command:'hostname'`, timeout 8000, on the three enumerated devices.
+- After successful online UAT, reverse the path-specific ingress rule to return Operator alias to 8794 or deny by default, and disable candidate Canary; original `/mcp` route remains untouched throughout.
+
+### Read-only technical proof
+- Unauthenticated public GET `/__byl_remote_mcp/mcp` returned **401** with `WWW-Authenticate: Bearer` challenge and resource_metadata URL for that exact path. Corresponding `/.well-known/cloudflare-access-protected-resource/__byl_remote_mcp/mcp` returned **200 JSON**. These requests currently resolve to the *old 8794 service*, not the candidate; this proves discovery can be path-specific, not yet candidate connectivity.
+- Created **shadow-only** tunnel configuration `/tmp/byl-mcp-uat-route-candidate-20261009.yml` on US Mac mini (original remains unmodified). Cloudflared `ingress validate`: **OK**.
+- Shadow ingress dry-run `/mcp` → rule #1 `127.0.0.1:8794` PASS; `/__byl_remote_mcp/mcp` → rule #0 exact path `127.0.0.1:8795` PASS.
+- **No running tunnel changed/restarted.** Production 8792 and staging 8794 remain healthy. Live 8795 candidate still needs authenticated owner JWT configuration and exact-source runtime restart.
+
+### Remaining secure activation gates
+1. Securely reuse the existing *staging* Access issuer/AUD/owner email locally, without printing credentials or copying process environment into logs; verify exact app audience for both OAuth paths and owner-only policy.
+2. Configure and start only the isolated candidate process 8795 with Access validation and single-owner operator allowlist, both explicit Canary flags; read-only/denied behavior verified before changing tunnel ingress.
+3. Back up active UAT tunnel configuration, apply only exact-path ingress rule with rollback plan; ensure original `/mcp` remains on 8794. Observe public challenge/discovery from Operator path without exposing old legacy credentials.
+4. Create a *separate ChatGPT custom MCP connection* to the Operator **path** (same host/OAuth app). Verify it negotiates OAuth and advertises only the authorized `remote_call`. Test harmless hostname on 3/3 devices and negative calls. Do not claim UAT PASS before real tool invocation.
+5. Restore candidate route/role on UAT failure. After success rerun preexisting Read-only UAT and legacy production Bearer compatibility.
+
+Current gate: shadow routes and public path discovery **PASS**; Operator authenticated 8795 and online client verification **PENDING**. The domain mentioned in the superseded section is not reachable and should not be created.
