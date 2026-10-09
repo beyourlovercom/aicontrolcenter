@@ -31,3 +31,13 @@ Status: **Architecture review / NO PRODUCTION CUTOVER**. Source baseline: featur
 - https://mcp.beyourlover.com/.well-known/oauth-protected-resource matches rule #2 and origin http://127.0.0.1:8793, **not** the OAuth-aware MCP service. Production OAuth discovery requires an explicitly reviewed route and Access policy change; cannot be achieved by renaming UAT.
 - Both production and UAT cloudflared tunnel processes were running independently. No service restarted, no production config changed.
 - Gate still pending: enumerate legacy Bearer clients and establish Cloudflare Access path-level policy compatibility. Do not claim production OAuth UAT PASS.
+
+## Production endpoint negative-path and discovery read-only checks — 2026-10-09
+- US Mac mini production local POST http://127.0.0.1:8792/mcp with unauthenticated empty JSON: HTTP **401** (deny baseline PASS).
+- Local GET http://127.0.0.1:8793/control/: HTTP **200** (page reachability only; does NOT establish successful console login).
+- Public GET https://mcp.beyourlover.com/.well-known/oauth-protected-resource: HTTP **401**.
+- Public GET https://mcp.beyourlover.com/.well-known/oauth-authorization-server: HTTP **401**.
+- Public GET https://mcp.beyourlover.com/.well-known/cloudflare-access-protected-resource/mcp: HTTP **404**.
+- Existing production ingress also routes /healthz to localhost:8790 and /__byl_remote_mcp/mcp to localhost:8792, with separate catch-all 8793. These must be considered in path-scope migration design.
+- **BLOCKED**: production OAuth discovery not ready; legacy authenticated Bearer initialize/tools/list has not yet been tested and Cloudflare edge Access behavior for legacy clients is unverified. No production configuration changes approved or executed.
+- **Next gate**: inventory actual legacy clients without reading secrets, test authenticated MCP using the existing token locally without printing it, and propose a path-isolated OAuth rollout that does not intercept /control/ or legacy MCP traffic.
