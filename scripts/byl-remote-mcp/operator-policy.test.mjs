@@ -137,7 +137,7 @@ test('P7 production Operator remains default-denied until all explicit OAuth fla
   const absent={...production};delete absent[key];
   assert.equal(canExposeRemoteCall(op,absent),false,'missing '+key);
   assert.throws(()=>authorizeRemoteCall(op,'us-macmini','start_process',safe,absent),/OPERATOR_DENIED/);
-  assert.equal(canExposeRemoteCall(op,{...production,[key]:'0'}),false,'disabled '+key);
+  assert.equal(canExposeRemoteCall(op,{...production,[key]:key==='BYL_MCP_STAGING'?'1':'0'}),false,'disabled '+key);
  }
  assert.equal(canExposeRemoteCall(op,production),true);
  assert.deepEqual(authorizeRemoteCall(op,'us-macmini','start_process',safe,production),
