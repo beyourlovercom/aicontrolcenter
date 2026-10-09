@@ -67,6 +67,20 @@ export function authorizeRemoteCall(principal,deviceId,name,args,env=process.env
       return {name:'write_file',arguments:{path:scratch,content:args.content}};
     }
   }
+  // P6-F: strictly read-only Chrome AppleScript probes, China Mac only.
+  // No tab navigation, DOM, profiles, screenshots, cookies or writes.
+  if(name==='start_process'&&deviceId==='china-mac'&&
+     env.BYL_MCP_OPERATOR_BROWSER_READ_CANARY_ENABLED==='1'){
+    const probes=[
+      "osascript -e 'tell application \"Google Chrome\" to count windows'",
+      "osascript -e 'tell application \"Google Chrome\" to count tabs of front window'"
+    ];
+    if(args&&typeof args==='object'&&!Array.isArray(args)&&
+       Object.keys(args).every(k=>['command','timeout_ms'].includes(k))&&
+       probes.includes(args.command)&&
+       (args.timeout_ms===undefined||args.timeout_ms===8000))
+      return {name:'start_process',arguments:{command:args.command,timeout_ms:8000}};
+  }
   if(name!=='start_process')throw Error('OPERATOR_TOOL_DENIED');
   if(!args||typeof args!=='object'||Array.isArray(args))throw Error('OPERATOR_ARGUMENTS_DENIED');
   const keys=Object.keys(args);
