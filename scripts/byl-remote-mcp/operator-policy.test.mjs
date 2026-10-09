@@ -67,3 +67,37 @@ test('one-directory depth-one operator listing is independently gated',()=>{
  }
  assert.throws(()=>authorizeRemoteCall({kind:'cloudflare-access',canOperate:false},'us-macmini','list_directory',{path:fixtures['us-macmini']},on),/OPERATOR_DENIED/);
 });
+
+test('P6-E isolated IO canary permits only exact projects, scratch writes and whoami',()=>{
+ const io={...enabled,BYL_MCP_OPERATOR_READ_CANARY_ENABLED:'1',BYL_MCP_OPERATOR_LIST_CANARY_ENABLED:'1',BYL_MCP_OPERATOR_IO_CANARY_ENABLED:'1'};
+ const exact={
+   'us-macmini':{file:'/Users/a/AI/007/AIcontrolcenter/README.md',scratch:'/tmp/byl-operator-uat-canary-20261009.txt'},
+   'china-mac':{file:'/Users/a/AI/007/AIcontrolcenter/README.md',scratch:'/tmp/byl-operator-uat-canary-20261009.txt'},
+   'windows':{file:'C:\\Windows\\win.ini',scratch:'C:\\Users\\Public\\Documents\\byl-operator-uat-canary-20261009.txt'}
+ };
+ const content='BYL_OPERATOR_UAT_V1_20261009\n';
+ for(const [id,{file,scratch}] of Object.entries(exact)){
+   assert.deepEqual(authorizeRemoteCall(op,id,'read_file',{path:file},io),
+     {name:'read_file',arguments:{path:file}});
+   assert.deepEqual(authorizeRemoteCall(op,id,'write_file',{path:scratch,content},io),
+     {name:'write_file',arguments:{path:scratch,content}});
+   assert.deepEqual(authorizeRemoteCall(op,id,'read_file',{path:scratch},io),
+     {name:'read_file',arguments:{path:scratch}});
+   assert.deepEqual(authorizeRemoteCall(op,id,'start_process',{command:'whoami',timeout_ms:8000},io),
+     {name:'start_process',arguments:{command:'whoami',timeout_ms:8000}});
+   for(const p of [scratch+'/../sensitive',scratch+'.bak','/etc/passwd','https://example.org/file']){
+     assert.throws(()=>authorizeRemoteCall(op,id,'read_file',{path:p},io),/ARGUMENTS_DENIED/);
+     assert.throws(()=>authorizeRemoteCall(op,id,'write_file',{path:p,content},io),/ARGUMENTS_DENIED/);
+   }
+   for(const payload of ['altered','',content+'x']){
+     assert.throws(()=>authorizeRemoteCall(op,id,'write_file',{path:scratch,content:payload},io),/ARGUMENTS_DENIED/);
+   }
+   assert.throws(()=>authorizeRemoteCall(op,id,'write_file',{path:scratch,content,mode:'append'},io),/ARGUMENTS_DENIED/);
+   assert.throws(()=>authorizeRemoteCall(op,id,'read_file',{path:file,isUrl:true},io),/ARGUMENTS_DENIED/);
+   assert.throws(()=>authorizeRemoteCall(op,id,'start_process',{command:'whoami'},enabled),/ARGUMENTS_DENIED/);
+ }
+ for(const command of ['bash','powershell','rm -rf /','whoami && id','hostname; whoami'])
+  assert.throws(()=>authorizeRemoteCall(op,'us-macmini','start_process',{command},io),/ARGUMENTS_DENIED/);
+ assert.throws(()=>authorizeRemoteCall({kind:'cloudflare-access',canOperate:false},'us-macmini',
+   'write_file',{path:exact['us-macmini'].scratch,content},io),/OPERATOR_DENIED/);
+});
