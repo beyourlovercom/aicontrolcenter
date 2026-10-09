@@ -51,3 +51,19 @@ Security: do not change production Tunnel, production authentication, credential
 - The Cloudflare OAuth authorization server metadata advertises dynamic client registration and PKCE S256, but does **not** advertise `authorization_response_iss_parameter_supported: true` and does not advertise CIMD support.
 - Under the OpenAI plugin authentication specification, when RFC 9207 authorization-response issuer identification is absent, ChatGPT uses a callback-ID-specific URI in the form https://chatgpt.com/connector/oauth/{callback_id}, **not** the stable https://chatgpt.com/connector_platform_oauth_redirect. The previous static URI allowlist is therefore insufficient for this callback mode. Official reference: https://developers.openai.com/plugins/build/auth.
 - Proposed staging-only recovery: ensure ChatGPT uses DCR, add narrowly scoped allowed redirect pattern https://chatgpt.com/connector/oauth/* to the Cloudflare staging application's Managed OAuth redirect allowlist, retry creating the plugin, and then restrict to the exact callback URI when discoverable. Never use a wildcard hostname or /any-path wildcard and never change the production app. This is a suspected, not yet confirmed, root cause.
+
+## Actual ChatGPT self-hosted MCP read-only UAT — 2026-10-09
+
+**PASS (3 of 3 devices).** The owner successfully created the ChatGPT custom plugin `BYL Remote MCP UAT` for `https://mcp-uat.beyourlover.com/mcp` with Cloudflare Managed OAuth. Within the same ChatGPT session, calls were made directly to tools from the **self-hosted BYL plugin namespace**, **not** via the vendor Desktop Commander cloud plugin:
+
+- `remote_list_devices`: returned all three registered device IDs `us-macmini`, `china-mac`, `windows`, each labelled `READY`. Important: these registry labels are static and alone are not proof of live heartbeat.
+- `remote_process_selftest({deviceId:"us-macmini"})`: `Process started`, output `as-Mac-mini.local`.
+- `remote_process_selftest({deviceId:"china-mac"})`: `Process started`, output `amacbook-pro.tail5ca8e5.ts.net`.
+- `remote_process_selftest({deviceId:"windows"})`: `Process started`, output `YST-241030SSD`.
+- `remote_list_tools` successfully returned the available agent-tool registry for **each** of the three devices.
+
+**Authorization boundary:** The ChatGPT session advertised the three BYL plugin tools `remote_list_devices`, `remote_list_tools`, `remote_process_selftest`; privileged `remote_call` was **not** exposed to this OAuth identity. Do not confuse underlying agent tools that are discoverable via `remote_list_tools` with callable MCP tools. No arbitrary remote command, file edit, production deployment or device restart was performed. Fixed hostnames are verified from live execution outputs; the tools returned process-start records, not explicit per-process completed exit codes.
+
+**Results:** Cloudflare OAuth connector creation PASS; actual self-hosted ChatGPT tool discovery PASS; registered device enumeration PASS; live read-only three-device hostname UAT **3/3 PASS**. This is a **staging UAT**, not authorization to move the Cloudflare Access policy or JWT settings to `mcp.beyourlover.com` production. Leave the protected existing `/control/` flow, production Bearer token and US Mac production port 8792 unchanged.
+
+**Follow-up gating:** review PR #50 for merge into the **development base only**, refresh CI for latest head, and separately approve any production rollout. Continue using BYL self-hosted plugin as default when available, rather than the vendor DC cloud status.
