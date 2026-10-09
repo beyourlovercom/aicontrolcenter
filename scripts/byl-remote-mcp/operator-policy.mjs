@@ -21,6 +21,24 @@ export function authorizeRemoteCall(principal,deviceId,name,args,env=process.env
   if(principal?.kind!=='cloudflare-access'||!canExposeRemoteCall(principal,env))
     throw Error('OPERATOR_DENIED');
   if(!OPERATOR_DEVICES.includes(deviceId))throw Error('OPERATOR_DEVICE_DENIED');
+  // P6-G Owner-approved full remote DC execution, isolated UAT only.
+  // This reuses the device agent's existing 24 tools and its own filesystem,
+  // command, process and audit protections; never touches internal Bearer flow.
+  if(env.BYL_MCP_STAGING==='1'&&env.BYL_MCP_UAT_CANDIDATE==='1'&&
+     env.BYL_MCP_OPERATOR_FULL_EXEC_ENABLED==='1'){
+    if(!args||typeof args!=='object'||Array.isArray(args))
+      throw Error('OPERATOR_ARGUMENTS_DENIED');
+    const allowed=new Set([
+      'read_file','read_multiple_files','write_file','write_pdf',
+      'create_directory','list_directory','move_file','start_search',
+      'get_more_search_results','stop_search','list_searches','get_file_info',
+      'edit_block','start_process','read_process_output',
+      'interact_with_process','list_sessions','list_processes',
+      'kill_process','get_usage_stats','get_recent_tool_calls'
+    ]);
+    if(!allowed.has(name))throw Error('OPERATOR_TOOL_DENIED');
+    return {name,arguments:args};
+  }
   // Opt-in isolated read-only canary; never grants arbitrary file paths.
   // The device agent retains its own filesystem permission enforcement.
   if(name==='read_file'&&env.BYL_MCP_OPERATOR_READ_CANARY_ENABLED==='1'&&env.BYL_MCP_OPERATOR_IO_CANARY_ENABLED!=='1'){
