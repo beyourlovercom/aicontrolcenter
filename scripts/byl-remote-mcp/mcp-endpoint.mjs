@@ -68,7 +68,19 @@ function getServer(principal){
   },async({deviceId,name,arguments:args})=>{
     let call={name,arguments:args||{}};
     if(principal.kind==='cloudflare-access'){
-      call=authorizeRemoteCall(principal,deviceId,name,args||{});
+      try{
+        call=authorizeRemoteCall(principal,deviceId,name,args||{});
+      }catch(error){
+        console.warn('[operator-audit]',JSON.stringify({
+          decision:'deny',principal:principal.subjectHash||'unknown',
+          deviceId,action:'remote_call',reason:'POLICY_DENIED'
+        }));
+        throw error;
+      }
+      console.info('[operator-audit]',JSON.stringify({
+        decision:'allow',principal:principal.subjectHash||'unknown',
+        deviceId,action:'remote_call',approvedTool:call.name
+      }));
     }
     const out=await agentCall(deviceId,call.name,call.arguments);
     return textResult(out.result??out);
