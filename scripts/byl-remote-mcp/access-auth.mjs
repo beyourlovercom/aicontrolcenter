@@ -3,6 +3,7 @@
  * Opt-in: the production legacy bearer path is unchanged unless explicitly enabled.
  * This module never accepts unsigned identity headers or client opaque OAuth tokens.
  */
+import {createHash} from 'node:crypto';
 const EMAIL=/^[^\s@,]+@[^\s@,]+\.[^\s@,]+$/;
 const ACCESS_ISSUER=/^https:\/\/[a-z0-9-]+\.cloudflareaccess\.com$/;
 let jwksCache;
@@ -57,5 +58,5 @@ export async function resolveAccessPrincipal(assertion,config,verifier=verifyAcc
     typeof claims.email!=='string')throw Error('ACCESS_DENIED');
   const email=claims.email.toLowerCase();
   if(!config.read.has(email))throw Error('ACCESS_DENIED');
-  return Object.freeze({kind:'cloudflare-access',canOperate:config.operate.has(email)});
+  return Object.freeze({kind:'cloudflare-access',canOperate:config.operate.has(email),subjectHash:createHash('sha256').update(email).digest('hex').slice(0,16)});
 }
