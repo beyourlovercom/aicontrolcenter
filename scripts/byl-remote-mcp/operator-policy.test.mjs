@@ -124,3 +124,30 @@ test('P6-F read-only Chrome telemetry probes are exact and China Mac only',()=>{
  assert.throws(()=>authorizeRemoteCall(op,'china-mac','start_process',{command:probes[0],timeout_ms:8000,cwd:'/tmp'},browser),/OPERATOR_ARGUMENTS_DENIED/);
  assert.throws(()=>authorizeRemoteCall({kind:'cloudflare-access',canOperate:false},'china-mac','start_process',{command:probes[0]},browser),/OPERATOR_DENIED/);
 });
+
+test('P7 production Operator remains default-denied until all explicit OAuth flags',()=>{
+ const production={
+  BYL_MCP_STAGING:'0',
+  BYL_MCP_ACCESS_ENABLED:'1',
+  BYL_MCP_PRODUCTION_OAUTH_ENABLED:'1',
+  BYL_MCP_PRODUCTION_OPERATOR_ENABLED:'1',
+  BYL_MCP_OPERATOR_CANARY_ENABLED:'1'
+ };
+ for(const key of Object.keys(production)){
+  const absent={...production};delete absent[key];
+  assert.equal(canExposeRemoteCall(op,absent),false,'missing '+key);
+  assert.throws(()=>authorizeRemoteCall(op,'us-macmini','start_process',safe,absent),/OPERATOR_DENIED/);
+  assert.equal(canExposeRemoteCall(op,{...production,[key]:'0'}),false,'disabled '+key);
+ }
+ assert.equal(canExposeRemoteCall(op,production),true);
+ assert.deepEqual(authorizeRemoteCall(op,'us-macmini','start_process',safe,production),
+  {name:'start_process',arguments:safe});
+ assert.equal(canExposeRemoteCall({...op,canOperate:false},production),false);
+ assert.equal(canExposeRemoteCall({kind:'internal',canOperate:true},{}),true);
+ const leakingStaging={...production,BYL_MCP_STAGING:'1'};
+ assert.equal(canExposeRemoteCall(op,leakingStaging),false);
+ assert.equal(canExposeRemoteCall(op,{...enabled,BYL_MCP_PRODUCTION_OPERATOR_ENABLED:'1'}),true);
+ for(const command of ['whoami','echo test','osascript']){
+  assert.throws(()=>authorizeRemoteCall(op,'us-macmini','start_process',{command},production),/ARGUMENTS_DENIED/);
+ }
+});
