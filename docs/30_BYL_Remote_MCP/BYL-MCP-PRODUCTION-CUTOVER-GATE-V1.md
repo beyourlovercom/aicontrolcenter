@@ -70,3 +70,10 @@ Production unauthenticated `/control/` currently returns 401 HTML (do not classi
 6. **Rollback:** disable only the newly created OAuth Access app/tunnel route, restore previous ingress/config pointer and leave existing production `8792`/`8793` processes intact. No device restarts, production data changes, or secrets in GitHub.
 
 Do not interpret existing broad rollout approval as permission to accept an unmeasured production authentication regression; require a passing explicit compatibility gate before any change to the canonical production `/mcp` route.
+
+## P5 pre-cutover public edge baseline and OAuth UAT repeat — 2026-10-09
+
+- **Legacy Bearer public-edge baseline PASS:** owner invoked reviewed script against `https://mcp.beyourlover.com/mcp`: `initialize` HTTP 200 with JSON-RPC result; `tools/list` HTTP 200 with 4 registered names (`remote_list_devices`, `remote_list_tools`, `remote_call`, `remote_process_selftest`).
+- **Staging OAuth device liveness 3/3 PASS again:** via connected read-only BYL Remote MCP UAT, fixed hostname self-tests reported `as-Mac-mini.local` (US), `amacbook-pro.tail5ca8e5.ts.net` (China), `YST-241030SSD` (Windows). This does not authorize `remote_call`.
+- **Production discovery remains BLOCKED:** a production OAuth canary has not yet been enabled or verified. The legacy Bearer baseline must be re-run **after** any production edge routing/Access change; today's PASS is not evidence about a future configuration.
+- **Canary rollout guard:** introduce an independently scoped OAuth endpoint and associated discovery routes; verify read-only JWT principal, 401/403 denial, public discovery, no overlap with existing `/control/` or production `/mcp`; have a no-restart rollback to prior ingress/config. Do not change production credentials or restart endpoints during staging proof.
