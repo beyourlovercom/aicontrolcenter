@@ -13,6 +13,17 @@ export function authorizeRemoteCall(principal,deviceId,name,args,env=process.env
   if(principal?.kind!=='cloudflare-access'||!canExposeRemoteCall(principal,env))
     throw Error('OPERATOR_DENIED');
   if(!OPERATOR_DEVICES.includes(deviceId))throw Error('OPERATOR_DEVICE_DENIED');
+  // Opt-in isolated read-only canary; never grants arbitrary file paths.
+  // The device agent retains its own filesystem permission enforcement.
+  if(name==='read_file'&&env.BYL_MCP_OPERATOR_READ_CANARY_ENABLED==='1'){
+    const fixture=deviceId==='windows'
+      ? 'C:\\Windows\\win.ini'
+      : '/etc/hosts';
+    if(!args||typeof args!=='object'||Array.isArray(args)||
+       Object.keys(args).length!==1||args.path!==fixture)
+      throw Error('OPERATOR_ARGUMENTS_DENIED');
+    return {name:'read_file',arguments:{path:fixture}};
+  }
   if(name!=='start_process')throw Error('OPERATOR_TOOL_DENIED');
   if(!args||typeof args!=='object'||Array.isArray(args))throw Error('OPERATOR_ARGUMENTS_DENIED');
   const keys=Object.keys(args);
