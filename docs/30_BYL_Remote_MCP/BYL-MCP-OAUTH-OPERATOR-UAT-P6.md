@@ -34,3 +34,22 @@ Status: **DESIGN / NOT OPERATOR-ENABLED**. Environment: independent `mcp-uat.bey
 - P4: both localhost and public-edge legacy Bearer `initialize`/`tools/list` HTTP 200.
 - P5: independent OAuth staging read-only plugin and 3/3 live hostname PASS, but production OAuth Discovery remains 401/404 and not ready.
 - This document is an implementation plan, **not** evidence that operator permissions have been enabled or UAT passed.
+
+## P6-C live staging route decision — 2026-10-09
+
+**Observed today:** independent processes respond HTTP 200: legacy prod localhost 8792, read-only OAuth UAT 8794, Operator candidate 8795. Cloudflared UAT ingress dry-run routes `https://mcp-uat.beyourlover.com/mcp` to 8794. Alternate path `/operator-mcp` on the same hostname would also route to 8794 and has no matching operator handler: changing URL path alone does not work.
+
+**Safe target:** separate `mcp-operator-uat.beyourlover.com/mcp` with its own narrowly scoped Cloudflare Access Managed OAuth app, Owner Only policy, exact callback allowlist, independent ingress pointing only to localhost 8795. This hostname is **proposed; neither DNS nor Access app existence has been verified**. It must not be added to a wildcard Access policy or overwrite the 8794 application's routes.
+
+**Staging candidate code flags:** `BYL_MCP_STAGING=1`, `BYL_MCP_UAT_CANDIDATE=1`, `BYL_MCP_OPERATOR_CANARY_ENABLED=1` plus `BYL_MCP_ACCESS_ENABLED=1`, with exact new Access issuer/AUD, and operator/read email allowlists containing only a verified approved owner identity. Keep Access values private and outside GitHub. The currently running 8795 process was started without operator auth and must not be misrepresented as an Operator-capable service; activation requires separately controlled candidate restart only after preserving rollback.
+
+**Minimum pre-live gates:**
+1. Create isolated Access application and verify its exact hostname, audience, authorized email policy, discovery JSON and fixed OAuth callback behavior. Do not alter production or existing UAT policies.
+2. Back up current 8795 candidate files, configuration metadata and process ownership; prepare revert route and prior launch state, never print credentials.
+3. Confirm current source hash and run 13+ identity/policy tests and MCP syntax check on US Mac mini, plus GitHub CI current commit.
+4. Restart **only** isolated 8795 candidate with exact authenticated environment and candidate flags; demonstrate unknown/anonymous requests rejected and unauthenticated tools not leaked.
+5. Add separate candidate tunnel ingress/DNS after Access app readiness; verify all three hostnames' route targets and no path overlap.
+6. In ChatGPT add **separate** Operator UAT plugin, sign in through exact approved Owner identity; verify `remote_call` is listed and only fixed `start_process`/`hostname` per device is permitted. Verify unsafe shell injection/file reads rejected and old read-only UAT connection continues to omit `remote_call`.
+7. Re-run public legacy Bearer initialize/tools/list, production health, original UAT live 3/3 and control-console login; then rollback candidate route/flags and confirm read-only behavior.
+
+**Blocker as of this audit:** no connected Cloudflare account write integration to verify/create isolated Access app; Cloudflare app/DNS and exact Operator OAuth callback have not been established. Therefore P6-C operator online UAT remains PENDING. Do not substitute an unprotected public tunnel route or copy production Bearer token into the ChatGPT app.
