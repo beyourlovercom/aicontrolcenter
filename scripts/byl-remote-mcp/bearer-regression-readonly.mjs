@@ -26,3 +26,17 @@ for(const port of ports){
   console.log('MCP_'+port+'_BEARER=PASS');
   console.log('MCP_'+port+'_ANONYMOUS_DENY=PASS');
 }
+
+const publicUrl='https://mcp.beyourlover.com/mcp';
+const publicResponse=await fetch(publicUrl,{
+ method:'POST',
+ headers:{'content-type':'application/json','accept':'application/json, text/event-stream',authorization:'Bearer '+token},
+ body:JSON.stringify(request),
+ signal:AbortSignal.timeout(10000)
+});
+const publicPayload=await publicResponse.text();
+if(publicResponse.status===200&&publicPayload.includes('"protocolVersion"'))console.log('PUBLIC_MCP_BEARER=PASS');
+else {
+ console.log('PUBLIC_MCP_BEARER=BLOCKED_STATUS_'+publicResponse.status);
+ process.exitCode=2;
+}
