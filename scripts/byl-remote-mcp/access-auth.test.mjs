@@ -40,6 +40,10 @@ test('Read-only user cannot operate while operator can',async()=>{
   assert.equal(read.canOperate,false);
   const op=await resolveAccessPrincipal(jwt,config,fakeVerifier(claims('OPERATOR@EXAMPLE.TEST')));
   assert.equal(op.canOperate,true);
+  assert.match(op.subjectHash,/^[a-f0-9]{16}$/);
+  assert.notEqual(op.subjectHash,'operator@example.test');
+  const same=await resolveAccessPrincipal(jwt,config,fakeVerifier(claims('operator@example.test')));
+  assert.equal(same.subjectHash,op.subjectHash);
 });
 test('Reject missing, malformed and disabled Access assertions',async()=>{
   await assert.rejects(resolveAccessPrincipal('',configured(),fakeVerifier(claims())),/ACCESS_DENIED/);
