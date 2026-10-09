@@ -93,7 +93,8 @@ end run`;
     repeat with w in windows
       repeat with t in tabs of w
         if ((id of t) as text) = targetId then
-          set active tab index of w to index of t
+          set tabIndex to (get index of t)
+          set active tab index of w to tabIndex
           set index of w to 1
           activate
           return "READY"
