@@ -15,7 +15,7 @@ export function authorizeRemoteCall(principal,deviceId,name,args,env=process.env
   if(!OPERATOR_DEVICES.includes(deviceId))throw Error('OPERATOR_DEVICE_DENIED');
   // Opt-in isolated read-only canary; never grants arbitrary file paths.
   // The device agent retains its own filesystem permission enforcement.
-  if(name==='read_file'&&env.BYL_MCP_OPERATOR_READ_CANARY_ENABLED==='1'){
+  if(name==='read_file'&&env.BYL_MCP_OPERATOR_READ_CANARY_ENABLED==='1'&&env.BYL_MCP_OPERATOR_IO_CANARY_ENABLED!=='1'){
     const fixture=deviceId==='windows'
       ? 'C:\\Windows\\win.ini'
       : '/etc/hosts';
@@ -55,7 +55,7 @@ export function authorizeRemoteCall(principal,deviceId,name,args,env=process.env
     if(name==='read_file'){
       if(!args||typeof args!=='object'||Array.isArray(args)||
          Object.keys(args).length!==1||
-         ![...projectFiles,scratch].includes(args.path))
+         ![...projectFiles,scratch,deviceId==='windows'?'C:\\Windows\\win.ini':'/etc/hosts'].includes(args.path))
         throw Error('OPERATOR_ARGUMENTS_DENIED');
       return {name:'read_file',arguments:{path:args.path}};
     }
