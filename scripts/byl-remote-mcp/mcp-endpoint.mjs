@@ -5,7 +5,7 @@ import {StreamableHTTPServerTransport} from '/Users/a/Library/Application Suppor
 import {createMcpExpressApp} from '/Users/a/Library/Application Support/AICC/desktop-commander-runtime/node_modules/@modelcontextprotocol/sdk/dist/esm/server/express.js';
 import * as z from '/Users/a/Library/Application Support/AICC/desktop-commander-runtime/node_modules/zod/v4/index.js';
 import {getAccessConfig,resolveAccessPrincipal} from './access-auth.mjs';
-import {authorizeRemoteCall} from './operator-policy.mjs';
+import {authorizeRemoteCall,canExposeRemoteCall} from './operator-policy.mjs';
 
 const HOST='127.0.0.1';
 const PORT=process.env.BYL_MCP_STAGING==='1' 
@@ -58,7 +58,7 @@ function getServer(principal){
     description:'List allowed Desktop Commander tools on a device.',
     inputSchema:{deviceId:z.enum(['us-macmini','china-mac','windows'])}
   },async({deviceId})=>textResult(await agentGet(deviceId,'/v1/tools')));
-  if(principal.canOperate) server.registerTool('remote_call',{
+  if(canExposeRemoteCall(principal)) server.registerTool('remote_call',{
     description:'Call an allowed Desktop Commander tool on a selected device.',
     inputSchema:{
       deviceId:z.enum(['us-macmini','china-mac','windows']),
