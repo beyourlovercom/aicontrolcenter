@@ -50,3 +50,20 @@ test('fixed harmless file read requires independent read Canary flag',()=>{
  for(const name of ['write_file','edit_block','list_directory','start_process'])
   assert.throws(()=>authorizeRemoteCall(op,'us-macmini',name,{path:'/etc/hosts'},readEnv),/TOOL_DENIED|ARGUMENTS_DENIED/);
 });
+
+test('one-directory depth-one operator listing is independently gated',()=>{
+ const on={...enabled,BYL_MCP_OPERATOR_LIST_CANARY_ENABLED:'1'};
+ const fixtures={
+  'us-macmini':'/Users/a/AI/007/AIcontrolcenter',
+  'china-mac':'/Users/a/AI/007',
+  'windows':'C:\\Windows'
+ };
+ for(const [id,path] of Object.entries(fixtures)){
+  assert.deepEqual(authorizeRemoteCall(op,id,'list_directory',{path,depth:1},on),
+   {name:'list_directory',arguments:{path,depth:1}});
+  assert.throws(()=>authorizeRemoteCall(op,id,'list_directory',{path},enabled),/TOOL_DENIED/);
+  for(const args of [{path:path+'/../'}, {path,depth:2},{path,depth:0},{path,depth:'1'}, {path,extra:true},{path:'/etc'}, {},null])
+   assert.throws(()=>authorizeRemoteCall(op,id,'list_directory',args,on),/ARGUMENTS_DENIED/);
+ }
+ assert.throws(()=>authorizeRemoteCall({kind:'cloudflare-access',canOperate:false},'us-macmini','list_directory',{path:fixtures['us-macmini']},on),/OPERATOR_DENIED/);
+});
