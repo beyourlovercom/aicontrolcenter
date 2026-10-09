@@ -7,7 +7,9 @@ import {openSync,closeSync} from 'node:fs';
 const base='/tmp/byl-mcp-oauth-compat-uat-20261009';
 const get=(bin,args)=>execFileSync(bin,args,{encoding:'utf8',maxBuffer:1048576});
 async function main(){
- const marker=get('/usr/sbin/lsof',['-nP','-iTCP:8797','-sTCP:LISTEN','-Fp']);
+ let marker='';
+ try{marker=get('/usr/sbin/lsof',['-nP','-iTCP:8797','-sTCP:LISTEN','-Fp']);}
+ catch(error){if(error.status!==1)throw error;}
  if(marker.trim())throw Error('PORT_8797_ALREADY_BOUND');
  const sourcePid=Number(get('/usr/sbin/lsof',['-nP','-iTCP:8795','-sTCP:LISTEN','-Fp']).match(/p(\d+)/)?.[1]);
  if(!Number.isSafeInteger(sourcePid))throw Error('SOURCE_CANDIDATE_MISSING');
