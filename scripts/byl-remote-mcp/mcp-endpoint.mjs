@@ -8,9 +8,14 @@ import {getAccessConfig,resolveAccessPrincipal} from './access-auth.mjs';
 import {authorizeRemoteCall,canExposeRemoteCall} from './operator-policy.mjs';
 
 const HOST='127.0.0.1';
-const PORT=process.env.BYL_MCP_STAGING==='1' 
-  ? (process.env.BYL_MCP_UAT_CANDIDATE==='1'?8795:8794) 
-  : 8792; // Candidate port is staging-only; production/default paths unchanged.
+// Dedicated same-host OAuth compatibility candidate, opt-in and never redirects
+// or replaces the existing production /mcp Bearer endpoint at 8792.
+const OAUTH_COMPAT_CANDIDATE=process.env.BYL_MCP_OAUTH_COMPAT_CANDIDATE==='1';
+if(OAUTH_COMPAT_CANDIDATE&&process.env.BYL_MCP_STAGING==='1')
+  throw Error('OAUTH_COMPAT_STAGING_CONFLICT');
+const PORT=OAUTH_COMPAT_CANDIDATE?8797:process.env.BYL_MCP_STAGING==='1'
+  ? (process.env.BYL_MCP_UAT_CANDIDATE==='1'?8795:8794)
+  : 8792;
 const ACCESS_CONFIG=getAccessConfig(); // Disabled unless explicitly configured in a separately gated deployment.
 const TOKEN=readFileSync('/Users/a/.byl-remote-mcp/gateway.token','utf8').trim();
 const PRIVATE_KEY=readFileSync('/Users/a/.byl-remote-mcp/keys/gateway-ed25519-private.pem','utf8');
@@ -110,7 +115,9 @@ async function auth(req,res,next){
   }
   return res.status(401).json({jsonrpc:'2.0',error:{code:-32001,message:'Unauthorized'},id:null});
 }
-const MCP_PATHS=['/mcp','/__byl_remote_mcp/mcp'];
+const MCP_PATHS=OAUTH_COMPAT_CANDIDATE
+  ? ['/oauth/mcp']
+  : ['/mcp','/__byl_remote_mcp/mcp'];
 for(const route of MCP_PATHS) app.post(route,auth,async(req,res)=>{
   const server=getServer(req.bylPrincipal);
   const transport=new StreamableHTTPServerTransport({sessionIdGenerator:undefined,enableJsonResponse:true});
