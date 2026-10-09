@@ -151,3 +151,33 @@ test('P7 production Operator remains default-denied until all explicit OAuth fla
   assert.throws(()=>authorizeRemoteCall(op,'us-macmini','start_process',{command},production),/ARGUMENTS_DENIED/);
  }
 });
+
+test('P6-G full DC execution is owner-only, staging candidate-only, opt-in',()=>{
+ const full={...enabled,BYL_MCP_OPERATOR_FULL_EXEC_ENABLED:'1'};
+ const cases=[
+  ['read_file',{path:'/Users/a/AI/007/AIcontrolcenter/README.md'}],
+  ['write_file',{path:'/tmp/byl-full-operator-uat.txt',content:'full operator uat'}],
+  ['edit_block',{file_path:'/tmp/byl-full-operator-uat.txt',old_string:'a',new_string:'b'}],
+  ['start_process',{command:'git --version',timeout_ms:8000}],
+  ['read_process_output',{pid:12345}],
+  ['list_directory',{path:'/Users/a/AI/007'}],
+  ['kill_process',{pid:12345}],
+  ['list_sessions',{}]
+ ];
+ for(const [name,args] of cases){
+  assert.deepEqual(authorizeRemoteCall(op,'china-mac',name,args,full),{name,arguments:args});
+  assert.throws(()=>authorizeRemoteCall(op,'china-mac',name,args,enabled),/OPERATOR_TOOL_DENIED|OPERATOR_ARGUMENTS_DENIED/);
+ }
+ for(const env of [
+  {...full,BYL_MCP_STAGING:'0'},
+  {...full,BYL_MCP_UAT_CANDIDATE:'0'},
+  {...full,BYL_MCP_OPERATOR_FULL_EXEC_ENABLED:'0'},
+ ]){
+  assert.throws(()=>authorizeRemoteCall(op,'china-mac','start_process',{command:'git --version'},env),/OPERATOR_DENIED|OPERATOR_ARGUMENTS_DENIED/);
+ }
+ assert.throws(()=>authorizeRemoteCall({...op,canOperate:false},'china-mac','start_process',{command:'git --version'},full),/OPERATOR_DENIED/);
+ for(const name of ['get_config','give_feedback_to_desktop_commander','get_prompts','unknown_tool'])
+  assert.throws(()=>authorizeRemoteCall(op,'china-mac',name,{},full),/OPERATOR_TOOL_DENIED/);
+ assert.throws(()=>authorizeRemoteCall(op,'china-mac','read_file',null,full),/ARGUMENTS_DENIED/);
+ assert.equal(canExposeRemoteCall({kind:'internal',canOperate:true},{}),true);
+});
