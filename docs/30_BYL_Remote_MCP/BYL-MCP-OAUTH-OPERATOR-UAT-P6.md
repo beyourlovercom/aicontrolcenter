@@ -79,3 +79,20 @@ The owner rejected the extra `mcp-operator-uat.beyourlover.com` domain/Access ap
 5. Restore candidate route/role on UAT failure. After success rerun preexisting Read-only UAT and legacy production Bearer compatibility.
 
 Current gate: shadow routes and public path discovery **PASS**; Operator authenticated 8795 and online client verification **PENDING**. The domain mentioned in the superseded section is not reachable and should not be created.
+
+## Same-host staging Operator Canary activated — 2026-10-09
+
+**Candidate-only activation:** Running original UAT PID 6071 was used locally to verify and copy *only* the existing staging Access issuer/AUD/one-owner allowlist into the candidate's in-memory launch environment; no secrets, email, AUD or process environment were printed or checked into GitHub. Candidate 8795 alone has operator email allowlist set to the exact existing single read member and the three Canary flags enabled. The original UAT 8794 remains read-only. Candidate was reloaded with current audited source; no device or production service rebooted.
+
+**Code/security:** Current staged source through commit `703eb5e4acc91fa97b9dc1e1bd6e89faf82bedb4`, including metadata-only hashed principal Allow/Deny audit, safe hostname-only OAuth remote_call, issuer/audience/RS256 JWT checks, explicit staging/candidate/Canary flags. US Mac mini 13/13 local tests PASS, GitHub Actions run `37883381899` SUCCESS. Candidate 8795 health HTTP 200, anonymous POST `/__byl_remote_mcp/mcp` HTTP 401.
+
+**Tunnel cutover:** Validated a one-rule-only shadow ingress configuration at `/tmp/byl-mcp-uat-route-candidate-20261009.yml` against unchanged original `/tmp/byl-mcp-uat-tunnel-20261009.yml`. Restarted ONLY the *staging UAT cloudflared process* to activate the shadow route (new staging tunnel PID 29824), with guarded automatic rollback on discovery/401 regression:
+- `https://mcp-uat.beyourlover.com/mcp` → localhost 8794, public unauthenticated GET HTTP 401.
+- `https://mcp-uat.beyourlover.com/__byl_remote_mcp/mcp` → localhost 8795, public unauthenticated GET HTTP 401.
+- Existing public OAuth discovery metadata HTTP 200; alternative Operator path-specific discovery HTTP 200.
+- Production MCP 8792, read-only UAT 8794, candidate 8795 health each HTTP 200.
+- After route change, via the **preexisting ChatGPT BYL Remote MCP UAT OAuth connector**, live read-only hostname selftest passed 3/3: US `as-Mac-mini.local`, China `amacbook-pro.tail5ca8e5.ts.net`, Windows `YST-241030SSD`.
+
+**Still PENDING / do not overstate:** We have not established a *second ChatGPT custom MCP OAuth connection* for the Operator path and have not seen an authenticated Operator `tools/list` or live `remote_call`. The next step requires owner OAuth connection approval in ChatGPT to `https://mcp-uat.beyourlover.com/__byl_remote_mcp/mcp` (same existing Access app), followed by harmless hostname three-device allow tests and denied-tool attempts. Until then P6 online Operator Owner UAT is not PASS.
+
+**Rollback if needed:** Stop only candidate tunnel PID, relaunch original tunnel config `/tmp/byl-mcp-uat-tunnel-20261009.yml` (restoring all paths to read-only 8794), optionally stop candidate 8795. Never change production 8792, control console 8793, any agent service or existing Bearer token.
