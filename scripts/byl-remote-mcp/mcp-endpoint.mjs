@@ -7,7 +7,7 @@ import * as z from '/Users/a/Library/Application Support/AICC/desktop-commander-
 import {getAccessConfig,resolveAccessPrincipal} from './access-auth.mjs';
 
 const HOST='127.0.0.1';
-const PORT=8792;
+const PORT=process.env.BYL_MCP_STAGING==='1'?8794:8792; // Staging opt-in; live default unchanged.
 const ACCESS_CONFIG=getAccessConfig(); // Disabled unless explicitly configured in a separately gated deployment.
 const TOKEN=readFileSync('/Users/a/.byl-remote-mcp/gateway.token','utf8').trim();
 const PRIVATE_KEY=readFileSync('/Users/a/.byl-remote-mcp/keys/gateway-ed25519-private.pem','utf8');
@@ -76,7 +76,7 @@ function getServer(principal){
   return server;
 }
 
-const app=createMcpExpressApp({host:'127.0.0.1',allowedHosts:['127.0.0.1','localhost','erp.beyourlover.com','mcp.beyourlover.com']});
+const app=createMcpExpressApp({host:'127.0.0.1',allowedHosts:['127.0.0.1','localhost','erp.beyourlover.com','mcp.beyourlover.com','mcp-uat.beyourlover.com']});
 async function auth(req,res,next){
   if((req.headers.authorization||'')===`Bearer ${TOKEN}`){
     req.bylPrincipal={kind:'internal',canOperate:true};
