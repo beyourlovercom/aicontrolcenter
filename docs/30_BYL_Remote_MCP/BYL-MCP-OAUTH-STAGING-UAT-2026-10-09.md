@@ -30,3 +30,8 @@ Status: OAuth discovery PASS; protected origin JWT/UAT BLOCKED pending verified 
 4. Denial UAT, audit evidence and owner approval before any production change.
 
 Security: do not change production Tunnel, production authentication, credentials, services or reboot READY devices.
+## Authentication boundary: existing /control/ is already protected
+- Confirmed existing self-hosted control console URL: https://mcp.beyourlover.com/control/ . This is a previously configured, authenticated admin console, **not an unprotected endpoint**.
+- The inspected console implementation uses BYL_CONTROL_PASSWORD and an HttpOnly, Secure, SameSite=Strict scoped session cookie (`byl_control_session`); these credentials remain private and unchanged. Cloudflare Access protection of this legacy console has not been independently demonstrated; do not infer it from the console's own password gate.
+- The production Streamable HTTP MCP URL https://mcp.beyourlover.com/mcp uses a different internal Bearer token. The staging test hostname mcp-uat.beyourlover.com uses separately configured Cloudflare Access Managed OAuth. These are three distinct authentication boundaries.
+- Preserve the stable production control-console password/session workflow, MCP internal token and signed agent backend. **Do not replace the existing /control/ login or redirect it to staging OAuth.** Only enable new Access token verification on a separately approved isolated staging origin before eventual production gate.
