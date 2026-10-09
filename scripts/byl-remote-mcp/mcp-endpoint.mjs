@@ -5,6 +5,7 @@ import {StreamableHTTPServerTransport} from '/Users/a/Library/Application Suppor
 import {createMcpExpressApp} from '/Users/a/Library/Application Support/AICC/desktop-commander-runtime/node_modules/@modelcontextprotocol/sdk/dist/esm/server/express.js';
 import * as z from '/Users/a/Library/Application Support/AICC/desktop-commander-runtime/node_modules/zod/v4/index.js';
 import {getAccessConfig,resolveAccessPrincipal} from './access-auth.mjs';
+import {authorizeRemoteCall} from './operator-policy.mjs';
 
 const HOST='127.0.0.1';
 const PORT=process.env.BYL_MCP_STAGING==='1'?8794:8792; // Staging opt-in; live default unchanged.
@@ -63,7 +64,11 @@ function getServer(principal){
       arguments:z.record(z.string(),z.unknown()).optional()
     }
   },async({deviceId,name,arguments:args})=>{
-    const out=await agentCall(deviceId,name,args||{});
+    let call={name,arguments:args||{}};
+    if(principal.kind==='cloudflare-access'){
+      call=authorizeRemoteCall(principal,deviceId,name,args||{});
+    }
+    const out=await agentCall(deviceId,call.name,call.arguments);
     return textResult(out.result??out);
   });
   server.registerTool('remote_process_selftest',{
