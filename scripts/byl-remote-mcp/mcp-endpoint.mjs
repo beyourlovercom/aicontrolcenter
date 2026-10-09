@@ -8,7 +8,9 @@ import {getAccessConfig,resolveAccessPrincipal} from './access-auth.mjs';
 import {authorizeRemoteCall} from './operator-policy.mjs';
 
 const HOST='127.0.0.1';
-const PORT=process.env.BYL_MCP_STAGING==='1'\n  ? (process.env.BYL_MCP_UAT_CANDIDATE==='1'?8795:8794)\n  : 8792; // Candidate port is staging-only; production/default paths unchanged.
+const PORT=process.env.BYL_MCP_STAGING==='1' 
+  ? (process.env.BYL_MCP_UAT_CANDIDATE==='1'?8795:8794) 
+  : 8792; // Candidate port is staging-only; production/default paths unchanged.
 const ACCESS_CONFIG=getAccessConfig(); // Disabled unless explicitly configured in a separately gated deployment.
 const TOKEN=readFileSync('/Users/a/.byl-remote-mcp/gateway.token','utf8').trim();
 const PRIVATE_KEY=readFileSync('/Users/a/.byl-remote-mcp/keys/gateway-ed25519-private.pem','utf8');
