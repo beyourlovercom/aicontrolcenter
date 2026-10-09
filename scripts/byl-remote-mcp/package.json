@@ -1,0 +1,11 @@
+{
+  "name": "byl-remote-mcp-auth",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "dependencies": {
+    "jose": "6.1.0"
+  }
+}

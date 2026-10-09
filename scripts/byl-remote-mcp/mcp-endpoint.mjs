@@ -4,9 +4,11 @@ import {McpServer} from '/Users/a/Library/Application Support/AICC/desktop-comma
 import {StreamableHTTPServerTransport} from '/Users/a/Library/Application Support/AICC/desktop-commander-runtime/node_modules/@modelcontextprotocol/sdk/dist/esm/server/streamableHttp.js';
 import {createMcpExpressApp} from '/Users/a/Library/Application Support/AICC/desktop-commander-runtime/node_modules/@modelcontextprotocol/sdk/dist/esm/server/express.js';
 import * as z from '/Users/a/Library/Application Support/AICC/desktop-commander-runtime/node_modules/zod/v4/index.js';
+import {getAccessConfig,resolveAccessPrincipal} from './access-auth.mjs';
 
 const HOST='127.0.0.1';
-const PORT=8792;
+const PORT=process.env.BYL_MCP_STAGING==='1'?8794:8792; // Staging opt-in; live default unchanged.
+const ACCESS_CONFIG=getAccessConfig(); // Disabled unless explicitly configured in a separately gated deployment.
 const TOKEN=readFileSync('/Users/a/.byl-remote-mcp/gateway.token','utf8').trim();
 const PRIVATE_KEY=readFileSync('/Users/a/.byl-remote-mcp/keys/gateway-ed25519-private.pem','utf8');
 const TARGETS=Object.freeze({
@@ -44,7 +46,7 @@ async function agentCall(deviceId,name,args){
 function textResult(value){
   return {content:[{type:'text',text:typeof value==='string'?value:JSON.stringify(value,null,2)}]};
 }
-function getServer(){
+function getServer(principal){
   const server=new McpServer({name:'byl-remote-mcp',version:'1.0.0'});
   server.registerTool('remote_list_devices',{
     description:'List BYL remote Desktop Commander devices.'
@@ -53,7 +55,7 @@ function getServer(){
     description:'List allowed Desktop Commander tools on a device.',
     inputSchema:{deviceId:z.enum(['us-macmini','china-mac','windows'])}
   },async({deviceId})=>textResult(await agentGet(deviceId,'/v1/tools')));
-  server.registerTool('remote_call',{
+  if(principal.canOperate) server.registerTool('remote_call',{
     description:'Call an allowed Desktop Commander tool on a selected device.',
     inputSchema:{
       deviceId:z.enum(['us-macmini','china-mac','windows']),
@@ -74,16 +76,23 @@ function getServer(){
   return server;
 }
 
-const app=createMcpExpressApp({host:'127.0.0.1',allowedHosts:['127.0.0.1','localhost','erp.beyourlover.com','mcp.beyourlover.com']});
-function auth(req,res,next){
-  if((req.headers.authorization||'')!==`Bearer ${TOKEN}`){
-    return res.status(401).json({jsonrpc:'2.0',error:{code:-32001,message:'Unauthorized'},id:null});
+const app=createMcpExpressApp({host:'127.0.0.1',allowedHosts:['127.0.0.1','localhost','erp.beyourlover.com','mcp.beyourlover.com','mcp-uat.beyourlover.com']});
+async function auth(req,res,next){
+  if((req.headers.authorization||'')===`Bearer ${TOKEN}`){
+    req.bylPrincipal={kind:'internal',canOperate:true};
+    return next();
   }
-  next();
+  if(ACCESS_CONFIG.enabled){
+    try{
+      req.bylPrincipal=await resolveAccessPrincipal(req.headers['cf-access-jwt-assertion'],ACCESS_CONFIG);
+      return next();
+    }catch{}
+  }
+  return res.status(401).json({jsonrpc:'2.0',error:{code:-32001,message:'Unauthorized'},id:null});
 }
 const MCP_PATHS=['/mcp','/__byl_remote_mcp/mcp'];
 for(const route of MCP_PATHS) app.post(route,auth,async(req,res)=>{
-  const server=getServer();
+  const server=getServer(req.bylPrincipal);
   const transport=new StreamableHTTPServerTransport({sessionIdGenerator:undefined,enableJsonResponse:true});
   try{
     await server.connect(transport);
