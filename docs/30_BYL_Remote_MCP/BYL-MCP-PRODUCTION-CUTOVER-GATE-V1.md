@@ -41,3 +41,32 @@ Status: **Architecture review / NO PRODUCTION CUTOVER**. Source baseline: featur
 - Existing production ingress also routes /healthz to localhost:8790 and /__byl_remote_mcp/mcp to localhost:8792, with separate catch-all 8793. These must be considered in path-scope migration design.
 - **BLOCKED**: production OAuth discovery not ready; legacy authenticated Bearer initialize/tools/list has not yet been tested and Cloudflare edge Access behavior for legacy clients is unverified. No production configuration changes approved or executed.
 - **Next gate**: inventory actual legacy clients without reading secrets, test authenticated MCP using the existing token locally without printing it, and propose a path-isolated OAuth rollout that does not intercept /control/ or legacy MCP traffic.
+
+## P4 closeout / P5 path-isolation decision (2026-10-09)
+
+### Verified P4 local legacy credential compatibility — PASS
+Owner ran `scripts/byl-remote-mcp/audit-legacy-bearer-readonly.mjs` on the US Mac mini against `http://127.0.0.1:8792/mcp`:
+- `initialize` — HTTP 200, valid JSON-RPC 2.0 result, no error.
+- `tools/list` — HTTP 200, valid JSON-RPC 2.0 result: `remote_list_devices`, `remote_list_tools`, `remote_call`, `remote_process_selftest`.
+- Token contents were not disclosed. Tool registration does not establish invocation authorization.
+- **P4 = PASS for localhost only; public Cloudflare edge Bearer compatibility remains UNTESTED.** This supersedes the earlier P4-pending sentence above.
+
+### P5 public path comparison — BLOCKED
+| Path | Production mcp.beyourlover.com | UAT mcp-uat.beyourlover.com |
+| --- | --- | --- |
+| `/.well-known/oauth-protected-resource` | 401 HTML | 200 JSON |
+| `/.well-known/oauth-authorization-server` | 401 HTML | 200 JSON |
+| `/.well-known/cloudflare-access-protected-resource/mcp` | 404 | 200 JSON |
+| `/healthz` | 200 JSON | 401 JSON |
+
+Production unauthenticated `/control/` currently returns 401 HTML (do not classify as a failure without valid console login). Production cloudflared ingress dry-run confirms discovery path `/.well-known/oauth-protected-resource` matches catch-all rule #2 => localhost 8793. The source layer of 401 remains unproven.
+
+### Cutover choice and sequencing
+1. **Hold existing production `/mcp` / `/control/` untouched.** Do not install a hostname-wide Cloudflare Access application. No production OAuth discovery claim yet.
+2. **Edge compatibility gate:** run the same reviewed read-only script at `BYL_AUDIT_MCP_URL=https://mcp.beyourlover.com/mcp`, record only HTTP statuses, JSON-RPC result and tool names. If denied, do not change the existing Bearer clients; choose a separate OAuth hostname/path.
+3. **Preferred non-disruptive option:** keep canonical legacy `mcp.beyourlover.com/mcp` unchanged and stand up an *independent* production OAuth hostname (distinct from `mcp-uat`) with precisely scoped Access application, OAuth discovery and JWT-validated read-only principal. Only consider a same-host `/mcp` switch after inventory/compatibility evidence and explicit cutover approval.
+4. Verify Cloudflare hostname/path scoped Access rule ordering, protected-resource discovery routing, and existing Basic/password/session boundary via non-secret response checks. Prepare exact backup/rollback diffs and independent origin port before any changes.
+5. Canary criteria: public OAuth discovery JSON, valid owner OAuth read-only MCP initialize/tools/list, fixed hostname 3/3, no `remote_call` for OAuth read-only, invalid JWT denied, existing control login and legacy Bearer untouched, healthz checks.
+6. **Rollback:** disable only the newly created OAuth Access app/tunnel route, restore previous ingress/config pointer and leave existing production `8792`/`8793` processes intact. No device restarts, production data changes, or secrets in GitHub.
+
+Do not interpret existing broad rollout approval as permission to accept an unmeasured production authentication regression; require a passing explicit compatibility gate before any change to the canonical production `/mcp` route.
