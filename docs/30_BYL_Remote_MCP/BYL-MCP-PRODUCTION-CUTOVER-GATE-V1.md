@@ -23,3 +23,11 @@ Status: **Architecture review / NO PRODUCTION CUTOVER**. Source baseline: featur
 - PR #50 merged into development baseline at 7606f5417f1bacf69611e1f839406dc03f1cf008.
 - ChatGPT staging OAuth, remote_list_devices, remote_list_tools and remote_process_selftest for us-macmini, china-mac, windows passed in the staging UAT evidence document.
 - No production DNS, Tunnel, Access policy, authentication secret, live service or device was modified during this architecture gate.
+
+## Read-only production route evidence — 2026-10-09
+- US Mac mini SSH through existing China Mac recovery channel: PASS. Production localhost:8792 /healthz HTTP 200; staging localhost:8794 /healthz HTTP 200.
+- Production cloudflared ingress validated OK. Exact ingress rule for https://mcp.beyourlover.com/mcp: rule #0, path ^/mcp$, origin http://127.0.0.1:8792.
+- https://mcp.beyourlover.com/control/ matches rule #2 and origin http://127.0.0.1:8793 (existing password/session console).
+- https://mcp.beyourlover.com/.well-known/oauth-protected-resource matches rule #2 and origin http://127.0.0.1:8793, **not** the OAuth-aware MCP service. Production OAuth discovery requires an explicitly reviewed route and Access policy change; cannot be achieved by renaming UAT.
+- Both production and UAT cloudflared tunnel processes were running independently. No service restarted, no production config changed.
+- Gate still pending: enumerate legacy Bearer clients and establish Cloudflare Access path-level policy compatibility. Do not claim production OAuth UAT PASS.
