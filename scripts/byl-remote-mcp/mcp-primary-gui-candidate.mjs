@@ -1,4 +1,5 @@
 import {readFileSync} from 'node:fs';
+import {setupPrimaryAuthorizer} from './gui-managed-access-auth.mjs';
 import {guiDevCartHomeCanary,PRIMARY_GUI_TOOL_NAME} from './gui-primary-bridge.mjs';
 import {createHash,sign} from 'node:crypto';
 import {McpServer} from '/Users/a/Library/Application Support/AICC/desktop-commander-runtime/node_modules/@modelcontextprotocol/sdk/dist/esm/server/mcp.js';
@@ -83,11 +84,14 @@ function getServer(){
 }
 
 const app=createMcpExpressApp({host:'127.0.0.1',allowedHosts:['127.0.0.1','localhost','erp.beyourlover.com','mcp.beyourlover.com']});
-function auth(req,res,next){
-  if((req.headers.authorization||'')!==`Bearer ${TOKEN}`){
-    return res.status(401).json({jsonrpc:'2.0',error:{code:-32001,message:'Unauthorized'},id:null});
-  }
-  next();
+const authorize=setupPrimaryAuthorizer(process.env,TOKEN);
+async function auth(req,res,next){
+  try{
+    const decision=await authorize(req);
+    if(!decision.ok)return res.status(401).json({jsonrpc:'2.0',error:{code:-32001,message:'Unauthorized'},id:null});
+    req.actor=decision.method==='legacy'?'legacy-bearer':'cloudflare-owner';
+    return next();
+  }catch{return res.status(401).json({jsonrpc:'2.0',error:{code:-32001,message:'Unauthorized'},id:null});}
 }
 const MCP_PATHS=['/mcp','/__byl_remote_mcp/mcp'];
 for(const route of MCP_PATHS) app.post(route,auth,async(req,res)=>{
