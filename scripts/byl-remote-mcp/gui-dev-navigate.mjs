@@ -12,6 +12,11 @@ export function navigateDevHome(input,{inspect=inspectBoundDevWindow,runner=exec
    const result=runner('/usr/bin/swift',[new URL('./gui-dev-navigation.swift',import.meta.url).pathname,String(windowPid)],{encoding:'utf8',timeout:30000});
    const verified=result.trim()==='DEV_HOME_NAVIGATION_PASS pid='+windowPid+' path=/';
    return {ok:verified,action:'navigate_dev_home',windowPid,executed:true,verified,errorCode:verified?undefined:'NAVIGATION_NOT_VERIFIED'};
-  }catch{return {ok:false,errorCode:'NAVIGATION_OUTCOME_UNKNOWN',executed:'unknown',verified:false};}
+  }catch(error){
+   const result=String(error?.stdout||'').trim();
+   if(['WINDOW_MISMATCH','SOURCE_DENIED','LINK_NOT_UNIQUE','FOCUS_STOLEN','AX_PRESS_FAILED'].includes(result))return {ok:false,errorCode:result,executed:false,verified:false};
+   if(['FOCUS_STOLEN_AFTER_PRESS','NAVIGATION_NOT_VERIFIED'].includes(result))return {ok:false,errorCode:result,executed:'unknown',verified:false};
+   return {ok:false,errorCode:'NAVIGATION_OUTCOME_UNKNOWN',executed:'unknown',verified:false};
+  }
  });}catch(error){return {ok:false,errorCode:error?.message==='GUI_BUSY'?'GUI_BUSY':'GUI_LOCK_ERROR',executed:false};}
 }

@@ -25,7 +25,8 @@ Date: 2026-10-10. All tests ran against isolated profiles, Dev site or offline f
 - Wrong host, PID drift, URL/query mismatch, duplicate windows, unexpected arguments, lock collision and unverified receipt rejected in regression.
 - Windows non-isolated profile request rejected (`WINDOWS_PROFILE_DENY_PASS`).
 - Running loopback canary rejects unauthenticated requests with HTTP 401.
-- After adding canary authenticated-route negative tests, China Mac total: 78/78 tests PASS.
+- After adding canary authenticated-route and pre/post-click outcome tests, China Mac total: 80/80 tests PASS.
+- Failures before AXPress report executed=false; failures after AXPress remain indeterminate and are never automatically retried.
 - Shared lock coordinates clients using this GUI implementation, **not** unrelated desktop applications. Focus theft still fails closed, but multi-application arbitration is not fully proven.
 
 ## Remaining release gate
