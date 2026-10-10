@@ -1,5 +1,5 @@
-import {Client} from '/Users/a/Library/Application Support/AICC/desktop-commander-runtime/node_modules/@modelcontextprotocol/sdk/dist/esm/client/index.js';
-import {StdioClientTransport} from '/Users/a/Library/Application Support/AICC/desktop-commander-runtime/node_modules/@modelcontextprotocol/sdk/dist/esm/client/stdio.js';
+import {Client} from '@modelcontextprotocol/sdk/client/index.js';
+import {StdioClientTransport} from '@modelcontextprotocol/sdk/client/stdio.js';
 import {discover} from './gui-target.mjs';
 const expectedPid=Number(process.env.BYL_GUI_UAT_PID);
 if(!Number.isSafeInteger(expectedPid)||expectedPid<=0)throw Error('EXPLICIT_PID_REQUIRED');

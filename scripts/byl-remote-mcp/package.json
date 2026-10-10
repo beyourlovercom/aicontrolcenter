@@ -1,0 +1,13 @@
+{
+  "name": "beyourlover-remote-gui",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Isolated scoped Dev GUI MCP tools",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "1.30.0"
+  },
+  "scripts": {
+    "test": "node --test *.test.mjs"
+  }
+}

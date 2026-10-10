@@ -1,0 +1,16 @@
+import test from 'node:test';import assert from 'node:assert/strict';
+import {verifyIsolatedChromeProcess as verify,checkDevSnapshot as check,inspectBoundDevWindow as inspect} from './gui-bound-dev.mjs';
+const cmd='/Applications/Google Chrome.app/Contents/MacOS/Google Chrome --user-data-dir=/tmp/byl-gui-canary-test --force-renderer-accessibility';
+const ps=()=>cmd;
+const good={pid:123,windows:[{title:'Your Cart',url:'dev.beyourlover.com/cart',addressBarCount:'1'}]};
+test('isolated Chrome profile verified',()=>assert.equal(verify(123,{ps}).ok,true));
+test('path traversal profile denied',()=>assert.equal(verify(123,{ps:()=>cmd.replace('byl-gui-canary-test','byl-gui-canary-test/../unsafe')}).ok,false));
+test('normal Chrome profile forbidden',()=>assert.equal(verify(123,{ps:()=>'/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'}).ok,false));
+test('dev cart identity verified',()=>assert.equal(check(good,123).ok,true));
+test('duplicate matching tabs denied',()=>assert.equal(check({...good,windows:[...good.windows,...good.windows]},123).errorCode,'AX_WINDOW_AMBIGUOUS'));
+test('different host denied',()=>assert.equal(check({...good,windows:[{title:'Cart',url:'www.beyourlover.com/cart',addressBarCount:'1'}]},123).ok,false));
+test('credentials and query denied',()=>assert.equal(check({...good,windows:[{title:'Cart',url:'dev.beyourlover.com/cart?key=secret',addressBarCount:'1'}]},123).ok,false));
+test('window disappears: deny',()=>assert.equal(check({...good,windows:[]},123).ok,false));
+test('snapshot PID drift denied',()=>assert.equal(check(good,124).ok,false));
+test('live inspector combines process and AX identities',()=>assert.equal(inspect({windowPid:123},{ps,swift:()=>JSON.stringify(good)}).verified,true));
+test('process mismatch prevents Swift lookup',()=>{let touched=false;const r=inspect({windowPid:123},{ps:()=>'',swift:()=>{touched=true;return ''}});assert.equal(r.ok,false);assert.equal(touched,false)});
