@@ -6,4 +6,6 @@ test('wrong PID blocks',()=>assert.equal(handleGuiRequest(req,{lookup:()=>({ok:t
 test('missing URL proof blocks',()=>assert.equal(handleGuiRequest(req,{lookup:()=>({ok:true,pid:123,title:'BYL GUI TEST READY - Google Chrome'})}).errorCode,'FIXTURE_URL_MISMATCH'));
 test('missing target blocks',()=>assert.equal(handleGuiRequest(req,{lookup:()=>({ok:false,reason:'TARGET_WINDOW_NOT_FOUND'})}).errorCode,'TARGET_WINDOW_NOT_FOUND'));
 test('unsafe request blocks before window lookup',()=>assert.equal(handleGuiRequest({...req,expectedHost:'www.beyourlover.com'},{lookup:()=>{throw Error('should not run')}}).errorCode,'DEV_ONLY_HOST_REQUIRED'));
-test('mutation remains disabled until target verification integrated',()=>assert.equal(handleGuiRequest({...req,action:'click',target:'Click test only'},{lookup}).errorCode,'REMOTE_GUI_MUTATION_NOT_YET_ENABLED'));
+test('fixture mutation verifies returned receipt',()=>assert.equal(handleGuiRequest({...req,action:'click',target:'Click test only'},{lookup,runner:()=> 'GUI_FIXTURE_ACTION_PASS'}).verified,true));
+test('unverified mutation is never a PASS',()=>assert.equal(handleGuiRequest({...req,action:'click',target:'Click test only'},{lookup,runner:()=> 'EVENT_SENT_NOT_VERIFIED'}).ok,false));
+test('runner failures fail closed',()=>assert.equal(handleGuiRequest({...req,action:'click',target:'Click test only'},{lookup,runner:()=>{throw Error('FOCUS_STOLEN')}}).errorCode,'GUI_ACTION_FAILED_CLOSED'));
