@@ -24,6 +24,13 @@ Isolated China Mac implementation only. No changes to Production, payments, main
 - Critical mismatch: the GUI click/type fixture is a local `file://` page, while the request validator models `dev.beyourlover.com`; these have not been cryptographically or semantically bound. Remote mutations must remain OFF.
 - AX URL probe produced no URL evidence because the isolated browser window was no longer present when checked; do not infer a URL from title.
 
+## Actual Chrome window / MCP read-only E2E (2026-10-10)
+- Opened an isolated, accessibility-enabled Chrome profile (PID 80489), with title `BYL GUI TEST READY - Google Chrome`.
+- `findTarget` discovered the PID, window title, and address-bar path `/tmp/byl-gui-owner-uat-20261010.html` from real macOS Accessibility data.
+- `handleGuiRequest` returned `ok=true`, `executed=false` after exact fixture identity validation.
+- Standard MCP client -> in-memory transport -> `gui_dev_inspect` server -> real window inspector returned `isError=false` and the same PID/title.
+- This is a real-window MCP protocol E2E, NOT a connection through the deployed ChatGPT remote MCP connector. Mouse/keyboard mutation remains disabled.
+
 ## Existing gaps (not yet a production-ready MCP GUI tool)
 1. Existing MCP agent has not been modified or restarted, and the GUI functions have not yet been exposed as a dedicated remote_call tool.
 2. Window/PID matching must be bound to a trusted URL/profile and supported by a stable, authenticated MCP invocation; current demo relies on local fixture and explicit PID.
