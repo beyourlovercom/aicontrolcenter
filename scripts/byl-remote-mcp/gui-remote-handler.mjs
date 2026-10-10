@@ -14,7 +14,7 @@ function executeValidatedRequest(input,{lookup,runner}){
  if(!target.ok)return {ok:false,errorCode:target.reason,executed:false};
  const identity=verifyFixtureIdentity(target,{expectedPid:input.windowPid,expectedTitle:input.expectedTitle});
  if(!identity.ok)return {ok:false,errorCode:identity.reason,executed:false};
- if(input.action==='inspect')return {ok:true,action:'inspect',pid:target.pid,title:target.title,executed:false};
+ if(input.action==='inspect')return {ok:true,action:'inspect',pid:target.pid,title:target.title,origin:'isolated-file-fixture',executed:false};
  if(input.action==='click'||input.action==='type'){
   try {
    const output=runner('/usr/bin/swift',[new URL('./gui-fixture-action.swift',import.meta.url).pathname,String(input.windowPid),input.action],{encoding:'utf8',timeout:30000});
