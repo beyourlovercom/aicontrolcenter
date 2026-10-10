@@ -5,9 +5,11 @@ import {StreamableHTTPServerTransport} from '/Users/a/Library/Application Suppor
 import {createMcpExpressApp} from '/Users/a/Library/Application Support/AICC/desktop-commander-runtime/node_modules/@modelcontextprotocol/sdk/dist/esm/server/express.js';
 import * as z from '/Users/a/Library/Application Support/AICC/desktop-commander-runtime/node_modules/zod/v4/index.js';
 import {getAccessConfig,resolveAccessPrincipal} from './access-auth.mjs';
+import {authorizeRemoteCall,canExposeRemoteCall} from './operator-policy.mjs';
+import {endpointRouting} from './endpoint-routing.mjs';
 
 const HOST='127.0.0.1';
-const PORT=process.env.BYL_MCP_STAGING==='1'?8794:8792; // Staging opt-in; live default unchanged.
+const {port:PORT,paths:MCP_PATHS}=endpointRouting(process.env);
 const ACCESS_CONFIG=getAccessConfig(); // Disabled unless explicitly configured in a separately gated deployment.
 const TOKEN=readFileSync('/Users/a/.byl-remote-mcp/gateway.token','utf8').trim();
 const PRIVATE_KEY=readFileSync('/Users/a/.byl-remote-mcp/keys/gateway-ed25519-private.pem','utf8');
@@ -55,7 +57,7 @@ function getServer(principal){
     description:'List allowed Desktop Commander tools on a device.',
     inputSchema:{deviceId:z.enum(['us-macmini','china-mac','windows'])}
   },async({deviceId})=>textResult(await agentGet(deviceId,'/v1/tools')));
-  if(principal.canOperate) server.registerTool('remote_call',{
+  if(canExposeRemoteCall(principal)) server.registerTool('remote_call',{
     description:'Call an allowed Desktop Commander tool on a selected device.',
     inputSchema:{
       deviceId:z.enum(['us-macmini','china-mac','windows']),
@@ -63,7 +65,24 @@ function getServer(principal){
       arguments:z.record(z.string(),z.unknown()).optional()
     }
   },async({deviceId,name,arguments:args})=>{
-    const out=await agentCall(deviceId,name,args||{});
+    let call={name,arguments:args||{}};
+    if(principal.kind==='cloudflare-access'){
+      try{
+        call=authorizeRemoteCall(principal,deviceId,name,args||{});
+      }catch(error){
+        console.warn('[operator-audit]',JSON.stringify({
+          decision:'deny',principal:principal.subjectHash||'unknown',
+          deviceId,action:'remote_call',reason:'POLICY_DENIED'
+        }));
+        throw error;
+      }
+      console.info('[operator-audit]',JSON.stringify({
+        decision:'allow',principal:principal.subjectHash||'unknown',
+        deviceId,action:'remote_call',approvedTool:call.name,
+        argumentSha256:sha(Buffer.from(JSON.stringify(call.arguments||{}))).slice(0,24)
+      }));
+    }
+    const out=await agentCall(deviceId,call.name,call.arguments);
     return textResult(out.result??out);
   });
   server.registerTool('remote_process_selftest',{
@@ -90,7 +109,6 @@ async function auth(req,res,next){
   }
   return res.status(401).json({jsonrpc:'2.0',error:{code:-32001,message:'Unauthorized'},id:null});
 }
-const MCP_PATHS=['/mcp','/__byl_remote_mcp/mcp'];
 for(const route of MCP_PATHS) app.post(route,auth,async(req,res)=>{
   const server=getServer(req.bylPrincipal);
   const transport=new StreamableHTTPServerTransport({sessionIdGenerator:undefined,enableJsonResponse:true});
