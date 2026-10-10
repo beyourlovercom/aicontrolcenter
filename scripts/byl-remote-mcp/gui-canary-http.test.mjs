@@ -14,3 +14,16 @@ test('loopback canary is bearer protected and scoped',async()=>{
   const action=await fetch(url+'/v1/gui/navigate-home',{method:'POST',headers,body:JSON.stringify({windowPid:123})});assert.equal(action.status,403);
  }finally{await new Promise(r=>s.close(r))}
 });
+
+test('enabled canary accepts only authenticated, scoped navigation',async()=>{
+ const token='b'.repeat(64);
+ const s=createGuiCanaryServer({token,allowNavigation:true,inspect:()=>({ok:true}),navigate:({windowPid})=>({ok:windowPid===123,verified:windowPid===123})});
+ await new Promise(resolve=>s.listen(0,'127.0.0.1',resolve));
+ const base='http://127.0.0.1:'+s.address().port+'/v1/gui/navigate-home';
+ try{
+  const headers={authorization:'Bearer '+token,'content-type':'application/json'};
+  const anon=await fetch(base,{method:'POST',body:'{"windowPid":123}'});assert.equal(anon.status,401);
+  const wrong=await fetch(base,{method:'POST',headers,body:'{"windowPid":456}'});assert.equal(wrong.status,403);
+  const right=await fetch(base,{method:'POST',headers,body:'{"windowPid":123}'});assert.equal(right.status,200);
+ }finally{await new Promise(resolve=>s.close(resolve))}
+});
