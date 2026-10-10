@@ -15,12 +15,13 @@ const token=readFileSync(tokenPath,'utf8').trim();
 if(token.length<40)throw Error('TOKEN_TOO_SHORT');
 const accessIssuer=process.env.BYL_WIN_ACCESS_ISSUER||'';
 const accessAud=process.env.BYL_WIN_ACCESS_AUDIENCE||'';
-const accessOwner=(process.env.BYL_WIN_ACCESS_OWNER||'').toLowerCase();
+const accessOwners=new Set(String(process.env.BYL_WIN_ACCESS_OWNER||'').split(',').map(e=>e.trim().toLowerCase()).filter(Boolean));
+if([...accessOwners].some(e=>!/^\S+@\S+\.\S+$/.test(e)))throw Error('ACCESS_OWNER_INVALID');
 const publicHost=process.env.BYL_WIN_PUBLIC_HOST||'';
-const hasAccess=Boolean(accessIssuer&&accessAud&&accessOwner);
+const hasAccess=Boolean(accessIssuer&&accessAud&&accessOwners.size);
 if(publicHost&&!/^[a-z0-9.-]+$/.test(publicHost))throw Error('PUBLIC_HOST_INVALID');
 if(publicHost&&!hasAccess)throw Error('PUBLIC_REQUIRES_SIGNED_ACCESS');
-if([accessIssuer,accessAud,accessOwner].some(Boolean)&&!hasAccess)throw Error('INCOMPLETE_ACCESS_CONFIG');
+if([accessIssuer,accessAud,accessOwners.size].some(Boolean)&&!hasAccess)throw Error('INCOMPLETE_ACCESS_CONFIG');
 if(hasAccess&&!/^https:\/\/[a-z0-9-]+\.cloudflareaccess\.com$/.test(accessIssuer))throw Error('ISSUER_INVALID');
 const jwks=hasAccess?createRemoteJWKSet(new URL(accessIssuer+'/cdn-cgi/access/certs')):null;
 function inRoot(path){
@@ -57,7 +58,7 @@ async function auth(req,res,next){
   if(typeof assertion==='string'){
    try{
     const {payload}=await jwtVerify(assertion,jwks,{algorithms:['RS256'],issuer:accessIssuer,audience:accessAud});
-    if(payload.email?.toLowerCase()===accessOwner){req.actor=createHash('sha256').update(accessOwner).digest('hex').slice(0,12);return next()}
+    if(accessOwners.has(payload.email?.toLowerCase())){req.actor=createHash('sha256').update(payload.email.toLowerCase()).digest('hex').slice(0,12);return next()}
    }catch{}
   }
  }
