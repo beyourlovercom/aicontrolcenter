@@ -22,7 +22,12 @@ func address(_ w:AXUIElement)->String{
 func url(_ a:String)->URL?{URL(string:a.hasPrefix("https://") ? a:"https://"+a)}
 guard let ws=get(app,kAXWindowsAttribute) as? [AXUIElement],ws.count==1,let w=ws.first else{print("WINDOW_MISMATCH");exit(3)}
 guard let u=url(address(w)),u.scheme=="https",u.host=="dev.beyourlover.com",["/cart","/cart/"].contains(u.path) else{print("SOURCE_DENIED");exit(4)}
-var links=[AXUIElement]();scan(w,0,&links)
+var links=[AXUIElement]()
+for _ in 0..<20 {
+ links=[];scan(w,0,&links)
+ if links.count==1 {break}
+ usleep(150000)
+}
 guard links.count==1 else{print("LINK_NOT_UNIQUE");exit(5)}
 _ = NSRunningApplication(processIdentifier:pid)?.activate()
 _ = AXUIElementPerformAction(w,kAXRaiseAction as CFString)
