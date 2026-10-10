@@ -16,7 +16,10 @@ if(token.length<40)throw Error('TOKEN_TOO_SHORT');
 const accessIssuer=process.env.BYL_WIN_ACCESS_ISSUER||'';
 const accessAud=process.env.BYL_WIN_ACCESS_AUDIENCE||'';
 const accessOwner=(process.env.BYL_WIN_ACCESS_OWNER||'').toLowerCase();
+const publicHost=process.env.BYL_WIN_PUBLIC_HOST||'';
 const hasAccess=Boolean(accessIssuer&&accessAud&&accessOwner);
+if(publicHost&&!/^[a-z0-9.-]+$/.test(publicHost))throw Error('PUBLIC_HOST_INVALID');
+if(publicHost&&!hasAccess)throw Error('PUBLIC_REQUIRES_SIGNED_ACCESS');
 if([accessIssuer,accessAud,accessOwner].some(Boolean)&&!hasAccess)throw Error('INCOMPLETE_ACCESS_CONFIG');
 if(hasAccess&&!/^https:\/\/[a-z0-9-]+\.cloudflareaccess\.com$/.test(accessIssuer))throw Error('ISSUER_INVALID');
 const jwks=hasAccess?createRemoteJWKSet(new URL(accessIssuer+'/cdn-cgi/access/certs')):null;
@@ -43,12 +46,13 @@ function serverFor(){
  });
  return server;
 }
-const app=createMcpExpressApp({host,allowedHosts:['localhost','127.0.0.1']});
+const app=createMcpExpressApp({host,allowedHosts:['localhost','127.0.0.1',...(publicHost?[publicHost]:[])]});
 async function auth(req,res,next){
- const bearer=req.headers.authorization?.startsWith('Bearer ')?req.headers.authorization.slice(7):'';
+ const fromPublic=publicHost&&req.headers.host?.split(':')[0]===publicHost;
+ const bearer=fromPublic?'':req.headers.authorization?.startsWith('Bearer ')?req.headers.authorization.slice(7):'';
  const a=Buffer.from(bearer),b=Buffer.from(token);
  if(a.length===b.length&&timingSafeEqual(a,b)){req.actor='local-bearer';return next()}
- if(hasAccess){
+ if(hasAccess&&fromPublic){
   const assertion=req.headers['cf-access-jwt-assertion'];
   if(typeof assertion==='string'){
    try{
