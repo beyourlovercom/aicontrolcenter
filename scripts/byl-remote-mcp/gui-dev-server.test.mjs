@@ -1,7 +1,7 @@
 import test from 'node:test';import assert from 'node:assert/strict';import {createGuiDevServer} from './gui-dev-server.mjs';
 const token='a'.repeat(40), request={action:'inspect',windowPid:321,expectedHost:'dev.beyourlover.com',expectedTitle:'BYL GUI TEST READY'};
 test('loopback authenticated inspect and denial contract',async()=>{
- const server=createGuiDevServer({token,lookup:()=>({ok:true,pid:321,title:'BYL GUI TEST READY - Google Chrome'})});
+ const server=createGuiDevServer({token,lookup:()=>({ok:true,pid:321,title:'BYL GUI TEST READY - Google Chrome',url:'/tmp/byl-gui-owner-uat-20261010.html'})});
  await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
  try{
  const url='http://127.0.0.1:'+server.address().port+'/dev/gui/inspect';

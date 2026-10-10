@@ -4,7 +4,7 @@ import {InMemoryTransport} from '/Users/a/Library/Application Support/AICC/deskt
 import {createGuiMcpServer} from './gui-mcp-server.mjs';
 test('MCP list and call inspect-only end-to-end',async()=>{
  const [clientTransport,serverTransport]=InMemoryTransport.createLinkedPair();
- const server=createGuiMcpServer({lookup:()=>({ok:true,pid:321,title:'BYL GUI TEST READY - Google Chrome'})});
+ const server=createGuiMcpServer({lookup:()=>({ok:true,pid:321,title:'BYL GUI TEST READY - Google Chrome',url:'/tmp/byl-gui-owner-uat-20261010.html'})});
  const client=new Client({name:'uat-client',version:'1.0'},{capabilities:{}});
  await server.connect(serverTransport);await client.connect(clientTransport);
  try{
