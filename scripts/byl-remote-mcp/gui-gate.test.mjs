@@ -1,0 +1,12 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {guiActionGate} from './gui-gate.mjs';
+const good={frontmost:'Google Chrome',chromeFrontmost:'true',accessibilityWindowCount:1,chromeScriptWindowCount:1,chromeActiveTab:'https://dev.beyourlover.com/cart/',expectedHost:'dev.beyourlover.com'};
+test('verified focus and URL passes',()=>assert.equal(guiActionGate(good).ok,true));
+test('other app steals focus, fail closed',()=>assert.equal(guiActionGate({...good,frontmost:'UURemote'}).reason,'CHROME_NOT_FRONTMOST'));
+test('Chrome scripting vs accessibility mismatch, fail closed',()=>assert.equal(guiActionGate({...good,chromeScriptWindowCount:0}).reason,'CHROME_SCRIPT_AX_WINDOW_MISMATCH'));
+test('no windows, fail closed',()=>assert.equal(guiActionGate({...good,accessibilityWindowCount:0,chromeScriptWindowCount:0}).reason,'NO_MATCHING_CHROME_WINDOW'));
+test('unavailable tab, fail closed',()=>assert.equal(guiActionGate({...good,chromeActiveTab:''}).reason,'CHROME_TAB_UNAVAILABLE'));
+test('production host blocked',()=>assert.equal(guiActionGate({...good,chromeActiveTab:'https://www.beyourlover.com/checkout'}).reason,'TARGET_HOST_MISMATCH'));
+test('similar-looking host blocked',()=>assert.equal(guiActionGate({...good,chromeActiveTab:'https://dev.beyourlover.com.attacker.net/'}).reason,'TARGET_HOST_MISMATCH'));
+test('non HTTPS blocked',()=>assert.equal(guiActionGate({...good,chromeActiveTab:'http://dev.beyourlover.com/'}).reason,'TARGET_HOST_MISMATCH'));
