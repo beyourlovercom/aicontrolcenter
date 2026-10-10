@@ -14,9 +14,8 @@ $w=$matches[0]
 $editCondition=New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::ControlTypeProperty,[System.Windows.Automation.ControlType]::Edit)
 function Read-Address {
  $allEdits=$w.FindAll([System.Windows.Automation.TreeScope]::Descendants,$editCondition)
- $edits=@($allEdits | Where-Object { $_.Current.Name -match 'Address|地址|Search' })
- if($edits.Count -ne 1){throw 'ADDRESS_NOT_UNIQUE'}
- return $edits[0].GetCurrentPattern([System.Windows.Automation.ValuePattern]::Pattern).Current.Value
+ if($allEdits.Count -ne 1){throw 'ADDRESS_CONTROL_NOT_UNIQUE'}
+ return $allEdits[0].GetCurrentPattern([System.Windows.Automation.ValuePattern]::Pattern).Current.Value
 }
 $before=Read-Address
 if($before -notmatch '^(https://)?dev\.beyourlover\.com/cart/?$'){throw 'DEV_CART_SOURCE_DENIED'}
