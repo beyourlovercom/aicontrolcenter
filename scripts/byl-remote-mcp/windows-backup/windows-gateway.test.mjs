@@ -4,6 +4,7 @@ import {mkdtempSync,writeFileSync,readFileSync,rmSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join,resolve} from 'node:path';
 import {spawn} from 'node:child_process';
+import {request as httpRequest} from 'node:http';
 import {randomBytes} from 'node:crypto';
 const delay=ms=>new Promise(ok=>setTimeout(ok,ms));
 test('Windows backup MCP localhost E2E + public Auth fail-closed', {timeout:40000},async()=>{
@@ -33,7 +34,16 @@ test('Windows backup MCP localhost E2E + public Auth fail-closed', {timeout:4000
   }
   const initParams={protocolVersion:'2025-03-26',capabilities:{},clientInfo:{name:'ci',version:'1'}};
   assert.equal((await rpc('initialize',initParams,{bearer:false})).status,401);
-  assert.equal((await rpc('initialize',initParams,{bearer:true,publicHost:true})).status,401,'local bearer must not bypass public Access');
+  const publicStatus=await new Promise((resolve,reject)=>{
+   const payload=JSON.stringify({jsonrpc:'2.0',id:999,method:'initialize',params:initParams});
+   const request=httpRequest({hostname:'127.0.0.1',port:8892,path:'/mcp',method:'POST',headers:{
+     Host:'mcp-win-uat.beyourlover.com',Authorization:'Bearer '+token,
+     'Content-Type':'application/json',Accept:'application/json, text/event-stream',
+     'Content-Length':Buffer.byteLength(payload)
+   }},response=>{response.resume();response.on('end',()=>resolve(response.statusCode))});
+   request.on('error',reject);request.end(payload);
+  });
+  assert.equal(publicStatus,401,'local bearer must not bypass public Access');
   const init=await rpc('initialize',initParams);
   assert.equal(init.status,200);
   assert.ok(init.body.result.protocolVersion);
