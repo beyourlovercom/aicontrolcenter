@@ -6,6 +6,8 @@ test('wrong PID blocks',()=>assert.equal(handleGuiRequest(req,{lookup:()=>({ok:t
 test('missing URL proof blocks',()=>assert.equal(handleGuiRequest(req,{lookup:()=>({ok:true,pid:123,title:'BYL GUI TEST READY - Google Chrome'})}).errorCode,'FIXTURE_URL_MISMATCH'));
 test('missing target blocks',()=>assert.equal(handleGuiRequest(req,{lookup:()=>({ok:false,reason:'TARGET_WINDOW_NOT_FOUND'})}).errorCode,'TARGET_WINDOW_NOT_FOUND'));
 test('unsafe request blocks before window lookup',()=>assert.equal(handleGuiRequest({...req,expectedHost:'www.beyourlover.com'},{lookup:()=>{throw Error('should not run')}}).errorCode,'DEV_ONLY_HOST_REQUIRED'));
-test('fixture mutation verifies returned receipt',()=>assert.equal(handleGuiRequest({...req,action:'click',target:'Click test only'},{lookup,runner:()=> 'GUI_FIXTURE_ACTION_PASS'}).verified,true));
+test('fixture mutation verifies returned receipt',()=>assert.equal(handleGuiRequest({...req,action:'click',target:'Click test only'},{lookup,runner:()=> 'ACTION=click BEFORE=READY AFTER=PASS\nGUI_FIXTURE_ACTION_PASS'}).verified,true));
 test('unverified mutation is never a PASS',()=>assert.equal(handleGuiRequest({...req,action:'click',target:'Click test only'},{lookup,runner:()=> 'EVENT_SENT_NOT_VERIFIED'}).ok,false));
+test('busy GUI returns a stable error response',()=>assert.equal(handleGuiRequest(req,{lookup,lock:()=>{throw Error('GUI_BUSY')}}).errorCode,'GUI_BUSY'));
+test('spoofed success token does not verify click',()=>assert.equal(handleGuiRequest({...req,action:'click',target:'Click test only'},{lookup,runner:()=> 'GUI_FIXTURE_ACTION_PASS but no state change'}).verified,false));
 test('runner failures fail closed',()=>assert.equal(handleGuiRequest({...req,action:'click',target:'Click test only'},{lookup,runner:()=>{throw Error('FOCUS_STOLEN')}}).errorCode,'GUI_ACTION_FAILED_CLOSED'));
