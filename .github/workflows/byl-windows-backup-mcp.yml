@@ -1,0 +1,27 @@
+name: BYL Windows Backup MCP V1
+on:
+  push:
+    paths:
+      - "scripts/byl-remote-mcp/windows-backup/**"
+      - ".github/workflows/byl-windows-backup-mcp.yml"
+  pull_request:
+    paths:
+      - "scripts/byl-remote-mcp/windows-backup/**"
+      - ".github/workflows/byl-windows-backup-mcp.yml"
+permissions:
+  contents: read
+jobs:
+  backup-gateway:
+    runs-on: windows-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Install pinned dependencies
+        working-directory: scripts/byl-remote-mcp/windows-backup
+        run: npm install --ignore-scripts --no-audit --no-fund
+      - name: Localhost authenticated MCP integration UAT
+        working-directory: scripts/byl-remote-mcp/windows-backup
+        run: node --test windows-gateway.test.mjs
