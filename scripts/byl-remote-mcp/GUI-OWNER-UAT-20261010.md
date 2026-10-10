@@ -17,6 +17,13 @@ Isolated China Mac implementation only. No changes to Production, payments, main
 - Latest isolated branch regression: 32/32 tests PASS.
 - No live MCP registration or service deployment was performed.
 
+## Standard MCP registration proof
+- Added a separate inspect-only MCP tool `gui_dev_inspect` implemented through the installed local SDK, not the live Remote MCP agent.
+- In-memory MCP client/server handshake, tools/list, allowed tools/call and rejection cases verified; branch regression 34/34 PASS.
+- Head commit before URL probe: `608e739`. This demonstrates MCP protocol behavior, **not** a ChatGPT-to-live-agent GUI call.
+- Critical mismatch: the GUI click/type fixture is a local `file://` page, while the request validator models `dev.beyourlover.com`; these have not been cryptographically or semantically bound. Remote mutations must remain OFF.
+- AX URL probe produced no URL evidence because the isolated browser window was no longer present when checked; do not infer a URL from title.
+
 ## Existing gaps (not yet a production-ready MCP GUI tool)
 1. Existing MCP agent has not been modified or restarted, and the GUI functions have not yet been exposed as a dedicated remote_call tool.
 2. Window/PID matching must be bound to a trusted URL/profile and supported by a stable, authenticated MCP invocation; current demo relies on local fixture and explicit PID.
