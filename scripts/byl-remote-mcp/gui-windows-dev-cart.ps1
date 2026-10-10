@@ -13,7 +13,8 @@ if($matches.Count -ne 1){throw 'CHROME_WINDOW_NOT_UNIQUE'}
 $w=$matches[0]
 $editCondition=New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::ControlTypeProperty,[System.Windows.Automation.ControlType]::Edit)
 function Read-Address {
- $edits=@($w.FindAll([System.Windows.Automation.TreeScope]::Descendants,$editCondition) | Where-Object { $_.Current.Name -match 'Address|地址|Search' })
+ $allEdits=$w.FindAll([System.Windows.Automation.TreeScope]::Descendants,$editCondition)
+ $edits=@($allEdits | Where-Object { $_.Current.Name -match 'Address|地址|Search' })
  if($edits.Count -ne 1){throw 'ADDRESS_NOT_UNIQUE'}
  return $edits[0].GetCurrentPattern([System.Windows.Automation.ValuePattern]::Pattern).Current.Value
 }
@@ -21,7 +22,8 @@ $before=Read-Address
 if($before -notmatch '^(https://)?dev\.beyourlover\.com/cart/?$'){throw 'DEV_CART_SOURCE_DENIED'}
 if($Action -eq 'Inspect'){Write-Output ('WINDOWS_DEV_CART_INSPECT_PASS pid='+$w.Current.ProcessId);exit 0}
 $linkCondition=New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::ControlTypeProperty,[System.Windows.Automation.ControlType]::Hyperlink)
-$links=@($w.FindAll([System.Windows.Automation.TreeScope]::Descendants,$linkCondition) | Where-Object { $_.Current.Name -eq 'BeYourLover home' })
+$allLinks=$w.FindAll([System.Windows.Automation.TreeScope]::Descendants,$linkCondition)
+$links=@($allLinks | Where-Object { $_.Current.Name -eq 'BeYourLover home' })
 if($links.Count -ne 1){throw 'HOME_LINK_NOT_UNIQUE'}
 $links[0].GetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern).Invoke()
 $verified=$false
