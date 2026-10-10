@@ -1,0 +1,13 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {validateGuiRequest as check} from './gui-request.mjs';
+const safe={action:'inspect',windowPid:123,expectedHost:'dev.beyourlover.com',expectedTitle:'BYL GUI TEST READY'};
+test('isolated inspect accepted',()=>assert.equal(check(safe).ok,true));
+test('production host rejected',()=>assert.equal(check({...safe,expectedHost:'www.beyourlover.com'}).reason,'DEV_ONLY_HOST_REQUIRED'));
+test('real checkout rejected',()=>assert.equal(check({...safe,expectedTitle:'Checkout'}).reason,'ISOLATED_FIXTURE_REQUIRED'));
+test('invalid PID rejected',()=>assert.equal(check({...safe,windowPid:0}).reason,'INVALID_PID'));
+test('arbitrary action rejected',()=>assert.equal(check({...safe,action:'execute'}).reason,'ACTION_DENIED'));
+test('arbitrary button rejected',()=>assert.equal(check({...safe,action:'click',target:'Pay now'}).reason,'BUTTON_NOT_ALLOWLISTED'));
+test('fixture button accepted',()=>assert.equal(check({...safe,action:'click',target:'Click test only'}).ok,true));
+test('arbitrary typing rejected',()=>assert.equal(check({...safe,action:'type',target:'GUI text test',value:'secret'}).reason,'INPUT_NOT_ALLOWLISTED'));
+test('fixture typing accepted',()=>assert.equal(check({...safe,action:'type',target:'GUI text test',value:'UATPASS'}).ok,true));
