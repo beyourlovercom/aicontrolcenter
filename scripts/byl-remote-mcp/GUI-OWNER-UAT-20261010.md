@@ -11,6 +11,12 @@ Isolated China Mac implementation only. No changes to Production, payments, main
 - Focus theft by UURemote caused fail-closed behavior. An isolated single-process keyboard test passed.
 - On the latest main worktree, local automated tests 18/18 PASS.
 
+## Dev-only remote handler follow-up
+- Added `gui-remote-handler.mjs` with request validation, PID + title binding, and read-only inspect output.
+- Rejects wrong PID, missing target, Production host, and all remote GUI mutations until authenticated target URL and state verification are integrated.
+- Latest isolated branch regression: 32/32 tests PASS.
+- No live MCP registration or service deployment was performed.
+
 ## Existing gaps (not yet a production-ready MCP GUI tool)
 1. Existing MCP agent has not been modified or restarted, and the GUI functions have not yet been exposed as a dedicated remote_call tool.
 2. Window/PID matching must be bound to a trusted URL/profile and supported by a stable, authenticated MCP invocation; current demo relies on local fixture and explicit PID.
