@@ -18,8 +18,10 @@ Deliverable: exact file manifest + source/permission comparison + test coverage 
 ## V2.1 — truthful, signed live health (in-progress)
 Separate **configured** status from **reachable** state. Only successful authenticated, device-bound agent responses may establish reachable. Timeout or transport failure means *unreachable at probe time*, not necessarily permanently offline. Stale cache becomes unknown, not READY. Bound per-probe time, concurrency, TTL and in-flight duplication. No probe to arbitrary URLs; fixed device registry only. No secret or private IP returned to ordinary callers.
 - New isolated pure module: \`remote-v2-live-health.mjs\` with \`remote-v2-live-health.test.mjs\`.
-- Current result: 14/14 module tests PASS (registration ≠ readiness, identity mismatch, unsigned success, Tailscale-like unreachable, timeout, stale, concurrency, sanitization).
-- **NOT integrated into runtime** until safe signed health probe implementation, authorized code source and rollback plan are reviewed and approved.
+- Current result: 14/14 base health tests PASS plus 16/16 Ed25519 response challenge tests; 128/128 complete Node suite PASS (including 98 pre-existing tests).
+- New isolated signed proof library: remote-v2-signed-health.mjs with per-device public keys, random nonce, bounded signed timestamps, replay and identity mismatch denial, cryptographic verification and explicit degraded status.
+- Read-only source-provenance audit: REMOTE-DC-V2-RUNTIME-PROVENANCE-20261012.md. Four 8797 OAuth runtime files SHA-256 byte-match PR #51, while runtime Gateway/Agent sources are still outside GitHub main.
+- **NOT integrated into runtime** until new signed agent response endpoints, pinned key enrollment, authorized source parity, code review, Owner UAT and rollback are approved.
 - Acceptance: offline/Tailscale-stop produces \`unreachable\` or \`unknown\` with timestamp,恢复 returns \`reachable\`; no false-ready; old MCP calls unchanged.
 
 ## V2.2 — durable audited remote jobs

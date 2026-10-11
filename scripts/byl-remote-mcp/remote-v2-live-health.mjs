@@ -5,7 +5,7 @@
  * Caller must inject a signed, authenticated and device-bound health probe;
  * this module performs no direct HTTP requests and cannot probe arbitrary URLs.
  */
-const SAFE_ERROR_CODES=new Set(['TIMEOUT','UNREACHABLE','AUTH_FAILED','MALFORMED_RESPONSE','PROBE_ERROR']);
+const SAFE_ERROR_CODES=new Set(['TIMEOUT','UNREACHABLE','AUTH_FAILED','MALFORMED_RESPONSE','PROBE_ERROR','CHALLENGE_EXPIRED','AGENT_DEGRADED']);
 const publicReason=code=>SAFE_ERROR_CODES.has(code)?code:'PROBE_ERROR';
 
 export function createLiveHealthMonitor({
@@ -53,8 +53,13 @@ export function createLiveHealthMonitor({
         if(received?.ok===true && received?.authenticated===true &&
            received?.deviceId===deviceId){
           record={state:'reachable',verified:true,reason:null};
-        }else if(received?.ok===false && received?.code==='UNREACHABLE'){
-          record={state:'unreachable',verified:false,reason:'UNREACHABLE'};
+        }else if(received?.ok===false && received?.authenticated===true &&
+                 received?.deviceId===deviceId && received?.code==='AGENT_DEGRADED'){
+          record={state:'degraded',verified:true,reason:'AGENT_DEGRADED'};
+        }else if(received?.ok===false && ['UNREACHABLE','TIMEOUT'].includes(received?.code)){
+          record={state:'unreachable',verified:false,reason:received.code};
+        }else if(received?.ok===false && ['AUTH_FAILED','CHALLENGE_EXPIRED'].includes(received?.code)){
+          record={state:'unknown',verified:false,reason:received.code};
         }else{
           record={state:'unknown',verified:false,reason:'MALFORMED_RESPONSE'};
         }
