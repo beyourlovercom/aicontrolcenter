@@ -1,5 +1,6 @@
 import {readFileSync} from 'node:fs';
 import {setupPrimaryAuthorizer} from './gui-managed-access-auth.mjs';
+import {MCP_PATHS,routeAllowsMcpRequest} from './gui-mcp-path-contract.mjs';
 import {guiDevCartHomeCanary,PRIMARY_GUI_TOOL_NAME} from './gui-primary-bridge.mjs';
 import {createHash,sign} from 'node:crypto';
 import {McpServer} from '/Users/a/Library/Application Support/AICC/desktop-commander-runtime/node_modules/@modelcontextprotocol/sdk/dist/esm/server/mcp.js';
@@ -88,12 +89,11 @@ const authorize=setupPrimaryAuthorizer(process.env,TOKEN);
 async function auth(req,res,next){
   try{
     const decision=await authorize(req);
-    if(!decision.ok)return res.status(401).json({jsonrpc:'2.0',error:{code:-32001,message:'Unauthorized'},id:null});
+    if(!routeAllowsMcpRequest(req.path,decision))return res.status(401).json({jsonrpc:'2.0',error:{code:-32001,message:'Unauthorized'},id:null});
     req.actor=decision.method==='legacy'?'legacy-bearer':'cloudflare-owner';
     return next();
   }catch{return res.status(401).json({jsonrpc:'2.0',error:{code:-32001,message:'Unauthorized'},id:null});}
 }
-const MCP_PATHS=['/mcp','/__byl_remote_mcp/mcp'];
 for(const route of MCP_PATHS) app.post(route,auth,async(req,res)=>{
   const server=getServer();
   const transport=new StreamableHTTPServerTransport({sessionIdGenerator:undefined,enableJsonResponse:true});
