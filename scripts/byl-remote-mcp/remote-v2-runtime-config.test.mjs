@@ -1,0 +1,10 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {parseRuntimeTargets,registeredTargets} from './remote-v2-runtime-config.mjs';
+const good={'china-mac':{kind:'dc-agent',upstream:'http://100.100.20.40:8791/'}};
+test('registered is not reachable',()=>{const got=parseRuntimeTargets(good);assert.equal(registeredTargets(got)[0].live,'unknown');assert.equal(registeredTargets(got)[0].state,'registered');});
+test('fail closed on missing config',()=>assert.throws(()=>parseRuntimeTargets(null)));
+test('reject public, localhost and ordinary private LAN',()=>{for(const host of ['8.8.8.8','127.0.0.1','192.168.0.5','localhost']) assert.throws(()=>parseRuntimeTargets({'china-mac':{kind:'dc-agent',upstream:'http://'+host+':8791/'}}));});
+test('reject credential, query, fragment, path and HTTPS',()=>{for(const url of ['http://user:pass@100.100.20.40:8791/','http://100.100.20.40:8791/?token=x','http://100.100.20.40:8791/path','https://100.100.20.40:8791/','http://100.100.20.40:8791/#x'])assert.throws(()=>parseRuntimeTargets({'china-mac':{kind:'dc-agent',upstream:url}}));});
+test('reject unknown device, wrong port or arbitrary fields',()=>{assert.throws(()=>parseRuntimeTargets({'other-device':good['china-mac']}));assert.throws(()=>parseRuntimeTargets({'china-mac':{kind:'dc-agent',upstream:'http://100.100.20.40:8787/'}}));assert.throws(()=>parseRuntimeTargets({'china-mac':{...good['china-mac'],token:'secret'}}));});
+test('preserve allowlisted fixed target only',()=>{const got=parseRuntimeTargets(good);assert.deepEqual(Object.keys(got),['china-mac']);assert.equal(got['china-mac'].upstream,'http://100.100.20.40:8791');});
