@@ -1,0 +1,19 @@
+name: Remote DC V2 Isolated Agent Health Tests
+on:
+  pull_request:
+    paths:
+      - 'scripts/byl-remote-mcp/remote-v2-agent-health-handler*'
+      - '.github/workflows/remote-dc-v2-agent-health-tests.yml'
+permissions:
+  contents: read
+jobs:
+  agent-health:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: node --check scripts/byl-remote-mcp/remote-v2-agent-health-handler.mjs
+      - run: node --test scripts/byl-remote-mcp/remote-v2-agent-health-handler.test.mjs
