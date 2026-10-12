@@ -1,0 +1,20 @@
+name: Remote DC V2 Phase A Isolated Config Tests
+on:
+  pull_request:
+    paths:
+      - 'scripts/byl-remote-mcp/remote-v2-runtime-config.mjs'
+      - 'scripts/byl-remote-mcp/remote-v2-runtime-config.test.mjs'
+      - '.github/workflows/remote-dc-v2-config-tests.yml'
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: node --check scripts/byl-remote-mcp/remote-v2-runtime-config.mjs
+      - run: node --test scripts/byl-remote-mcp/remote-v2-runtime-config.test.mjs
