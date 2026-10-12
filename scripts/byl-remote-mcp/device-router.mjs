@@ -1,7 +1,8 @@
 export const DEVICE_REGISTRY=Object.freeze({
   'us-macmini':Object.freeze({id:'us-macmini',state:'READY',kind:'aicc-runner',upstream:'http://100.94.52.109:8787',tokenFile:null}),
   'china-mac':Object.freeze({id:'china-mac',state:'READY',kind:'dc-agent',upstream:'http://100.102.15.40:8791',tokenFile:'/Users/a/.byl-remote-mcp/china-agent.token'}),
-  'windows':Object.freeze({id:'windows',state:'READY',kind:'dc-agent',upstream:'http://100.87.29.56:8791',tokenFile:'/Users/a/.byl-remote-mcp/windows-agent.token'})
+  'windows':Object.freeze({id:'windows',state:'READY',kind:'dc-agent',upstream:'http://100.87.29.56:8791',tokenFile:'/Users/a/.byl-remote-mcp/windows-agent.token'}),
+  '007windows':Object.freeze({id:'007windows',state:'READY',kind:'dc-agent',upstream:'http://100.99.21.57:8791',tokenFile:'/Users/a/.byl-remote-mcp/007windows-agent.token'})
 });
 
 export function listDevices(){

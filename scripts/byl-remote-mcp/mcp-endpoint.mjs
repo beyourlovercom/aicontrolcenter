@@ -14,7 +14,8 @@ const PRIVATE_KEY=readFileSync('/Users/a/.byl-remote-mcp/keys/gateway-ed25519-pr
 const TARGETS=Object.freeze({
   'us-macmini':'http://127.0.0.1:8791',
   'china-mac':'http://100.102.15.40:8791',
-  'windows':'http://100.87.29.56:8791'
+  'windows':'http://100.87.29.56:8791',
+  '007windows':'http://100.99.21.57:8791'
 });
 
 function sha(body){return createHash('sha256').update(body).digest('hex');}
@@ -53,12 +54,12 @@ function getServer(principal){
   },async()=>textResult(Object.keys(TARGETS).map(id=>({id,state:'READY'}))));
   server.registerTool('remote_list_tools',{
     description:'List allowed Desktop Commander tools on a device.',
-    inputSchema:{deviceId:z.enum(['us-macmini','china-mac','windows'])}
+    inputSchema:{deviceId:z.enum(['us-macmini','china-mac','windows','007windows'])}
   },async({deviceId})=>textResult(await agentGet(deviceId,'/v1/tools')));
   if(principal.canOperate) server.registerTool('remote_call',{
     description:'Call an allowed Desktop Commander tool on a selected device.',
     inputSchema:{
-      deviceId:z.enum(['us-macmini','china-mac','windows']),
+      deviceId:z.enum(['us-macmini','china-mac','windows','007windows']),
       name:z.string().min(1),
       arguments:z.record(z.string(),z.unknown()).optional()
     }
@@ -68,7 +69,7 @@ function getServer(principal){
   });
   server.registerTool('remote_process_selftest',{
     description:'Run a fixed read-only hostname process self-test on a selected device.',
-    inputSchema:{deviceId:z.enum(['us-macmini','china-mac','windows'])}
+    inputSchema:{deviceId:z.enum(['us-macmini','china-mac','windows','007windows'])}
   },async({deviceId})=>{
     const out=await agentCall(deviceId,'start_process',{command:'hostname',timeout_ms:8000});
     return textResult(out.result??out);

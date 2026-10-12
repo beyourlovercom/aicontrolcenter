@@ -1,0 +1,39 @@
+name: 007windows Gateway isolated CI
+on:
+  pull_request:
+    branches:
+      - feature/byl-remote-mcp-v1
+    paths:
+      - 'scripts/byl-remote-mcp/device-router.mjs'
+      - 'scripts/byl-remote-mcp/mcp-endpoint.mjs'
+      - 'scripts/byl-remote-mcp/mcp-endpoint-registry.test.mjs'
+      - 'scripts/byl-remote-mcp/device-router.test.mjs'
+      - 'scripts/byl-remote-mcp/signature-contract.test.mjs'
+      - 'scripts/byl-remote-mcp/isolated-http-e2e.test.mjs'
+      - '.github/workflows/007windows-device-ci.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  offline-contracts:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 5
+    steps:
+      - name: Checkout candidate
+        uses: actions/checkout@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Syntax checks
+        run: |
+          node --check scripts/byl-remote-mcp/device-router.mjs
+          node --check scripts/byl-remote-mcp/mcp-endpoint.mjs
+          node --check scripts/byl-remote-mcp/mcp-endpoint-registry.test.mjs
+          node --check scripts/byl-remote-mcp/device-router.test.mjs
+          node --check scripts/byl-remote-mcp/signature-contract.test.mjs
+          node --check scripts/byl-remote-mcp/isolated-http-e2e.test.mjs
+      - name: Isolated route and ephemeral-key signature tests
+        run: node --test scripts/byl-remote-mcp/mcp-endpoint-registry.test.mjs scripts/byl-remote-mcp/device-router.test.mjs scripts/byl-remote-mcp/signature-contract.test.mjs scripts/byl-remote-mcp/isolated-http-e2e.test.mjs
