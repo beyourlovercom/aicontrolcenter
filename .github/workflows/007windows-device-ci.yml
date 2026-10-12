@@ -29,7 +29,7 @@ jobs:
         run: |
           node --check scripts/byl-remote-mcp/device-router.mjs
           node --check scripts/byl-remote-mcp/device-router.test.mjs
-          node --check scripts/byl-remote-mcp/signature-contract.test.mjs scripts/byl-remote-mcp/isolated-http-e2e.test.mjs
+          node --check scripts/byl-remote-mcp/signature-contract.test.mjs
           node --check scripts/byl-remote-mcp/isolated-http-e2e.test.mjs
       - name: Isolated route and ephemeral-key signature tests
-        run: node --test scripts/byl-remote-mcp/device-router.test.mjs scripts/byl-remote-mcp/signature-contract.test.mjs
+        run: node --test scripts/byl-remote-mcp/device-router.test.mjs scripts/byl-remote-mcp/signature-contract.test.mjs scripts/byl-remote-mcp/isolated-http-e2e.test.mjs
