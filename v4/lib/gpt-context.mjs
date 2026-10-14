@@ -1,3 +1,5 @@
+import { UI_PREVIEW_POLICY_ID } from './ui-preview-policy.mjs';
+
 function clean(value, fallback = '—') {
   return typeof value === 'string' && value.trim() ? value.trim() : fallback;
 }
@@ -99,8 +101,13 @@ function roadmapSnapshot(roadmap) {
   });
 }
 
-export function buildGptContextSnapshot(projectFacts, runtimeOverview, { now = () => new Date() } = {}) {
+export function buildGptContextSnapshot(projectFacts, runtimeOverview, { now = () => new Date(), uiPreviewPolicy } = {}) {
   if (!projectFacts?.available) throw new Error('project facts unavailable');
+  if (uiPreviewPolicy?.id !== UI_PREVIEW_POLICY_ID || uiPreviewPolicy?.status !== 'ACTIVE' || !uiPreviewPolicy?.instruction || !/^[0-9a-f]{40}$/i.test(uiPreviewPolicy?.mainSha || '')) {
+    const error = new Error('Canonical global UI preview policy required for GPT Context');
+    error.code = 'GLOBAL_UI_PREVIEW_POLICY_UNAVAILABLE';
+    throw error;
+  }
   const explicitOwnerGates = Object.freeze((projectFacts.ownerAttention || []).map((item) => Object.freeze({
     type: item.type,
     title: item.title,
@@ -116,6 +123,7 @@ export function buildGptContextSnapshot(projectFacts, runtimeOverview, { now = (
       aiccRole: 'advisory projection only',
       executionInterfaces: 'GitHub + Remote Desktop Commander'
     }),
+    uiPreviewPolicy: Object.freeze({ ...uiPreviewPolicy }),
     project: Object.freeze({ id: projectFacts.projectId, name: projectFacts.name, repository: projectFacts.repository }),
     github: Object.freeze({
       defaultBranch: projectFacts.defaultBranch,
@@ -153,6 +161,11 @@ export function formatGptContext(snapshot) {
   const lines = [
     'AICC GPT EXECUTION CONTEXT',
     'Authority: GitHub is the only project Source of Truth. AICC is advisory only. GPT decides and executes through GitHub/DC.',
+    'GLOBAL UI PREVIEW FIRST — canonical rule; not execution authorization:',
+    `Policy ID: ${snapshot.uiPreviewPolicy.id} · version ${snapshot.uiPreviewPolicy.version} · ${snapshot.uiPreviewPolicy.status}`,
+    `Policy source: ${snapshot.uiPreviewPolicy.canonicalRepository}/${snapshot.uiPreviewPolicy.canonicalPath} @ ${snapshot.uiPreviewPolicy.mainSha}`,
+    `Policy content SHA-256: ${snapshot.uiPreviewPolicy.contentSha256}`,
+    snapshot.uiPreviewPolicy.instruction,
     `Project: ${snapshot.project.name} (${snapshot.project.id})`,
     `Repository: ${snapshot.project.repository}`,
     `Canonical default branch: ${github.defaultBranch}`,

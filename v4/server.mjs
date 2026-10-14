@@ -8,6 +8,7 @@ import { getProjectLocator, loadProjectRegistry } from './lib/project-registry.m
 import { compareProjectionFreshness, readAllGitHubProjectFacts, readGitHubProjectFacts, readGitHubProjectHead } from './lib/project-facts.mjs';
 import { loadMachineRegistry, readRuntimeOverview } from './lib/runtime-overview.mjs';
 import { createGptContextSnapshot } from './lib/gpt-context.mjs';
+import { readGlobalUiPreviewPolicy } from './lib/ui-preview-policy.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const defaultRegistryPath = join(here, 'projects.json');
@@ -70,10 +71,15 @@ export async function createV4Server({ registryPath = defaultRegistryPath, machi
       const project = getProjectLocator(registry, contextMatch[1]);
       if (!project) { sendJson(response, 404, { schema: 'aicc.v4.error.v1', error: 'PROJECT_NOT_REGISTERED' }); return; }
       try {
-        const facts = await readGitHubProjectFacts(project, { client, now });
+        // Canonical cross-project governance is loaded before GPT context is copied.
+        // An unavailable policy is an explicit error, never an implicit waiver.
+        const [facts, uiPreviewPolicy] = await Promise.all([
+          readGitHubProjectFacts(project, { client, now }),
+          readGlobalUiPreviewPolicy(client)
+        ]);
         let runtime = null;
         try { runtime = await readRuntimeOverview(machineRegistry, runtimeObservationPath, { now }); } catch { runtime = null; }
-        sendJson(response, 200, createGptContextSnapshot(facts, runtime, { now }));
+        sendJson(response, 200, createGptContextSnapshot(facts, runtime, { now, uiPreviewPolicy }));
       } catch (error) { sendJson(response, 502, { schema: 'aicc.v4.error.v1', error: error.code ?? 'GPT_CONTEXT_UNAVAILABLE', detail: error.message }); }
       return;
     }

@@ -22,7 +22,19 @@ Canonical contract: `docs/00_Governance/AI-EXECUTOR-GOVERNANCE-V2.md`.
 - Historical or subsystem-specific `Codex-only` runtime contracts remain scoped to those exact runtimes and do not override the global provider policy.
 
 
-## Permanent denials
+## Global UI Preview First V1
+
+Canonical contract: `docs/00_Governance/AICC-GLOBAL-UI-PREVIEW-FIRST-V1.md`.
+
+`AICC_GLOBAL_UI_PREVIEW_FIRST_V1 = REQUIRED` for governed GPT → AICC UI work after the policy is merged to canonical GitHub main.
+
+- GPT classifies whether a task materially changes UI, navigation, layouts or interactions; AICC does not infer task semantics.
+- Before new implementation of a material UI design, prefer a directly interactive in-chat HTML/CSS/JavaScript prototype (ChatGPT AppBlock when available); present real limitations and clearly label mock data.
+- Require explicit Owner Visual UAT PASS for the scoped design unless Owner explicitly waives preview or approves an existing design baseline.
+- Narrow bug fixes, pure backend/infrastructure work and urgent remediation may skip preview with a recorded GPT reason.
+- Visual PASS is not functional UAT, GitHub merge approval, Production deployment authorization, or business data write authority.
+- AICC V4 must read the policy at an exact canonical GitHub main SHA and include it in project-independent Copy GPT Context output; fail closed if missing, never mutate Bridge request/Result content to insert it.
+- Project-specific rules can tighten but not silently bypass this cross-project default.
 
 - Arbitrary shell strings from the application UI or runtime.
 - OpenSpec Sync.
