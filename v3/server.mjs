@@ -11,6 +11,7 @@ import {createDraftPr,readPrDeliveryFacts} from './lib/github-delivery.mjs';
 import {ensureBridgeCredential,listBridgeRequestIds,readBridgeRequestBinding,verifyBridgeCredential} from './lib/bridge-store.mjs';
 import {bridgeProjectionAsync,claimBridgeDeliveryAsync,reconcileBridgeStartup,recordBridgeReceipt,submitBridgeRequestAsync} from './lib/bridge-runtime.mjs';
 import {createChatgptProjectionStore} from './lib/chatgpt-projection.mjs';
+import {loadNextStepUiPreviewPolicy} from './lib/ui-preview-policy-runtime.mjs';
 import {assertNextStepLocal,cancelPendingNextStepForRoom,claimNextStep,createNextStepRequest,readNextStepRequest,reconcileNextStepStartup,recordNextStepReceipt} from './lib/next-step-runtime.mjs';
 import {createHumanChatRequest,claimHumanChat,readHumanChatRequest,reconcileHumanChatStartup,recordHumanChatReceipt} from './lib/human-chat-runtime.mjs';
 import {RemoteRunnerClient,remoteRunnerBaseUrl,remoteRepositoryRoot} from './lib/remote-runner-client.mjs';
@@ -281,7 +282,10 @@ export function createAiccV3Server(options={}){
         const context=loadProjectContextFromBinding({projectId:input?.projectId,projectName:input?.roomName||input?.projectId,repositoryIdentity:input?.repositoryIdentity,repositoryPath:input?.worktree});
         const executor=executorStatus(context,env,executorOptions);const snapshot=chatgptProjection.get(input?.conversationId);
         let work=null,prDelivery=null;try{work=readRoomWorkStore(context,input?.roomId,input?.workstreamId,env);}catch{}try{prDelivery=readCachedPrDelivery(context);}catch{}
-        const created=createNextStepRequest(context,input,{executorReady:Boolean(executor?.readiness?.ready),activeRun:executor?.activeLease?.runId||null,snapshot,work,prDelivery},env,options.nextStepOptions||{});
+        // Pre-submit governance only: pin canonical GitHub policy into the NEW immutable GPT prompt.
+        // Existing frozen requests and Bridge / Result transport are never rewritten.
+        const uiPreviewPolicy=await (options.nextStepUiPreviewPolicyLoader||loadNextStepUiPreviewPolicy)();
+        const created=createNextStepRequest(context,input,{executorReady:Boolean(executor?.readiness?.ready),activeRun:executor?.activeLease?.runId||null,snapshot,work,prDelivery},env,{...(options.nextStepOptions||{}),uiPreviewPolicy});
         return json(res,201,{ok:true,...created});
       }catch(error){return nextStepError(res,error);}
     }
