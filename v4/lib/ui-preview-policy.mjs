@@ -17,8 +17,8 @@ export function parseGlobalUiPreviewPolicy(markdown, { mainSha, blobSha } = {}) 
   if (!/^Policy-ID: \x60AICC-GLOBAL-UI-PREVIEW-FIRST-V1\x60$/m.test(markdown)) throw unavailable('policy identity');
   if (!/^Policy-Version: \x601\x60$/m.test(markdown)) throw unavailable('policy version');
   if (!/^Status: \x60ACTIVE\x60$/m.test(markdown)) throw unavailable('policy status');
-  const block = markdown.match(/^## GPT Context Instruction[ \t]*\r?\n([\s\S]*?)(?:\r?\n## |\s*$)/m);
-  const instruction = block?.[1]?.trim();
+  const section = markdown.split(/^## GPT Context Instruction[ \t]*\r?\n/m);
+  const instruction = section.length === 2 ? section[1].split(/\r?\n## /, 1)[0].trim() : null;
   if (!instruction || instruction.length > 4000) throw unavailable('missing or oversized GPT instruction');
   for (const required of ['AppBlock', 'OWNER_VISUAL_PASS', 'Production', 'GPT']) {
     if (!instruction.includes(required)) throw unavailable('incomplete GPT instruction');
