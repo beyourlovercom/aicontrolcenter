@@ -22,5 +22,6 @@ jobs:
       - run: node --check scripts/byl-remote-mcp/dev-allowlist-fs-receiver.mjs
       - run: node --check scripts/byl-remote-mcp/dev-allowlist-durable-store.mjs
       - run: node --check scripts/byl-remote-mcp/dev-allowlist-trusted-authority.mjs
+      - run: node --check scripts/byl-remote-mcp/dev-allowlist-mcp-registration.mjs
       - run: node --test scripts/byl-remote-mcp/dev-allowlist-*.test.mjs
       - run: git diff --check
