@@ -43,7 +43,7 @@ export function createDurableReleaseStore({root}={}){
  async function projectRoot(project){
   await init();
   const sub=dir(project);
-  await mkdir(sub,{mode:0o700});
+  await mkdir(sub,{recursive:true,mode:0o700});
   const info=await lstat(sub);
   if(!info.isDirectory()||info.isSymbolicLink()||(info.mode&0o077)!==0||
      await realpath(sub)!==sub)deny('STORE_PROJECT_UNSAFE');
