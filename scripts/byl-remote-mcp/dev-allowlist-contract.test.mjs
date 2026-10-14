@@ -154,7 +154,8 @@ test('reject changing release manifest with same release ID',async()=>{
 });
 test('rollback requires currently approved postimage',async()=>{
  const f=fixture();await f.service.prepare(base());await f.service.apply(base());f.data.set(target,a);
- await assert.rejects(f.service.rollback(base()),{message:'FILE_DRIFT_DENIED'});
+ await assert.rejects(f.service.rollback(base()),{message:'ROLLBACK_FAILED_MANUAL_RECOVERY'});
+ assert.equal((await f.service.status({project:base().project,releaseId:base().releaseId})).state,'MANUAL_RECOVERY_REQUIRED');
 });
 test('read-only status requires independent authorization',async()=>{
  const f=fixture();f.flags.canView=false;
@@ -194,4 +195,12 @@ test('a second release cannot reuse same approved manifest with different immuta
  const f=fixture();await f.service.prepare(base());const v=base();
  v.artifact.sha256='e'.repeat(64);
  await assert.rejects(f.service.apply(v),{message:'RELEASE_REPLAY_CONFLICT'});
+});
+
+test('failed restore during Owner rollback produces manual recovery receipt',async()=>{
+ const f=fixture();await f.service.prepare(base());await f.service.apply(base());
+ f.flags.failRestore=true;
+ await assert.rejects(f.service.rollback(base()),{message:'ROLLBACK_FAILED_MANUAL_RECOVERY'});
+ const r=await f.service.status({project:base().project,releaseId:base().releaseId});
+ assert.equal(r.state,'MANUAL_RECOVERY_REQUIRED');
 });
