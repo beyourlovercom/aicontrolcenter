@@ -18,5 +18,6 @@ jobs:
           node-version: '24'
       - run: node --check scripts/byl-remote-mcp/dev-allowlist-contract.mjs
       - run: node --check scripts/byl-remote-mcp/dev-allowlist-controller.mjs
-      - run: node --test scripts/byl-remote-mcp/dev-allowlist-contract.test.mjs
+      - run: node --check scripts/byl-remote-mcp/dev-allowlist-mcp-tools.mjs
+      - run: node --test scripts/byl-remote-mcp/dev-allowlist-*.test.mjs
       - run: git diff --check
