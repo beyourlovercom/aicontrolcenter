@@ -65,6 +65,8 @@ export function createDevReleaseService({registry=DEV_PROJECTS,authority,receive
         if(prev.state!=='PREPARED')deny('RELEASE_STATE_DENIED');
         await attest(m,digest,'apply'); // Recheck HEAD, CI, Owner TTL and artifact.
         await inspect(m,'before');       // Reject Dev runtime drift since prepare.
+        // Durable intent precedes any side effect. Incomplete APPLYING is never auto-retried.
+        await store.put(Object.freeze({...prev,state:'APPLYING'}));
         try{
           await receiver.apply({manifest:m,manifestSha256:digest,backupId:prev.backupId});
           await inspect(m,'after');
@@ -97,6 +99,9 @@ export function createDevReleaseService({registry=DEV_PROJECTS,authority,receive
         if(prev.state==='ROLLED_BACK')return prev;
         if(prev.state!=='APPLIED')deny('RELEASE_STATE_DENIED');
         await attest(m,digest,'rollback');
+        await inspect(m,'after');
+        // No automatic replay of interrupted rollback; Owner must reconcile it.
+        await store.put(Object.freeze({...prev,state:'ROLLING_BACK'}));
         try{
           await inspect(m,'after');
           const result=await receiver.restore({manifest:m,backupId:prev.backupId,
