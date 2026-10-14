@@ -64,7 +64,7 @@ function fixture(){
   async get(project,releaseId){return records.get(project+':'+releaseId);},
   async put(rec){records.set(rec.project+':'+rec.releaseId,rec);}
  };
- return {service:createDevReleaseService({authority,receiver,store}),flags,calls,data,records};
+ return {service:createDevReleaseService({authority,receiver,store}),flags,calls,data,records,store};
 }
 async function rejection(request,code){
  const f=fixture();
@@ -175,4 +175,23 @@ test('manifest digest sorts paths independent of caller ordering',()=>{
 });
 test('invalid controller configuration fails before any deployment',()=>{
  assert.throws(()=>createDevReleaseService(),{message:'ADAPTER_NOT_CONFIGURED'});
+});
+
+test('lock rejects concurrent release attempts without duplicate receiver invocation',async()=>{
+ const f=fixture();let unlock;const pending=f.store.withProjectLock('byl-wordpress-core',
+   ()=>new Promise(resolve=>{unlock=resolve;}));
+ await assert.rejects(f.service.prepare(base()),{message:'DEPLOY_LOCK_BUSY'});
+ assert.equal(f.calls.prepare,0);unlock();await pending;
+ const receipt=await f.service.prepare(base());assert.equal(receipt.state,'PREPARED');
+});
+test('idempotent apply does not falsely report success after runtime changes',async()=>{
+ const f=fixture();await f.service.prepare(base());await f.service.apply(base());
+ f.data.set(target,'f'.repeat(64));
+ await assert.rejects(f.service.apply(base()),{message:'FILE_DRIFT_DENIED'});
+ assert.equal(f.calls.apply,1);
+});
+test('a second release cannot reuse same approved manifest with different immutable artifact',async()=>{
+ const f=fixture();await f.service.prepare(base());const v=base();
+ v.artifact.sha256='e'.repeat(64);
+ await assert.rejects(f.service.apply(v),{message:'RELEASE_REPLAY_CONFLICT'});
 });
