@@ -99,11 +99,10 @@ export function createDevReleaseService({registry=DEV_PROJECTS,authority,receive
         if(prev.state==='ROLLED_BACK')return prev;
         if(prev.state!=='APPLIED')deny('RELEASE_STATE_DENIED');
         await attest(m,digest,'rollback');
-        await inspect(m,'after');
-        // No automatic replay of interrupted rollback; Owner must reconcile it.
-        await store.put(Object.freeze({...prev,state:'ROLLING_BACK'}));
         try{
           await inspect(m,'after');
+          // No automatic replay of interrupted rollback; Owner must reconcile it.
+          await store.put(Object.freeze({...prev,state:'ROLLING_BACK'}));
           const result=await receiver.restore({manifest:m,backupId:prev.backupId,
             reason:'owner_rollback',strictIdentity:true});
           if(result?.restored!==true)deny('ROLLBACK_FAILED');
