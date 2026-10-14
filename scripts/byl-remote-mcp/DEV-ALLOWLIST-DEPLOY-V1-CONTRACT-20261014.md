@@ -29,7 +29,7 @@ Commerce and theme are deliberately NOT allowed yet; future projects require ind
 
 ## Security boundaries / required real adapters
 
-Current `dev-allowlist-contract.mjs` and `dev-allowlist-controller.mjs` are pure ES modules. There is **no endpoint, receiver or OAuth tool registration**, and they cannot deploy.
+Current `dev-allowlist-contract.mjs` and `dev-allowlist-controller.mjs` are pure ES modules. There is **no deployed endpoint or OAuth tool registration**. A separately reviewed `dev-allowlist-fs-receiver.mjs` candidate exists and is exercised only in temporary CI fixtures; it is **NOT installed on Hostinger** and is not bound to production MCP.
 
 Production-ready integration needs independently approved, mutually authenticated adapters owned by the MCP service (not supplied by ChatGPT text):
 1. **Authority**: verify Owner receipt scope, expiry and anti-replay; fetch exact GitHub HEAD and CI from authenticated trusted source; fetch immutable artifact digest and approved file list; distinguish read-only status authority from Dev apply/rollback.
@@ -40,12 +40,12 @@ Production-ready integration needs independently approved, mutually authenticate
 
 `prepare` validates authoritative approval, inspected preimage, verified backup and unchanged runtime without touching live WordPress; `apply` re-attests and checks preimage again, asks the trusted receiver to perform only the exact allowlisted update, rechecks postimage; on partial error attempts verified rollback or records `MANUAL_RECOVERY_REQUIRED`. `rollback` requires separate authorized action, exact postimage and verified restoration. `status` is independently read-authorized and redacted. Release IDs are idempotent in durable storage.
 
-These are **adapter contracts**, NOT evidence that real Hostinger filesystem symlink, identity, backup, PHP lint, rollback or atomic multi-file semantics have been implemented. In-memory fake adapters test state transitions only.
+The isolated filesystem receiver candidate implements fixed Dev root validation, symlink checks, staged verified copies outside Web, exact hashes, fixed PHP lint hook, per-file atomic rename and verified restore in CI temporary fixtures. These are NOT evidence of actual Hostinger receiver provisioning, artifact source trust, persistent service rollout, PHP execution on Dev, or multi-file atomicity in Production. Store locking and Owner/GitHub authority still need durable approved real adapters.
 
 ## D3 exit / negative tests
 Automated Node tests cover: valid prepare/apply/rollback, no running file write on prepare, same-release replay, bad environments, command injection fields, path escape, Commerce crossing, wrong repo, forged receipt syntax, failed CI, denied Owner proof, changed PR HEAD, unauthorized path set, stage/runtime drift, site spoof, broken backup, rollback recovery failure and status authorization.
 
-CI only certifies policy and in-memory controller; **not** real Dev Canary. D4/D5/D6 remain BLOCKED until officially registered tool, trusted production-hosted receiver and Dev-only Owner approvals are available.
+CI certifies the policy/controller with in-memory fake adapters and the receiver in CI-generated temporary directories; **not** a real Dev Canary, real MCP tool registration, or Hostinger integration. D4/D5/D6 remain BLOCKED until officially registered tool, trusted production-hosted receiver and Dev-only Owner approvals are available.
 
 ## Andy OS D5 safety
 Never re-develop PR #103 here. Before any trial, re-read exact PR SHA and all four relevant CI gates; check current Dev file SHA vs approved patch before/after. Do not overwrite the newer Commerce plugin, old Dev B1.1 features or any entire plugin ZIP. Require new Release ID, Owner receipt, backup outside web, smoke and PC + 390px iPhone 14 Owner UAT. No automatic merge or WWW deployment.
