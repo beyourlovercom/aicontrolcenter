@@ -61,7 +61,7 @@ export function createDevReleaseService({registry=DEV_PROJECTS,authority,receive
       return store.withProjectLock(m.project,async()=>{
         const prev=await store.get(m.project,m.releaseId);
         receiptEquals(prev,m,digest);
-        if(prev.state==='APPLIED')return prev;
+        if(prev.state==='APPLIED'){await inspect(m,'after');return prev;}
         if(prev.state!=='PREPARED')deny('RELEASE_STATE_DENIED');
         await attest(m,digest,'apply'); // Recheck HEAD, CI, Owner TTL and artifact.
         await inspect(m,'before');       // Reject Dev runtime drift since prepare.
