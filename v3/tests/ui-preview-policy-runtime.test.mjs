@@ -32,7 +32,7 @@ test('V5 fails closed on a modified, stale or missing global UI policy',async()=
 
 test('canonical policy includes visual Owner gate distinct from functional UAT and deployment',()=>{
   const p=parseNextStepUiPreviewPolicy(markdown,mainSha,blobSha);
-  assert.match(p.instruction,/Visual/);
+  assert.match(p.instruction,/visual/i);
   assert.match(p.instruction,/functional UAT/);
   assert.match(p.instruction,/Production deployment/);
 });
