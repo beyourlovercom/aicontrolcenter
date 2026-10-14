@@ -90,6 +90,7 @@ export function createDevFilesystemReceiver({siteRoot,backupRoot,site='dev.beyou
    validateDevManifest(m);checkPaths(m.project,m.files);
    if(manifestDigest(m)!==manifestSha256)deny('MANIFEST_HASH_DENIED');
    await safeBase();await mkdir(backupBase,{recursive:true,mode:0o700});
+   await safeBase();
    await preimage(m.files);
    const artifact=await artifactResolver.loadVerified({id:m.artifact.id,sha256:m.artifact.sha256,
      repo:m.github.repo,commitSha:m.github.commitSha});
@@ -111,8 +112,14 @@ export function createDevFilesystemReceiver({siteRoot,backupRoot,site='dev.beyou
     if(hash(prior??Buffer.alloc(0))!==f.beforeSha256 && !(prior===null&&f.beforeSha256===null))
       deny('RECEIVER_PREIMAGE_DRIFT');
     modes[f.path]=mode;
-    await writeFile(join(wd,'staged-'+fileKey(f.path)),bytes,{flag:'wx',mode:0o600});
-    if(prior!==null)await writeFile(join(wd,'backup-'+fileKey(f.path)),prior,{flag:'wx',mode:0o600});
+    const stagedPath=join(wd,'staged-'+fileKey(f.path));
+    await writeFile(stagedPath,bytes,{flag:'wx',mode:0o600});
+    if(hash(await readFile(stagedPath))!==f.afterSha256)deny('STAGED_VERIFY_FAILED');
+    if(prior!==null){
+      const backupPath=join(wd,'backup-'+fileKey(f.path));
+      await writeFile(backupPath,prior,{flag:'wx',mode:0o600});
+      if(hash(await readFile(backupPath))!==f.beforeSha256)deny('BACKUP_VERIFY_FAILED');
+    }
    }
    await preimage(m.files);
    const backupId='backup-'+m.releaseId;
