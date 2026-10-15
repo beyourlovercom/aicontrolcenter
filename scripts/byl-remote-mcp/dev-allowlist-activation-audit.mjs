@@ -28,7 +28,7 @@ export function evaluateDevActivation({
      MUST_HAVE.some(name=>!platform.invokeAuthorizedToolNames.includes(name)))
     blockers.push('G1_FORMAL_TOOL_REGISTRATION');
   if(!plain(receiver)||receiver.hostIdentity!=='dev.beyourlover.com'||
-     receiver.noGeneralShell===false||receiver.noGeneralShell!==true||
+     receiver.noGeneralShell!==true||
      receiver.preimageReadOnlyPassed!==true||
      receiver.backupOutsideWebVerified!==true||
      receiver.rollbackVerified!==true||
@@ -36,7 +36,7 @@ export function evaluateDevActivation({
     blockers.push('G2_DEV_RECEIVER_NOT_VERIFIED');
   if(!plain(authority)||authority.issuerVerified!==true||
      authority.ownerReceiptStoreVerified!==true||
-     authority.githubHeadAndCIIndependent===true!==true||
+     authority.githubHeadAndCIIndependent!==true||
      authority.artifactImmutableVerified!==true||
      authority.durableLockAndJournalVerified!==true||
      authority.crashRecoveryVerified!==true)
