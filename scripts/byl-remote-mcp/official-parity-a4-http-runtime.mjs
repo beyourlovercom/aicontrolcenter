@@ -88,7 +88,17 @@ export function createCredentialFreeOAuthHttpRuntime({
   return responseError(res,401,-32001,'Unauthorized');
  }
  app.post(EXACT_ROUTE,auth,async(req,res)=>{
-  let server,transport;
+  let server,transport,closed=false;
+  const close=()=>{
+   if(closed)return;
+   closed=true;
+   // Close only this SDK session; NEVER reboot/stop a remote device.
+   Promise.resolve(transport?.close?.()).catch(()=>{});
+   Promise.resolve(server?.close?.()).catch(()=>{});
+  };
+  // Register before any awaited MCP I/O. An aborted client must not leak a
+  // session even if the request disconnects while handleRequest is running.
+  if(typeof res.once==='function')res.once('close',close);
   try{
    ({server}=createCredentialFreeOAuthToolSurface({
     McpServer,z,principal:req.bylPrincipal,
@@ -104,19 +114,7 @@ export function createCredentialFreeOAuthHttpRuntime({
    logger.error('PARITY_MCP_HANDLER_FAILURE');
    if(!res.headersSent)responseError(res,500,-32603,'Internal server error');
   }finally{
-   // Do not terminate devices: only clean up this per-request SDK session.
-   // Cleanup on completed/aborted response exactly once.
-   if(server||transport){
-    let closed=false;
-    const close=()=>{
-     if(closed)return;
-     closed=true;
-     Promise.resolve(transport?.close?.()).catch(()=>{});
-     Promise.resolve(server?.close?.()).catch(()=>{});
-    };
-    if(typeof res.once==='function')res.once('close',close);
-    else close();
-   }
+   if(typeof res.once!=='function'||res.destroyed||res.writableEnded)close();
   }
  });
  for(const method of ['get','delete'])
