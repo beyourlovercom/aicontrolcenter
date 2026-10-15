@@ -1,0 +1,41 @@
+name: DC Official Parity V1 Contract CI
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'scripts/byl-remote-mcp/official-parity-*.mjs'
+      - 'scripts/byl-remote-mcp/remote-v2-live-health.mjs'
+      - 'scripts/byl-remote-mcp/remote-v2-signed-health.mjs'
+      - 'scripts/byl-remote-mcp/remote-v2-*.test.mjs'
+      - '.github/workflows/dc-official-parity-v1.yml'
+  push:
+    branches:
+      - 'feature/dc-official-parity-v1-20261015'
+    paths:
+      - 'scripts/byl-remote-mcp/official-parity-*.mjs'
+      - '.github/workflows/dc-official-parity-v1.yml'
+
+jobs:
+  isolated-parity-contract:
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Syntax check isolated parity modules
+        shell: bash
+        run: |
+          set -euo pipefail
+          for file in scripts/byl-remote-mcp/official-parity-*.mjs; do
+            node --check "$file"
+          done
+      - name: Isolated parity and canonical signed health tests
+        run: >
+          node --test
+          scripts/byl-remote-mcp/official-parity-*.test.mjs
+          scripts/byl-remote-mcp/remote-v2-live-health.test.mjs
+          scripts/byl-remote-mcp/remote-v2-signed-health.test.mjs
