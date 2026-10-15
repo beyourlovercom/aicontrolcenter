@@ -12,77 +12,82 @@ class FakeServer{
  }
 }
 const listSchema={key:'list'},callSchema={key:'call'};
-function factory({Server=FakeServer,allowMutatingTools=false,authenticated=true,operatorGrant=true}={}){
- let calls=0;
- const service=Object.fromEntries(['prepare','apply','rollback','status']
-   .map(k=>[k,async()=>{calls++;return {project:'byl-wordpress-core',releaseId:'dev-test-release',state:k,digest:'a'.repeat(64)};}]));
+function factory({Server=FakeServer,authenticated=true,operatorGrant=true}={}){
  const server=createIsolatedDevMcpServer({
    Server,ListToolsRequestSchema:listSchema,CallToolRequestSchema:callSchema,
-   resolvePrincipal:async()=>authenticated?{sub:'trusted-server-principal'}:null,
-   authorizeTool:async()=>operatorGrant,service,allowMutatingTools
+   resolvePrincipal:async()=>authenticated?{sub:'verified-oauth-principal'}:null,
+   authorizeTool:async()=>operatorGrant
  });
- return {server,calls:()=>calls,list:server.handlers.get('list'),call:server.handlers.get('call')};
+ return {server,list:server.handlers.get('list'),call:server.handlers.get('call')};
 }
-test('constructor ALWAYS creates separate isolated server with correct identity',()=>{
+const statusArguments={project:'byl-wordpress-core',releaseId:'g1-smoke-release'};
+test('constructor creates fresh separate isolated server with exact identity',()=>{
  const s=factory().server;
  assert.equal(s.identity.name,'aicc-dev-deployment-isolated');
  assert.deepEqual(s.options,{capabilities:{tools:{}}});
  assert.equal(s.handlers.size,2);
 });
-test('default only exposes status, never prepare/apply/rollback even with operator grant',async()=>{
+test('G1 exposes exactly dev_release_status, even when operator grants everything',async()=>{
  const f=factory();
- const tools=(await f.list({},{})).tools.map(x=>x.name);
- assert.deepEqual(tools,['dev_release_status']);
+ assert.deepEqual((await f.list({},{})).tools.map(t=>t.name),['dev_release_status']);
  for(const action of ['prepare','apply','rollback']){
-   const r=await f.call({params:{name:'dev_release_'+action,arguments:{manifest:{}}}},{});
-   assert.equal(r.isError,true);
+  const r=await f.call({params:{name:'dev_release_'+action,arguments:{manifest:{}}}},{});
+  assert.equal(r.isError,true);
  }
- assert.equal(f.calls(),0);
 });
-test('default status may be called read-only by trusted authorized principal',async()=>{
+test('authorized status returns explicit NOT_ENABLED, not real deploy receipt',async()=>{
  const f=factory();
- const result=await f.call({params:{name:'dev_release_status',
-   arguments:{project:'byl-wordpress-core',releaseId:'dev-test-release'}}},{});
- assert.equal(result.isError,undefined);assert.equal(f.calls(),1);
+ const result=await f.call({params:{name:'dev_release_status',arguments:statusArguments}},{});
+ assert.equal(result.isError,undefined);
+ assert.deepEqual(JSON.parse(result.content[0].text),{
+  project:'byl-wordpress-core',releaseId:'g1-smoke-release',state:'NOT_ENABLED',digest:null
+ });
 });
-test('operator denial means neither status visibility nor invocation',async()=>{
+test('operator denial removes visibility and invocation',async()=>{
  const f=factory({operatorGrant:false});
  assert.deepEqual((await f.list({},{})).tools,[]);
- const r=await f.call({params:{name:'dev_release_status',arguments:{
-   project:'byl-wordpress-core',releaseId:'dev-test-release'}}},{});
- assert.equal(r.isError,true);assert.equal(f.calls(),0);
+ assert.equal((await f.call({params:{name:'dev_release_status',arguments:statusArguments}},{})).isError,true);
 });
-test('anonymous principal does not see or call isolated tools',async()=>{
+test('anonymous principal removes visibility and invocation',async()=>{
  const f=factory({authenticated:false});
  assert.deepEqual((await f.list({},{})).tools,[]);
- assert.equal((await f.call({params:{name:'dev_release_status',
-  arguments:{project:'byl-wordpress-core',releaseId:'dev-test-release'}}},{})).isError,true);
- assert.equal(f.calls(),0);
+ assert.equal((await f.call({params:{name:'dev_release_status',arguments:statusArguments}},{})).isError,true);
 });
-test('explicit trusted mutating-mode switch still requires operator authorization',async()=>{
- const f=factory({allowMutatingTools:true,operatorGrant:false});
- assert.deepEqual((await f.list({},{})).tools,[]);
- assert.equal((await f.call({params:{name:'dev_release_apply',arguments:{manifest:{}}}},{})).isError,true);
- assert.equal(f.calls(),0);
+test('caller cannot inject a fake OAuth principal in tool arguments',async()=>{
+ const f=factory();
+ const r=await f.call({params:{name:'dev_release_status',arguments:{
+  ...statusArguments,principal:{sub:'admin'}
+ }}},{});
+ assert.equal(r.isError,true);
 });
-test('fresh instance guard rejects a constructor reusing a previously returned server',()=>{
- const singleton=new FakeServer({name:'incompatible-existing'},{capabilities:{tools:{}}});
+test('trusted server cannot configure any mutation mode or inject filesystem release service',()=>{
+ const base={Server:FakeServer,ListToolsRequestSchema:listSchema,
+  CallToolRequestSchema:callSchema,resolvePrincipal:async()=>({sub:'u'}),
+  authorizeTool:async()=>true};
+ for(const extra of [
+  {allowMutatingTools:true},{allowMutatingTools:false},
+  {service:{status:async()=>({state:'APPLIED'})}},
+  {receiver:{apply:async()=>true}},
+  {command:'node arbitrary-deploy.js'}
+ ]){
+  assert.throws(()=>createIsolatedDevMcpServer({...base,...extra}),
+   {message:'G1_MUTATING_CONFIGURATION_DENIED'});
+ }
+});
+test('a reused existing SDK server is rejected',()=>{
+ const singleton=new FakeServer({name:'existing-oauth-dc'},{capabilities:{tools:{}}});
  function ReusedServer(){return singleton;}
- const f=factory({Server:ReusedServer});
- assert.equal(f.server,singleton);
+ factory({Server:ReusedServer});
  assert.throws(()=>factory({Server:ReusedServer}),{message:'MCP_SERVER_NOT_FRESH'});
 });
-test('unconfigured SDK/authorization fails closed before new server is used',()=>{
+test('missing identity resolver and malformed input reject before server creation',()=>{
  assert.throws(()=>createIsolatedDevMcpServer(),{message:'ISOLATED_DEV_MCP_NOT_CONFIGURED'});
- assert.throws(()=>createIsolatedDevMcpServer({Server:FakeServer,authorizeTool:()=>true,
-  resolvePrincipal:()=>({}),service:{},allowMutatingTools:'yes'}),
-  {message:'ISOLATED_DEV_MCP_NOT_CONFIGURED'});
+ assert.throws(()=>createIsolatedDevMcpServer(null),{message:'G1_MUTATING_CONFIGURATION_DENIED'});
 });
-
-test('existing OAuth/DC SDK handlers remain byte-for-byte same references',async()=>{
- const legacy=new FakeServer({name:'existing-oauth-dc'}, {capabilities:{tools:{}}});
- const oldList=async()=>({tools:[{name:'remote_list_devices'}, {name:'remote_call'},
-   {name:'remote_list_tools'}, {name:'remote_process_selftest'}]});
+test('legacy OAuth/DC tool handler objects remain untouched',async()=>{
+ const legacy=new FakeServer({name:'existing-oauth-dc'},{capabilities:{tools:{}}});
+ const oldList=async()=>({tools:['remote_list_devices','remote_call',
+  'remote_list_tools','remote_process_selftest'].map(name=>({name}))});
  const oldCall=async()=>({content:[{type:'text',text:'EXISTING_HANDLER'}]});
  legacy.setRequestHandler(listSchema,oldList);
  legacy.setRequestHandler(callSchema,oldCall);
@@ -90,16 +95,7 @@ test('existing OAuth/DC SDK handlers remain byte-for-byte same references',async
  assert.notEqual(sidecar.server,legacy);
  assert.equal(legacy.handlers.get('list'),oldList);
  assert.equal(legacy.handlers.get('call'),oldCall);
- assert.deepEqual((await legacy.handlers.get('list')()).tools.map(x=>x.name),[
-  'remote_list_devices','remote_call','remote_list_tools','remote_process_selftest'
- ]);
+ assert.deepEqual((await legacy.handlers.get('list')()).tools.map(x=>x.name),
+ ['remote_list_devices','remote_call','remote_list_tools','remote_process_selftest']);
  assert.deepEqual((await sidecar.list({},{})).tools.map(x=>x.name),['dev_release_status']);
-});
-test('enabling mutating mode alone still cannot bypass action-level operator veto',async()=>{
- const f=factory({allowMutatingTools:true,operatorGrant:true});
- assert.deepEqual((await f.list({},{})).tools.map(x=>x.name),[
-   'dev_release_prepare','dev_release_apply','dev_release_rollback','dev_release_status'
- ]);
- // This dry-run fake service has no real Dev receiver and cannot change site files.
- assert.equal(f.calls(),0);
 });
