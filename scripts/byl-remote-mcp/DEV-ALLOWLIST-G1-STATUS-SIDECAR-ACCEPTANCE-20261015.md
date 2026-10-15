@@ -10,9 +10,11 @@ We therefore implement a **new** Dev-only MCP SDK `Server` object in `dev-allowl
 
 ### Default capability
 
-- `allowMutatingTools=false` is the unconditional default: only `dev_release_status` can be visible/invoked.
-- Read-only status additionally requires a server-verified OAuth principal, operator authorization for both list and call, and the normal service-side `canView` check.
-- `dev_release_prepare`, `dev_release_apply` and `dev_release_rollback` remain hidden/blocked even when an operator makes them visible by mistake, unless **the trusted runtime itself** independently chooses `allowMutatingTools=true` and operator action authorization also passes. This opt-in is **not** accepted as a user-supplied tool argument.
+- G1 has **no mutating-mode switch at all**, not even for an operator: a supplied `service`, `receiver` or `allowMutatingTools` key fails closed. Only `dev_release_status` can be visible/invoked.
+- A sealed `createG1StatusOnlyService()` is constructed internally; it has **no filesystem, network, process or durable-journal adapter**. The current `createDurableReleaseStore.get()` is not used because it creates directories when the journal root is absent.
+- An authorized status query returns the explicit bootstrap state `NOT_ENABLED` (with `digest=null`) and **must not be represented as a real release or site-status receipt**.
+- Status still requires a server-verified OAuth principal and separate operator authorization for both enumeration and invocation.
+- `dev_release_prepare`, `dev_release_apply`, and `dev_release_rollback` are always hidden and denied in this G1 constructor, even for an otherwise authorized operator. G2/G3 mutating actions require an independently reviewed new runtime and deployment gate.
 - Registration is isolated: it does not overwrite the production SDK's `ListToolsRequestSchema` or `CallToolRequestSchema` handlers; tests assert the four existing remote tool names and handler object references remain untouched.
 - The low-level exported `registerDevAllowlistMcpHandlers` adapter is for constructing a **fresh isolated** server only. Wiring it into the live production OAuth Server would overwrite tool handlers and is prohibited.
 
@@ -39,3 +41,7 @@ We therefore implement a **new** Dev-only MCP SDK `Server` object in `dev-allowl
 - Existing production OAuth four-device runtime previously confirmed via formal OAuth MCP read-only sources and processes; new dedicated Dev tool remains unregistered.
 - PR #66 standalone isolated SDK adapter and fake-server tests provide *offline* proof only.
 - AICC Notion tracker: https://app.notion.com/p/3f95f5efdf94817fa0c4f31b1b0083d4
+
+## Staged activation audit clarification
+
+`evaluateG1StatusActivation()` now checks only the dedicated status tool, immutable runtime provenance, existing OAuth device/tool no-regression and an independently proven zero-write backend. Its synthetic ready result **never** authorizes `apply`. The older `evaluateDevActivation()` remains a separate full G3 Canary gate requiring all four actions plus G2 receiver, authority, and Owner release evidence. Thus the G1 gate cannot deadlock itself by requiring a write tool to be live before status-only UAT.
