@@ -132,7 +132,7 @@ test('readable-by-everyone secret material is rejected even if not writable',asy
    importPrivate:f.importPrivate}),{message:'A4_PRIVATE_PERMISSIONS_DENIED'});
  }finally{f.dispose();}
 });
-test('manifest directory world-readable is rejected before private imports',async()=>{
+test('world-readable synthetic parent directory cannot reveal mode-0600 manifest',async()=>{
  const f=fixture();
  try{
   chmodSync(f.dir,0o755);
