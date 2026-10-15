@@ -1,0 +1,30 @@
+name: DC MCP Dev Allowlist Contract CI
+on:
+  pull_request:
+    paths:
+      - 'scripts/byl-remote-mcp/dev-allowlist-*'
+      - '.github/workflows/dc-mcp-dev-allowlist-v1.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  contract:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: node --check scripts/byl-remote-mcp/dev-allowlist-contract.mjs
+      - run: node --check scripts/byl-remote-mcp/dev-allowlist-controller.mjs
+      - run: node --check scripts/byl-remote-mcp/dev-allowlist-mcp-tools.mjs
+      - run: node --check scripts/byl-remote-mcp/dev-allowlist-fs-receiver.mjs
+      - run: node --check scripts/byl-remote-mcp/dev-allowlist-durable-store.mjs
+      - run: node --check scripts/byl-remote-mcp/dev-allowlist-trusted-authority.mjs
+      - run: node --check scripts/byl-remote-mcp/dev-allowlist-mcp-registration.mjs
+      - run: node --check scripts/byl-remote-mcp/dev-allowlist-activation-audit.mjs
+      - run: node --check scripts/byl-remote-mcp/dev-allowlist-isolated-server.mjs
+      - run: node --check scripts/byl-remote-mcp/dev-allowlist-g1-status-service.mjs
+      - run: node --test scripts/byl-remote-mcp/dev-allowlist-*.test.mjs
+      - run: git diff --check
