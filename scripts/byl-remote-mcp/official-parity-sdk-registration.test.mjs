@@ -9,7 +9,6 @@ function fixture({enabled=true,operatorGranted=true}={}){
   if(handlers.has(name))throw Error('NAME_COLLISION');
   handlers.set(name,handler);
  }};
- // Existing production tool handlers are on the same test server.
  const oldHandler=async()=>({content:[{type:'text',text:'legacy'}]});
  for(const name of ['remote_list_devices','remote_list_tools','remote_call','remote_process_selftest'])
   server.registerTool(name,{},oldHandler);
@@ -24,40 +23,73 @@ function fixture({enabled=true,operatorGranted=true}={}){
   check:async deviceId=>({id:deviceId,state:'unknown',verified:false})};
  return {server,handlers,oldHandler,principal,authorizeRemoteCall,delegate,authorizeHealth,monitor,enabled};
 }
-test('disabled by default: never register a new tool',()=>{
+test('disabled by default: register zero new tools',()=>{
  const f=fixture({enabled:false});
- assert.throws(()=>registerOfficialParityV1(f),{message:'PARITY_NOT_ACTIVATED'});
+ assert.throws(()=>registerOfficialParityV1({...f,z}),{message:'PARITY_NOT_ACTIVATED'});
  assert.equal(f.handlers.size,4);
 });
-test('one verified OAuth server session can expose 7 new read-only tools',()=>{
+test('A4 phase 1 exposes five direct core reads without signed Agent dependencies',()=>{
  const f=fixture();
- const names=registerOfficialParityV1({...f,z});
+ const names=registerOfficialParityV1({...f,z,monitor:null,authorizeHealth:null});
  assert.deepEqual(names,[
-  'dc_read_file','dc_list_directory','dc_get_file_info',
-  'dc_list_sessions','dc_list_processes','dc_list_devices_live','dc_ping'
+  'dc_read_file','dc_list_directory','dc_get_file_info','dc_list_sessions','dc_list_processes'
+ ]);
+ assert.equal(f.handlers.size,9);
+ for(const n of ['remote_list_devices','remote_list_tools','remote_call','remote_process_selftest'])
+  assert.equal(f.handlers.get(n),f.oldHandler);
+ assert.equal(names.some(n=>n.includes('start_process')||n.includes('write')||n.includes('terminate')),false);
+ assert.equal(f.handlers.has('dc_ping'),false);
+});
+test('A4 phase 2 adds signed Ping only when independently verified',()=>{
+ const f=fixture();
+ const names=registerOfficialParityV1({...f,z,mode:'signed-health',signedAgentEvidenceVerified:true});
+ assert.deepEqual(names,[
+  'dc_read_file','dc_list_directory','dc_get_file_info','dc_list_sessions',
+  'dc_list_processes','dc_list_devices_live','dc_ping'
  ]);
  assert.equal(f.handlers.size,11);
  for(const n of ['remote_list_devices','remote_list_tools','remote_call','remote_process_selftest'])
   assert.equal(f.handlers.get(n),f.oldHandler);
- assert.equal(names.some(n=>n.includes('start_process')||n.includes('write')||n.includes('terminate')),false);
 });
-test('no injected command or device can replace the existing operator gate',async()=>{
+test('signed Agent absent or unverified fails before any new tool is registered',()=>{
+ for(const overrides of [
+  {mode:'signed-health'},
+  {mode:'signed-health',signedAgentEvidenceVerified:true,monitor:null},
+  {mode:'signed-health',signedAgentEvidenceVerified:true,authorizeHealth:null}
+ ]){
+  const f=fixture();
+  assert.throws(()=>registerOfficialParityV1({...f,z,...overrides}),
+   {message:'PARITY_SIGNED_HEALTH_NOT_VERIFIED'});
+  assert.equal(f.handlers.size,4);
+ }
+});
+test('unknown mode or unauthorized server cannot register any tool',()=>{
+ const f=fixture();
+ assert.throws(()=>registerOfficialParityV1({...f,z,mode:'full-access'}),
+  {message:'PARITY_MODE_DENIED'});
+ assert.equal(f.handlers.size,4);
+});
+test('incomplete core dependencies fail before registration',()=>{
+ const f=fixture();
+ assert.throws(()=>registerOfficialParityV1({...f,z,delegate:null}),
+  {message:'PARITY_REGISTRATION_INCOMPLETE'});
+ assert.equal(f.handlers.size,4);
+});
+test('legacy Operator Policy still rejects read and process diagnostics',async()=>{
  const f=fixture({operatorGranted:false});
  registerOfficialParityV1({...f,z});
  for(const [name,args] of [
   ['dc_read_file',{deviceId:'windows',path:'/tmp/example'}],
-  ['dc_list_sessions',{deviceId:'windows'}],
-  ['dc_ping',{deviceId:'windows'}]]){
-   assert.equal((await f.handlers.get(name)(args)).isError,true);
+  ['dc_list_sessions',{deviceId:'windows'}]]){
+  assert.equal((await f.handlers.get(name)(args)).isError,true);
  }
 });
-test('incomplete health service is rejected before any partial tool registration',()=>{
- const f=fixture();
- assert.throws(()=>registerOfficialParityV1({...f,z,monitor:null}),
- {message:'PARITY_REGISTRATION_INCOMPLETE'});
- assert.equal(f.handlers.size,4);
+test('health Operator Policy denial is independent of file policy',async()=>{
+ const f=fixture({operatorGranted:false});
+ registerOfficialParityV1({...f,z,mode:'signed-health',signedAgentEvidenceVerified:true});
+ assert.equal((await f.handlers.get('dc_ping')({deviceId:'us-macmini'})).isError,true);
 });
-test('fake principal is refused without registering any new tools',()=>{
+test('unverified principal is refused before registration',()=>{
  const f=fixture();
  assert.throws(()=>registerOfficialParityV1({...f,z,
   principal:{kind:'anonymous',canOperate:true}}),
