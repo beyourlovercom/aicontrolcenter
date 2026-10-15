@@ -29,6 +29,7 @@ export function createDevFilesystemReceiver({siteRoot,backupRoot,site='dev.beyou
     !resolve(siteRoot).endsWith(sep+expected)||typeof backupRoot!=='string'||
     !isAbsolute(backupRoot)||resolve(backupRoot)===resolve(siteRoot)||
     resolve(backupRoot).startsWith(resolve(siteRoot)+sep)||
+    resolve(backupRoot).split(sep).some(part=>['domains','public_html','wp-content'].includes(part))||
     typeof artifactResolver?.loadVerified!=='function'||typeof phpLint!=='function')
     deny('RECEIVER_CONFIG_DENIED');
  const base=resolve(siteRoot),backupBase=resolve(backupRoot);
