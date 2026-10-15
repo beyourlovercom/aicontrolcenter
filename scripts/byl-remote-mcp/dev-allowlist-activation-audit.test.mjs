@@ -6,7 +6,7 @@ function valid(){
  return {
  runtime:{sourceRepo:'beyourlovercom/aicontrolcenter',sourceRef:'main',
    commitSha:'a'.repeat(40),sourceParityVerified:true,productionGatewayUntouched:true,
-   devOnlyBindingVerified:true},
+   devOnlyBindingVerified:true,existingRemoteToolsPreserved:true,fourDevicePolicyPreserved:true},
  platform:{formalOAuthVerified:true,ownerActionReviewComplete:true,
    discoveredToolNames:['dev_release_prepare','dev_release_apply','dev_release_status','dev_release_rollback'],
    invokeAuthorizedToolNames:['dev_release_prepare','dev_release_apply','dev_release_status','dev_release_rollback']},
@@ -43,7 +43,8 @@ test('server visibility does not replace ChatGPT action review + invocation',()=
  }
 });
 test('main missing runtime provenance / production gateway evidence fails closed',()=>{
- for(const key of ['sourceParityVerified','productionGatewayUntouched','devOnlyBindingVerified']){
+ for(const key of ['sourceParityVerified','productionGatewayUntouched','devOnlyBindingVerified',
+ 'existingRemoteToolsPreserved','fourDevicePolicyPreserved']){
   const v=valid();v.runtime[key]=false;
   assert.ok(evaluateDevActivation(v).blockers.includes('G1_RUNTIME_PROVENANCE'));
  }
