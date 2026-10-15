@@ -11,6 +11,7 @@ import {createParityAgentDelegate} from './official-parity-agent-delegate.mjs';
 
 export const PARITY_CORE_FLAG='BYL_MCP_PARITY_CORE_READ_ENABLED';
 const DISABLED=Object.freeze({enabled:false,names:Object.freeze([]),reason:'NOT_ENABLED'});
+const NOT_AUTHORIZED=Object.freeze({enabled:false,names:Object.freeze([]),reason:'NOT_AUTHORIZED'});
 export function registerOAuthParityCore({
  server,z,principal,canExposeRemoteCall,authorizeRemoteCall,agentCall,
  auditOperation,env={},enabledFlag=PARITY_CORE_FLAG
@@ -22,6 +23,16 @@ export function registerOAuthParityCore({
   throw Error('PARITY_FLAG_NOT_CANONICAL');
  if(!env||typeof env!=='object'||Array.isArray(env))
   throw Error('PARITY_FLAG_CONFIG_DENIED');
+ // Keep legacy read/list MCP operations available to nonoperators, even
+ // when this feature flag is ON for approved Owner sessions. An unauthorized
+ // principal is never a reason to fail a legitimate older MCP session.
+ if(principal?.kind!=='cloudflare-access'||principal.canOperate!==true)
+  return NOT_AUTHORIZED;
+ if(typeof canExposeRemoteCall!=='function')
+  throw Error('PARITY_OPERATOR_VISIBILITY_REQUIRED');
+ let mayExpose=false;
+ try{mayExpose=canExposeRemoteCall(principal)===true;}catch{mayExpose=false;}
+ if(!mayExpose)return NOT_AUTHORIZED;
  if(typeof agentCall!=='function')throw Error('PARITY_AGENT_TRANSPORT_REQUIRED');
  const delegate=createParityAgentDelegate({agentCall});
  const names=registerOfficialParityV1({
