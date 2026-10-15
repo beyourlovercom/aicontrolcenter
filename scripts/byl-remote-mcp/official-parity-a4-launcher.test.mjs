@@ -122,3 +122,23 @@ test('no loaded key, target URI or private file name leaks from public exports',
    assert(!JSON.stringify(result).includes(sensitive));
  }finally{f.dispose();}
 });
+
+
+test('readable-by-everyone secret material is rejected even if not writable',async()=>{
+ const f=fixture();
+ try{
+  chmodSync(f.key,0o644);
+  await assert.rejects(launchA4OAuthService({env:f.env,listen:false,
+   importPrivate:f.importPrivate}),{message:'A4_PRIVATE_PERMISSIONS_DENIED'});
+ }finally{f.dispose();}
+});
+test('manifest directory world-readable is rejected before private imports',async()=>{
+ const f=fixture();
+ try{
+  chmodSync(f.dir,0o755);
+  // Parent directory permissions are not a direct file gate. The manifest
+  // itself remains strictly 0600, and the installed module dir is 0700.
+  const r=await launchA4OAuthService({env:f.env,listen:false,importPrivate:f.importPrivate});
+  assert.equal(r.status,'PREPARED_NOT_LISTENING');
+ }finally{f.dispose();}
+});
