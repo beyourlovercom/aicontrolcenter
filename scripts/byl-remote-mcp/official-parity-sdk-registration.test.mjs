@@ -19,10 +19,12 @@ function fixture({enabled=true,operatorGranted=true}={}){
   return {name,arguments:args};
  };
  const delegate=async()=>({text:'OBSERVED'});
+ const auditEvents=[];
+ const auditOperation=entry=>{auditEvents.push(entry);return true;};
  const authorizeHealth=async()=>operatorGranted;
  const monitor={list:async()=>[{id:'us-macmini',state:'unknown',verified:false}],
   check:async deviceId=>({id:deviceId,state:'unknown',verified:false})};
- return {server,handlers,oldHandler,principal,canExposeRemoteCall,authorizeRemoteCall,delegate,authorizeHealth,monitor,enabled};
+ return {server,handlers,oldHandler,principal,canExposeRemoteCall,authorizeRemoteCall,delegate,auditOperation,auditEvents,authorizeHealth,monitor,enabled};
 }
 test('disabled by default: register zero new tools',()=>{
  const f=fixture({enabled:false});
@@ -112,4 +114,28 @@ test('an invalid exposure predicate cannot expose partial new tool registry',()=
    {message:expected});
   assert.equal(f.handlers.size,4);
  }
+});
+
+test('audit sink is required before any named tool registration',()=>{
+ const f=fixture();
+ assert.throws(()=>registerOfficialParityV1({...f,z,auditOperation:null}),
+  {message:'PARITY_AUDIT_SINK_REQUIRED'});
+ assert.equal(f.handlers.size,4);
+});
+test('positive permission requires acknowledged audit receipt before dispatch',async()=>{
+ const f=fixture();
+ let sent=false;
+ registerOfficialParityV1({...f,z,auditOperation:()=>{sent=true;return false;},
+  delegate:async()=>{throw Error('DELEGATE_MUST_NOT_RUN');}});
+ const out=await f.handlers.get('dc_read_file')({deviceId:'us-macmini',path:'/etc/hosts'});
+ assert.equal(sent,true);
+ assert.equal(out.isError,true);
+});
+test('audited direct read excludes raw paths, command args and response contents',async()=>{
+ const f=fixture();
+ registerOfficialParityV1({...f,z});
+ await f.handlers.get('dc_read_file')({deviceId:'us-macmini',path:'/tmp/private-fixture'});
+ assert.deepEqual(f.auditEvents.map(x=>({decision:x.decision,operation:x.operation,deviceId:x.deviceId})),
+  [{decision:'allow',operation:'read_file',deviceId:'us-macmini'}]);
+ assert.equal(JSON.stringify(f.auditEvents).includes('/tmp/private-fixture'),false);
 });
