@@ -98,3 +98,14 @@ test('transport failures never leak raw fetch errors',async()=>{
  const api=createCredentialFreeSignedAgentClient(f.config);
  await assert.rejects(api.agentGet('china-mac','/v1/tools'),{message:'PARITY_AGENT_UNREACHABLE'});
 });
+
+
+test('external PKCS8 Ed25519 PEM is supported without persisting it in GitHub or output',async()=>{
+ const f=fixture();
+ const pem=privateKey.export({type:'pkcs8',format:'pem'});
+ f.config.signingKey=pem;
+ const transport=createCredentialFreeSignedAgentClient(f.config);
+ const value=await transport.agentGet('us-macmini','/v1/tools');
+ assert.deepEqual(value,{ok:true,result:{safe:true}});
+ assert.equal(JSON.stringify(transport).includes('PRIVATE KEY'),false);
+});
