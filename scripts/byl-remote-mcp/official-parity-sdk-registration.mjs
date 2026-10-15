@@ -13,7 +13,7 @@ import {registerParitySessionTools} from './official-parity-session-tools.mjs';
 const MODES=new Set(['core','signed-health']);
 export function registerOfficialParityV1({
  server,z,principal,canExposeRemoteCall,authorizeRemoteCall,delegate,
- authorizeHealth,monitor,enabled=false,mode='core',
+ auditOperation,authorizeHealth,monitor,enabled=false,mode='core',
  signedAgentEvidenceVerified=false
 }={}){
  if(enabled!==true)throw Error('PARITY_NOT_ACTIVATED');
@@ -32,6 +32,31 @@ export function registerOfficialParityV1({
     typeof z?.string!=='function'||typeof z?.number!=='function'||
     typeof authorizeRemoteCall!=='function'||typeof delegate!=='function')
   throw Error('PARITY_REGISTRATION_INCOMPLETE');
+ if(typeof auditOperation!=='function')
+  throw Error('PARITY_AUDIT_SINK_REQUIRED');
+ // Audit sink is server-owned, synchronous, and must acknowledge each allow.
+ // Never log filenames, arguments, credentials or raw response contents.
+ const audit=(decision,deviceId,name)=>{
+  const result=auditOperation({
+   decision,principalHash:principal.subjectHash||'unknown',
+   deviceId:deviceId??null,operation:name
+  });
+  if(result!==true)throw Error('PARITY_AUDIT_UNAVAILABLE');
+ };
+ const auditedAuthorize=(p,deviceId,name,args)=>{
+  let approved;
+  try{approved=authorizeRemoteCall(p,deviceId,name,args);}
+  catch(e){try{audit('deny',deviceId,name);}catch{}throw e;}
+  audit('allow',deviceId,name);
+  return approved;
+ };
+ const auditedHealthAuthorize=async({principal:p,deviceId,action})=>{
+  let approved=false;
+  try{approved=(await authorizeHealth({principal:p,deviceId,action}))===true;}catch{}
+  try{audit(approved?'allow':'deny',deviceId,'health_'+action);}
+  catch{return false;}
+  return approved;
+ };
  if(mode==='signed-health'&&(
     signedAgentEvidenceVerified!==true||
     typeof authorizeHealth!=='function'||typeof monitor?.list!=='function'||
@@ -39,11 +64,11 @@ export function registerOfficialParityV1({
   throw Error('PARITY_SIGNED_HEALTH_NOT_VERIFIED');
  // Explicit per-operation Operator Policy required: never substitute
  // unvalidated remote_call or generic command execution.
- const base={server,z,principal,authorizeRemoteCall,delegate};
+ const base={server,z,principal,authorizeRemoteCall:auditedAuthorize,delegate};
  const read=registerParityReadTools(base);
  const session=registerParitySessionTools(base);
  const health=mode==='signed-health'
-   ? registerParityHealthTools({server,z,principal,authorizeHealth,monitor})
+   ? registerParityHealthTools({server,z,principal,authorizeHealth:auditedHealthAuthorize,monitor})
    : [];
  return Object.freeze([...read,...session,...health]);
 }
