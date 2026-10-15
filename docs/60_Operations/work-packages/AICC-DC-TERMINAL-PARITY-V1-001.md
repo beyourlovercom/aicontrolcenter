@@ -8,8 +8,8 @@ Canonical evidence: https://github.com/beyourlovercom/aicontrolcenter/issues/67#
 
 ## Responsibility / provider route
 - GPT: work-package scope, review, exact-SHA gates and STOP.
-- Governed US Claude: default implementation `CLAUDE_CODE`, `IMPLEMENTATION`, Sonnet 4.6 low, according to `AI-EXECUTOR-GOVERNANCE-V2`.
-- Deterministic/offline tests and exact-head review are test-only/audit, not production UAT.
+- **Owner 2026-10-15 explicit override:** `CODEX_GOVERNED` only for this narrowly bounded four-file terminal-argument adapter and deterministic regression tests. GPT routing reason: Owner explicitly declined renewed Claude authentication and instructed `只需要 codex`; the scoped task is a pure argument transformation with no service/runtime/authorization changes. This is a documented narrower provider exception under `AI-EXECUTOR-GOVERNANCE-V2`; it is not a general policy override. `AICC_EXECUTION_CLASS=IMPLEMENTATION`, fixed branch/authority/allowlist and independent review are still mandatory.
+- Deterministic/offline tests and exact-head review do not substitute for production Owner UAT.
 - One writer, isolated worktree; never modify or clean an existing dirty checkout.
 
 ## Verified observations (do not exaggerate)
@@ -48,3 +48,7 @@ Canonical evidence: https://github.com/beyourlovercom/aicontrolcenter/issues/67#
 - Governed launcher exited before implementation with: `Failed to authenticate: OAuth session expired and could not be refreshed`.
 - Postflight: isolated worktree clean at commit `6765cf92c3bac01fbbf2d4c78c961a2ed54826c4`. No implementation files edited, no tests/CI claimed, no non-governed fallback used.
 - Next prerequisite: Owner reauthorizes/reconnects the existing US Mac mini Claude Code session through the normal official login flow. Do not request or transfer tokens. Then resume the same WP and branch, preserving Writer and merge gates.
+
+## 2026-10-15 owner provider correction
+- Claude Code authentication is no longer a prerequisite or action item for this branch. Owner explicitly selected Codex instead. Preserve the prior failure only as historical evidence, not the current gate.
+- Only a governed Codex invocation scoped to this exact WP/worktree can implement the four allowed files; no non-governed bypass, no wide shell execution or extra write permissions.
