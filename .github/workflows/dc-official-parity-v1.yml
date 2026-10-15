@@ -33,6 +33,9 @@ jobs:
           for file in scripts/byl-remote-mcp/official-parity-*.mjs; do
             node --check "$file"
           done
+      - name: Install pinned MCP SDK for true protocol E2E
+        working-directory: scripts/byl-remote-mcp
+        run: npm ci --ignore-scripts --no-audit --no-fund
       - name: Isolated parity and canonical signed health tests
         run: >
           node --test
