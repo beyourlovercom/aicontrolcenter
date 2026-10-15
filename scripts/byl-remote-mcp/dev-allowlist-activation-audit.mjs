@@ -56,3 +56,42 @@ export function evaluateDevActivation({
     toolNames:Object.freeze([...MUST_HAVE]),
   });
 }
+
+
+/**
+ * G1 staged read-only activation is intentionally independent of G2/G3 release
+ * authority, backups and mutating tool registration. It never grants a write.
+ * Evidence must be collected by independent trusted operator/client probes.
+ */
+export function evaluateG1StatusActivation({runtime,platform,statusBackend}={}){
+  const blockers=[];
+  if(!plain(runtime)||runtime.sourceRepo!=='beyourlovercom/aicontrolcenter'||
+     runtime.sourceRef!=='main'||typeof runtime.commitSha!=='string'||
+     !SHA.test(runtime.commitSha)||runtime.sourceParityVerified!==true||
+     runtime.productionGatewayUntouched!==true||
+     runtime.devOnlyBindingVerified!==true||
+     runtime.existingRemoteToolsPreserved!==true||
+     runtime.fourDevicePolicyPreserved!==true)
+    blockers.push('G1_RUNTIME_PROVENANCE');
+  // A dedicated G1 application must expose exactly ONE tool; it must not
+  // make staged prepare/apply/rollback actions discoverable or invocable.
+  const exactlyStatus=(names)=>Array.isArray(names)&&names.length===1&&
+    names[0]==='dev_release_status';
+  if(!plain(platform)||platform.formalOAuthVerified!==true||
+     platform.ownerActionReviewComplete!==true||
+     !exactlyStatus(platform.discoveredToolNames)||
+     !exactlyStatus(platform.invokeAuthorizedToolNames))
+    blockers.push('G1_STATUS_ONLY_TOOL_REGISTRATION');
+  // A status handler using the current durable-store.get() is not yet proven
+  // read-only: that function initializes on-disk directories on a missing root.
+  if(!plain(statusBackend)||statusBackend.noFilesystemMutationsVerified!==true||
+     statusBackend.noDevBusinessWritesVerified!==true||
+     statusBackend.readAuthorizationVerified!==true)
+    blockers.push('G1_STATUS_READ_ONLY_NOT_VERIFIED');
+  return Object.freeze({
+    status:blockers.length===0?'READY_FOR_STATUS_UAT':'BLOCKED',
+    blockers:Object.freeze(blockers),
+    canApply:false,
+    toolNames:Object.freeze(['dev_release_status']),
+  });
+}
