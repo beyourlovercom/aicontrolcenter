@@ -192,3 +192,35 @@ test('unhandled transport failures are sanitized, never echo stack or bearer',as
  assert.deepEqual(f.logs,['PARITY_MCP_HANDLER_FAILURE']);
  assert.equal(JSON.stringify(res.body).includes(f.bearer),false);
 });
+
+
+test('client abort before response completes closes MCP session exactly once',async()=>{
+ const f=fixture();
+ let entered;
+ const enteredPromise=new Promise(resolve=>{entered=resolve;});
+ let release;
+ const wait=new Promise(resolve=>{release=resolve;});
+ f.args.StreamableHTTPServerTransport=class{
+  constructor(){this.closed=0;transports.push(this);}
+  async handleRequest(){entered();await wait;}
+  async close(){this.closed++;}
+ };
+ createCredentialFreeOAuthHttpRuntime(f.args);
+ const handlers=f.routes.get('post:/oauth/mcp');
+ const req={headers:{authorization:'Bearer '+f.bearer},body:{}};
+ const res=response();
+ let approved=false;
+ await handlers[0](req,res,()=>{approved=true;});
+ assert.equal(approved,true);
+ const executing=handlers[1](req,res);
+ await enteredPromise;
+ assert.equal(servers.length,1);
+ assert.equal(typeof res.closer,'function');
+ res.closer();
+ res.closer();
+ release();
+ await executing;
+ await new Promise(resolve=>setImmediate(resolve));
+ assert.equal(servers[0].closed,1);
+ assert.equal(transports[0].closed,1);
+});
