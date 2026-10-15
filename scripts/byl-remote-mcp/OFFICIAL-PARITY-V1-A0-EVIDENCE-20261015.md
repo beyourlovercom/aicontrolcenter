@@ -37,3 +37,10 @@ Match the **daily useful operation experience** of official Desktop Commander wh
 
 ## Roadmap
 A0 audit: DONE. A1–A3 isolated implementation: CANDIDATE / CI. A4: BLOCKED on official registration and owner UAT. Initial engineering estimate 18–29h is not elapsed time and excludes external review.
+
+
+## A4 staged compatibility implementation (2026-10-15)
+- **A4.0 (core-only first):** \`registerOfficialParityV1()\` is disabled by default and now registers precisely **five** read-only tools in \`mode='core'\`, without requiring unprovisioned signed Agent response endpoints or pinned public keys. Existing four \`remote_*\` handlers are preserved by the same-session mocked SDK integration test. The live production service is NOT connected to this module yet.
+- **A4.1 (signed health later):** \`mode='signed-health'\` may register the additional two health tools ONLY when the *trusted server integration*, not an end-user request, supplies \`signedAgentEvidenceVerified:true\` and an independently authorized monitor. Missing or false evidence rejects before any tool registration. The boolean is an isolated integration signal, NOT a replacement for real per-device signed response verification, key enrollment, and Owner approval.
+- **Required operator review:** the running \`getServer(principal)\` in the installed OAuth endpoint constructs the MCP SDK Server per authenticated HTTP request. New tools must only be attached within that same trusted server/request context, using the exact principal from \`resolveAccessPrincipal\` and the installed \`authorizeRemoteCall\`, without altering the four existing \`remote_*\` handlers. Historical PR #51 lacks current 007windows source and must not overwrite it.
+- **Live activation blocker:** GitHub main still lacks the installed production OAuth runtime source. Any source parity reconciliation / tool registration / OAuth app refresh / deployment is a separate authorized change and is NOT implied by CI PASS, Public repository visibility, or this Draft PR. No READY restarts.
