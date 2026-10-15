@@ -86,6 +86,9 @@ test('WWW path and unsafe backup-root containment blocked at configuration',asyn
  try{
   assert.throws(()=>createDevFilesystemReceiver({siteRoot:f.siteRoot.replace('dev.beyourlover.com','www.beyourlover.com'),
   backupRoot:f.backupRoot,artifactResolver:{loadVerified(){}},phpLint:()=>true}),{message:'RECEIVER_CONFIG_DENIED'});
+  assert.throws(()=>createDevFilesystemReceiver({siteRoot:f.siteRoot,
+  backupRoot:join(f.siteRoot.split('/domains/')[0],'domains','www.beyourlover.com','public_html','backups'),
+  artifactResolver:{loadVerified(){}},phpLint:()=>true}),{message:'RECEIVER_CONFIG_DENIED'});
   assert.throws(()=>createDevFilesystemReceiver({siteRoot:f.siteRoot,backupRoot:join(f.siteRoot,'backup'),
   artifactResolver:{loadVerified(){}},phpLint:()=>true}),{message:'RECEIVER_CONFIG_DENIED'});
  }finally{await f.cleanup();}
