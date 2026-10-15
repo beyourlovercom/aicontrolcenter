@@ -12,7 +12,7 @@ import {registerParitySessionTools} from './official-parity-session-tools.mjs';
 
 const MODES=new Set(['core','signed-health']);
 export function registerOfficialParityV1({
- server,z,principal,authorizeRemoteCall,delegate,
+ server,z,principal,canExposeRemoteCall,authorizeRemoteCall,delegate,
  authorizeHealth,monitor,enabled=false,mode='core',
  signedAgentEvidenceVerified=false
 }={}){
@@ -20,6 +20,13 @@ export function registerOfficialParityV1({
  if(!MODES.has(mode))throw Error('PARITY_MODE_DENIED');
  if(principal?.kind!=='cloudflare-access'||principal.canOperate!==true)
   throw Error('PARITY_PRINCIPAL_NOT_VERIFIED');
+ // Existing OAuth remote_call visibility is the upper bound of any new
+ // direct-tool visibility. Both checks operate on the same server principal.
+ if(typeof canExposeRemoteCall!=='function')
+  throw Error('PARITY_OPERATOR_VISIBILITY_REQUIRED');
+ let mayExpose=false;
+ try{mayExpose=canExposeRemoteCall(principal)===true;}catch{mayExpose=false;}
+ if(!mayExpose)throw Error('PARITY_OPERATOR_VISIBILITY_DENIED');
  // Preflight all requested dependencies before any registration occurs.
  if(typeof server?.registerTool!=='function'||typeof z?.enum!=='function'||
     typeof z?.string!=='function'||typeof z?.number!=='function'||
