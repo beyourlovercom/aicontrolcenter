@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {evaluateDevActivation} from './dev-allowlist-activation-audit.mjs';
+import {evaluateDevActivation,evaluateG1StatusActivation} from './dev-allowlist-activation-audit.mjs';
 
 function valid(){
  return {
@@ -74,4 +74,40 @@ test('readiness never mutates input, and checks cannot grant deployment',()=>{
  const v=valid();const before=structuredClone(v);const r=evaluateDevActivation(v);
  assert.deepEqual(v,before);assert.equal(r.canApply,false);
  assert.equal(Object.isFrozen(r),true);
+});
+
+function validG1(){
+ const v=valid();
+ v.platform.discoveredToolNames=['dev_release_status'];
+ v.platform.invokeAuthorizedToolNames=['dev_release_status'];
+ return {runtime:v.runtime,platform:v.platform,statusBackend:{
+  noFilesystemMutationsVerified:true,noDevBusinessWritesVerified:true,
+  readAuthorizationVerified:true}};
+}
+test('G1 status-only gate does not require G2 receiver, G3 artifact or mutating tools',()=>{
+ const r=evaluateG1StatusActivation(validG1());
+ assert.equal(r.status,'READY_FOR_STATUS_UAT');
+ assert.equal(r.canApply,false);
+ assert.deepEqual(r.toolNames,['dev_release_status']);
+});
+test('G1 refuses to expose prepare, apply or rollback early',()=>{
+ for(const key of ['discoveredToolNames','invokeAuthorizedToolNames']){
+  const v=validG1();v.platform[key].push('dev_release_apply');
+  assert.deepEqual(evaluateG1StatusActivation(v).blockers,['G1_STATUS_ONLY_TOOL_REGISTRATION']);
+ }
+});
+test('G1 status backend cannot use directory-creating get() without independent no-write proof',()=>{
+ for(const key of ['noFilesystemMutationsVerified','noDevBusinessWritesVerified','readAuthorizationVerified']){
+  const v=validG1();v.statusBackend[key]=false;
+  assert.deepEqual(evaluateG1StatusActivation(v).blockers,['G1_STATUS_READ_ONLY_NOT_VERIFIED']);
+ }
+});
+test('G1 requires current four-device policy and original handler compatibility',()=>{
+ const v=validG1();v.runtime.fourDevicePolicyPreserved=false;
+ assert.deepEqual(evaluateG1StatusActivation(v).blockers,['G1_RUNTIME_PROVENANCE']);
+});
+test('G1 partial readiness diagnostics fail closed without real operator evidence',()=>{
+ const r=evaluateG1StatusActivation();
+ assert.equal(r.status,'BLOCKED');assert.equal(r.blockers.length,3);
+ assert.equal(r.canApply,false);
 });
