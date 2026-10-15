@@ -142,3 +142,41 @@ test('world-readable synthetic parent directory cannot reveal mode-0600 manifest
   assert.equal(r.status,'PREPARED_NOT_LISTENING');
  }finally{f.dispose();}
 });
+
+
+test('synthetic listener confirms startup only after listening event',async()=>{
+ const {EventEmitter}=await import('node:events');
+ const f=fixture();
+ try{
+  const fakeServer=new EventEmitter();
+  fakeServer.close=cb=>cb?.();
+  const bindListener=(_app,port,host)=>{
+   assert.equal(port,8797);
+   assert.equal(host,'127.0.0.1');
+   queueMicrotask(()=>fakeServer.emit('listening'));
+   return fakeServer;
+  };
+  const result=await launchA4OAuthService({
+   env:f.env,listen:true,importPrivate:f.importPrivate,bindListener
+  });
+  assert.equal(result.status,'SERVICE_LISTENING');
+  assert.equal(result.listener,fakeServer);
+ }finally{f.dispose();}
+});
+test('occupied-port error refuses cutover and does not kill any running service',async()=>{
+ const {EventEmitter}=await import('node:events');
+ const f=fixture();
+ const logs=[];
+ try{
+  const bindListener=()=>{
+   const fake=new EventEmitter();
+   queueMicrotask(()=>fake.emit('error',Object.assign(Error('occupied'),{code:'EADDRINUSE'})));
+   return fake;
+  };
+  await assert.rejects(launchA4OAuthService({
+   env:f.env,listen:true,importPrivate:f.importPrivate,bindListener,
+   logger:{error:s=>logs.push(s)}
+  }),{message:'A4_OAUTH_LISTEN_FAILED'});
+  assert.deepEqual(logs,['A4_OAUTH_LISTEN_FAILED']);
+ }finally{f.dispose();}
+});
