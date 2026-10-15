@@ -13,6 +13,7 @@ function fixture({enabled=true,operatorGranted=true}={}){
  for(const name of ['remote_list_devices','remote_list_tools','remote_call','remote_process_selftest'])
   server.registerTool(name,{},oldHandler);
  const principal={kind:'cloudflare-access',canOperate:true};
+ const canExposeRemoteCall=()=>operatorGranted;
  const authorizeRemoteCall=(_p,_id,name,args)=>{
   if(!operatorGranted)throw Error('OPERATOR_DENIED');
   return {name,arguments:args};
@@ -21,7 +22,7 @@ function fixture({enabled=true,operatorGranted=true}={}){
  const authorizeHealth=async()=>operatorGranted;
  const monitor={list:async()=>[{id:'us-macmini',state:'unknown',verified:false}],
   check:async deviceId=>({id:deviceId,state:'unknown',verified:false})};
- return {server,handlers,oldHandler,principal,authorizeRemoteCall,delegate,authorizeHealth,monitor,enabled};
+ return {server,handlers,oldHandler,principal,canExposeRemoteCall,authorizeRemoteCall,delegate,authorizeHealth,monitor,enabled};
 }
 test('disabled by default: register zero new tools',()=>{
  const f=fixture({enabled:false});
@@ -77,7 +78,7 @@ test('incomplete core dependencies fail before registration',()=>{
 });
 test('legacy Operator Policy still rejects read and process diagnostics',async()=>{
  const f=fixture({operatorGranted:false});
- registerOfficialParityV1({...f,z});
+ registerOfficialParityV1({...f,z,canExposeRemoteCall:()=>true});
  for(const [name,args] of [
   ['dc_read_file',{deviceId:'windows',path:'/tmp/example'}],
   ['dc_list_sessions',{deviceId:'windows'}]]){
@@ -86,7 +87,7 @@ test('legacy Operator Policy still rejects read and process diagnostics',async()
 });
 test('health Operator Policy denial is independent of file policy',async()=>{
  const f=fixture({operatorGranted:false});
- registerOfficialParityV1({...f,z,mode:'signed-health',signedAgentEvidenceVerified:true});
+ registerOfficialParityV1({...f,z,mode:'signed-health',signedAgentEvidenceVerified:true,canExposeRemoteCall:()=>true});
  assert.equal((await f.handlers.get('dc_ping')({deviceId:'us-macmini'})).isError,true);
 });
 test('unverified principal is refused before registration',()=>{
@@ -95,4 +96,20 @@ test('unverified principal is refused before registration',()=>{
   principal:{kind:'anonymous',canOperate:true}}),
  {message:'PARITY_PRINCIPAL_NOT_VERIFIED'});
  assert.equal(f.handlers.size,4);
+});
+
+test('new tool names invisible when installed Operator Policy hides remote_call',()=>{
+ const f=fixture({operatorGranted:false});
+ assert.throws(()=>registerOfficialParityV1({...f,z}),
+  {message:'PARITY_OPERATOR_VISIBILITY_DENIED'});
+ assert.equal(f.handlers.size,4);
+});
+test('an invalid exposure predicate cannot expose partial new tool registry',()=>{
+ for(const injected of [null,()=>{throw Error('unexpected');},()=>undefined,()=>1]){
+  const f=fixture();
+  const expected=injected===null?'PARITY_OPERATOR_VISIBILITY_REQUIRED':'PARITY_OPERATOR_VISIBILITY_DENIED';
+  assert.throws(()=>registerOfficialParityV1({...f,z,canExposeRemoteCall:injected}),
+   {message:expected});
+  assert.equal(f.handlers.size,4);
+ }
 });
