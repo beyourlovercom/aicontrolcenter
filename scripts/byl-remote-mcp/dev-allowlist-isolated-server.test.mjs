@@ -78,3 +78,28 @@ test('unconfigured SDK/authorization fails closed before new server is used',()=
   resolvePrincipal:()=>({}),service:{},allowMutatingTools:'yes'}),
   {message:'ISOLATED_DEV_MCP_NOT_CONFIGURED'});
 });
+
+test('existing OAuth/DC SDK handlers remain byte-for-byte same references',async()=>{
+ const legacy=new FakeServer({name:'existing-oauth-dc'}, {capabilities:{tools:{}}});
+ const oldList=async()=>({tools:[{name:'remote_list_devices'}, {name:'remote_call'},
+   {name:'remote_list_tools'}, {name:'remote_process_selftest'}]});
+ const oldCall=async()=>({content:[{type:'text',text:'EXISTING_HANDLER'}]});
+ legacy.setRequestHandler(listSchema,oldList);
+ legacy.setRequestHandler(callSchema,oldCall);
+ const sidecar=factory();
+ assert.notEqual(sidecar.server,legacy);
+ assert.equal(legacy.handlers.get('list'),oldList);
+ assert.equal(legacy.handlers.get('call'),oldCall);
+ assert.deepEqual((await legacy.handlers.get('list')()).tools.map(x=>x.name),[
+  'remote_list_devices','remote_call','remote_list_tools','remote_process_selftest'
+ ]);
+ assert.deepEqual((await sidecar.list({},{})).tools.map(x=>x.name),['dev_release_status']);
+});
+test('enabling mutating mode alone still cannot bypass action-level operator veto',async()=>{
+ const f=factory({allowMutatingTools:true,operatorGrant:true});
+ assert.deepEqual((await f.list({},{})).tools.map(x=>x.name),[
+   'dev_release_prepare','dev_release_apply','dev_release_rollback','dev_release_status'
+ ]);
+ // This dry-run fake service has no real Dev receiver and cannot change site files.
+ assert.equal(f.calls(),0);
+});
