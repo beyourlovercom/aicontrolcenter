@@ -13,7 +13,7 @@ export const PARITY_CORE_FLAG='BYL_MCP_PARITY_CORE_READ_ENABLED';
 const DISABLED=Object.freeze({enabled:false,names:Object.freeze([]),reason:'NOT_ENABLED'});
 export function registerOAuthParityCore({
  server,z,principal,canExposeRemoteCall,authorizeRemoteCall,agentCall,
- env={},enabledFlag=PARITY_CORE_FLAG
+ auditOperation,env={},enabledFlag=PARITY_CORE_FLAG
 }={}){
  // Never let the tool caller supply env or enabledFlag: these parameters
  // are for trusted server composition only. No mutation and no health tools.
@@ -26,7 +26,7 @@ export function registerOAuthParityCore({
  const delegate=createParityAgentDelegate({agentCall});
  const names=registerOfficialParityV1({
   server,z,principal,canExposeRemoteCall,authorizeRemoteCall,delegate,
-  enabled:true,mode:'core'
+  auditOperation,enabled:true,mode:'core'
  });
  return Object.freeze({enabled:true,names,reason:null});
 }
