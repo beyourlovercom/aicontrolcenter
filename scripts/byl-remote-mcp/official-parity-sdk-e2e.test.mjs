@@ -17,6 +17,7 @@ async function fixture({allow=true}={}){
  registerOfficialParityV1({
   server,z,principal,enabled:true,mode:'core',
   canExposeRemoteCall:()=>true,
+  auditOperation:()=>true,
   authorizeRemoteCall:(_principal,deviceId,name,args)=>{
    if(!allow)throw Error('OPERATOR_DENIED');
    if(!['us-macmini','china-mac','windows','007windows'].includes(deviceId))
