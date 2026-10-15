@@ -87,7 +87,8 @@ function makeAuditor(path){
  */
 export async function launchA4OAuthService({
  env=process.env,manifestFile=env?.BYL_MCP_A4_PRIVATE_MANIFEST_FILE,
- listen=true,importPrivate,readManifest,logger=console
+ listen=true,importPrivate,readManifest,
+ bindListener=(app,port,host)=>app.listen(port,host),logger=console
 }={}){
  if(env?.BYL_MCP_A4_SERVICE_LAUNCH_ENABLED!=='1'||env.BYL_MCP_STAGING!=='0'||
     env.BYL_MCP_PRODUCTION_OAUTH_ENABLED!=='1')
@@ -132,7 +133,7 @@ export async function launchA4OAuthService({
  let listener;
  try{
   listener=await new Promise((resolve,reject)=>{
-   const server=runtime.app.listen(runtime.port,runtime.host);
+   const server=bindListener(runtime.app,runtime.port,runtime.host);
    server.once('error',()=>reject(Error('A4_OAUTH_LISTEN_FAILED')));
    server.once('listening',()=>resolve(server));
   });
