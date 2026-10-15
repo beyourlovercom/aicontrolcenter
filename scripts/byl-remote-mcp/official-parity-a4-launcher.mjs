@@ -28,7 +28,8 @@ function privateFile(path,{regular=true}={}){
  try{st=statSync(path);}catch{fail('A4_PRIVATE_FILE_NOT_ACCESSIBLE');}
  if((regular&&!st.isFile())||(!regular&&!st.isDirectory()))
   fail('A4_PRIVATE_FILE_INVALID');
- if((st.mode&0o022)!==0)
+ // Private config must never be readable or writable by group/others.
+ if((st.mode&0o077)!==0)
   fail('A4_PRIVATE_PERMISSIONS_DENIED');
  // Check ownership for files loaded with production signing material.
  if(typeof process.getuid==='function'&&st.uid!==process.getuid())
