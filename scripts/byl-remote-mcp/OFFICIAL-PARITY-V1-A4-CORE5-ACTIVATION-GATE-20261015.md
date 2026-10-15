@@ -28,3 +28,17 @@
 
 ## Current state
 A0 DONE; A1–A3 GitHub isolated; A4 core-5 per-request protocol and Operator visibility tested in CI; live SDK tool registration and Owner UAT **NOT STARTED**. Dev Deployment OS Draft PR #66 remains paused. **No READY device restart, no production OAuth/MCP deployment, no change to ChatGPT app permissions, and no workaround of an unrelated prior platform safety denial.**
+
+
+## 2026-10-15 exact installed-source read-only parity evidence
+- A read-only four-file comparison to historical GitHub branch \`docs/byl-mcp-production-cutover-gate-v1\` established that the installed \`access-auth.mjs\` and \`endpoint-routing.mjs\` are byte-equivalent after trimming final whitespace.
+- Installed \`mcp-endpoint.mjs\` differs from historical only by the fourth fixed \`007windows\` target, three \`deviceId\` field schemas changed from three-device enum to bounded 1–64-character strings, and a fourth-device authorization comment. The existing trusted device target resolver still uses fixed registered device IDs.
+- Installed \`operator-policy.mjs\` differs only by registering \`007windows\` in \`OPERATOR_DEVICES\`, adding a fourth-device scope comment, and permitting \`get_config\` for that device under existing full-exec conditions.
+- In-memory normalization of only these enumerated deltas produced equality on all four file texts; **no unexpected installed-source drift was observed within this four-file comparison**. This does not verify other installed Agent/gateway files, environment settings, actual Cloudflare routes, or original public Git history.
+- New \`official-parity-source-audit.mjs\` and tests provide a pure, read-only, no-leakage comparison, refusing unknown auth/routing/tool/target deltas. **The module is not executed on production devices and its results are not a substitute for code review.**
+- **Public GitHub safety:** the comparison logs no private target addresses or auth-key paths. Do not copy raw installed \`mcp-endpoint.mjs\` to Public GitHub because it contains machine-specific runtime configuration. The canonical source must use a separately reviewed config contract.
+
+## 2026-10-15 per-operation audit gate
+- To retain the original \`remote_call\` audit protection, \`registerOfficialParityV1\` now also REQUIRES a **trusted, synchronous \`auditOperation\` sink** before exposing any direct tool. The sink receives only \`decision\`, \`principalHash\`, \`deviceId\`, and canonical \`operation\`; no raw file paths, token material, command arguments or returned data are supplied.
+- Every allowed operation must obtain \`auditOperation(...)=true\` **before** the delegate is called; a missing, throwing or rejecting audit sink fails closed with no remote operation. Operator rejection attempts a redacted deny audit and remains denied regardless of sink status.
+- The candidate \`official-parity-oauth-hook.mjs\` passes this audit function from the trusted per-request server integration. Production must implement an actual reliable logger and explicitly acknowledge the receipt, rather than a silent/no-op function. No live audit logger wiring has been approved or performed.
