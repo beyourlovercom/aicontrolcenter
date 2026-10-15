@@ -41,3 +41,10 @@ Canonical evidence: https://github.com/beyourlovercom/aicontrolcenter/issues/67#
 - Output pagination must preserve intentional final stdout empty lines.
 - A typed `cwd` option is not in current public tool schemas; shell `cd` already works.
 - Windows identity mapping and PowerShell encoding require separate evidence.
+
+## 2026-10-15 governed implementation attempt and blocker
+- Official DC US Mac mini: `claude --version` returned Claude Code `2.1.252`; a dedicated, clean worktree was created for the exact branch without changing the existing dirty checkout.
+- Structured launch provided required `AICC_WORK_PACKAGE_ID`, `AICC_PROVIDER_ROUTING_DECISION=CLAUDE_CODE`, `AICC_EXECUTION_CLASS=IMPLEMENTATION` and `AICC_PROVIDER_ROUTING_REASON`; requested default Sonnet 4.6 and scoped edits only.
+- Governed launcher exited before implementation with: `Failed to authenticate: OAuth session expired and could not be refreshed`.
+- Postflight: isolated worktree clean at commit `6765cf92c3bac01fbbf2d4c78c961a2ed54826c4`. No implementation files edited, no tests/CI claimed, no non-governed fallback used.
+- Next prerequisite: Owner reauthorizes/reconnects the existing US Mac mini Claude Code session through the normal official login flow. Do not request or transfer tokens. Then resume the same WP and branch, preserving Writer and merge gates.
