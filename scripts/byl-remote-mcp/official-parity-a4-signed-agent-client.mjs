@@ -42,8 +42,10 @@ export function createCredentialFreeSignedAgentClient({
     maxResponseChars<1||maxResponseChars>65536)
   throw Error('PARITY_TRANSPORT_DEPENDENCY_INVALID');
  let key;
- try{key=createPrivateKey(signingKey);}
- catch{throw Error('PARITY_PRIVATE_KEY_REQUIRED');}
+ try{
+  key=signingKey?.type==='private'&&signingKey?.asymmetricKeyType==='ed25519'
+   ? signingKey:createPrivateKey(signingKey);
+ }catch{throw Error('PARITY_PRIVATE_KEY_REQUIRED');}
  if(key.asymmetricKeyType!=='ed25519')
   throw Error('PARITY_SIGNING_KEY_TYPE_INVALID');
  async function request(deviceId,path,body,method,timeoutMs){
