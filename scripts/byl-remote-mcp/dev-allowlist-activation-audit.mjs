@@ -17,7 +17,9 @@ export function evaluateDevActivation({
      runtime.sourceRef!=='main'||typeof runtime.commitSha!=='string'||
      !SHA.test(runtime.commitSha)||runtime.sourceParityVerified!==true||
      runtime.productionGatewayUntouched!==true||
-     runtime.devOnlyBindingVerified!==true)
+     runtime.devOnlyBindingVerified!==true||
+     runtime.existingRemoteToolsPreserved!==true||
+     runtime.fourDevicePolicyPreserved!==true)
     blockers.push('G1_RUNTIME_PROVENANCE');
   // A registry snapshot is not proof that the client can invoke new actions.
   if(!plain(platform)||platform.formalOAuthVerified!==true||
