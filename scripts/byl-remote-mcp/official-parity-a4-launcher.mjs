@@ -127,8 +127,19 @@ export async function launchA4OAuthService({
  // When not explicitly approved to bind, this is only an inert constructor.
  if(!listen)return Object.freeze({status:'PREPARED_NOT_LISTENING',port:runtime.port,
   host:runtime.host,route:runtime.paths[0],serviceLabel:LABEL});
- const listener=runtime.app.listen(runtime.port,runtime.host);
- listener.on('error',()=>{logger.error?.('A4_OAUTH_LISTEN_FAILED');});
- return Object.freeze({status:'SERVICE_LAUNCH_ATTEMPTED',port:runtime.port,
+ // Port 8797 is normally occupied by the existing OAuth service.
+ // Refuse an unplanned concurrent bind; never kill or replace that service.
+ let listener;
+ try{
+  listener=await new Promise((resolve,reject)=>{
+   const server=runtime.app.listen(runtime.port,runtime.host);
+   server.once('error',()=>reject(Error('A4_OAUTH_LISTEN_FAILED')));
+   server.once('listening',()=>resolve(server));
+  });
+ }catch{
+  logger.error?.('A4_OAUTH_LISTEN_FAILED');
+  fail('A4_OAUTH_LISTEN_FAILED');
+ }
+ return Object.freeze({status:'SERVICE_LISTENING',port:runtime.port,
   host:runtime.host,route:runtime.paths[0],serviceLabel:LABEL,listener});
 }
