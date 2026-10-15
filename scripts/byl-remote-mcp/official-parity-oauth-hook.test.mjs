@@ -58,13 +58,26 @@ test('read-only feature flag registers exactly five discoverable tools through S
   assert.equal((await c.client.callTool({name:'remote_list_devices',arguments:{}})).content[0].text,'LEGACY');
  }finally{await c.close();}
 });
-test('previous Operator policy hidden = no new named tools registered',()=>{
+test('previous Operator policy hidden = no new tools, legacy tool sessions survive',async()=>{
  const f=make({enabled:true,expose:false});
- assert.throws(()=>registerOAuthParityCore(f.config),{message:'PARITY_OPERATOR_VISIBILITY_DENIED'});
+ assert.deepEqual(registerOAuthParityCore(f.config),{enabled:false,names:[],reason:'NOT_AUTHORIZED'});
+ const c=await clientOf(f.server);
+ try{
+  assert.deepEqual((await c.client.listTools()).tools.map(x=>x.name).sort(),[...f.old].sort());
+  assert.equal((await c.client.callTool({name:'remote_list_devices',arguments:{}})).content[0].text,'LEGACY');
+ }finally{await c.close();}
 });
-test('unauthorized OAuth principal cannot gain tool visibility',()=>{
- const f=make({enabled:true,principal:{kind:'internal',canOperate:true}});
- assert.throws(()=>registerOAuthParityCore(f.config),{message:'PARITY_PRINCIPAL_NOT_VERIFIED'});
+test('internal/read-only OAuth principal does not break existing tool access',async()=>{
+ for(const principal of [{kind:'internal',canOperate:true},
+  {kind:'cloudflare-access',canOperate:false}]){
+  const f=make({enabled:true,principal});
+  assert.deepEqual(registerOAuthParityCore(f.config),{enabled:false,names:[],reason:'NOT_AUTHORIZED'});
+  const c=await clientOf(f.server);
+  try{
+   assert.deepEqual((await c.client.listTools()).tools.map(x=>x.name).sort(),[...f.old].sort());
+   assert.equal((await c.client.callTool({name:'remote_list_devices',arguments:{}})).content[0].text,'LEGACY');
+  }finally{await c.close();}
+ }
 });
 test('operator invocation denial leaves the transport untouched',async()=>{
  const f=make({enabled:true,permit:false});
@@ -113,4 +126,13 @@ test('audit entries are argument-free and bound to operation/device',async()=>{
    [['allow','007windows','get_file_info']]);
   assert.equal(JSON.stringify(f.auditEvents).includes('private-test-file'),false);
  }finally{await c.close();}
+});
+
+test('operator visibility-check failure only hides new names, never legacy tools',async()=>{
+ const f=make({enabled:true});
+ const result=registerOAuthParityCore({...f.config,canExposeRemoteCall:()=>{throw Error('deny')}});
+ assert.deepEqual(result,{enabled:false,names:[],reason:'NOT_AUTHORIZED'});
+ const c=await clientOf(f.server);
+ try{assert.equal((await c.client.listTools()).tools.length,4);}
+ finally{await c.close();}
 });
