@@ -52,7 +52,7 @@ test('real SDK accepts bounded four-device read and delegates existing operator 
   const out=await f.client.callTool({name:'dc_read_file',arguments:{
    deviceId:'007windows',path:'C:\\Temp\\parity-canary.txt',offset:0,length:20
   }});
-  assert.equal(out.isError,false);
+  assert.notEqual(out.isError,true); // MCP success may omit isError
   assert.equal(out.content[0].text,'FIXTURE_READ_ONLY');
   assert.deepEqual(f.calls,[{deviceId:'007windows',name:'read_file',arguments:{
    path:'C:\\Temp\\parity-canary.txt',offset:0,length:20
