@@ -97,7 +97,7 @@ export async function verifyOfflineRelease(dir){
  if(!top.find(e=>e.name==='source')?.isDirectory()||!top.find(e=>e.name==='release-manifest.json')?.isFile())throw error('UNEXPECTED_ARTIFACT_CONTENT');
  const m=JSON.parse(await readFile(join(root,'release-manifest.json'),'utf8'));
  const keys=['schema','deviceId','releaseName','sourceCommit','reviewedTargetCommit','files','buildSha256','authority','executingProcessIdentity','rollbackBuild','deployPermission'];
- if(!exactKeys(m,keys)||m.authority!=='UNSIGNED_LOCAL_CANDIDATE'||m.executingProcessIdentity!=='UNVERIFIED'||m.rollbackBuild!=='UNVERIFIED'||m.deployPermission!=='NONE'||!SHA.test(m.buildSha256))throw error('MANIFEST_NOT_OFFLINE_CANDIDATE');
+ if(!exactKeys(m,keys)||m.schema!==SCHEMA||m.authority!=='UNSIGNED_LOCAL_CANDIDATE'||m.executingProcessIdentity!=='UNVERIFIED'||m.rollbackBuild!=='UNVERIFIED'||m.deployPermission!=='NONE'||!SHA.test(m.buildSha256))throw error('MANIFEST_NOT_OFFLINE_CANDIDATE');
  const core=coreFrom(m);
  if(digestCore(core)!==m.buildSha256)throw error('MANIFEST_DIGEST_INVALID');
  const directory=join(root,'source');
