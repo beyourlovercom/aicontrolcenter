@@ -177,53 +177,97 @@ modify runtime identities, secrets, token issuers or deployment policy.
   https://developers.openai.com/api/docs/guides/tools-connectors-mcp
 
 
-## 7. Public OAuth discovery probe — 2026-10-15 (not a secret probe)
+## 7. Public OAuth discovery probe — verified full Cloudflare Managed OAuth chain, 2026-10-15
 
-A nonauthenticated **public HTTPS** check was performed through the
-already-authorized official Desktop Commander on US Mac mini. It did not
-read service files, session secrets, bearer/JWT values, proxy credentials,
-private environment or response bodies. Only HTTP status, content-type
-category and presence of an OAuth challenge were reported.
+### 7.1 Owner UI evidence
 
-| HTTPS GET path on `mcp.beyourlover.com` | HTTP | Content type class | Bearer challenge |
-|---|---|---|---|
-| `/.well-known/oauth-protected-resource` | 401 | HTML, not JSON | Absent |
-| `/.well-known/oauth-protected-resource/oauth/mcp` | 401 | HTML, not JSON | Absent |
-| `/.well-known/oauth-authorization-server` | 401 | HTML, not JSON | Absent |
-| `/.well-known/oauth-authorization-server/oauth/mcp` | 401 | not separately classified | unknown |
-| `/.well-known/openid-configuration` | 401 | not separately classified | unknown |
-| `/healthz` | 200 | not classified | not applicable |
-| `/oauth/mcp` unauthenticated GET | 401 | not classified | not classified |
+Owner screenshot of Cloudflare Zero Trust > Access controls > Applications >
+"BYL MCP OAuth Production" > OAuth settings shows **Managed OAuth ON**
+and two ChatGPT callback URI entries. It is an edit view, thus does not
+independently prove the settings were saved. No values were changed/saved.
+The HTTPS response evidence below independently verifies a Managed OAuth
+challenge is active at the live public hostname.
 
-**Implication:** the public protected-resource metadata on the current MCP
-hostname is not accessible as the JSON document expected by the documented
-MCP OAuth discovery flow; the 401 HTML response does not advertise a
-`WWW-Authenticate: Bearer resource_metadata="..."` challenge in the tested
-cases. This is a separate actionable publication/routing concern from
-validating a user access token. It does *not* prove the actual authorization
-server uses this same hostname, or that a previously connected plugin is
-using OAuth rather than a preconfigured legacy bearer.
+Cloudflare's documented Managed OAuth sends **opaque** OAuth access tokens
+to clients; Cloudflare resolves them at the edge and forwards its **signed
+Cf-Access-Jwt-Assertion** to the origin. The origin must cryptographically
+validate the JWT and apply server-owned Operator Policy. An extra OAuth-JWT
+access-token verifier (Draft PR #76) does not apply to Cloudflare's opaque
+client token unless an independent OAuth issuer is actually in use.
+Sources:
+- https://developers.cloudflare.com/cloudflare-one/access-controls/applications/http-apps/managed-oauth/
+- https://developers.cloudflare.com/cloudflare-one/access-controls/applications/linked-app-token/
 
-**Required next evidence and correction gate:**
-1. Identify the **actual** ChatGPT connector auth mode and canonical MCP
-   protected-resource URL (no tokens/headers or user account identifiers).
-2. Identify the authorized external AS issuer hostname via an approved
-   service-owner public metadata contract; do not guess one and do not
-   publish private issuer configuration as an incidental leak.
-3. Where OAuth is used, permit only the **public metadata** GET resource to
-   return reviewed JSON containing the real resource and AS URLs; the AS must
-   expose its own discovery metadata on its configured hostname.
-4. Preserve protection of `/oauth/mcp` and all tool endpoints. A 200 public
-   metadata response is **not** permission to relax Cloudflare Access,
-   bearer validation, per-user scopes, installed Operator Policy or auditing.
-5. Any Cloudflare or Production routing update requires independent
-   Owner authorization, isolated staged tests, exact rollback, and
-   credential-free HTTP verification (JSON schema, HTTPS, CORS as applicable,
-   unauthorized tool calls still 401).
-6. Repeat ChatGPT provider refresh only once both real per-user identity and
-   public metadata readiness are established. Avoid further blind reconnect
-   loops.
+### 7.2 Credential-free public URL tests
 
-OpenAI source: https://developers.openai.com/plugins/build/auth
-— protected-resource metadata discovery and `WWW-Authenticate` requirements.
+Using official Desktop Commander on US Mac mini, read ONLY public HTTPS
+status, content-type classification and presence of OAuth standard fields.
+Never sent a bearer, cookie, JWT or Cloudflare API credential; no response
+body/token values were printed or saved.
 
+| Path and discovery method | HTTP | Result |
+|---|---|---|
+| GET \`https://mcp.beyourlover.com/oauth/mcp\` unauthenticated | **401 JSON** | **Bearer** \`WWW-Authenticate\` header with \`resource_metadata\` URI |
+| Follow **exact resource_metadata URI** supplied by challenge | **200 JSON** | Resource matches the MCP origin; has \`authorization_servers\`, Cloudflare protected-resource metadata marker |
+| Follow listed Cloudflare Access AS issuer to \`/.well-known/oauth-authorization-server\` | **200 JSON** | Issuer matches listed AS; authorization endpoint, token endpoint, client registration endpoint; **PKCE S256** supported |
+| Naïve GET \`/.well-known/oauth-protected-resource\` on MCP hostname | 401 HTML | Not the metadata URI advertised by Cloudflare's actual challenge |
+| Naïve GET \`/.well-known/oauth-authorization-server\` on MCP hostname | 401 HTML | Not the actual listed Cloudflare Access AS issuer hostname |
+| GET \`/healthz\` | 200 | Normal health |
+
+**Correction to prior interim hypothesis:** The canonical bare MCP-host
+\`/.well-known/oauth-*\` probes were insufficient. Cloudflare advertises an
+alternate **\`/.well-known/cloudflare-access-protected-resource/...\`**
+URI in the Bearer challenge, and that exact URI returns valid public JSON.
+The AS is a different authorized \`*.cloudflareaccess.com\` hostname whose
+metadata also returns valid JSON. Therefore public OAuth *discovery* has
+**PASS** evidence. Do NOT make metadata-only Cloudflare bypass rules or
+change Managed OAuth on the basis of earlier naive 401 results.
+
+This PASS does NOT prove the origin got a verified user JWT, that the
+installed Operator Policy authorized the operator, that the feature flag
+was ON during ChatGPT refresh, or that five new named actions have been
+registered and discovered. These remain independent live gates.
+
+### 7.3 Narrowed next gates
+
+1. Keep Cloudflare Managed OAuth and both allowed ChatGPT redirect URIs
+   unchanged; do not modify Cloudflare, issuance, session lifetime, scopes
+   or token policy without a separate approved change.
+2. Existing A4 runtime already exposes a Cloudflare JWT verification hook
+   (\`resolveAccessPrincipal\`) and requires the installed
+   \`canExposeRemoteCall\` and \`authorizeRemoteCall\` gates. Verify using
+   a **previously approved, non-sensitive and policy-compliant** attestation
+   that a real operator request is classified as \`cloudflare-access\` and
+   passes Operator Policy; emit booleans / registered name count only,
+   never tokens, subjects, headers, private files, audit contents or env.
+   Prior platform-blocked private service introspection MUST NOT be
+   reproduced via alternate tools.
+3. Independently determine whether Core-5 is Flag-ON during discovery and
+   whether the **backend** tools/list for a legitimately verified operator
+   advertises exactly 9 names. Do not infer from static READY or code mocks.
+4. Only when authenticated backend 9-tool list passes, refresh the
+   ChatGPT plugin action schema and verify the five newly invocable \`dc_*\`
+   names. Existing ChatGPT action inventory was 4 legacy/0 direct on
+   prior rechecks.
+5. 4-device fixed innocuous read-only Owner UAT, ACL denial/audit proof,
+   rollout/rollback confirmation are mandatory for stage closure.
+6. Draft PR #73 is only the **both-credentials** precedence corner case;
+   normal Cloudflare Managed OAuth client opaque bearer plus injected
+   validated CF JWT should already follow the CF verifier when the
+   bearer does not equal the internal static service token. Do not claim
+   PR #73 alone solves current missing-tool discovery.
+7. Draft PR #76 is an **unwired JWT client-token candidate**, not a fix
+   for Cloudflare-issued opaque tokens. Keep it Draft unless an actual
+   independently verified JWT issuer integration is required.
+
+## 8. Revised R3 disposition
+
+- Public OAuth discovery: **PASS** (challenge -> actual resource metadata
+  -> actual Cloudflare AS metadata, including DCR and PKCE S256).
+- Origin user identity / operator policy: **NOT YET PROVEN LIVE**.
+- Feature-flag state during provider schema discovery: **NOT YET PROVEN**.
+- Backend 9-tool authorized tools/list: **NOT YET PROVEN**.
+- ChatGPT five *newly invocable* direct actions: **NOT YET PROVEN**.
+- Four-device Owner UAT: **NOT STARTED**.
+- No secret/profile/token inspection, Cloudflare mutation, device restart,
+  PR merge, Production runtime write or browser reconnect in this step.
