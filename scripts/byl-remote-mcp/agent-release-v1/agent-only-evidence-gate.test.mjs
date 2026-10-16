@@ -89,8 +89,14 @@ test('unapproved key fingerprint or substituted trust root is rejected',()=>{
 test('same signer for deployment and runtime observation is rejected',()=>{
   const f=createFixture();
   f.trustRoots['runtime-observer']=f.trustRoots.deployment;
-  f.receipts['runtime-observer']=f.receipt('runtime-observer');
-  assert.throws(()=>verifyAgentOnlyReceipts(f),/UNAPPROVED_KEY_FINGERPRINT/);
+  const body=f.receipt('runtime-observer').body;
+  // Authenticate the runtime claim using the SAME key as deployment;
+  // this must fail independence even if both signatures are valid.
+  f.receipts['runtime-observer']={
+    body,keyFingerprint:f.trustRoots.deployment.approvedFingerprint,
+    signatureBase64:sign(null,signingBytes(body),f.keys.deployment.privateKey).toString('base64')
+  };
+  assert.throws(()=>verifyAgentOnlyReceipts(f),/INDEPENDENT_ISSUERS_REQUIRED/);
 });
 test('Oct 13 running process cannot be claimed to run Oct 16 signed source',()=>{
   const f=createFixture();
