@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {mkdtemp, mkdir, writeFile,readFile,symlink,rename,rm} from 'node:fs/promises';
+import {mkdtemp, mkdir, writeFile,readFile,symlink,rename,rm,chmod} from 'node:fs/promises';
 import {join} from 'node:path';
 import {tmpdir} from 'node:os';
 import {createOfflineRelease,verifyOfflineRelease,assessOfflineCandidate} from './agent-versioned-release.mjs';
@@ -41,6 +41,7 @@ test('source file tampering after packaging detected',async()=>{
  const a=await fixture();
  try{
   await createOfflineRelease(a.params);
+  await chmod(join(a.params.outputDir,'source','agent-entry.mjs'),0o644);
   await writeFile(join(a.params.outputDir,'source','agent-entry.mjs'),"export const hijack=true;\n");
   await assert.rejects(verifyOfflineRelease(a.params.outputDir),/SOURCE_DIGEST_INVALID|SOURCE_TYPE_DENIED/);
  }finally{await a.cleanup()}
@@ -51,6 +52,7 @@ test('manifest tampering detected',async()=>{
   await createOfflineRelease(a.params);
   const p=join(a.params.outputDir,'release-manifest.json');
   const obj=JSON.parse(await readFile(p,'utf8'));obj.sourceCommit='c'.repeat(40);
+  await chmod(p,0o644);
   await writeFile(p,JSON.stringify(obj));
   await assert.rejects(verifyOfflineRelease(a.params.outputDir),/MANIFEST_DIGEST_INVALID/);
  }finally{await a.cleanup()}
