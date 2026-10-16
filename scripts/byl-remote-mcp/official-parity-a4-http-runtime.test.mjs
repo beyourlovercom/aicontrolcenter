@@ -224,3 +224,70 @@ test('client abort before response completes closes MCP session exactly once',as
  assert.equal(servers[0].closed,1);
  assert.equal(transports[0].closed,1);
 });
+
+
+test('verified operator takes precedence when bearer and Access JWT are both present',async()=>{
+ const f=fixture({on:true});createCredentialFreeOAuthHttpRuntime(f.args);
+ const {res}=await invoke(f,'post','/oauth/mcp',{
+  authorization:'Bearer '+f.bearer,
+  'cf-access-jwt-assertion':'valid-authorized-identity'
+ });
+ assert.equal(res.statusCode,200);
+ assert.equal(res.body.principal,'cloudflare-access');
+ assert.deepEqual(res.body.names.filter(name=>name.startsWith('dc_')),[
+  'dc_read_file','dc_list_directory','dc_get_file_info',
+  'dc_list_sessions','dc_list_processes'
+ ]);
+ assert.equal(res.body.names.length,9);
+ assert.equal(f.agentCalls.length,0);
+});
+
+test('verified read-only Access principal is not promoted by a valid internal bearer',async()=>{
+ const f=fixture({on:true});createCredentialFreeOAuthHttpRuntime(f.args);
+ const {res}=await invoke(f,'post','/oauth/mcp',{
+  authorization:'Bearer '+f.bearer,
+  'cf-access-jwt-assertion':'valid-readonly-identity'
+ });
+ assert.equal(res.statusCode,200);
+ assert.equal(res.body.principal,'cloudflare-access');
+ assert.deepEqual(res.body.names,[
+  'remote_list_devices','remote_list_tools','remote_process_selftest'
+ ]);
+});
+
+test('bad or malformed Access assertion with a valid bearer is rejected, not downgraded',async()=>{
+ const f=fixture({on:true});createCredentialFreeOAuthHttpRuntime(f.args);
+ for(const assertion of ['forged','',[],['valid-authorized-identity'],'x'.repeat(8193)]){
+  const {res}=await invoke(f,'post','/oauth/mcp',{
+   authorization:'Bearer '+f.bearer,
+   'cf-access-jwt-assertion':assertion
+  });
+  assert.equal(res.statusCode,401);
+  assert.equal(res.body.error.message,'Unauthorized');
+ }
+ assert.equal(servers.length,0);
+ assert.equal(f.agentCalls.length,0);
+});
+
+test('verified Access operator does not need the internal service bearer',async()=>{
+ const f=fixture({on:true});createCredentialFreeOAuthHttpRuntime(f.args);
+ const {res}=await invoke(f,'post','/oauth/mcp',{
+  authorization:'Bearer invalid-bearer',
+  'cf-access-jwt-assertion':'valid-authorized-identity'
+ });
+ assert.equal(res.statusCode,200);
+ assert.equal(res.body.principal,'cloudflare-access');
+ assert.equal(res.body.names.length,9);
+});
+
+test('Core-5 OFF preserves original four tools for verified dual credentials',async()=>{
+ const f=fixture({on:false});createCredentialFreeOAuthHttpRuntime(f.args);
+ const {res}=await invoke(f,'post','/oauth/mcp',{
+  authorization:'Bearer '+f.bearer,
+  'cf-access-jwt-assertion':'valid-authorized-identity'
+ });
+ assert.equal(res.statusCode,200);
+ assert.equal(res.body.principal,'cloudflare-access');
+ assert.equal(res.body.names.length,4);
+ assert.equal(res.body.names.some(name=>name.startsWith('dc_')),false);
+});
