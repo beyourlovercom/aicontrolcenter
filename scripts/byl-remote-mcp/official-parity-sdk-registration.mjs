@@ -47,6 +47,11 @@ export function registerOfficialParityV1({
   let approved;
   try{approved=authorizeRemoteCall(p,deviceId,name,args);}
   catch(e){try{audit('deny',deviceId,name);}catch{}throw e;}
+  if(approved?.name!==name||approved?.arguments===null||
+     typeof approved?.arguments!=='object'||Array.isArray(approved?.arguments)){
+   try{audit('deny',deviceId,name);}catch{}
+   throw Error('PARITY_AUTHORIZATION_INVALID');
+  }
   audit('allow',deviceId,name);
   return approved;
  };
