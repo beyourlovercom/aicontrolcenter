@@ -128,6 +128,26 @@ test('precall audit denial fails closed with no tool execution',async()=>{
     assert.equal(h.calls.length,0);
   }finally{await h.close()}
 });
+
+test('post-execution audit failure preserves success and quarantines further tools',async()=>{
+  const h=await harness({auditEvent:async rec=>{
+    if(rec.event==='tool_result') throw Error('synthetic sink unavailable');
+  }});
+  try{
+    const first=await h.ask('POST','/v1/call',{name:'read_file',arguments:{path:'first'}});
+    assert.equal(first.status,200);
+    assert.equal(first.data.result.content[0].text,'synthetic-fixture');
+    assert.equal(first.data.auditState,'DEGRADED_POST_EXECUTION');
+    assert.equal(h.calls.length,1);
+    const second=await h.ask('POST','/v1/call',{name:'read_file',arguments:{path:'second'}});
+    assert.equal(second.status,503);
+    assert.equal(second.data.errorCode,'DC_AGENT_AUDIT_DEGRADED');
+    assert.equal(h.calls.length,1);
+    const health=await h.ask('GET','/healthz',undefined,{unsigned:true});
+    assert.equal(health.status,503);
+    assert.equal(health.data.auditHealthy,false);
+  }finally{await h.close()}
+});
 test('oversize delegated result does not expose content',async()=>{
   const h=await harness({callTool:async()=>({content:[{type:'text',text:'X'.repeat(80_000)}]})});
   try{
