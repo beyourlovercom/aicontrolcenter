@@ -105,3 +105,25 @@ After upstream schema/provenance is supplied: approximately **8–14 engineering
 If separately authorized, inspect only sanitized metadata for transport framing (request/response content type, declared length versus serialized byte count, and where the existing bound is applied) and for page hints (presence and names of typed limit/offset/cursor, continuation, summary, or truncation fields). Preserve the no-live-payload rule and do not infer a schema from keyword presence alone.
 
 This new evidence does not claim a fix, implementation readiness, or UAT PASS.
+
+## P2 bounded public helper implementation — 2026-10-16
+
+Owner authorization permits this narrow public-only implementation in the isolated P2 branch. The implementation is limited to:
+
+- `scripts/byl-remote-mcp/p2-bounded-mcp-response.mjs`
+- `scripts/byl-remote-mcp/p2-bounded-mcp-response.test.mjs`
+- this appended work-package record
+
+The helper is pure and performs no network, filesystem, process, service, OAuth, credential, Cloudflare, device, or production operation. It accepts only a synthetic/documented MCP `CallToolResult` shape containing exactly one `{type: "text", text}` block for the intended `list_processes` integration point. It rejects error results, unsupported/multiple/non-text content, embedded NUL, invalid UTF-16/UTF-8 text, and input beyond the safe public helper cap. It does not unwrap an unknown Agent response, infer private fields, or print/echo rejected content.
+
+The snapshot is versioned and marked `partial: true`, carries a SHA-256 content identity and total UTF-16 character count, and retains the source text only in a non-enumerable immutable in-memory payload. The content hash detects content mismatch; it is not freshness, replay, or generation protection. A future bridge must bind pages to the specific in-memory snapshot instance and enforce its own request lifetime/identity policy; it must not treat `snapshotId` alone as stale protection. Pages carry `start`, `end`, `next`, `total`, snapshot identity, and page hash. Page boundaries are validated against surrogate pairs; the original text, including quotes, backslashes, Unicode, CRLF, and intentional blank tails, reconstructs exactly when pages are concatenated. Each serialized page, including the outer `{result: page}` transport envelope, is bounded below both 65,536 JavaScript characters and 65,536 UTF-8 bytes. The helper never silently truncates: a continuation is explicit, and malformed/tampered/invalid requests fail closed with fixed non-content-bearing codes.
+
+### Integration contract and STOP
+
+This module is an offline response gate and pagination primitive only. A future public bridge may call `snapshotListProcessesResponse` after receiving a verified upstream MCP `CallToolResult`, then call `pageListProcessesSnapshot` for a requested page. The bridge must bind all pages to the same snapshot and must not combine pages from different calls, infer process ordering, or use this helper to split arbitrary JSON records. The real installed Agent bridge may call `callTool` and return a JSON response with a `result`, but its exact private schema is intentionally not asserted here and is not changed by this work.
+
+STOP immediately for any request to inspect or edit private Agent implementation, launch or restart a live Agent/OAuth service, access credentials/Cloudflare, retrieve live process payloads, modify the transport cap, edit Core-5/A4.1/OAuth code, or write to production. Upstream Agent integration remains a separate Owner-gated work package requiring authoritative schema/provenance evidence. This helper does not establish deployed Mac functionality, cause analysis, integration readiness, or a Human/Owner UAT PASS.
+
+### Synthetic UAT and verification record
+
+Synthetic tests cover small and approximately 107,432-character process-like text, Chinese and emoji UTF-8 pressure including the full outer result envelope, escaped quotes/backslashes, CRLF and blank tails, exact boundaries, malformed/error/non-text/multiple-text/NUL/lone-surrogate/oversized input, content-hash identity versus snapshot-instance lifetime, metadata rejection, invalid options/offsets/limits, and unauthorized context-shaped inputs. UAT is synthetic only; no live Mac, Agent, OAuth service, device, or production system was used.
