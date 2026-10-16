@@ -175,3 +175,55 @@ modify runtime identities, secrets, token issuers or deployment policy.
   https://developers.openai.com/plugins/build/mcp-server
 - OpenAI MCP tool discovery and bearer authentication:
   https://developers.openai.com/api/docs/guides/tools-connectors-mcp
+
+
+## 7. Public OAuth discovery probe — 2026-10-15 (not a secret probe)
+
+A nonauthenticated **public HTTPS** check was performed through the
+already-authorized official Desktop Commander on US Mac mini. It did not
+read service files, session secrets, bearer/JWT values, proxy credentials,
+private environment or response bodies. Only HTTP status, content-type
+category and presence of an OAuth challenge were reported.
+
+| HTTPS GET path on `mcp.beyourlover.com` | HTTP | Content type class | Bearer challenge |
+|---|---|---|---|
+| `/.well-known/oauth-protected-resource` | 401 | HTML, not JSON | Absent |
+| `/.well-known/oauth-protected-resource/oauth/mcp` | 401 | HTML, not JSON | Absent |
+| `/.well-known/oauth-authorization-server` | 401 | HTML, not JSON | Absent |
+| `/.well-known/oauth-authorization-server/oauth/mcp` | 401 | not separately classified | unknown |
+| `/.well-known/openid-configuration` | 401 | not separately classified | unknown |
+| `/healthz` | 200 | not classified | not applicable |
+| `/oauth/mcp` unauthenticated GET | 401 | not classified | not classified |
+
+**Implication:** the public protected-resource metadata on the current MCP
+hostname is not accessible as the JSON document expected by the documented
+MCP OAuth discovery flow; the 401 HTML response does not advertise a
+`WWW-Authenticate: Bearer resource_metadata="..."` challenge in the tested
+cases. This is a separate actionable publication/routing concern from
+validating a user access token. It does *not* prove the actual authorization
+server uses this same hostname, or that a previously connected plugin is
+using OAuth rather than a preconfigured legacy bearer.
+
+**Required next evidence and correction gate:**
+1. Identify the **actual** ChatGPT connector auth mode and canonical MCP
+   protected-resource URL (no tokens/headers or user account identifiers).
+2. Identify the authorized external AS issuer hostname via an approved
+   service-owner public metadata contract; do not guess one and do not
+   publish private issuer configuration as an incidental leak.
+3. Where OAuth is used, permit only the **public metadata** GET resource to
+   return reviewed JSON containing the real resource and AS URLs; the AS must
+   expose its own discovery metadata on its configured hostname.
+4. Preserve protection of `/oauth/mcp` and all tool endpoints. A 200 public
+   metadata response is **not** permission to relax Cloudflare Access,
+   bearer validation, per-user scopes, installed Operator Policy or auditing.
+5. Any Cloudflare or Production routing update requires independent
+   Owner authorization, isolated staged tests, exact rollback, and
+   credential-free HTTP verification (JSON schema, HTTPS, CORS as applicable,
+   unauthorized tool calls still 401).
+6. Repeat ChatGPT provider refresh only once both real per-user identity and
+   public metadata readiness are established. Avoid further blind reconnect
+   loops.
+
+OpenAI source: https://developers.openai.com/plugins/build/auth
+— protected-resource metadata discovery and `WWW-Authenticate` requirements.
+
