@@ -1,0 +1,107 @@
+name: DC Agent V1 Portable Runtime Source Build
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/dc-agent-runnable-source-v1.yml'
+      - 'scripts/byl-remote-mcp/agent-release-v1/**'
+      - 'scripts/byl-remote-mcp/agent-versioned-release.mjs'
+      - 'scripts/byl-remote-mcp/package.json'
+      - 'scripts/byl-remote-mcp/package-lock.json'
+      - 'docs/60_Operations/work-packages/AICC-DC-AGENT-RUNNABLE-SOURCE-V1-WP.md'
+  workflow_dispatch:
+    inputs:
+      acknowledgement:
+        description: 'Sign ONLY source + pinned deps. No deployment or rollback'
+        type: choice
+        required: true
+        options:
+          - STOP
+          - ATTEST_PORTABLE_AGENT_SOURCE_ONLY
+
+permissions:
+  contents: read
+
+jobs:
+  portable-agent-isolated-ci:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Offline Agent source integrity and SDK stdio E2E
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash -n scripts/byl-remote-mcp/agent-release-v1/build-runnable-source-bundle.sh
+          cd scripts/byl-remote-mcp
+          npm ci --ignore-scripts --omit=dev --no-audit --no-fund
+          node --test agent-release-v1/agent-core.test.mjs agent-release-v1/agent-integration.test.mjs
+          cd ../..
+          bash scripts/byl-remote-mcp/agent-release-v1/build-runnable-source-bundle.sh "$RUNNER_TEMP/aicc-agent-runtime-source"
+          grep -q '"deployPermission": "NONE"' "$RUNNER_TEMP/aicc-agent-runtime-source/offline-bundle/release-manifest.json"
+          grep -q '"executingProcessIdentity": "UNVERIFIED"' "$RUNNER_TEMP/aicc-agent-runtime-source/offline-bundle/release-manifest.json"
+          test -f "$RUNNER_TEMP/aicc-agent-runtime-source/aicc-agent-runnable-source.tar"
+          mkdir "$RUNNER_TEMP/extracted-agent-evidence"
+          tar -xf "$RUNNER_TEMP/aicc-agent-runtime-source/aicc-agent-runnable-source.tar" -C "$RUNNER_TEMP/extracted-agent-evidence"
+          node scripts/byl-remote-mcp/agent-versioned-release.mjs verify "$RUNNER_TEMP/extracted-agent-evidence/offline-bundle"
+          (cd "$RUNNER_TEMP/extracted-agent-evidence" && sha256sum -c locked-dependencies/SHA256SUMS)
+
+  source-attestation-owner-only:
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.acknowledgement == 'ATTEST_PORTABLE_AGENT_SOURCE_ONLY'
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+      artifact-metadata: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Assemble pinned Agent source and verify SDK import
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF" = refs/heads/main
+          bash scripts/byl-remote-mcp/agent-release-v1/build-runnable-source-bundle.sh "$RUNNER_TEMP/aicc-agent-runtime-source"
+          grep -q '"deployPermission": "NONE"' "$RUNNER_TEMP/aicc-agent-runtime-source/offline-bundle/release-manifest.json"
+          mkdir "$RUNNER_TEMP/approved-agent-readback"
+          tar -xf "$RUNNER_TEMP/aicc-agent-runtime-source/aicc-agent-runnable-source.tar" -C "$RUNNER_TEMP/approved-agent-readback"
+          node scripts/byl-remote-mcp/agent-versioned-release.mjs verify "$RUNNER_TEMP/approved-agent-readback/offline-bundle"
+          (cd "$RUNNER_TEMP/approved-agent-readback" && sha256sum -c locked-dependencies/SHA256SUMS)
+      - name: Attest source tar via native GitHub OIDC Sigstore
+        id: attestation
+        uses: actions/attest@v4
+        with:
+          subject-path: ${{ runner.temp }}/aicc-agent-runtime-source/aicc-agent-runnable-source.tar
+      - name: Verify signature subject and GitHub source identity
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BUNDLE_PATH: ${{ steps.attestation.outputs.bundle-path }}
+        run: |
+          set -euo pipefail
+          test -f "$BUNDLE_PATH"
+          gh attestation verify "$RUNNER_TEMP/aicc-agent-runtime-source/aicc-agent-runnable-source.tar" \
+            --bundle "$BUNDLE_PATH" \
+            --repo beyourlovercom/aicontrolcenter \
+            --signer-workflow beyourlovercom/aicontrolcenter/.github/workflows/dc-agent-runnable-source-v1.yml \
+            --source-ref refs/heads/main \
+            --source-digest "$GITHUB_SHA" \
+            --deny-self-hosted-runners
+      - name: Retain source-only signed subject
+        uses: actions/upload-artifact@v4
+        with:
+          name: aicc-agent-runnable-source-${{ github.sha }}
+          path: ${{ runner.temp }}/aicc-agent-runtime-source/aicc-agent-runnable-source.tar
+          retention-days: 14
+          if-no-files-found: error
