@@ -62,9 +62,25 @@ jobs:
           bash scripts/byl-remote-mcp/attested-public-p2-source-bundle-v1.sh "$RUNNER_TEMP/p2-public-source"
           grep -q '"deployPermission": "NONE"' "$RUNNER_TEMP/p2-public-source/offline-bundle/release-manifest.json"
       - name: Attest public source tar digest using GitHub OIDC identity
+        id: attest
         uses: actions/attest@v4
         with:
           subject-path: ${{ runner.temp }}/p2-public-source/aicc-p2-public-source.tar
+      - name: Independently verify signed source ref and signer identity
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ATTESTATION_BUNDLE: ${{ steps.attest.outputs.bundle-path }}
+        run: |
+          set -euo pipefail
+          test -f "$ATTESTATION_BUNDLE"
+          gh attestation verify "$RUNNER_TEMP/p2-public-source/aicc-p2-public-source.tar" \
+            --bundle "$ATTESTATION_BUNDLE" \
+            --repo beyourlovercom/aicontrolcenter \
+            --signer-workflow beyourlovercom/aicontrolcenter/.github/workflows/dc-agent-attested-public-source-v1.yml \
+            --source-ref refs/heads/main \
+            --source-digest "$GITHUB_SHA" \
+            --deny-self-hosted-runners
       - name: Retain source-only artifact for independent signature verification
         uses: actions/upload-artifact@v4
         with:
