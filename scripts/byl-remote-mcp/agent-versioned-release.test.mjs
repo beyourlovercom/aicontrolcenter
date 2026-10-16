@@ -133,6 +133,15 @@ test('output directory inside source forbidden',async()=>{
  try{await assert.rejects(createOfflineRelease({...a.params,outputDir:join(a.params.sourceDir,'release')}),/SOURCE_OUTPUT_OVERLAP/)}
  finally{await a.cleanup()}
 });
+test('reject output parent symlink resolving inside source directory',async()=>{
+ const a=await fixture();
+ try{
+  const alias=join(a.base,'source-alias');
+  await symlink(a.params.sourceDir,alias,'dir');
+  await assert.rejects(createOfflineRelease({...a.params,outputDir:join(alias,'release')}),/SOURCE_OUTPUT_OVERLAP/);
+  await assert.rejects(stat(join(a.params.sourceDir,'release')),{code:'ENOENT'});
+ }finally{await a.cleanup()}
+});
 test('four-device allowlist enforced',async()=>{
  const a=await fixture();
  try{await assert.rejects(createOfflineRelease({...a.params,deviceId:'unknown-mac'}),/BUNDLE_METADATA_INVALID/)}
