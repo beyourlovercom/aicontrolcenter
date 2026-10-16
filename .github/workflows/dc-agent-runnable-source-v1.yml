@@ -47,6 +47,10 @@ jobs:
           grep -q '"deployPermission": "NONE"' "$RUNNER_TEMP/aicc-agent-runtime-source/offline-bundle/release-manifest.json"
           grep -q '"executingProcessIdentity": "UNVERIFIED"' "$RUNNER_TEMP/aicc-agent-runtime-source/offline-bundle/release-manifest.json"
           test -f "$RUNNER_TEMP/aicc-agent-runtime-source/aicc-agent-runnable-source.tar"
+          mkdir "$RUNNER_TEMP/extracted-agent-evidence"
+          tar -xf "$RUNNER_TEMP/aicc-agent-runtime-source/aicc-agent-runnable-source.tar" -C "$RUNNER_TEMP/extracted-agent-evidence"
+          node scripts/byl-remote-mcp/agent-versioned-release.mjs verify "$RUNNER_TEMP/extracted-agent-evidence/offline-bundle"
+          (cd "$RUNNER_TEMP/extracted-agent-evidence" && sha256sum -c locked-dependencies/SHA256SUMS)
 
   source-attestation-owner-only:
     if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.acknowledgement == 'ATTEST_PORTABLE_AGENT_SOURCE_ONLY'
@@ -70,6 +74,10 @@ jobs:
           test "$GITHUB_REF" = refs/heads/main
           bash scripts/byl-remote-mcp/agent-release-v1/build-runnable-source-bundle.sh "$RUNNER_TEMP/aicc-agent-runtime-source"
           grep -q '"deployPermission": "NONE"' "$RUNNER_TEMP/aicc-agent-runtime-source/offline-bundle/release-manifest.json"
+          mkdir "$RUNNER_TEMP/approved-agent-readback"
+          tar -xf "$RUNNER_TEMP/aicc-agent-runtime-source/aicc-agent-runnable-source.tar" -C "$RUNNER_TEMP/approved-agent-readback"
+          node scripts/byl-remote-mcp/agent-versioned-release.mjs verify "$RUNNER_TEMP/approved-agent-readback/offline-bundle"
+          (cd "$RUNNER_TEMP/approved-agent-readback" && sha256sum -c locked-dependencies/SHA256SUMS)
       - name: Attest source tar via native GitHub OIDC Sigstore
         id: attestation
         uses: actions/attest@v4
