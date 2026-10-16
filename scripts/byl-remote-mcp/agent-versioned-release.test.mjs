@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {mkdtemp, mkdir, writeFile,readFile,symlink,rename,rm,chmod} from 'node:fs/promises';
+import {mkdtemp, mkdir, writeFile,readFile,symlink,rename,rm,chmod,stat} from 'node:fs/promises';
 import {join} from 'node:path';
 import {tmpdir} from 'node:os';
 import {createOfflineRelease,verifyOfflineRelease,assessOfflineCandidate} from './agent-versioned-release.mjs';
@@ -37,6 +37,30 @@ test('identical staged inputs produce same immutable release digest',async()=>{
   assert.equal(x.buildSha256,y.buildSha256);
  }finally{await a.cleanup();await b.cleanup()}
 });
+test('deterministic ordinal filename order supports punctuation and underscores',async()=>{
+ const a=await fixture();
+ try{
+  await writeFile(join(a.params.sourceDir,'a-b.mjs'),'export const a=1;\n');
+  await writeFile(join(a.params.sourceDir,'a_mjs.mjs'),'export const b=2;\n');
+  const out=await createOfflineRelease(a.params);
+  assert.equal(out.integrityVerified,true);
+  const m=JSON.parse(await readFile(join(a.params.outputDir,'release-manifest.json'),'utf8'));
+  assert.deepEqual(m.files.map(x=>x.name),['a-b.mjs','a_mjs.mjs','agent-entry.mjs']);
+ }finally{await a.cleanup()}
+});
+
+test('clean up partial output after staged mkdir failure (nonroot POSIX)',{skip:process.platform==='win32'||typeof process.getuid!=='function'||process.getuid()===0},async()=>{
+ const a=await fixture();
+ try{
+  const prev=process.umask(0o777);
+  try{await assert.rejects(createOfflineRelease(a.params),/EACCES|EPERM/);}
+  finally{process.umask(prev)}
+  await assert.rejects(stat(a.params.outputDir),{code:'ENOENT'});
+  const ready=await createOfflineRelease(a.params);
+  assert.equal(ready.integrityVerified,true);
+ }finally{await a.cleanup()}
+});
+
 test('source file tampering after packaging detected',async()=>{
  const a=await fixture();
  try{
