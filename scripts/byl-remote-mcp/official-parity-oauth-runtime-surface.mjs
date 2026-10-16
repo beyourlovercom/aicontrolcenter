@@ -10,6 +10,7 @@
  * in-memory protocol and independent source review only until Owner release.
  */
 import {registerOAuthParityCore} from './official-parity-oauth-hook.mjs';
+import {normalizeApprovedRemoteCall} from './official-parity-terminal-compat.mjs';
 
 export const CANONICAL_DEVICE_IDS=Object.freeze([
  'us-macmini','china-mac','windows','007windows'
@@ -73,6 +74,7 @@ export function createCredentialFreeOAuthToolSurface({
    const logged=auditLegacyOperation({decision:'allow',principalHash:principal.subjectHash||'unknown',
     deviceId:id,operation:approved.name});
    if(logged!==true)throw Error('PARITY_LEGACY_AUDIT_UNAVAILABLE');
+   approved=normalizeApprovedRemoteCall(approved);
   }
   const result=await agentCall(id,approved.name,approved.arguments);
   return reply(result?.result??result);

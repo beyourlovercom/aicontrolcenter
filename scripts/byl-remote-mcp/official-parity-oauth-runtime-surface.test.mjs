@@ -125,6 +125,49 @@ test('legacy operator denial or audit refusal blocks delegated call',async()=>{
   }finally{await s.close();}
  }
 });
+test('authorized start_process without timeout receives the compatibility default',async()=>{
+ const f=source();
+ f.input.authorizeRemoteCall=(_p,_id,name,args)=>({name,arguments:{...args}});
+ const surface=createCredentialFreeOAuthToolSurface(f.input);
+ const s=await session(surface.server);
+ try{
+  const out=await s.client.callTool({name:'remote_call',arguments:{
+   deviceId:'us-macmini',name:'start_process',arguments:{command:'hostname'}
+  }});
+  assert.notEqual(out.isError,true);
+  assert.deepEqual(f.seen,[['call','us-macmini','start_process',{
+   command:'hostname',timeout_ms:3000
+  }]]);
+ }finally{await s.close();}
+});
+test('authorized explicit start_process timeout remains unchanged',async()=>{
+ const f=source();
+ f.input.authorizeRemoteCall=(_p,_id,name,args)=>({name,arguments:{...args}});
+ const surface=createCredentialFreeOAuthToolSurface(f.input);
+ const s=await session(surface.server);
+ try{
+  const out=await s.client.callTool({name:'remote_call',arguments:{
+   deviceId:'us-macmini',name:'start_process',arguments:{command:'hostname',timeout_ms:8000}
+  }});
+  assert.notEqual(out.isError,true);
+  assert.deepEqual(f.seen,[['call','us-macmini','start_process',{
+   command:'hostname',timeout_ms:8000
+  }]]);
+ }finally{await s.close();}
+});
+test('internal principal receives no terminal adapter',async()=>{
+ const f=source({principal:{kind:'internal',canOperate:true}});
+ const surface=createCredentialFreeOAuthToolSurface(f.input);
+ const s=await session(surface.server);
+ try{
+  const out=await s.client.callTool({name:'remote_call',arguments:{
+   deviceId:'windows',name:'start_process',arguments:{command:'hostname'}
+  }});
+  assert.notEqual(out.isError,true);
+  assert.deepEqual(f.seen,[['call','windows','start_process',{command:'hostname'}]]);
+  assert.equal(f.audit.length,0);
+ }finally{await s.close();}
+});
 test('missing trusted transport/policy/audit fails before constructing a production-compatible surface',()=>{
  for(const name of ['agentGet','agentCall','canExposeRemoteCall','authorizeRemoteCall','auditLegacyOperation']){
   const f=source();f.input[name]=null;
