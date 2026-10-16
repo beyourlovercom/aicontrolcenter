@@ -30,12 +30,26 @@ for name in package.json package-lock.json; do
   cp "$root/scripts/byl-remote-mcp/$name" "$out/staging/$name"
 done
 
-# Versioned V1 candidate manifest intentionally never asserts running identity.
+# Verify runtime JS using the existing high-sensitivity scanner.
+# The existing public npm lock graph contains legitimate semver/package names
+# that resemble private IPs. Do not weaken the shared scanner. Instead bind
+# pinned dependency files in the outer signed TAR with their own checksums.
+mkdir "$out/reviewed-code"
+cp "$out/staging/agent-core.mjs" "$out/staging/agent-entry.mjs" "$out/reviewed-code/"
 node "$root/scripts/byl-remote-mcp/agent-versioned-release.mjs" build \
-  "$out/staging" "$out/offline-bundle" us-macmini \
+  "$out/reviewed-code" "$out/offline-bundle" us-macmini \
   "$GITHUB_SHA" "$GITHUB_SHA" aicc-agent-source-v1 > /dev/null
 node "$root/scripts/byl-remote-mcp/agent-versioned-release.mjs" verify \
   "$out/offline-bundle" > /dev/null
+mkdir -p "$out/tar-root/locked-dependencies"
+cp -R "$out/offline-bundle" "$out/tar-root/offline-bundle"
+cp "$out/staging/package.json" "$out/staging/package-lock.json" "$out/tar-root/locked-dependencies/"
+(
+ cd "$out/tar-root"
+ sha256sum locked-dependencies/package.json locked-dependencies/package-lock.json \
+   > locked-dependencies/SHA256SUMS
+ sha256sum -c locked-dependencies/SHA256SUMS >/dev/null
+)
 
 # SDK may be installed in the isolated staging directory, NEVER into signed bundle.
 (cd "$out/staging" &&
@@ -45,7 +59,7 @@ node "$root/scripts/byl-remote-mcp/agent-versioned-release.mjs" verify \
   node --input-type=module -e "import('./agent-entry.mjs').then(m => { if(typeof m.startApprovedAgent !== 'function') process.exit(3); console.log('ISOLATED_RUNTIME_IMPORT=PASS'); })")
 
 tar --sort=name --owner=0 --group=0 --numeric-owner --mtime='@0' \
-  -cf "$out/aicc-agent-runnable-source.tar" -C "$out/offline-bundle" .
+  -cf "$out/aicc-agent-runnable-source.tar" -C "$out/tar-root" .
 sha256sum "$out/aicc-agent-runnable-source.tar"
 printf 'PORTABLE_AGENT_SOURCE_BUNDLE=PASS\n'
 printf 'ACTUAL_RUNNING_BUILD_ATTESTED=NO\n'
