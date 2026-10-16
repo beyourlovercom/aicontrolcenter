@@ -3,7 +3,7 @@
  * Reference: historical DC Agent transport contract. NOT a deployed service.
  * No environment access, SDK import, listener, secret, process control, or P2 bypass.
  */
-import {createHash, createPublicKey, verify} from 'node:crypto';
+import {createHash, createPublicKey, verify, KeyObject} from 'node:crypto';
 
 export const AGENT_RELEASE_PROTOCOL = 'aicc-dc-agent-release-source/v1';
 export const MAX_REQUEST_BYTES = 1_048_576;
@@ -71,7 +71,7 @@ export function createAgentHandler({
   clock = Date.now, maxResponseBytes = MAX_RESPONSE_BYTES
 } = {}) {
   let key;
-  try { key = createPublicKey(publicKey); }
+  try { key = publicKey instanceof KeyObject && publicKey.type === 'public' ? publicKey : createPublicKey(publicKey); }
   catch { throw Error('AGENT_PUBLIC_KEY_INVALID'); }
   if (key.asymmetricKeyType !== 'ed25519') throw Error('AGENT_PUBLIC_KEY_NOT_ED25519');
   if (typeof allowedPeer !== 'string' || !/^[0-9a-fA-F:.]{2,64}$/u.test(allowedPeer) ||
