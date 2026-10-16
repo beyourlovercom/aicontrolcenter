@@ -1,0 +1,39 @@
+name: DC Agent-only Recovery Evidence V1 Offline Gate
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/dc-agent-only-evidence-v1.yml'
+      - 'scripts/byl-remote-mcp/agent-release-v1/agent-only-evidence-gate.mjs'
+      - 'scripts/byl-remote-mcp/agent-release-v1/agent-only-evidence-gate.test.mjs'
+      - 'docs/60_Operations/work-packages/AICC-DC-AGENT-ONLY-RECOVERY-EVIDENCE-V1-WP.md'
+
+permissions:
+  contents: read
+
+jobs:
+  pure-evidence-validator:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Offline-only Agent-only evidence signature and recovery tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --check scripts/byl-remote-mcp/agent-release-v1/agent-only-evidence-gate.mjs
+          node --check scripts/byl-remote-mcp/agent-release-v1/agent-only-evidence-gate.test.mjs
+          node --test scripts/byl-remote-mcp/agent-release-v1/agent-only-evidence-gate.test.mjs
+      - name: Gate cannot deploy or assert production release
+        shell: bash
+        run: |
+          set -euo pipefail
+          gate=scripts/byl-remote-mcp/agent-release-v1/agent-only-evidence-gate.mjs
+          ! grep -En 'createServer|spawn\(|exec\(|launchctl|workflow_dispatch|service restart|process\.kill|listen\(' "$gate"
+          grep -q "agentOnlyCanary:'STOP'" "$gate"
+          grep -q "externalTrustEnrollment:'NOT_VERIFIED'" "$gate"
