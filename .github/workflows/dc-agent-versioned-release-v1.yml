@@ -1,0 +1,32 @@
+name: DC Agent Versioned Release V1 Offline CI
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'scripts/byl-remote-mcp/agent-versioned-release*.mjs'
+      - 'docs/60_Operations/work-packages/AICC-DC-AGENT-VERSIONED-RELEASE-V1-WP.md'
+      - '.github/workflows/dc-agent-versioned-release-v1.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  source-bundle-offline:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Verify no production listener / Agent launch in CI
+        shell: bash
+        run: |
+          set -euo pipefail
+          ! grep -En '(launchctl|service[[:space:]]+(start|restart)|spawn\(|exec\(|createServer\(|\.listen\(|curl[[:space:]])' scripts/byl-remote-mcp/agent-versioned-release.mjs
+      - name: Validate offline source bundle syntax
+        run: |
+          node --check scripts/byl-remote-mcp/agent-versioned-release.mjs
+          node --check scripts/byl-remote-mcp/agent-versioned-release.test.mjs
+      - name: Offline-only source integrity tests
+        run: node --test scripts/byl-remote-mcp/agent-versioned-release.test.mjs
