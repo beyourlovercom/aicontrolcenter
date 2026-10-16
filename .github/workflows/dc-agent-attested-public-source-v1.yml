@@ -1,0 +1,95 @@
+name: DC Agent Provenance V1 - P2 Public Source Attestation
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/dc-agent-attested-public-source-v1.yml'
+      - 'scripts/byl-remote-mcp/attested-public-p2-source-bundle-v1.sh'
+      - 'scripts/byl-remote-mcp/agent-versioned-release.mjs'
+      - 'scripts/byl-remote-mcp/agent-versioned-release.test.mjs'
+      - 'scripts/byl-remote-mcp/p2-attested-agent-call.mjs'
+      - 'scripts/byl-remote-mcp/p2-agent-snapshot-bridge.mjs'
+      - 'scripts/byl-remote-mcp/p2-bounded-mcp-response.mjs'
+      - 'docs/60_Operations/work-packages/AICC-DC-TRUSTED-SOURCE-ATTESTATION-V1-20261016.md'
+  workflow_dispatch:
+    inputs:
+      acknowledgement:
+        description: 'Only attest reviewed PUBLIC P2 source; never deploy Agent'
+        required: true
+        type: choice
+        options:
+          - STOP
+          - ATTEST_PUBLIC_P2_SOURCE_ONLY
+
+permissions:
+  contents: read
+
+jobs:
+  public-source-dry-run:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Validate read-only candidate build
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash -n scripts/byl-remote-mcp/attested-public-p2-source-bundle-v1.sh
+          node --test scripts/byl-remote-mcp/agent-versioned-release.test.mjs
+          bash scripts/byl-remote-mcp/attested-public-p2-source-bundle-v1.sh "$RUNNER_TEMP/p2-public-source"
+          test -f "$RUNNER_TEMP/p2-public-source/aicc-p2-public-source.tar"
+          grep -q '"deployPermission": "NONE"' "$RUNNER_TEMP/p2-public-source/offline-bundle/release-manifest.json"
+
+  attest-reviewed-public-source:
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.acknowledgement == 'ATTEST_PUBLIC_P2_SOURCE_ONLY'
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+      artifact-metadata: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Build pinned source-only candidate from main SHA
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF" = refs/heads/main
+          bash scripts/byl-remote-mcp/attested-public-p2-source-bundle-v1.sh "$RUNNER_TEMP/p2-public-source"
+          grep -q '"deployPermission": "NONE"' "$RUNNER_TEMP/p2-public-source/offline-bundle/release-manifest.json"
+      - name: Attest public source tar digest using GitHub OIDC identity
+        id: attest
+        uses: actions/attest@v4
+        with:
+          subject-path: ${{ runner.temp }}/p2-public-source/aicc-p2-public-source.tar
+      - name: Independently verify signed source ref and signer identity
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ATTESTATION_BUNDLE: ${{ steps.attest.outputs.bundle-path }}
+        run: |
+          set -euo pipefail
+          test -f "$ATTESTATION_BUNDLE"
+          gh attestation verify "$RUNNER_TEMP/p2-public-source/aicc-p2-public-source.tar" \
+            --bundle "$ATTESTATION_BUNDLE" \
+            --repo beyourlovercom/aicontrolcenter \
+            --signer-workflow beyourlovercom/aicontrolcenter/.github/workflows/dc-agent-attested-public-source-v1.yml \
+            --source-ref refs/heads/main \
+            --source-digest "$GITHUB_SHA" \
+            --deny-self-hosted-runners
+      - name: Retain source-only artifact for independent signature verification
+        uses: actions/upload-artifact@v4
+        with:
+          name: aicc-p2-public-source-${{ github.sha }}
+          path: ${{ runner.temp }}/p2-public-source/aicc-p2-public-source.tar
+          retention-days: 14
+          if-no-files-found: error
