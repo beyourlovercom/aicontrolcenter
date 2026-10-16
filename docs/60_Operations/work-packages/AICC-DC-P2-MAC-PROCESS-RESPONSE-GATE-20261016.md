@@ -91,3 +91,17 @@ After upstream schema/provenance is supplied: approximately **8–14 engineering
 - No live process content was retrieved or printed.
 - No tests were run because no implementation was authorized or added.
 - Final verification must confirm this is the only changed path and that `git diff --check` passes.
+
+## NEW EVIDENCE — 2026-10-16 inspection record (sanitized, read-only)
+
+- Repository inspection records `origin/main` at `3496d4d51771da478c5eef5884ee3b3e5b787d89`; draft PR77 CI is recorded as **SUCCESS**. This does not change the authority base or authorize implementation.
+- On the authorized US Mac mini, only `launchctl` and `ps` source metadata was used. No paths or source values were retrieved or printed. The running launchd service `com.byl.remote-mcp-us-agent` reports script basename `dc-agent-macos.mjs`, `4534` bytes, and SHA-256 public prefix `6fb0512be58a932b`. The running `com.byl.remote-mcp-gateway` reports script basename `gateway.mjs`, `5543` bytes, and SHA-256 public prefix `c59e4d1d7fabdad4`. These public prefixes and byte counts are provenance metadata only, not a full source-integrity attestation.
+- Read-only keyword analysis of the installed macOS Agent found `/v1/call`, `/v1/tools`, `callTool`, `listTools`, `JSON.stringify`, and a generic SDK server marker. It found no literal `list_processes`, `list_sessions`, `start_process`, `read_process_output`, `offset`, `cursor`, `page`, or truncation markers. The Agent therefore appears to be a bridging MCP handler in this static inspection; these findings are not evidence of the downstream tool response schema. The gateway keyword inspection found `/v1/call`, `/v1/tools`, and a proxy marker. These are static keyword findings, not full protocol proof.
+- Existing self-hosted Macs continue to show `list_processes` failure `PARITY_AGENT_RESPONSE_INVALID`; the official US Mac observation remains greater than `65k` characters. Never increase the transport bound without a validated upstream schema. The specific next step is to obtain an authorized Desktop Commander vendor/schema artifact or an isolated synthetic SDK response; no live payload may be disseminated.
+- This evidence is **READ-ONLY provenance metadata**. No service or configuration was changed, no READY restart was performed, and no private file was copied.
+
+### Optional next read-only checks
+
+If separately authorized, inspect only sanitized metadata for transport framing (request/response content type, declared length versus serialized byte count, and where the existing bound is applied) and for page hints (presence and names of typed limit/offset/cursor, continuation, summary, or truncation fields). Preserve the no-live-payload rule and do not infer a schema from keyword presence alone.
+
+This new evidence does not claim a fix, implementation readiness, or UAT PASS.
