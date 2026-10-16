@@ -6,6 +6,11 @@ on:
     paths:
       - '.github/workflows/dc-agent-attested-public-source-v1.yml'
       - 'scripts/byl-remote-mcp/attested-public-p2-source-bundle-v1.sh'
+      - 'scripts/byl-remote-mcp/agent-versioned-release.mjs'
+      - 'scripts/byl-remote-mcp/agent-versioned-release.test.mjs'
+      - 'scripts/byl-remote-mcp/p2-attested-agent-call.mjs'
+      - 'scripts/byl-remote-mcp/p2-agent-snapshot-bridge.mjs'
+      - 'scripts/byl-remote-mcp/p2-bounded-mcp-response.mjs'
       - 'docs/60_Operations/work-packages/AICC-DC-TRUSTED-SOURCE-ATTESTATION-V1-20261016.md'
   workflow_dispatch:
     inputs:
