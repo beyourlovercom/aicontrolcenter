@@ -5,7 +5,7 @@
  * An unsigned local artifact is never a trusted running-build attestation.
  */
 import {createHash} from 'node:crypto';
-import {readFile,writeFile,mkdir,readdir,lstat,stat,realpath} from 'node:fs/promises';
+import {readFile,writeFile,mkdir,readdir,lstat,stat,realpath,rm} from 'node:fs/promises';
 import {resolve,relative,sep,join,basename,dirname} from 'node:path';
 
 const SCHEMA='aicc-agent-offline-release-candidate/v1';
@@ -64,7 +64,7 @@ async function inspectSource(dir){
   scanner(bytes);
   files.push({name,size:bytes.length,sha256:hash(bytes),bytes});
  }
- files.sort((a,b)=>a.name.localeCompare(b.name,'en'));
+ files.sort((a,b)=>a.name<b.name?-1:a.name>b.name?1:0);
  return files;
 }
 function isContained(root,child){const r=relative(root,child);return r===''||(!r.startsWith('..'+sep)&&r!=='..'&&!r.startsWith(sep));}
@@ -82,13 +82,21 @@ export async function createOfflineRelease({sourceDir,outputDir,deviceId,sourceC
  const buildSha256=digestCore(core);
  const manifest={...core,buildSha256,authority:'UNSIGNED_LOCAL_CANDIDATE',
   executingProcessIdentity:'UNVERIFIED',rollbackBuild:'UNVERIFIED',deployPermission:'NONE'};
+ // Own this path only after exclusive creation; never touch a pre-existing release.
  try{await mkdir(output,{recursive:false});}catch{throw error('OUTPUT_MUST_BE_NEW');}
- await mkdir(join(output,'source'));
- for(const {name,bytes} of newFiles){await writeFile(join(output,'source',name),bytes,{mode:0o444,flag:'wx'});}
- await writeFile(join(output,'release-manifest.json'),JSON.stringify(manifest,null,2)+'\n',{mode:0o444,flag:'wx'});
- const evidence=await verifyOfflineRelease(output);
- if(!evidence.integrityVerified)throw error('POST_BUILD_VERIFICATION_FAILED');
- return Object.freeze({deviceId,releaseName,buildSha256,fileCount:files.length,...evidence});
+ try{
+  await mkdir(join(output,'source'));
+  for(const {name,bytes} of newFiles){await writeFile(join(output,'source',name),bytes,{mode:0o444,flag:'wx'});}
+  await writeFile(join(output,'release-manifest.json'),JSON.stringify(manifest,null,2)+'\n',{mode:0o444,flag:'wx'});
+  const evidence=await verifyOfflineRelease(output);
+  if(!evidence.integrityVerified)throw error('POST_BUILD_VERIFICATION_FAILED');
+  return Object.freeze({deviceId,releaseName,buildSha256,fileCount:files.length,...evidence});
+ }catch(cause){
+  // Failure before final validation cannot leave a release-shaped partial artifact.
+  // This directory was exclusively created above and contains only staged files.
+  try{await rm(output,{recursive:true,force:true});}catch{throw error('PARTIAL_RELEASE_CLEANUP_FAILED');}
+  throw cause;
+ }
 }
 export async function verifyOfflineRelease(dir){
  const root=await realpath(resolve(dir));
