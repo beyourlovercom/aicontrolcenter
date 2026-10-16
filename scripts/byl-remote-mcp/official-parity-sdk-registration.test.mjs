@@ -131,6 +131,57 @@ test('positive permission requires acknowledged audit receipt before dispatch',a
  assert.equal(sent,true);
  assert.equal(out.isError,true);
 });
+test('malformed authorization never audits allow or delegates any core named tool',async()=>{
+ const calls=[
+  ['dc_read_file',{deviceId:'us-macmini',path:'/etc/hosts'},'read_file'],
+  ['dc_list_directory',{deviceId:'us-macmini',path:'/tmp'},'list_directory'],
+  ['dc_get_file_info',{deviceId:'us-macmini',path:'/etc/hosts'},'get_file_info'],
+  ['dc_list_sessions',{deviceId:'us-macmini'},'list_sessions'],
+  ['dc_list_processes',{deviceId:'us-macmini'},'list_processes']
+ ];
+ const malformed=[
+  approved=>({...approved,name:'wrong_operation'}),
+  approved=>({name:approved.name}),
+  approved=>({...approved,arguments:[]})
+ ];
+ for(const [tool,input,operation] of calls){
+  for(const makeMalformed of malformed){
+    const f=fixture();
+   let delegated=false;
+   registerOfficialParityV1({...f,z,
+    authorizeRemoteCall:(_p,_id,name,args)=>makeMalformed({name,arguments:args}),
+    delegate:async()=>{delegated=true;return {text:'MUST_NOT_RUN'};}});
+   const out=await f.handlers.get(tool)(input);
+   assert.equal(out.isError,true,`${tool} should reject malformed authorization`);
+   assert.equal(delegated,false,`${tool} must not delegate malformed authorization`);
+   assert.deepEqual(f.auditEvents.map(({decision,operation:audited})=>({decision,operation:audited})),
+    [{decision:'deny',operation}]);
+  }
+ }
+});
+test('valid authorization contract preserves acknowledged audit before delegation',async()=>{
+ const calls=[
+  ['dc_read_file',{deviceId:'us-macmini',path:'/etc/hosts'},'read_file'],
+  ['dc_list_directory',{deviceId:'us-macmini',path:'/tmp'},'list_directory'],
+  ['dc_get_file_info',{deviceId:'us-macmini',path:'/etc/hosts'},'get_file_info'],
+  ['dc_list_sessions',{deviceId:'us-macmini'},'list_sessions'],
+  ['dc_list_processes',{deviceId:'us-macmini'},'list_processes']
+ ];
+ for(const [tool,input,operation] of calls){
+  const f=fixture();
+  let audited=false;
+  let delegated=false;
+  registerOfficialParityV1({...f,z,
+   auditOperation:entry=>{f.auditEvents.push(entry);audited=entry.decision==='allow';return true;},
+   delegate:async()=>{assert.equal(audited,true);delegated=true;return {text:'OK'};}});
+  const out=await f.handlers.get(tool)(input);
+  assert.equal(out.isError,undefined,`${tool} valid authorization should pass`);
+  assert.equal(delegated,true,`${tool} valid authorization should delegate`);
+  assert.equal(audited,true);
+  assert.deepEqual(f.auditEvents.map(({decision,operation:auditedOperation})=>
+   ({decision,operation:auditedOperation})),[{decision:'allow',operation}]);
+ }
+});
 test('audited direct read excludes raw paths, command args and response contents',async()=>{
  const f=fixture();
  registerOfficialParityV1({...f,z});
