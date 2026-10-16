@@ -99,10 +99,6 @@ function checkReceipt(role,receipt,root){
       if(typeof v!=='string'||!TOKEN.test(v))deny('PROCESS_START_TOKEN_INVALID');
     }
   }
-  if(issued<utc(Object.values(payload).filter((_,i)=>Object.keys(payload)[i].endsWith('At')).sort().at(-1)||b.issuedAt)){
-    // This precheck is supplemented by the explicit temporal constraints below.
-    // No operation is released based on issuer timestamps alone.
-  }
   return {body:b,payload,issued,fingerprint};
 }
 
