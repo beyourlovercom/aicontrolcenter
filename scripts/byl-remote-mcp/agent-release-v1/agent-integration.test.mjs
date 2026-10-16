@@ -71,3 +71,27 @@ test('complete SDK stdio to HTTP Agent flow uses fake MCP fixture only',async()=
 test('new Agent fails closed when private release-service injection is absent',async()=>{
   await assert.rejects(startApprovedAgent({env:{}}),/AGENT_PRIVATE_FILE_PATH_INVALID/);
 });
+
+test('startup validation failure closes previously created SDK bridge',async()=>{
+  const dir=await mkdtemp(join(tmpdir(),'aicc-bridge-close-fixture-'));
+  const {publicKey}=generateKeyPairSync('ed25519');
+  const keyFile=join(dir,'pub.pem');
+  await writeFile(keyFile,publicKey.export({type:'spki',format:'pem'}));
+  let closed=0;
+  try{
+    const env={
+      DC_AGENT_LISTEN_HOST:'127.0.0.1',
+      DC_AGENT_GATEWAY_PEER:'127.0.0.1',
+      DC_AGENT_LISTEN_PORT:'49213',
+      DC_AGENT_MCP_ENTRY_FILE:MCP_FIXTURE,
+      DC_AGENT_GATEWAY_PUBLIC_KEY_FILE:keyFile,
+      DC_AGENT_AUDIT_FILE:join(dir,'audit.jsonl'),
+      DC_AGENT_ALLOWED_TOOLS_JSON:JSON.stringify(['force_terminate'])
+    };
+    const bridgeFactory=async()=>({
+      listTools:async()=>({tools:[]}),callTool:async()=>({}),close:async()=>{closed++;}
+    });
+    await assert.rejects(startApprovedAgent({env,bridgeFactory}),/AGENT_TOOL_POLICY_INVALID/);
+    assert.equal(closed,1);
+  }finally{await rm(dir,{recursive:true,force:true})}
+});
