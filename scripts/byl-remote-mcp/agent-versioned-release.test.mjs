@@ -57,6 +57,18 @@ test('manifest tampering detected',async()=>{
   await assert.rejects(verifyOfflineRelease(a.params.outputDir),/MANIFEST_DIGEST_INVALID/);
  }finally{await a.cleanup()}
 });
+test('reject manifest schema tampering without digest change',async()=>{
+ const a=await fixture();
+ try{
+  await createOfflineRelease(a.params);
+  const p=join(a.params.outputDir,'release-manifest.json');
+  const obj=JSON.parse(await readFile(p,'utf8'));
+  obj.schema='aicc-agent-offline-release-candidate/v0';
+  await chmod(p,0o644);
+  await writeFile(p,JSON.stringify(obj));
+  await assert.rejects(verifyOfflineRelease(a.params.outputDir),/MANIFEST_NOT_OFFLINE_CANDIDATE/);
+ }finally{await a.cleanup()}
+});
 test('reject symlink source',async()=>{
  const a=await fixture();
  try{
