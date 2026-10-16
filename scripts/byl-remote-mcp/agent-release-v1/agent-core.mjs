@@ -82,6 +82,7 @@ export function createAgentHandler({
 
   const allowed = validatedAllowedTools(allowedTools);
   const used = new Map();
+  let auditDegraded = false;
 
   async function audit(event, detail = {}) {
     await auditEvent({event, ...detail});
@@ -106,9 +107,10 @@ export function createAgentHandler({
       if (req.method === 'GET' && route === '/healthz') {
         const result = await listTools();
         const found = Array.isArray(result?.tools) ? result.tools : [];
-        return emit(res, 200, {ok:true, service:'byl-dc-agent', protocol:AGENT_RELEASE_PROTOCOL,
+        return emit(res, auditDegraded ? 503 : 200, {ok:!auditDegraded,
+          service:'byl-dc-agent', protocol:AGENT_RELEASE_PROTOCOL,
           toolCount:found.filter(t => allowed.has(t?.name)).length,
-          buildIdentityAttested:false}, maxResponseBytes);
+          buildIdentityAttested:false, auditHealthy:!auditDegraded}, maxResponseBytes);
       }
       if (route === '/v1/restart') {
         await audit('restart_denied');
@@ -142,6 +144,9 @@ export function createAgentHandler({
         await audit('tool_denied', {tool:typeof input.name==='string' ? input.name.slice(0,80) : 'invalid'});
         return emit(res, 403, {errorCode:'DC_AGENT_TOOL_DENIED'}, maxResponseBytes);
       }
+      if (auditDegraded) {
+        return emit(res, 503, {errorCode:'DC_AGENT_AUDIT_DEGRADED'}, maxResponseBytes);
+      }
       if (replay(req.headers['x-byl-signature'], now)) {
         await audit('replay_denied', {tool:input.name});
         return emit(res, 409, {errorCode:'DC_AGENT_REPLAY_DENIED'}, maxResponseBytes);
@@ -149,7 +154,14 @@ export function createAgentHandler({
       // Fail closed if pre-call audit is unavailable. No tool arguments are logged.
       await audit('tool_call', {tool:input.name});
       const result = await callTool({name:input.name, arguments:input.arguments || {}});
-      await audit('tool_result', {tool:input.name, ok:result?.isError !== true});
+      try {
+        await audit('tool_result', {tool:input.name, ok:result?.isError !== true});
+      } catch {
+        // The tool already ran. Never report it as an unexecuted 502 or
+        // permit later operations while the audit sink is unavailable.
+        auditDegraded = true;
+        return emit(res, 200, {result, auditState:'DEGRADED_POST_EXECUTION'}, maxResponseBytes);
+      }
       return emit(res, 200, {result}, maxResponseBytes);
     } catch (err) {
       if (err?.code === 'DC_AGENT_BODY_TOO_LARGE')
