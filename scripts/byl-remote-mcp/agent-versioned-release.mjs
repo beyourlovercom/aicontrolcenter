@@ -72,9 +72,11 @@ function isContained(root,child){const r=relative(root,child);return r===''||(!r
 export async function createOfflineRelease({sourceDir,outputDir,deviceId,sourceCommit,reviewedTargetCommit,releaseName}){
  if(!sourceDir||!outputDir)throw error('PATH_REQUIRED');
  const source=await realpath(resolve(sourceDir));
- const output=resolve(outputDir);
+ const requestedOutput=resolve(outputDir);
+ // Resolve parent symlinks before any source/output containment decision.
+ const outParent=await realpath(dirname(requestedOutput));
+ const output=resolve(outParent,basename(requestedOutput));
  if(isContained(source,output)||isContained(output,source))throw error('SOURCE_OUTPUT_OVERLAP');
- const outParent=await realpath(dirname(output));
  if(!isContained(outParent,output))throw error('OUTPUT_PARENT_INVALID');
  const newFiles=await inspectSource(source);
  const files=newFiles.map(({name,size,sha256})=>({name,size,sha256}));
