@@ -95,15 +95,16 @@ export async function startApprovedAgent({
   const cfg = releaseConfig(env);
   const gatewayKey = await readFile(cfg.key, 'utf8');
   const sdk = await bridgeFactory(cfg.command);
-  const handler = createAgentHandler({
-    publicKey:gatewayKey, allowedPeer:cfg.peer, allowedTools:cfg.allowedTools,
-    listTools:sdk.listTools, callTool:sdk.callTool,
-    auditEvent:record => auditWrite(cfg.audit,
-      JSON.stringify({ts:new Date().toISOString(), ...record})+'\n',
-      {encoding:'utf8',mode:0o600,flag:'a'})
-  });
-  const server = serverFactory(handler);
+  let server;
   try {
+    const handler = createAgentHandler({
+      publicKey:gatewayKey, allowedPeer:cfg.peer, allowedTools:cfg.allowedTools,
+      listTools:sdk.listTools, callTool:sdk.callTool,
+      auditEvent:record => auditWrite(cfg.audit,
+        JSON.stringify({ts:new Date().toISOString(), ...record})+'\n',
+        {encoding:'utf8',mode:0o600,flag:'a'})
+    });
+    server = serverFactory(handler);
     await new Promise((resolve, reject) => {
       server.once('error',reject);
       server.listen(cfg.port,cfg.bind,() => {
@@ -112,7 +113,8 @@ export async function startApprovedAgent({
       });
     });
   } catch(e) {
-    await sdk.close();
+    try { server?.close(); } catch {}
+    try { await sdk.close(); } catch {}
     throw e;
   }
   // This is a controlled process stop handler, not a restart API.
