@@ -1,10 +1,27 @@
 import Foundation
 import ServiceManagement
+import Security
 
 // Registration controller only. Never reads or exports legacy Agent data.
 @main
 struct AICCBackupRegistration {
     static let launchdPlist = "com.aicc.agent-only-backup-registrar.plist"
+
+    // Never infer release authority from ad-hoc signing or an arbitrary runtime flag.
+    // The Owner-approved Team ID must be embedded BEFORE the final bundle signature.
+    static func signedByApprovedTeam() -> Bool {
+        guard let approvedTeam = Bundle.main.object(forInfoDictionaryKey: "AICCApprovedTeamID") as? String,
+              approvedTeam.range(of: "^[A-Z0-9]{10}$", options: .regularExpression) != nil else { return false }
+        var code: SecStaticCode?
+        guard SecStaticCodeCreateWithPath(Bundle.main.bundleURL as CFURL, SecCSFlags(), &code) == errSecSuccess,
+              let code,
+              SecStaticCodeCheckValidity(code, SecCSFlags(), nil) == errSecSuccess else { return false }
+        var info: CFDictionary?
+        guard SecCodeCopySigningInformation(code, SecCSFlags(rawValue: kSecCSSigningInformation), &info) == errSecSuccess,
+              let attrs = info as? [String: Any],
+              let actualTeam = attrs[kSecCodeInfoTeamIdentifier as String] as? String else { return false }
+        return actualTeam == approvedTeam
+    }
 
     static func label(_ status: SMAppService.Status) -> String {
         switch status {
@@ -34,6 +51,10 @@ struct AICCBackupRegistration {
             print("R2A1_EXPORT=DISABLED_NOT_IMPLEMENTED")
             print("R2A_REAL_BACKUP=NO")
         case "--register":
+            guard signedByApprovedTeam() else {
+                fputs("RELEASE_SIGNER_NOT_ENROLLED: ad-hoc or unapproved app cannot register.\\n", stderr)
+                exit(77)
+            }
             // Only macOS ServiceManagement performs registration; no direct install.
             do {
                 try service.register()
