@@ -1,0 +1,43 @@
+name: DC R2-A Presealed Backup Intake V1 Offline Gate
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/dc-agent-r2a-presealed-intake-v1.yml'
+      - 'scripts/byl-remote-mcp/agent-release-v1/agent-only-presealed-intake.mjs'
+      - 'scripts/byl-remote-mcp/agent-release-v1/agent-only-presealed-intake.test.mjs'
+      - 'docs/60_Operations/work-packages/AICC-DC-R2A-PRESEALED-BACKUP-INTAKE-V1-WP.md'
+
+permissions:
+  contents: read
+
+jobs:
+  offline-intake-tests:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Node syntax + isolated ciphertext-only security regression tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --check scripts/byl-remote-mcp/agent-release-v1/agent-only-presealed-intake.mjs
+          node --check scripts/byl-remote-mcp/agent-release-v1/agent-only-presealed-intake.test.mjs
+          node --test scripts/byl-remote-mcp/agent-release-v1/agent-only-presealed-intake.test.mjs
+      - name: No private Agent source access, production service control or automatic Canary GO
+        shell: bash
+        run: |
+          set -euo pipefail
+          gate=scripts/byl-remote-mcp/agent-release-v1/agent-only-presealed-intake.mjs
+          if grep -En "node:fs|node:child_process|createServer|spawn\(|exec\(|launchctl|process\.kill|listen\(" "$gate"; then
+            echo "Forbidden live source/service operation detected"
+            exit 1
+          fi
+          grep -q "agentOnlyCanary:'STOP'" "$gate"
+          grep -q "DURABLE_REPLAY_LEDGER_REQUIRED" "$gate"
+          grep -q "AUTHORIZATION_REPLAY_DENIED" "$gate"
