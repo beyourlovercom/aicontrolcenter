@@ -45,9 +45,11 @@ export function authorizationBytes(body) {
 
 /** Public-purpose bridge. Its issuer root MUST be provisioned by an external owner-managed trust registry. */
 export async function retainPresealedLegacyBackup({ciphertext, authorization, trustAnchor,
-  primaryStore, independentStore, now = new Date()} = {}) {
+  primaryStore, independentStore, receiptLedger} = {}) {
   if (!Buffer.isBuffer(ciphertext) || ciphertext.length === 0 || ciphertext.length > LIMIT_BYTES)
     deny('CIPHERTEXT_BYTES_REQUIRED');
+  // Snapshot caller bytes before any await or untrusted storage-adapter call.
+  const sealed = Buffer.from(ciphertext);
   if (!exactKeys(authorization, ['body', 'signatureBase64'])) deny('AUTHORIZATION_SHAPE_INVALID');
   const b = authorization.body;
   const fields = ['schema','deviceId','serviceLabel','kind','classification','backupId',
@@ -58,8 +60,8 @@ export async function retainPresealedLegacyBackup({ciphertext, authorization, tr
     b.classification !== 'legacy-baseline-with-unknown-source' ||
     ![b.backupId,b.captureReceiptId,b.offWindowsKeyCustodyReceiptId].every(id=>typeof id === 'string' && ID.test(id)) ||
     ![b.ciphertextSha256,b.sourceManifestSha256].every(h=>typeof h==='string' && SHA256.test(h)) ||
-    !Number.isSafeInteger(b.ciphertextBytes) || b.ciphertextBytes !== ciphertext.length ||
-    b.ciphertextSha256 !== sha(ciphertext)) deny('BACKUP_SUBJECT_MISMATCH');
+    !Number.isSafeInteger(b.ciphertextBytes) || b.ciphertextBytes !== sealed.length ||
+    b.ciphertextSha256 !== sha(sealed)) deny('BACKUP_SUBJECT_MISMATCH');
   if (!exactKeys(trustAnchor, ['publicKeyPem','approvedSpkiSha256'])) deny('TRUST_ANCHOR_MISSING');
   let key;
   try {key = createPublicKey(trustAnchor.publicKeyPem);} catch {deny('BAD_TRUST_PUBLIC_KEY');}
@@ -72,7 +74,8 @@ export async function retainPresealedLegacyBackup({ciphertext, authorization, tr
     !verifySignature(null, authorizationBytes(b), key,
       Buffer.from(authorization.signatureBase64, 'base64'))) deny('SIGNATURE_INVALID');
   const issue = stamp(b.issuedAt),expiry = stamp(b.expiresAt);
-  const clock = now instanceof Date ? now.getTime() : NaN;
+  // Production time is not caller-controlled; no public override that revives an expired grant.
+  const clock = Date.now();
   if (!Number.isFinite(clock) || issue > clock || expiry <= clock || expiry - issue > 24*60*60*1000)
     deny('AUTHORIZATION_EXPIRED_OR_FUTURE');
   if (!primaryStore || !independentStore ||
@@ -83,19 +86,25 @@ export async function retainPresealedLegacyBackup({ciphertext, authorization, tr
     !ID.test(primaryStore.failureDomainId) || !ID.test(independentStore.failureDomainId) ||
     primaryStore.failureDomainId === independentStore.failureDomainId)
     deny('INDEPENDENT_STORAGE_REQUIRED');
+  // External issuer-approved ledger MUST atomically and durably claim the backup ID.
+  // Never retry a partially committed transfer without operator reconciliation.
+  if (!receiptLedger || typeof receiptLedger.reserveOnce !== 'function')
+    deny('DURABLE_REPLAY_LEDGER_REQUIRED');
+  const claimed = await receiptLedger.reserveOnce(b.backupId,b.ciphertextSha256);
+  if (claimed !== true) deny('AUTHORIZATION_REPLAY_DENIED');
 
   // Storage backends are approved/injected by an external service manager, not
   // specified by the input or this public repo. No private paths or keys here.
   const writeOne = async store => {
-    const copy = await store.writeOnceAndReadBack(b.backupId, ciphertext);
-    if (!Buffer.isBuffer(copy) || copy.length !== ciphertext.length || sha(copy) !== b.ciphertextSha256)
+    const copy = await store.writeOnceAndReadBack(b.backupId, Buffer.from(sealed));
+    if (!Buffer.isBuffer(copy) || copy.length !== sealed.length || sha(copy) !== b.ciphertextSha256)
       deny('STORAGE_READBACK_MISMATCH');
     return {domain: store.failureDomainId, readbackSha256: sha(copy)};
   };
   const primary = await writeOne(primaryStore);
   const replica = await writeOne(independentStore);
   return Object.freeze({
-    backupId:b.backupId,ciphertextBytes:ciphertext.length,ciphertextSha256:b.ciphertextSha256,
+    backupId:b.backupId,ciphertextBytes:sealed.length,ciphertextSha256:b.ciphertextSha256,
     primary,replica,presealedIntake:'CIPHERTEXT_READBACK_MATCHED',
     sourceCapture:'NOT_INDEPENDENTLY_VERIFIED',externalIssuerEnrollment:'NOT_INDEPENDENTLY_VERIFIED',
     keyEscrow:'NOT_INDEPENDENTLY_VERIFIED',isolatedRestore:'NOT_TESTED',
