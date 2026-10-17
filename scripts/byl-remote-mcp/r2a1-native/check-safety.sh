@@ -5,6 +5,9 @@ if grep -En '\b(sudo|launchctl|AuthorizationExecuteWithPrivileges|Process\(|File
  echo 'Unexpected OS/private source operation introduced' >&2; exit 1
 fi
 grep -q 'SMAppService.daemon' BackupRegistration.swift
+grep -q 'signedByApprovedTeam()' BackupRegistration.swift
+grep -q 'RELEASE_SIGNER_NOT_ENROLLED' BackupRegistration.swift
+grep -q 'UNENROLLED' Info.plist
 grep -q 'R2A1_EXPORT=DISABLED_NOT_IMPLEMENTED' BackupRegistration.swift
 grep -q 'AICC_R2A_REAL_BACKUP=NO' BackupRegistrarDaemon.swift
 grep -q '<false/>' com.aicc.agent-only-backup-registrar.plist
