@@ -5,13 +5,18 @@ mode="${1:---dev}"
 if [[ "$mode" != "--dev" && "$mode" != "--release" ]]; then echo 'Use --dev or --release' >&2; exit 64; fi
 if [[ "$(uname -s)" != "Darwin" ]]; then echo 'macOS required' >&2; exit 69; fi
 if ! command -v swiftc >/dev/null || ! command -v codesign >/dev/null; then echo 'Swift and codesign required' >&2; exit 69; fi
-if [[ "$mode" == "--release" && -z "${AICC_R2A1_SIGNING_IDENTITY:-}" ]]; then
-  echo 'BLOCKED: release requires external Owner-approved code signing identity' >&2; exit 77
+if [[ "$mode" == "--release" ]]; then
+  if [[ -z "${AICC_R2A1_SIGNING_IDENTITY:-}" || ! "${AICC_R2A1_APPROVED_TEAM_ID:-}" =~ ^[A-Z0-9]{10}$ ]]; then
+    echo 'BLOCKED: release requires independently approved signing identity and 10-character Team ID' >&2; exit 77
+  fi
 fi
 out="${AICC_R2A1_OUT:-$(mktemp -d "${TMPDIR:-/tmp/}/aicc-r2a1.XXXXXX")}"; mkdir -p "$out"
 app="$out/AICC Agent-only Backup Registration.app"
 mkdir -p "$app/Contents/MacOS" "$app/Contents/Library/LaunchDaemons"
 cp Info.plist "$app/Contents/Info.plist"
+if [[ "$mode" == "--release" ]]; then
+  /usr/libexec/PlistBuddy -c "Set :AICCApprovedTeamID $AICC_R2A1_APPROVED_TEAM_ID" "$app/Contents/Info.plist"
+fi
 cp com.aicc.agent-only-backup-registrar.plist "$app/Contents/Library/LaunchDaemons/"
 swiftc -parse-as-library -target "$(uname -m)-apple-macos13.0" -O BackupRegistration.swift -o "$app/Contents/MacOS/AICCBackupRegistration"
 swiftc -parse-as-library -target "$(uname -m)-apple-macos13.0" -O BackupRegistrarDaemon.swift -o "$app/Contents/MacOS/AICCBackupRegistrarDaemon"
@@ -21,6 +26,10 @@ if [[ "$mode" == "--release" ]]; then sign="$AICC_R2A1_SIGNING_IDENTITY"; fi
 codesign --force --sign "$sign" "$app/Contents/MacOS/AICCBackupRegistrarDaemon"
 codesign --force --sign "$sign" "$app"
 codesign --verify --strict --verbose=1 "$app"
+if [[ "$mode" == "--release" ]]; then
+  actual_team="$(codesign -dv --verbose=4 "$app" 2>&1 | sed -n 's/^TeamIdentifier=//p' | tail -1)"
+  if [[ "$actual_team" != "$AICC_R2A1_APPROVED_TEAM_ID" ]]; then echo 'CODE_SIGNING_TEAM_MISMATCH' >&2; exit 77; fi
+fi
 if [[ "$mode" == "--dev" ]]; then
   echo 'DEV BUILD ONLY: ad-hoc signature. Not approved for privileged registration or installation.'
 else
