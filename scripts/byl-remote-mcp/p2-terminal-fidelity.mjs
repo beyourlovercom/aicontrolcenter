@@ -201,6 +201,33 @@ export function optInPowerShellUtf8Command(options = {}) {
   return UTF8_PREFIX + command;
 }
 
+/**
+ * Render an already-authoritative typed page without conflating a real blank
+ * line with a page that contains zero lines. This is PRESENTATION ONLY:
+ * upstream must independently remove a terminal newline's phantom sentinel.
+ *
+ * 'rawText' retains the exact joined output (including real blank lines).
+ * 'displayText' adds a label ONLY when the page is entirely blank. A caller
+ * must use hasOutput/readCount rather than truthiness of the joined string.
+ * No transport, process, device or Agent integration occurs in this helper.
+ */
+export function presentTerminalLinePage(page) {
+  const normalized = normalizeTerminalLinePage(page);
+  const { lines, readCount } = normalized;
+  const hasOutput = readCount > 0;
+  const blankOnly = hasOutput && lines.every((line) => line.length === 0);
+  const rawText = lines.join('\n');
+  const displayText = !hasOutput ? '(No output in requested range)' :
+    blankOnly ? `(Blank output: ${readCount} line${readCount === 1 ? '' : 's'})` : rawText;
+  return Object.freeze({
+    rawText,
+    displayText,
+    hasOutput,
+    blankOnly,
+    lineCount: readCount,
+  });
+}
+
 export const P2_TERMINAL_FIDELITY_CONTRACT = Object.freeze({
   version: 'aicc-p2-terminal-fidelity/v1',
   upstreamLineRule: 'Remove only the phantom empty trailing line after a newline upstream; preserve real blank lines here.',

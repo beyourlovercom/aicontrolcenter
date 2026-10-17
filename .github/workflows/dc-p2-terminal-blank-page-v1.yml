@@ -1,0 +1,42 @@
+name: DC P2 Terminal Blank Page V1 Offline Tests
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/dc-p2-terminal-blank-page-v1.yml'
+      - 'scripts/byl-remote-mcp/p2-terminal-fidelity.mjs'
+      - 'scripts/byl-remote-mcp/p2-terminal-fidelity.test.mjs'
+      - 'docs/60_Operations/work-packages/AICC-DC-P2-TERMINAL-BLANK-PAGE-V1-20261017.md'
+
+permissions:
+  contents: read
+
+jobs:
+  terminal-blank-page:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Offline Node syntax and full terminal fidelity regression tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --check scripts/byl-remote-mcp/p2-terminal-fidelity.mjs
+          node --check scripts/byl-remote-mcp/p2-terminal-fidelity.test.mjs
+          node --test scripts/byl-remote-mcp/p2-terminal-fidelity.test.mjs
+      - name: Ensure display helper introduces no process, filesystem, network or Agent I/O
+        shell: bash
+        run: |
+          set -euo pipefail
+          helper=scripts/byl-remote-mcp/p2-terminal-fidelity.mjs
+          if grep -En 'node:fs|node:child_process|launchctl|createServer|process\.kill|spawn\(|exec\(' "$helper"; then
+            echo "Unexpected privileged operation in pure formatting module"
+            exit 1
+          fi
+          grep -q "presentTerminalLinePage(page)" "$helper"
+          grep -q "hasOutput" "$helper"

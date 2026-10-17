@@ -4,6 +4,7 @@ import {
   normalizeProcessStatus,
   normalizeTerminalLinePage,
   optInPowerShellUtf8Command,
+  presentTerminalLinePage,
 } from './p2-terminal-fidelity.mjs';
 
 const status = (overrides = {}) => ({
@@ -144,4 +145,75 @@ test('UTF-8 command options require own safe data properties', () => {
   assert.equal(optInPowerShellUtf8Command(nullRecord), command);
   const enabled = Object.assign(Object.create(null), { command, optIn: true, deviceId: 'windows', shell: 'pwsh.exe' });
   assert.match(optInPowerShellUtf8Command(enabled), /OutputEncoding/);
+});
+
+test('single real blank line is distinguishable from a zero-line page', () => {
+  const realBlank = presentTerminalLinePage(page({
+    lines: [''], totalLines: 1, readCount: 1, remaining: 0, isComplete: true,
+  }));
+  assert.deepEqual(realBlank, {
+    rawText: '',
+    displayText: '(Blank output: 1 line)',
+    hasOutput: true,
+    blankOnly: true,
+    lineCount: 1,
+  });
+  const noLines = presentTerminalLinePage(page({
+    lines: [], totalLines: 0, readCount: 0, remaining: 0, isComplete: true,
+  }));
+  assert.equal(noLines.rawText, '');
+  assert.equal(noLines.displayText, '(No output in requested range)');
+  assert.equal(noLines.hasOutput, false);
+  assert.equal(noLines.blankOnly, false);
+});
+
+test('multiple genuine blank lines preserve count instead of false no-output', () => {
+  const result = presentTerminalLinePage(page({
+    lines: ['', ''], totalLines: 2, readCount: 2, remaining: 0,
+  }));
+  assert.equal(result.rawText, '\n');
+  assert.equal(result.displayText, '(Blank output: 2 lines)');
+  assert.equal(result.lineCount, 2);
+});
+
+test('mixed lines and literal no-output text are not censored or invented', () => {
+  const mixed = presentTerminalLinePage(page());
+  assert.equal(mixed.displayText, 'alpha\n');
+  assert.equal(mixed.rawText, 'alpha\n');
+  assert.equal(mixed.hasOutput, true);
+  assert.equal(mixed.blankOnly, false);
+  const literal = presentTerminalLinePage(page({
+    lines: ['(No output in requested range)'], totalLines: 1, readCount: 1,
+  }));
+  assert.equal(literal.displayText, '(No output in requested range)');
+  assert.equal(literal.hasOutput, true);
+  assert.equal(literal.blankOnly, false);
+});
+
+test('renderer respects geometry and refuses malformed or accessor-backed page', () => {
+  assert.throws(() => presentTerminalLinePage(page({ readCount: 3 })), {
+    code: 'P2_TERMINAL_PAGE_INVALID',
+  });
+  assert.throws(() => presentTerminalLinePage(page({ readFrom: 3, totalLines: 2 })), {
+    code: 'P2_TERMINAL_PAGE_CONTRADICTORY',
+  });
+  const getterPage = page();
+  Object.defineProperty(getterPage, 'lines', {
+    enumerable: true,
+    get() { throw Error('should be redacted'); },
+  });
+  assert.throws(() => presentTerminalLinePage(getterPage), {
+    code: 'P2_TERMINAL_PAGE_INVALID',
+  });
+});
+
+test('presentation result is frozen and cannot mutate original line buffers', () => {
+  const lineValues = ['hello', '', '中文'];
+  const r = presentTerminalLinePage(page({
+    lines: lineValues, totalLines: 3, readCount: 3,
+  }));
+  assert.equal(Object.isFrozen(r), true);
+  assert.equal(r.displayText, 'hello\n\n中文');
+  lineValues[0] = 'changed';
+  assert.equal(r.rawText, 'hello\n\n中文');
 });
