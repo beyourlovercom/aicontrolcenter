@@ -10,6 +10,7 @@
  */
 import {createHash,timingSafeEqual} from 'node:crypto';
 import {createCredentialFreeOAuthToolSurface} from './official-parity-oauth-runtime-surface.mjs';
+import {createOperationalDeviceStatusReader} from './official-parity-operational-device-status.mjs';
 
 const EXACT_ROUTE='/oauth/mcp',EXACT_PORT=8797,LOOPBACK='127.0.0.1';
 const reject=code=>{throw Error(code);};
@@ -66,6 +67,8 @@ export function createCredentialFreeOAuthHttpRuntime({
     (env.BYL_MCP_PARITY_CORE_READ_ENABLED==='1'&&typeof auditOperation!=='function')||
     typeof z?.string!=='function')
   reject('PARITY_RUNTIME_POLICY_INCOMPLETE');
+ // One app-lifetime TTL cache; never probe during server construction.
+ const deviceStatusReader=createOperationalDeviceStatusReader({agentGet});
  const app=createMcpExpressApp({host:LOOPBACK,allowedHosts:hosts});
  if(typeof app?.post!=='function'||typeof app?.get!=='function'||
     typeof app?.delete!=='function')
@@ -103,7 +106,7 @@ export function createCredentialFreeOAuthHttpRuntime({
    ({server}=createCredentialFreeOAuthToolSurface({
     McpServer,z,principal:req.bylPrincipal,
     agentGet,agentCall,canExposeRemoteCall,authorizeRemoteCall,
-    auditLegacyOperation,auditOperation,env
+    auditLegacyOperation,auditOperation,deviceStatusReader,env
    }));
    transport=new StreamableHTTPServerTransport({
     sessionIdGenerator:undefined,enableJsonResponse:true
