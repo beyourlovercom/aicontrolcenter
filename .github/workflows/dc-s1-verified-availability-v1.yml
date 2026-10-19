@@ -1,0 +1,37 @@
+name: DC S1 Signed Availability Dev-only V1
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'scripts/byl-remote-mcp/remote-v2-verified-availability.mjs'
+      - 'scripts/byl-remote-mcp/remote-v2-verified-availability.test.mjs'
+      - '.github/workflows/dc-s1-verified-availability-v1.yml'
+      - 'docs/60_Operations/work-packages/AICC-DC-S1-VERIFIED-AVAILABILITY-V1.md'
+permissions:
+  contents: read
+jobs:
+  offline-readonly:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Signed health adapters syntax and tests
+        run: |
+          set -euo pipefail
+          node --check scripts/byl-remote-mcp/remote-v2-verified-availability.mjs
+          node --check scripts/byl-remote-mcp/remote-v2-verified-availability.test.mjs
+          node --test scripts/byl-remote-mcp/remote-v2-{verified-availability,live-health,signed-health}.test.mjs
+      - name: No direct IO, shell, credential, installed Agent or Canary ops
+        shell: bash
+        run: |
+          set -euo pipefail
+          p=scripts/byl-remote-mcp/remote-v2-verified-availability.mjs
+          if grep -En 'node:fs|node:child_process|fetch\(|launchctl|process\.kill|spawn\(|exec\(|listen\(|privateKey|readFile|writeFile' "$p"; then
+            echo "Unexpected privileged IO or secret operation in view adapter"; exit 1
+          fi
+          grep -q 'TRUST_KEY_NOT_ENROLLED' "$p"
+          grep -q 'SIGNED_RESPONSE_VERIFIED' "$p"
