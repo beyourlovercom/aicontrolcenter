@@ -125,7 +125,13 @@ test('real 127.0.0.1 HTTP request/response with synthetic Ed25519 fixture only',
    const body=[];
    for await(const part of req)body.push(part);
    const json=JSON.parse(Buffer.concat(body).toString('utf8'));
-   const proof=await signer(json);
+   assert.equal(json.operation,SIGNED_HEALTH_OPERATION);
+   assert(ids.includes(json.deviceId));
+   // JSON wire records do not preserve Object.freeze() from the sender.
+   // Immutable callback arguments are checked separately by the in-process tests.
+   const proof=signHealthResponse(json.challenge,{
+     privateKey:pairs[json.deviceId].privateKey,clock
+   });
    res.writeHead(200,{'content-type':'application/json'});
    res.end(JSON.stringify(proof));
   }catch(error){res.writeHead(400);res.end(JSON.stringify({error:'invalid'}));}
