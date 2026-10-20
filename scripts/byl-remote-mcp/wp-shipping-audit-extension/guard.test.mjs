@@ -107,12 +107,14 @@ const fakeRow=(attributes,selectors)=>{
   };
   return row;
 };
-async function withMockPage(pageUrl,tableRows,operation,callback){
+async function withMockPage(pageUrl,tableRows,operation,callback,footerRows=[]){
   const oldDoc=globalThis.document,oldLoc=globalThis.location;
   const zoneSelector='table.wc-shipping-zones tbody tr';
   const methodSelector='table.wc-shipping-zone-methods tbody tr';
+  const footerSelector='table.wc-shipping-zones tfoot.wc-shipping-zone-worldwide[data-id="0"]';
   globalThis.location={href:pageUrl};
   globalThis.document={querySelectorAll(selector){
+    if(selector===footerSelector)return footerRows;
     return selector===(operation==='zones'?zoneSelector:methodSelector)?tableRows:[];
   }};
   try{return await callback();}
@@ -163,4 +165,38 @@ test('manifest + popup source enforce explicit host permission, scoped DNR befor
   assert.ok(popup.indexOf('chrome.tabs.remove(auditTab.id)')<popup.indexOf('removeRuleIds'));
   assert.ok(!popup.includes('fetch('));
   assert.ok(!popup.includes('forms.submit'));
+});
+
+
+test('Woo template worldwide footer is included even though outside tbody',async()=>{
+  const regular=fakeRow({'data-id':'5','data-priority':'1'},{
+    'td.wc-shipping-zone-name':fakeElement('United States'),
+    'td.wc-shipping-zone-region':fakeElement('United States (US)')
+  });
+  const worldwide=fakeRow({'data-id':'0'},{
+    'td.wc-shipping-zone-name':fakeElement('Rest of the world'),
+    'td.wc-shipping-zone-region':fakeElement('Any unmatched shipping destination')
+  });
+  const parsed=await withMockPage(dev.url,[regular],'zones',
+    ()=>readWooShippingDocument(dev.url,'zones'),[worldwide]);
+  const result=sanitizeBrowserSnapshot(parsed,dev);
+  assert.equal(result.ok,true);
+  assert.deepEqual(result.rows.map(r=>r.zoneId),[5,0]);
+  assert.equal(result.rows[1].name,'Rest of the world');
+  assert.equal(result.rows[1].priority,null);
+  assert.equal(result.partial,true);
+});
+test('Woo methods data-enabled attribute maps yes/no without clicking status link',async()=>{
+  const on=fakeRow({'data-id':'10','data-enabled':'yes'},{
+    'td.wc-shipping-zone-method-title':fakeElement('Flat rate')
+  });
+  const off=fakeRow({'data-id':'11','data-enabled':'no'},{
+    'td.wc-shipping-zone-method-title':fakeElement('Local pickup')
+  });
+  const parsed=await withMockPage(methods.url,[on,off],'methods',
+    ()=>readWooShippingDocument(methods.url,'methods'));
+  const result=sanitizeBrowserSnapshot(parsed,methods);
+  assert.equal(result.ok,true);
+  assert.deepEqual(result.rows.map(r=>r.enabled),[true,false]);
+  assert.equal(result.partial,true);
 });
