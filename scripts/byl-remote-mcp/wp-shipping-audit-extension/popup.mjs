@@ -38,6 +38,6 @@ button.addEventListener('click',async()=>{
       '\nReview using your authorized DC read_file tool.');
   }catch{
     say('Browser audit ended with an unavailable/closed permission or worker channel. '+
-      'No WooCommerce form was submitted; check Downloads for a signed-off JSON receipt.');
+      'No WooCommerce form was submitted; check Downloads for a completed JSON receipt, if any.');
   }finally{button.disabled=false;}
 });
