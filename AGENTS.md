@@ -22,6 +22,19 @@ Canonical contract: `docs/00_Governance/AI-EXECUTOR-GOVERNANCE-V2.md`.
 - Historical or subsystem-specific `Codex-only` runtime contracts remain scoped to those exact runtimes and do not override the global provider policy.
 
 
+## Global Fast Iteration V1
+
+Canonical contract: `docs/00_Governance/AICC-GLOBAL-FAST-ITERATION-V1.md`.
+
+`AICC_GLOBAL_FAST_ITERATION_V1 = REQUIRED` for governed AICC work **only after** Owner-approved merge to canonical GitHub main and verified runtime context adoption.
+
+- GPT distinguishes small, low-risk, reversible changes from material/high-risk changes; AICC does not auto-classify intent or grant authority.
+- For eligible work, reuse accepted results, prepare the smallest Dev-only ZIP or isolated preview, run proportional focused checks, obtain real Owner Dev UAT, then fix / tweak / change approach / prepare integration according to the observed outcome.
+- Keep approved design baselines, native functional requirements and site-specific Dev safety. Major UI changes continue to require Global UI Preview First.
+- Successful Dev Owner PASS does not itself permit main merge, Stable release, WWW deploy or real financial/order/customer/database/email writes. Follow exact-head Owner gates.
+- Do not leave a disposable proof-of-concept plugin as a third permanent production plugin; consolidate accepted changes into their intended canonical module.
+- Runtime context inheritance must be demonstrated by exact-SHA canonical policy read and evidence; a GitHub reference alone does not make all standalone chats or devices compliant.
+
 ## Global UI Preview First V1
 
 Canonical contract: `docs/00_Governance/AICC-GLOBAL-UI-PREVIEW-FIRST-V1.md`.
