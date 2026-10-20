@@ -1,0 +1,35 @@
+name: Global Fast Iteration Governance V1
+
+on:
+  pull_request:
+    paths:
+      - 'AGENTS.md'
+      - 'docs/00_Governance/AICC-GLOBAL-FAST-ITERATION-V1.md'
+      - 'docs/60_Operations/work-packages/AICC-GLOBAL-FAST-ITERATION-V1-001.md'
+      - 'scripts/verify-global-fast-iteration-policy.mjs'
+      - '.github/workflows/global-fast-iteration-governance.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'AGENTS.md'
+      - 'docs/00_Governance/AICC-GLOBAL-FAST-ITERATION-V1.md'
+      - 'docs/60_Operations/work-packages/AICC-GLOBAL-FAST-ITERATION-V1-001.md'
+      - 'scripts/verify-global-fast-iteration-policy.mjs'
+      - '.github/workflows/global-fast-iteration-governance.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Validate policy identity, safety gates and inheritance
+        run: node scripts/verify-global-fast-iteration-policy.mjs
+      - name: Diff whitespace validation
+        run: git diff --check
