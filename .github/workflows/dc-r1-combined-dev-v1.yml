@@ -1,0 +1,69 @@
+name: DC R1 Public Actions Combined Dev Integration
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/dc-r1-combined-dev-v1.yml'
+permissions:
+  contents: read
+jobs:
+  combined-isolated-dev:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Assert persisted G1 plus pinned S2-S6 files match exact approved PR blob identities
+        shell: bash
+        run: |
+          set -euo pipefail
+          verify() {
+            test -f "$1"
+            local actual
+            actual="$(git hash-object "$1")"
+            test "$actual" = "$2" || { echo "Pinned Git blob mismatch: $1"; exit 1; }
+          }
+          base=scripts/byl-remote-mcp
+          verify "$base/official-parity-operational-device-status.mjs" adc4a966b508739c29c20e80734f6e498424707d
+          verify "$base/official-parity-oauth-runtime-surface.mjs" 83511301f503ef03fcedb5e8de179b58fa2b6fa7
+          verify "$base/remote-v2-health-wire-dev.mjs" ff62609fc22349febe53b3ca6c85e638f9dcc547
+          verify "$base/remote-v2-health-wire-dev.test.mjs" 79e1a696225ff818a265c72ee4425d7bcb379311
+          verify "$base/remote-v3-trust-enrollment.mjs" 4c81655deca0a3d19e62dfbdbed0123dc99e47bb
+          verify "$base/remote-v3-trust-enrollment.test.mjs" 4f60b40bddb038884c03978de72ca8a78662bc2e
+          verify "$base/remote-v4-agent-signed-health-handler.mjs" 61bfc2941548d979324da7725beb5fa236f7e2d2
+          verify "$base/remote-v4-agent-signed-health-handler.test.mjs" 387ad308deca7912916533f4edd3b7463b3223ee
+          verify "$base/remote-v5-four-device-e2e.test.mjs" 13df345550a792ee1872ab822f39099c381ec3ea
+          verify "$base/stage-s5-pinned-e2e-test.sh" 4e2cedee4a22331d27bdfe9885e247ba93d7f21b
+          verify "$base/remote-v6-real-readiness-audit.mjs" f388a446d84d322119994161226b3f76892a75fa
+          verify "$base/remote-v6-real-readiness-audit.test.mjs" 288e045b749747e778d26d5385132d145090712f
+          echo "R1_SOURCE_BLOBS=12_PINNED_PASS"
+      - name: Install locked MCP SDK dependencies without lifecycle scripts
+        working-directory: scripts/byl-remote-mcp
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Syntax, combined status and signed health regressions
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --test \
+            scripts/byl-remote-mcp/official-parity-operational-device-status.test.mjs \
+            scripts/byl-remote-mcp/official-parity-oauth-runtime-surface.test.mjs \
+            scripts/byl-remote-mcp/remote-v2-health-wire-dev.test.mjs \
+            scripts/byl-remote-mcp/remote-v3-trust-enrollment.test.mjs \
+            scripts/byl-remote-mcp/remote-v4-agent-signed-health-handler.test.mjs \
+            scripts/byl-remote-mcp/remote-v5-four-device-e2e.test.mjs \
+            scripts/byl-remote-mcp/remote-v6-real-readiness-audit.test.mjs \
+            scripts/byl-remote-mcp/remote-v2-verified-availability.test.mjs \
+            scripts/byl-remote-mcp/remote-v2-live-health.test.mjs \
+            scripts/byl-remote-mcp/remote-v2-signed-health.test.mjs
+          echo "R1_COMBINED_SYNTHETIC_DEV_TEST=PASS"
+      - name: Assert isolated CI never imports runtime secrets
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -z "${BYL_MCP_A4_PRIVATE_MANIFEST_FILE:-}"
+          echo "R1_LIVE_AGENT_PROBES=NONE"
+          echo "R1_PRODUCTION_DEPLOYMENT=NO"
