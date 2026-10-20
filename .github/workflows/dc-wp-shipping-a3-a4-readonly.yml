@@ -1,0 +1,33 @@
+name: DC Woo Shipping A3-A4 Readonly
+
+on:
+  pull_request:
+    paths:
+      - 'scripts/byl-remote-mcp/wp-shipping-audit-extension/**'
+      - 'scripts/byl-remote-mcp/wp-shipping-audit-readonly-a2.*'
+      - '.github/workflows/dc-wp-shipping-a3-a4-readonly.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  browser-audit-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout exact PR
+        uses: actions/checkout@v4
+      - name: Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Syntax-check extension and existing A2
+        run: |
+          node --check scripts/byl-remote-mcp/wp-shipping-audit-extension/guard.mjs
+          node --check scripts/byl-remote-mcp/wp-shipping-audit-extension/snapshot.mjs
+          node --check scripts/byl-remote-mcp/wp-shipping-audit-extension/popup.mjs
+          node --check scripts/byl-remote-mcp/wp-shipping-audit-readonly-a2.mjs
+      - name: Verify source and deny matrix
+        run: |
+          node --test scripts/byl-remote-mcp/wp-shipping-audit-extension/guard.test.mjs
+          node --test scripts/byl-remote-mcp/wp-shipping-audit-readonly-a2.test.mjs
