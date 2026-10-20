@@ -32,7 +32,9 @@ async function cleanupOrphan(){
   if(!state||state.owner!=='BYL_WP_SHIPPING'||!Number.isInteger(state.tabId))return;
   try{
     const tab=await chrome.tabs.get(state.tabId);
-    if(tab.url==='about:blank'||auditUrl(tab.url))await chrome.tabs.remove(state.tabId);
+    const bound=fixedShippingRequest({environment:state.environment,
+      operation:state.operation,...(state.operation==='methods'?{zoneId:state.zoneId}:{})});
+    if(tab.url==='about:blank'||exactAuditPage(tab.url,bound))await chrome.tabs.remove(state.tabId);
   }catch{}
   if(Number.isInteger(state.ruleId)&&state.ruleId>=10000){
     try{await chrome.declarativeNetRequest.updateSessionRules({removeRuleIds:[state.ruleId]});}catch{}
