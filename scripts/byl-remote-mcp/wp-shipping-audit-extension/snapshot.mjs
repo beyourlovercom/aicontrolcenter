@@ -43,6 +43,11 @@ export function readWooShippingDocument(expectedUrl,operation){
     ['table.wc-shipping-zone-methods tbody tr','table.wc_shipping_zone_methods tbody tr'];
   let matched=[];
   for(const selector of selectors){matched=query(selector);if(matched.length)break;}
+  if(operation==='zones'){
+    // WooCommerce renders Zone 0 "Rest of the world" in tfoot, not tbody.
+    const worldwide=query('table.wc-shipping-zones tfoot.wc-shipping-zone-worldwide[data-id="0"]');
+    for(const row of worldwide){if(!matched.includes(row))matched.push(row);}
+  }
   const rows=[];
   let partial=false;
   for(const row of matched.slice(0,100)){
@@ -65,7 +70,13 @@ export function readWooShippingDocument(expectedUrl,operation){
       ]),100);
       const enabledElement=one(row,['td.wc-shipping-zone-method-enabled input[type="checkbox"]',
         'input[type="checkbox"].wc-shipping-zone-method-enabled']);
-      const enabled=enabledElement?enabledElement.checked===true:null;
+      let enabled=enabledElement?enabledElement.checked===true:null;
+      if(enabled===null){
+        // WooCommerce's actual method row template stores enabled in data-enabled.
+        const state=attr(row,'data-enabled');
+        if(['yes','true','1'].includes(state))enabled=true;
+        if(['no','false','0'].includes(state))enabled=false;
+      }
       // The method list normally does not display actual per-instance costs.
       // Read only if a recognized, visible scoped element explicitly has it.
       const costNode=one(row,[
