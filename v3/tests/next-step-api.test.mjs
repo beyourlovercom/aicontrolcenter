@@ -17,11 +17,12 @@ function fixture(){
   return {home,repo};
 }
 const uiPreviewPolicy={id:'AICC-GLOBAL-UI-PREVIEW-FIRST-V1',version:1,status:'ACTIVE',mainSha:'a'.repeat(40),contentSha256:'b'.repeat(64),instruction:'GPT uses AppBlock for UI prototype, requires OWNER_VISUAL_PASS before implementation and keeps Production gates separate.'};
+const fastIterationPolicy={id:'AICC-GLOBAL-FAST-ITERATION-V1',version:1,status:'ACTIVE',mainSha:'a'.repeat(40),blobSha:'c'.repeat(40),contentSha256:'d'.repeat(64),instruction:'GPT follows Owner Dev UAT, CI, Global UI Preview First and retains Owner exact-head merge and WWW/Production gates.'};
 function readyExecutor(){return {ready:true,checkedAt:'2026-09-14T09:00:00.000Z',path:'/fake/codex',version:'0.test',model:'test',authMode:'test',doctorStatus:'ok',diagnostics:[]};}
-async function withServer(fx,run, policyLoader=async()=>uiPreviewPolicy){
+async function withServer(fx,run, policyLoader=async()=>uiPreviewPolicy, fastLoader=async()=>fastIterationPolicy){
   const projection=createChatgptProjectionStore({now:()=> '2026-09-14T09:00:00.000Z'});
   projection.upsert({conversationId:'conv-v54',conversationUrl:'https://chatgpt.com/c/conv-v54',title:'V5.4',tabId:7,capturedAt:new Date().toISOString(),messages:[{role:'assistant',text:'ready'}]});
-  const env={AICC_V3_HOME:fx.home};const server=createAiccV3Server({env,chatgptProjectionStore:projection,executorOptions:{preflight:readyExecutor},nextStepUiPreviewPolicyLoader:policyLoader});
+  const env={AICC_V3_HOME:fx.home};const server=createAiccV3Server({env,chatgptProjectionStore:projection,executorOptions:{preflight:readyExecutor},nextStepUiPreviewPolicyLoader:policyLoader,nextStepFastIterationPolicyLoader:fastLoader});
   await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));const {port}=server.address();
   try{await run(`http://127.0.0.1:${port}`,env);}finally{await new Promise(resolve=>server.close(resolve));}
 }
@@ -30,7 +31,7 @@ function requestBody(repo){return {roomId:'room-v54',roomName:'V5.5 Room',projec
 test('Next-Step HTTP loop freezes intent, allows one authenticated claim, and records STOP_GATE',async()=>{
   const fx=fixture();await withServer(fx,async(base,env)=>{
     const create=await fetch(`${base}/api/next-step/requests`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(requestBody(fx.repo))});
-    const created=await create.json();assert.equal(create.status,201,JSON.stringify(created));assert.equal(created.state.state,'PENDING');assert.match(created.request.prompt,/AICC_NEXT_STEP_V1/);assert.match(created.request.prompt,/OWNER_VISUAL_PASS/);assert.match(created.request.prompt,/CANONICAL CROSS-PROJECT UI GOVERNANCE/);
+    const created=await create.json();assert.equal(create.status,201,JSON.stringify(created));assert.equal(created.state.state,'PENDING');assert.match(created.request.prompt,/AICC_NEXT_STEP_V1/);assert.match(created.request.prompt,/OWNER_VISUAL_PASS/);assert.match(created.request.prompt,/CANONICAL CROSS-PROJECT UI GOVERNANCE/);assert.match(created.request.prompt,/CROSS-PROJECT FAST ITERATION/);assert.equal(created.request.fastIterationPolicy.mainSha,created.request.uiPreviewPolicy.mainSha);
     const token=ensureBridgeCredential(env);const auth={'content-type':'application/json','x-aicc-bridge-token':token};
     const claim=await fetch(`${base}/api/bridge/next-step/claim`,{method:'POST',headers:auth,body:JSON.stringify({bridgeInstanceId:'bridge-test'})}).then(r=>r.json());
     assert.equal(claim.claimed.request.requestId,created.request.requestId);assert.equal(claim.claimed.state.state,'CLAIMED');
@@ -60,4 +61,14 @@ test('Next-Step server fails closed when canonical policy read fails, with no pe
     assert.equal(response.status,503);
     assert.equal(body.errorCode,'NEXT_STEP_GLOBAL_UI_PREVIEW_POLICY_UNAVAILABLE');
   },failed);
+});
+
+test('Next-Step HTTP create fails closed if fast iteration policy cannot load',async()=>{
+  const fx=fixture();
+  const failed=async()=>{const error=new Error('fast policy fetch failed');error.code='NEXT_STEP_GLOBAL_FAST_ITERATION_POLICY_UNAVAILABLE';throw error;};
+  await withServer(fx,async base=>{
+    const response=await fetch(base+'/api/next-step/requests',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(requestBody(fx.repo))});
+    assert.equal(response.status,503);
+    assert.equal((await response.json()).errorCode,'NEXT_STEP_GLOBAL_FAST_ITERATION_POLICY_UNAVAILABLE');
+  },async()=>uiPreviewPolicy,failed);
 });

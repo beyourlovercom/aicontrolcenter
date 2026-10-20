@@ -14,8 +14,9 @@ function fixture(overrides={}){
 }
 function expectCode(fn,code){assert.throws(fn,e=>e?.code===code);}
 const uiPreviewPolicy={id:'AICC-GLOBAL-UI-PREVIEW-FIRST-V1',status:'ACTIVE',version:1,mainSha:'a'.repeat(40),contentSha256:'b'.repeat(64),instruction:'GPT must use AppBlock for material UI changes, require OWNER_VISUAL_PASS and keep Production deployment separately gated.'};
+const fastIterationPolicy={id:'AICC-GLOBAL-FAST-ITERATION-V1',status:'ACTIVE',version:1,mainSha:'a'.repeat(40),blobSha:'c'.repeat(40),contentSha256:'d'.repeat(64),instruction:'GPT keeps Owner Dev UAT, CI, Global UI Preview First, Owner exact-head merge and WWW/Production separately gated.'};
 function createWithPolicy(context,input,facts,env,options={}) {
-  return createNextStepRequest(context,input,facts,env,{...options,uiPreviewPolicy});
+  return createNextStepRequest(context,input,facts,env,{...options,uiPreviewPolicy,fastIterationPolicy});
 }
 
 test('next-step prompt includes AICC_PROVIDER and AICC_PROVIDER_ROUTING_REASON fields',()=>{

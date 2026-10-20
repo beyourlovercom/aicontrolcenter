@@ -1,4 +1,5 @@
 import { UI_PREVIEW_POLICY_ID } from './ui-preview-policy.mjs';
+import { validateGlobalFastIterationPolicy } from './fast-iteration-policy.mjs';
 
 function clean(value, fallback = '—') {
   return typeof value === 'string' && value.trim() ? value.trim() : fallback;
@@ -101,13 +102,14 @@ function roadmapSnapshot(roadmap) {
   });
 }
 
-export function buildGptContextSnapshot(projectFacts, runtimeOverview, { now = () => new Date(), uiPreviewPolicy } = {}) {
+export function buildGptContextSnapshot(projectFacts, runtimeOverview, { now = () => new Date(), uiPreviewPolicy, fastIterationPolicy } = {}) {
   if (!projectFacts?.available) throw new Error('project facts unavailable');
   if (uiPreviewPolicy?.id !== UI_PREVIEW_POLICY_ID || uiPreviewPolicy?.status !== 'ACTIVE' || !uiPreviewPolicy?.instruction || !/^[0-9a-f]{40}$/i.test(uiPreviewPolicy?.mainSha || '')) {
     const error = new Error('Canonical global UI preview policy required for GPT Context');
     error.code = 'GLOBAL_UI_PREVIEW_POLICY_UNAVAILABLE';
     throw error;
   }
+  const verifiedFastPolicy = validateGlobalFastIterationPolicy(fastIterationPolicy, uiPreviewPolicy.mainSha);
   const explicitOwnerGates = Object.freeze((projectFacts.ownerAttention || []).map((item) => Object.freeze({
     type: item.type,
     title: item.title,
@@ -124,6 +126,7 @@ export function buildGptContextSnapshot(projectFacts, runtimeOverview, { now = (
       executionInterfaces: 'GitHub + Remote Desktop Commander'
     }),
     uiPreviewPolicy: Object.freeze({ ...uiPreviewPolicy }),
+    fastIterationPolicy: verifiedFastPolicy,
     project: Object.freeze({ id: projectFacts.projectId, name: projectFacts.name, repository: projectFacts.repository }),
     github: Object.freeze({
       defaultBranch: projectFacts.defaultBranch,
@@ -166,6 +169,11 @@ export function formatGptContext(snapshot) {
     `Policy source: ${snapshot.uiPreviewPolicy.canonicalRepository}/${snapshot.uiPreviewPolicy.canonicalPath} @ ${snapshot.uiPreviewPolicy.mainSha}`,
     `Policy content SHA-256: ${snapshot.uiPreviewPolicy.contentSha256}`,
     snapshot.uiPreviewPolicy.instruction,
+    'GLOBAL FAST ITERATION — low-risk workflow preference; NOT execution authorization:',
+    `Policy ID: ${snapshot.fastIterationPolicy.id} · version ${snapshot.fastIterationPolicy.version} · ${snapshot.fastIterationPolicy.status}`,
+    `Policy source: ${snapshot.fastIterationPolicy.canonicalRepository}/${snapshot.fastIterationPolicy.canonicalPath} @ ${snapshot.fastIterationPolicy.mainSha}`,
+    `Policy content SHA-256: ${snapshot.fastIterationPolicy.contentSha256}`,
+    snapshot.fastIterationPolicy.instruction,
     `Project: ${snapshot.project.name} (${snapshot.project.id})`,
     `Repository: ${snapshot.project.repository}`,
     `Canonical default branch: ${github.defaultBranch}`,

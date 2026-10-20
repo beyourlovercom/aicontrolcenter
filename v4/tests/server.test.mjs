@@ -7,10 +7,12 @@ import { createV4Server } from '../server.mjs';
 
 const sha = 'c'.repeat(40);
 const canonicalPolicy = await readFile(new URL('../../docs/00_Governance/AICC-GLOBAL-UI-PREVIEW-FIRST-V1.md', import.meta.url), 'utf8');
+const fastPolicy = await readFile(new URL('../../docs/00_Governance/AICC-GLOBAL-FAST-ITERATION-V1.md', import.meta.url), 'utf8');
 const registry = { schema: 'aicc.v4.project-registry.v1', projects: [{ id: 'demo', name: 'Demo', repository: 'owner/repo' }] };
 const client = { api: async (path) => {
   if (path === 'repos/beyourlovercom/aicontrolcenter/commits/HEAD') return { sha };
   if (path === `repos/beyourlovercom/aicontrolcenter/contents/docs/00_Governance/AICC-GLOBAL-UI-PREVIEW-FIRST-V1.md?ref=${sha}`) return { type:'file', encoding:'base64', content:Buffer.from(canonicalPolicy).toString('base64'), sha:'d'.repeat(40) };
+  if (path === `repos/beyourlovercom/aicontrolcenter/contents/docs/00_Governance/AICC-GLOBAL-FAST-ITERATION-V1.md?ref=${sha}`) return { type:'file', encoding:'base64', content:Buffer.from(fastPolicy).toString('base64'), sha:'e'.repeat(40) };
   if (path === 'repos/owner/repo') return { full_name: 'owner/repo', default_branch: 'main', archived: false, visibility: 'private' };
   if (path === 'repos/owner/repo/commits/HEAD') return { sha };
   if (path === 'repos/owner/repo/pulls?state=open&per_page=100') return [];
@@ -53,6 +55,9 @@ test('read-only API exposes project facts and rejects mutations', async () => {
     assert.equal(context.authority.sourceOfTruth, 'GitHub');
     assert.equal(context.uiPreviewPolicy.id, 'AICC-GLOBAL-UI-PREVIEW-FIRST-V1');
     assert.equal(context.uiPreviewPolicy.mainSha, sha);
+    assert.equal(context.fastIterationPolicy.id, 'AICC-GLOBAL-FAST-ITERATION-V1');
+    assert.equal(context.fastIterationPolicy.mainSha, sha);
+    assert.match(context.copyText, /GLOBAL FAST ITERATION/);
     assert.match(context.copyText, /OWNER_VISUAL_PASS/);
     assert.match(context.copyText, /AppBlock/);
     assert.match(context.copyText, /Before action: reconcile current GitHub evidence/);
@@ -82,5 +87,18 @@ test('context API explicitly rejects a missing canonical GitHub policy instead o
     // Unrelated GitHub project reads remain read-only and usable.
     const facts = await fetch(base + '/api/projects/demo').then(r => r.json());
     assert.equal(facts.mainSha, sha);
+  }, brokenClient);
+});
+
+test('context API refuses missing pinned fast policy while other read APIs still work', async () => {
+  const brokenClient = { api: async (path) => {
+    if (path.includes('/AICC-GLOBAL-FAST-ITERATION-V1.md?ref=')) throw new Error('missing canonical fast rule');
+    return client.api(path);
+  } };
+  await withServer(async (base) => {
+    const response = await fetch(base + '/api/projects/demo/context');
+    assert.equal(response.status, 502);
+    assert.equal((await response.json()).error, 'GLOBAL_FAST_ITERATION_POLICY_UNAVAILABLE');
+    assert.equal((await fetch(base + '/api/projects/demo').then(r=>r.json())).mainSha, sha);
   }, brokenClient);
 });

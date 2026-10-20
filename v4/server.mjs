@@ -9,6 +9,7 @@ import { compareProjectionFreshness, readAllGitHubProjectFacts, readGitHubProjec
 import { loadMachineRegistry, readRuntimeOverview } from './lib/runtime-overview.mjs';
 import { createGptContextSnapshot } from './lib/gpt-context.mjs';
 import { readGlobalUiPreviewPolicy } from './lib/ui-preview-policy.mjs';
+import { readGlobalFastIterationPolicy } from './lib/fast-iteration-policy.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const defaultRegistryPath = join(here, 'projects.json');
@@ -77,9 +78,11 @@ export async function createV4Server({ registryPath = defaultRegistryPath, machi
           readGitHubProjectFacts(project, { client, now }),
           readGlobalUiPreviewPolicy(client)
         ]);
+        // Load fast-iteration governance at the SAME exact main SHA as UI Preview.
+        const fastIterationPolicy = await readGlobalFastIterationPolicy(client, { mainSha: uiPreviewPolicy.mainSha });
         let runtime = null;
         try { runtime = await readRuntimeOverview(machineRegistry, runtimeObservationPath, { now }); } catch { runtime = null; }
-        sendJson(response, 200, createGptContextSnapshot(facts, runtime, { now, uiPreviewPolicy }));
+        sendJson(response, 200, createGptContextSnapshot(facts, runtime, { now, uiPreviewPolicy, fastIterationPolicy }));
       } catch (error) { sendJson(response, 502, { schema: 'aicc.v4.error.v1', error: error.code ?? 'GPT_CONTEXT_UNAVAILABLE', detail: error.message }); }
       return;
     }

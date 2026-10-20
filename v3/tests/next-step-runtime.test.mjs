@@ -14,12 +14,13 @@ function fixture(overrides={}){
 }
 function expectCode(fn,code){assert.throws(fn,error=>error?.code===code);}
 const uiPreviewPolicy=Object.freeze({id:'AICC-GLOBAL-UI-PREVIEW-FIRST-V1',version:1,status:'ACTIVE',mainSha:'a'.repeat(40),contentSha256:'b'.repeat(64),instruction:'GPT must use AppBlock where supported; OWNER_VISUAL_PASS is separate from Production deployment approval.'});
+const fastIterationPolicy=Object.freeze({id:'AICC-GLOBAL-FAST-ITERATION-V1',version:1,status:'ACTIVE',mainSha:'a'.repeat(40),blobSha:'c'.repeat(40),contentSha256:'d'.repeat(64),instruction:'GPT uses Owner Dev UAT, CI and Global UI Preview First. Owner exact-head merge and WWW/Production remain separately authorized.'});
 function createWithPolicy(context,input,facts,env,options={}) {
-  return createNextStepRequest(context,input,facts,env,{...options,uiPreviewPolicy});
+  return createNextStepRequest(context,input,facts,env,{...options,uiPreviewPolicy,fastIterationPolicy});
 }
 
 
-test('creates frozen PENDING intent with strict GPT protocol',()=>{const f=fixture();try{const value=createWithPolicy(f.context,f.input,f.facts,f.env,{uuid:()=> 'req-1'});assert.equal(value.state.state,'PENDING');assert.equal(value.request.head,'abc123');assert.match(value.request.prompt,/AICC_NEXT_STEP_V1/);assert.match(value.request.prompt,/CANONICAL CROSS-PROJECT UI GOVERNANCE/);assert.match(value.request.prompt,/OWNER_VISUAL_PASS/);assert.equal(value.request.uiPreviewPolicy.mainSha,'a'.repeat(40));assert.match(value.request.prompt,/AICC_DECISION: EXECUTE\|STOP_GATE/);assert.match(value.request.prompt,/AICC_ACTION_CLASS: CODE_CHANGE\|TEST_ONLY\|STOP_GATE/);assert.match(value.request.prompt,/CANONICAL_EVIDENCE/);assert.match(value.request.prompt,/Live Task/);assert.match(value.request.prompt,/Live PR/);assert.equal(value.request.canonicalEvidence.currentTask.title,'Live Task');assert.equal(readNextStepRequest(f.context,'req-1',f.env).request.promptSha256.length,64);}finally{f.cleanup();}});
+test('creates frozen PENDING intent with strict GPT protocol',()=>{const f=fixture();try{const value=createWithPolicy(f.context,f.input,f.facts,f.env,{uuid:()=> 'req-1'});assert.equal(value.state.state,'PENDING');assert.equal(value.request.head,'abc123');assert.match(value.request.prompt,/AICC_NEXT_STEP_V1/);assert.match(value.request.prompt,/CANONICAL CROSS-PROJECT UI GOVERNANCE/);assert.match(value.request.prompt,/OWNER_VISUAL_PASS/);assert.match(value.request.prompt,/CROSS-PROJECT FAST ITERATION/);assert.match(value.request.prompt,/Owner exact-head merge/);assert.equal(value.request.fastIterationPolicy.mainSha,value.request.uiPreviewPolicy.mainSha);assert.equal(value.request.uiPreviewPolicy.mainSha,'a'.repeat(40));assert.match(value.request.prompt,/AICC_DECISION: EXECUTE\|STOP_GATE/);assert.match(value.request.prompt,/AICC_ACTION_CLASS: CODE_CHANGE\|TEST_ONLY\|STOP_GATE/);assert.match(value.request.prompt,/CANONICAL_EVIDENCE/);assert.match(value.request.prompt,/Live Task/);assert.match(value.request.prompt,/Live PR/);assert.equal(value.request.canonicalEvidence.currentTask.title,'Live Task');assert.equal(readNextStepRequest(f.context,'req-1',f.env).request.promptSha256.length,64);}finally{f.cleanup();}});
 test('fails closed on runtime drift, dirty worktree, busy executor and stale conversation',()=>{
   for(const [mutate,code] of [
     [f=>f.input.branch='wrong','NEXT_STEP_RUNTIME_DRIFT'],
@@ -71,4 +72,13 @@ test('no Next-Step is created without a verified canonical global UI policy',()=
     expectCode(()=>createNextStepRequest(f.context,f.input,f.facts,f.env,{uiPreviewPolicy:{...uiPreviewPolicy,status:'DRAFT'}}),'NEXT_STEP_GLOBAL_UI_PREVIEW_POLICY_UNAVAILABLE');
     assert.equal(latestNextStepForRoom(f.context,'traffic',f.env),null);
   } finally {f.cleanup();}
+});
+
+test('Next-Step never persists intent with absent, stale or mismatched fast policy',()=>{
+  const f=fixture();try{
+    expectCode(()=>createNextStepRequest(f.context,f.input,f.facts,f.env,{uiPreviewPolicy}),'NEXT_STEP_GLOBAL_FAST_ITERATION_POLICY_UNAVAILABLE');
+    expectCode(()=>createNextStepRequest(f.context,f.input,f.facts,f.env,{uiPreviewPolicy,fastIterationPolicy:{...fastIterationPolicy,mainSha:'f'.repeat(40)}}),'NEXT_STEP_GLOBAL_FAST_ITERATION_POLICY_UNAVAILABLE');
+    expectCode(()=>createNextStepRequest(f.context,f.input,f.facts,f.env,{uiPreviewPolicy,fastIterationPolicy:{...fastIterationPolicy,status:'DRAFT'}}),'NEXT_STEP_GLOBAL_FAST_ITERATION_POLICY_UNAVAILABLE');
+    assert.equal(latestNextStepForRoom(f.context,'traffic',f.env),null);
+  }finally{f.cleanup();}
 });

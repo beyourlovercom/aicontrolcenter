@@ -12,6 +12,7 @@ import {ensureBridgeCredential,listBridgeRequestIds,readBridgeRequestBinding,ver
 import {bridgeProjectionAsync,claimBridgeDeliveryAsync,reconcileBridgeStartup,recordBridgeReceipt,submitBridgeRequestAsync} from './lib/bridge-runtime.mjs';
 import {createChatgptProjectionStore} from './lib/chatgpt-projection.mjs';
 import {loadNextStepUiPreviewPolicy} from './lib/ui-preview-policy-runtime.mjs';
+import {loadNextStepFastIterationPolicy} from './lib/fast-iteration-policy-runtime.mjs';
 import {assertNextStepLocal,cancelPendingNextStepForRoom,claimNextStep,createNextStepRequest,readNextStepRequest,reconcileNextStepStartup,recordNextStepReceipt} from './lib/next-step-runtime.mjs';
 import {createHumanChatRequest,claimHumanChat,readHumanChatRequest,reconcileHumanChatStartup,recordHumanChatReceipt} from './lib/human-chat-runtime.mjs';
 import {RemoteRunnerClient,remoteRunnerBaseUrl,remoteRepositoryRoot} from './lib/remote-runner-client.mjs';
@@ -285,7 +286,9 @@ export function createAiccV3Server(options={}){
         // Pre-submit governance only: pin canonical GitHub policy into the NEW immutable GPT prompt.
         // Existing frozen requests and Bridge / Result transport are never rewritten.
         const uiPreviewPolicy=await (options.nextStepUiPreviewPolicyLoader||loadNextStepUiPreviewPolicy)();
-        const created=createNextStepRequest(context,input,{executorReady:Boolean(executor?.readiness?.ready),activeRun:executor?.activeLease?.runId||null,snapshot,work,prDelivery},env,{...(options.nextStepOptions||{}),uiPreviewPolicy});
+        // Pin both policies before freezing a new request; never rewrite prior Bridge payloads.
+        const fastIterationPolicy=await (options.nextStepFastIterationPolicyLoader||loadNextStepFastIterationPolicy)({mainSha:uiPreviewPolicy.mainSha});
+        const created=createNextStepRequest(context,input,{executorReady:Boolean(executor?.readiness?.ready),activeRun:executor?.activeLease?.runId||null,snapshot,work,prDelivery},env,{...(options.nextStepOptions||{}),uiPreviewPolicy,fastIterationPolicy});
         return json(res,201,{ok:true,...created});
       }catch(error){return nextStepError(res,error);}
     }
