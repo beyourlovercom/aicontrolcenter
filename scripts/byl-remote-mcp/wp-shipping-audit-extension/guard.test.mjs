@@ -150,21 +150,28 @@ test('manifest + popup source enforce explicit host permission, scoped DNR befor
   const root=new URL('.',import.meta.url);
   const manifest=JSON.parse(readFileSync(new URL('manifest.json',root),'utf8'));
   const popup=readFileSync(new URL('popup.mjs',root),'utf8');
+  const worker=readFileSync(new URL('background.mjs',root),'utf8');
   assert.equal(manifest.manifest_version,3);
+  assert.equal(manifest.background.service_worker,'background.mjs');
   assert.ok(manifest.optional_host_permissions.includes('https://dev.beyourlover.com/*'));
   assert.ok(manifest.optional_host_permissions.includes('https://www.beyourlover.com/*'));
   assert.equal(manifest.host_permissions,undefined);
   assert.ok(!manifest.permissions.includes('cookies'));
   assert.ok(!manifest.permissions.includes('webRequest'));
+  assert.ok(!manifest.permissions.includes('tabs'));
+  assert.ok(popup.includes('chrome.permissions.request'));
+  assert.ok(popup.includes('chrome.runtime.sendMessage'));
   for(const token of [
-    'chrome.permissions.request', 'chrome.declarativeNetRequest.updateSessionRules',
+    'chrome.permissions.contains','chrome.declarativeNetRequest.updateSessionRules',
     'chrome.tabs.create','chrome.tabs.update','chrome.scripting.executeScript',
-    'chrome.downloads.download', 'removeRuleIds'
-  ])assert.ok(popup.includes(token),token);
-  assert.ok(popup.indexOf('addRules:[rule]')<popup.indexOf('chrome.tabs.update'));
-  assert.ok(popup.indexOf('chrome.tabs.remove(auditTab.id)')<popup.indexOf('removeRuleIds'));
-  assert.ok(!popup.includes('fetch('));
-  assert.ok(!popup.includes('forms.submit'));
+    'chrome.downloads.download','chrome.downloads.search', 'removeRuleIds',
+    'chrome.storage.session', 'cleanupOrphan'
+  ])assert.ok(worker.includes(token),token);
+  assert.ok(worker.indexOf('addRules:[rule]')<worker.indexOf('chrome.tabs.update'));
+  assert.ok(worker.indexOf('chrome.tabs.remove(tab.id)')<worker.indexOf('removeRuleIds'));
+  assert.ok(worker.includes("'main_frame'"));
+  assert.ok(!worker.includes('fetch('));
+  assert.ok(!worker.includes('forms.submit'));
 });
 
 
@@ -199,4 +206,15 @@ test('Woo methods data-enabled attribute maps yes/no without clicking status lin
   assert.equal(result.ok,true);
   assert.deepEqual(result.rows.map(r=>r.enabled),[true,false]);
   assert.equal(result.partial,true);
+});
+
+
+test('shipping rates cannot export alphabetic secrets disguised as cost',()=>{
+  for(const maliciousCost of ['admin_token','internal_note','[fee percent=99]','20;secret']){
+    const result=sanitizeBrowserSnapshot(snapshot(methods,[{
+      instanceId:14,methodId:'flat_rate',label:'Flat rate',
+      cost:maliciousCost,minimum:null,enabled:true
+    }]),methods);
+    assert.equal(result.ok,false,maliciousCost);
+  }
 });
