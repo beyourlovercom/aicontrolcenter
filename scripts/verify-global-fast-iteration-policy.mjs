@@ -23,7 +23,7 @@ for (const [token, description] of [
   ['OWNER_PASS', 'explicit human UAT'],
   ['exact-head', 'merge gate remains independent'],
   ['GitHub `main` SHA', 'cross-project authority provenance'],
-  ['do not authorize execution', 'advisory-only semantics']
+  ['does not authorize execution', 'advisory-only semantics']
 ]) must(policy, token, description);
 
 for (const token of [
