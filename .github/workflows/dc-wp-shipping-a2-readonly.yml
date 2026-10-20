@@ -1,0 +1,28 @@
+name: DC WP Shipping Audit A2 (read-only)
+
+on:
+  pull_request:
+    paths:
+      - 'scripts/byl-remote-mcp/wp-shipping-audit-readonly-a2.mjs'
+      - 'scripts/byl-remote-mcp/wp-shipping-audit-readonly-a2.test.mjs'
+      - '.github/workflows/dc-wp-shipping-a2-readonly.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  dev-audit-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout PR source
+        uses: actions/checkout@v4
+      - name: Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Syntax and isolated read-only regression
+        run: |
+          node --check scripts/byl-remote-mcp/wp-shipping-audit-readonly-a2.mjs
+          node --check scripts/byl-remote-mcp/wp-shipping-audit-readonly-a2.test.mjs
+          node --test scripts/byl-remote-mcp/wp-shipping-audit-readonly-a2.test.mjs
