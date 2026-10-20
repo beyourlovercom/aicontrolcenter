@@ -1,0 +1,80 @@
+name: DC R1 Public Actions Combined Dev Integration
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/dc-r1-combined-dev-v1.yml'
+permissions:
+  contents: read
+jobs:
+  combined-isolated-dev:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Verify G1 exact source and overlay fixed S2-S6 PR heads
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" != "" 
+          mkdir -p "$RUNNER_TEMP/dc-r1"
+          declare -A heads=(
+            [91]=1a9fb3891368be5027ca98556086264d1c39f47a
+            [92]=23cfcf26a006b8a804c71b39bba195599cb1a727
+            [93]=15464cdf941be107558cda8ad0f5720a94ce44b2
+            [94]=7c92d3ee6b16eb99c9afd51ad9b362c42679d365
+            [95]=b6c52f4492a034d784f30eb29677da24e41d4ed1
+          )
+          for n in 91 92 93 94 95; do
+            sha="${heads[$n]}"
+            folder="$RUNNER_TEMP/dc-r1/$n"
+            mkdir -p "$folder"
+            curl -fsSL --retry 2 --connect-timeout 10 --max-time 60 \
+              "https://api.github.com/repos/beyourlovercom/aicontrolcenter/tarball/$sha" \
+              | tar -xz --strip-components=1 -C "$folder"
+            case "$n" in
+              91) files='.github/workflows/dc-s2-health-wire-dev-v1.yml docs/60_Operations/work-packages/AICC-DC-S2-SIGNED-WIRE-DEV-V1.md scripts/byl-remote-mcp/remote-v2-health-wire-dev.mjs scripts/byl-remote-mcp/remote-v2-health-wire-dev.test.mjs' ;;
+              92) files='.github/workflows/dc-s3-trust-enrollment-v1.yml docs/60_Operations/work-packages/AICC-DC-S3-TRUST-ENROLLMENT-V1.md scripts/byl-remote-mcp/remote-v3-trust-enrollment.mjs scripts/byl-remote-mcp/remote-v3-trust-enrollment.test.mjs' ;;
+              93) files='.github/workflows/dc-s4-agent-signed-health-handler-v1.yml docs/60_Operations/work-packages/AICC-DC-S4-AGENT-SIGNED-HEALTH-HANDLER-V1.md scripts/byl-remote-mcp/remote-v4-agent-signed-health-handler.mjs scripts/byl-remote-mcp/remote-v4-agent-signed-health-handler.test.mjs' ;;
+              94) files='.github/workflows/dc-s5-four-device-e2e-v1.yml docs/60_Operations/work-packages/AICC-DC-S5-PINNED-FOUR-DEVICE-E2E-V1.md scripts/byl-remote-mcp/remote-v5-four-device-e2e.test.mjs scripts/byl-remote-mcp/stage-s5-pinned-e2e-test.sh' ;;
+              95) files='.github/workflows/dc-s6-real-runtime-readiness-v1.yml docs/60_Operations/work-packages/AICC-DC-S6-REAL-SIGNED-READINESS-V1.md scripts/byl-remote-mcp/remote-v6-real-readiness-audit.mjs scripts/byl-remote-mcp/remote-v6-real-readiness-audit.test.mjs' ;;
+            esac
+            for f in $files; do
+              test -f "$folder/$f"
+              mkdir -p "$(dirname "$f")"
+              cp "$folder/$f" "$f"
+            done
+            echo "R1_PINNED_SOURCE_PR_${n}=${sha}"
+          done
+          echo "R1_G1_BRANCH_SOURCE=PR96_39e8bd9f577e50c12b1ea0ab1f759e61cbcbe3b7"
+      - name: Install locked MCP SDK dependencies without lifecycle scripts
+        working-directory: scripts/byl-remote-mcp
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Syntax, combined status and signed health regressions
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --test \
+            scripts/byl-remote-mcp/official-parity-operational-device-status.test.mjs \
+            scripts/byl-remote-mcp/official-parity-oauth-runtime-surface.test.mjs \
+            scripts/byl-remote-mcp/remote-v2-health-wire-dev.test.mjs \
+            scripts/byl-remote-mcp/remote-v3-trust-enrollment.test.mjs \
+            scripts/byl-remote-mcp/remote-v4-agent-signed-health-handler.test.mjs \
+            scripts/byl-remote-mcp/remote-v5-four-device-e2e.test.mjs \
+            scripts/byl-remote-mcp/remote-v6-real-readiness-audit.test.mjs \
+            scripts/byl-remote-mcp/remote-v2-verified-availability.test.mjs \
+            scripts/byl-remote-mcp/remote-v2-live-health.test.mjs \
+            scripts/byl-remote-mcp/remote-v2-signed-health.test.mjs
+          echo "R1_COMBINED_SYNTHETIC_DEV_TEST=PASS"
+      - name: Assert isolated CI never imports runtime secrets
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -z "${BYL_MCP_A4_PRIVATE_MANIFEST_FILE:-}"
+          echo "R1_LIVE_AGENT_PROBES=NONE"
+          echo "R1_PRODUCTION_DEPLOYMENT=NO"
