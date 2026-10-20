@@ -168,7 +168,8 @@ test('manifest + popup source enforce explicit host permission, scoped DNR befor
     'chrome.storage.session', 'cleanupOrphan'
   ])assert.ok(worker.includes(token),token);
   assert.ok(worker.indexOf('addRules:[rule]')<worker.indexOf('chrome.tabs.update'));
-  assert.ok(worker.indexOf('chrome.tabs.remove(tab.id)')<worker.indexOf('removeRuleIds'));
+  const transactionWorker=worker.slice(worker.indexOf('async function readAndExport'));
+  assert.ok(transactionWorker.indexOf('chrome.tabs.remove(tab.id)')<transactionWorker.indexOf('removeRuleIds'));
   assert.ok(worker.includes("'main_frame'"));
   assert.ok(!worker.includes('fetch('));
   assert.ok(!worker.includes('forms.submit'));
