@@ -109,7 +109,8 @@ async function readAndExport(request){
     if(!Number.isInteger(tab.id))throw Error('TAB_UNAVAILABLE');
     rule=blockingRule(tab.id);
     await chrome.storage.session.set({[ACTIVE_KEY]:{
-      owner:'BYL_WP_SHIPPING',tabId:tab.id,ruleId:rule.id
+      owner:'BYL_WP_SHIPPING',tabId:tab.id,ruleId:rule.id,
+      environment:request.environment,operation:request.operation,zoneId:request.zoneId
     }});
     // The rule is activated BEFORE navigating to the authenticated page.
     await chrome.declarativeNetRequest.updateSessionRules({addRules:[rule]});
