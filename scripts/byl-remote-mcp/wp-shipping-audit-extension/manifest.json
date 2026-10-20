@@ -3,7 +3,12 @@
   "name": "BYL Woo Shipping Read-only Audit",
   "description": "Explicitly consented, local-only shipping settings inspection. No order or settings writes.",
   "version": "0.1.0",
-  "permissions": ["tabs", "scripting", "downloads", "declarativeNetRequest"],
+  "permissions": [
+    "scripting",
+    "downloads",
+    "declarativeNetRequest",
+    "storage"
+  ],
   "optional_host_permissions": [
     "https://dev.beyourlover.com/*",
     "https://www.beyourlover.com/*"
@@ -11,5 +16,9 @@
   "action": {
     "default_title": "BYL Shipping Read-only Audit",
     "default_popup": "popup.html"
+  },
+  "background": {
+    "service_worker": "background.mjs",
+    "type": "module"
   }
 }
