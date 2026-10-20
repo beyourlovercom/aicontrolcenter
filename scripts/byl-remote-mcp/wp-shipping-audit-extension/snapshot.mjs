@@ -81,11 +81,10 @@ export function readWooShippingDocument(expectedUrl,operation){
       // Read only if a recognized, visible scoped element explicitly has it.
       const costNode=one(row,[
         'td.wc-shipping-zone-method-cost [data-rate-cost]',
-        'td.wc-shipping-zone-method-cost input[name="cost"]',
-        'td.wc-shipping-zone-method-cost'
+        'td.wc-shipping-zone-method-cost input[name="cost"]'
       ]);
-      let cost=costNode?(costNode.getAttribute?.('data-rate-cost')??costNode.value??text(costNode,80)):null;
-      if(cost!==null){cost=String(cost).trim();if(!/^[0-9a-z_\[\] +*().,-]{1,80}$/i.test(cost))cost=null;}
+      let cost=costNode?(costNode.getAttribute?.('data-rate-cost')??costNode.value):null;
+      if(cost!==null){cost=String(cost).trim();if(!/^\d{1,8}(?:\.\d{1,2})?$/.test(cost))cost=null;}
       const minimumNode=one(row,['td.wc-shipping-zone-method-minimum input[name="min_amount"]',
         'td.wc-shipping-zone-method-minimum [data-min-amount]']);
       let minimum=minimumNode?(minimumNode.getAttribute?.('data-min-amount')??minimumNode.value):null;
