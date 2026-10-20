@@ -14,7 +14,7 @@ export const AUDIT_SCHEMA='wp_shipping_browser_readonly.v1';
 const isObject=x=>x!==null&&typeof x==='object'&&!Array.isArray(x);
 const validId=(x,max=99999)=>Number.isSafeInteger(x)&&x>=0&&x<=max;
 const safeText=(input,max=120)=>{
-  if(typeof input!=='string'||input.length>max*3)return null;
+  if(typeof input!=='string'||input.length>max*3||/[\u0000-\u001F]/.test(input))return null;
   const s=input.replace(/\s+/g,' ').trim();
   return s.length>0&&s.length<=max&&!/[<>\u0000-\u001F]/.test(s)?s:null;
 };
