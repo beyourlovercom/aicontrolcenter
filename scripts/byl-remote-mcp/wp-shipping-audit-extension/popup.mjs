@@ -47,7 +47,10 @@ const blockingRule=tabId=>({
   action:{type:'block'},
   condition:{
     regexFilter:'^https?://',
-    requestMethods:['post','put','patch','delete','connect'],
+    requestMethods:['post','put','patch','delete','connect','other'],
+    resourceTypes:['main_frame','sub_frame','xmlhttprequest','script','stylesheet',
+      'image','font','object','ping','csp_report','media','websocket',
+      'webtransport','webbundle','other'],
     tabIds:[tabId]
   }
 });
