@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BYL Shipping read-only audit</title>
+<style>
+body{font:13px -apple-system,BlinkMacSystemFont,Arial,sans-serif;margin:0;padding:16px;width:300px;color:#111;background:#fff}
+h1{font-size:16px;margin:0 0 10px}
+p{line-height:1.5;color:#555}
+label{display:block;font-weight:600;margin:12px 0 5px}
+select,input,button{box-sizing:border-box;width:100%;font:inherit;padding:10px;border:1px solid #aaa;border-radius:6px;background:#fff;color:#111}
+button{margin-top:16px;color:#fff;background:#222;border-color:#222;cursor:pointer;font-weight:600}
+button:disabled{opacity:.5;cursor:wait}
+small{display:block;margin-top:8px;color:#555;line-height:1.5}
+#status{white-space:pre-wrap;word-break:break-word;min-height:40px;margin-top:12px;border-top:1px solid #ddd;padding-top:10px}
+</style>
+</head>
+<body>
+<h1>Woo Shipping · Read only</h1>
+<p>Uses your existing logged-in Chrome profile. Exports only shipping configuration fields to a local JSON file.</p>
+<label for="environment">Site (separate consent)</label>
+<select id="environment">
+<option value="DEV">Dev · dev.beyourlover.com</option>
+<option value="WWW">WWW · www.beyourlover.com</option>
+</select>
+<label for="operation">Read</label>
+<select id="operation">
+<option value="zones">Shipping Zones list</option>
+<option value="methods">Shipping Methods for one zone</option>
+</select>
+<label for="zoneId">Zone ID (Methods only)</label>
+<input id="zoneId" type="number" min="0" max="99999" step="1" value="0" disabled>
+<button id="audit" type="button">Grant access and read</button>
+<small>Only fixed Shipping Settings GET pages are opened. A temporary Chrome rule blocks POST/PUT/PATCH/DELETE during inspection. No WordPress forms are submitted. The new audit tab is closed afterward.</small>
+<div id="status" role="status" aria-live="polite">Ready. Nothing has been read.</div>
+<script type="module" src="popup.mjs"></script>
+</body>
+</html>
