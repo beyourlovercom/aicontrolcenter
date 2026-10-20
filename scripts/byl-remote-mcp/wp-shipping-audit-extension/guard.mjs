@@ -20,7 +20,9 @@ const safeText=(input,max=120)=>{
 };
 const safeMoney=(s)=>{
   if(s===null)return null;
-  return typeof s==='string'&&s.length<=80&&/^[0-9a-z_\[\] +*().,-]+$/i.test(s)?s:null;
+  // Do not serialize arbitrary visible text as a rate; complex Woo formulas
+  // remain UNKNOWN until an explicit instance configuration audit.
+  return typeof s==='string'&&/^\d{1,8}(?:\.\d{1,2})?$/.test(s)?s:null;
 };
 const own=(o,k)=>Object.prototype.hasOwnProperty.call(o,k);
 const error=code=>({ok:false,errorCode:code});
