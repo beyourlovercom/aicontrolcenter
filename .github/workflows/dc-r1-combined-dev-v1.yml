@@ -17,41 +17,30 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - name: Verify G1 exact source and overlay fixed S2-S6 PR heads
+      - name: Assert persisted G1 plus pinned S2-S6 files match exact approved PR blob identities
         shell: bash
         run: |
           set -euo pipefail
-          test "$(git rev-parse HEAD)" != "" 
-          mkdir -p "$RUNNER_TEMP/dc-r1"
-          declare -A heads=(
-            [91]=1a9fb3891368be5027ca98556086264d1c39f47a
-            [92]=23cfcf26a006b8a804c71b39bba195599cb1a727
-            [93]=15464cdf941be107558cda8ad0f5720a94ce44b2
-            [94]=7c92d3ee6b16eb99c9afd51ad9b362c42679d365
-            [95]=b6c52f4492a034d784f30eb29677da24e41d4ed1
-          )
-          for n in 91 92 93 94 95; do
-            sha="${heads[$n]}"
-            folder="$RUNNER_TEMP/dc-r1/$n"
-            mkdir -p "$folder"
-            curl -fsSL --retry 2 --connect-timeout 10 --max-time 60 \
-              "https://api.github.com/repos/beyourlovercom/aicontrolcenter/tarball/$sha" \
-              | tar -xz --strip-components=1 -C "$folder"
-            case "$n" in
-              91) files='.github/workflows/dc-s2-health-wire-dev-v1.yml docs/60_Operations/work-packages/AICC-DC-S2-SIGNED-WIRE-DEV-V1.md scripts/byl-remote-mcp/remote-v2-health-wire-dev.mjs scripts/byl-remote-mcp/remote-v2-health-wire-dev.test.mjs' ;;
-              92) files='.github/workflows/dc-s3-trust-enrollment-v1.yml docs/60_Operations/work-packages/AICC-DC-S3-TRUST-ENROLLMENT-V1.md scripts/byl-remote-mcp/remote-v3-trust-enrollment.mjs scripts/byl-remote-mcp/remote-v3-trust-enrollment.test.mjs' ;;
-              93) files='.github/workflows/dc-s4-agent-signed-health-handler-v1.yml docs/60_Operations/work-packages/AICC-DC-S4-AGENT-SIGNED-HEALTH-HANDLER-V1.md scripts/byl-remote-mcp/remote-v4-agent-signed-health-handler.mjs scripts/byl-remote-mcp/remote-v4-agent-signed-health-handler.test.mjs' ;;
-              94) files='.github/workflows/dc-s5-four-device-e2e-v1.yml docs/60_Operations/work-packages/AICC-DC-S5-PINNED-FOUR-DEVICE-E2E-V1.md scripts/byl-remote-mcp/remote-v5-four-device-e2e.test.mjs scripts/byl-remote-mcp/stage-s5-pinned-e2e-test.sh' ;;
-              95) files='.github/workflows/dc-s6-real-runtime-readiness-v1.yml docs/60_Operations/work-packages/AICC-DC-S6-REAL-SIGNED-READINESS-V1.md scripts/byl-remote-mcp/remote-v6-real-readiness-audit.mjs scripts/byl-remote-mcp/remote-v6-real-readiness-audit.test.mjs' ;;
-            esac
-            for f in $files; do
-              test -f "$folder/$f"
-              mkdir -p "$(dirname "$f")"
-              cp "$folder/$f" "$f"
-            done
-            echo "R1_PINNED_SOURCE_PR_${n}=${sha}"
-          done
-          echo "R1_G1_BRANCH_SOURCE=PR96_39e8bd9f577e50c12b1ea0ab1f759e61cbcbe3b7"
+          verify() {
+            test -f "$1"
+            local actual
+            actual="$(git hash-object "$1")"
+            test "$actual" = "$2" || { echo "Pinned Git blob mismatch: $1"; exit 1; }
+          }
+          base=scripts/byl-remote-mcp
+          verify "$base/official-parity-operational-device-status.mjs" adc4a966b508739c29c20e80734f6e498424707d
+          verify "$base/official-parity-oauth-runtime-surface.mjs" 83511301f503ef03fcedb5e8de179b58fa2b6fa7
+          verify "$base/remote-v2-health-wire-dev.mjs" ff62609fc22349febe53b3ca6c85e638f9dcc547
+          verify "$base/remote-v2-health-wire-dev.test.mjs" 79e1a696225ff818a265c72ee4425d7bcb379311
+          verify "$base/remote-v3-trust-enrollment.mjs" 4c81655deca0a3d19e62dfbdbed0123dc99e47bb
+          verify "$base/remote-v3-trust-enrollment.test.mjs" 4f60b40bddb038884c03978de72ca8a78662bc2e
+          verify "$base/remote-v4-agent-signed-health-handler.mjs" 61bfc2941548d979324da7725beb5fa236f7e2d2
+          verify "$base/remote-v4-agent-signed-health-handler.test.mjs" 387ad308deca7912916533f4edd3b7463b3223ee
+          verify "$base/remote-v5-four-device-e2e.test.mjs" 13df345550a792ee1872ab822f39099c381ec3ea
+          verify "$base/stage-s5-pinned-e2e-test.sh" 4e2cedee4a22331d27bdfe9885e247ba93d7f21b
+          verify "$base/remote-v6-real-readiness-audit.mjs" f388a446d84d322119994161226b3f76892a75fa
+          verify "$base/remote-v6-real-readiness-audit.test.mjs" 288e045b749747e778d26d5385132d145090712f
+          echo "R1_SOURCE_BLOBS=12_PINNED_PASS"
       - name: Install locked MCP SDK dependencies without lifecycle scripts
         working-directory: scripts/byl-remote-mcp
         run: npm ci --ignore-scripts --no-audit --no-fund
