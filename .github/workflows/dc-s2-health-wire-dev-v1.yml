@@ -1,0 +1,41 @@
+name: DC S2 Signed Health Wire Dev-only V1
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'scripts/byl-remote-mcp/remote-v2-health-wire-dev.mjs'
+      - 'scripts/byl-remote-mcp/remote-v2-health-wire-dev.test.mjs'
+      - '.github/workflows/dc-s2-health-wire-dev-v1.yml'
+      - 'docs/60_Operations/work-packages/AICC-DC-S2-SIGNED-WIRE-DEV-V1.md'
+permissions:
+  contents: read
+jobs:
+  dev-signed-wire:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Source syntax + reused library/Dev-only 127.0.0.1 fixture tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --check scripts/byl-remote-mcp/remote-v2-health-wire-dev.mjs
+          node --check scripts/byl-remote-mcp/remote-v2-health-wire-dev.test.mjs
+          node --test scripts/byl-remote-mcp/remote-v2-{health-wire-dev,verified-availability,live-health,signed-health}.test.mjs
+      - name: Reject network/filesystem/process/private-key operations in shipping transport contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          target=scripts/byl-remote-mcp/remote-v2-health-wire-dev.mjs
+          if grep -En 'node:fs|node:http|node:net|fetch\(|launchctl|process\.kill|spawn\(|exec\(|listen\(|privateKey|readFile|writeFile|\.env|gateway\.token' "$target"; then
+            echo 'Unexpected privileged operation in fixed health wire adapter'
+            exit 1
+          fi
+          grep -q 'SIGNED_HEALTH_OPERATION' "$target"
+          grep -q 'DUPLICATE_DEVICE_TRUST_KEY' "$target"
+          grep -q 'TRUST_PIN_MISMATCH' "$target"
