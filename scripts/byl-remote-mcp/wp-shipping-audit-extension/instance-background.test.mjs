@@ -7,7 +7,7 @@ test('synthetic browser: Dev-first, nine guarded GETs, cleanup and local-only ex
   const original={chrome:globalThis.chrome,document:globalThis.document,location:globalThis.location};
   const events=[],tabs=new Map(),activeRules=new Map(),sessions={},
     local={},downloads=[],updatedListeners=new Set(),removedListeners=new Set();
-  let onMessage,tabCount=0;
+  let onMessage,tabCount=0,manifestVersion='0.2.1';
   const fakeField=(kind,key,value,type='text')=>{
     const id='woocommerce_'+kind+'_'+key;
     return {id,name:id,tagName:type==='select-one'?'SELECT':'INPUT',
@@ -16,6 +16,7 @@ test('synthetic browser: Dev-first, nine guarded GETs, cleanup and local-only ex
   globalThis.chrome={
     runtime:{
       id:'synthetic-a5-extension',
+      getManifest(){return {version:manifestVersion};},
       onStartup:{addListener(){}},
       onMessage:{addListener(fn){onMessage=fn;}}
     },
@@ -156,6 +157,12 @@ test('synthetic browser: Dev-first, nine guarded GETs, cleanup and local-only ex
         if(!hold&&input.operation==='instanceBatch')reject(Error('not async'));
       }catch(err){reject(err);}
     });
+    manifestVersion='0.0.0';
+    const wrongBuild=await send({environment:'DEV',operation:'instanceBatch'});
+    assert.equal(wrongBuild.ok,false);
+    assert.equal(wrongBuild.errorCode,'A5_VERSION_MISMATCH');
+    assert.equal(tabCount,0);
+    manifestVersion='0.2.1';
     const noDev=await send({environment:'WWW',operation:'instanceBatch'});
     assert.equal(noDev.ok,false);assert.equal(noDev.errorCode,'DEV_OWNER_PASS_REQUIRED');
     assert.equal(tabCount,0);
