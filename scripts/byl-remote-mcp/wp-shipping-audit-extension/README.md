@@ -38,3 +38,35 @@ The dedicated GitHub Actions workflow runs these tests with read-only repository
 ## Handoff
 
 A3/A4 browser source and scoped optional permissions are delivered as a stacked Draft PR on the A2 branch. **No AICC main merge, Production Gateway/Agent release, Chrome install, WWW mutation or READY device restart** is allowed in this work package. A5 still needs a real verified WWW shipping-config receipt, and Checkout B retains sole ownership of shipping calculation fixes.
+
+## A5 — fixed 9 shipping instance details (v0.2.0, isolated source candidate)
+
+**Not installed, not production OAuth registered, not real Dev/WWW UAT PASS.**
+
+The new popup choice `Shipping instance details · fixed 9 (read only)` uses an exact URL/ID list independently observed in the Owner's **WWW** Shipping Methods UAT: IDs `1,3,9,10,7,8,5,6,2`. Each has a known method kind and prior zone ID (0/5/4/3/1). The prior zone mapping is historical evidence; the instance detail page does **not** independently confirm it.
+
+WooCommerce supports a separate admin instance settings page:
+`/wp-admin/admin.php?page=wc-settings&tab=shipping&instance_id=N`.
+This Chrome extension performs **one fixed GET at a time**, protected by a per-tab non-GET block, then closes the temporary tab before removing the blocking rule. No arbitrary URL, Woo admin click, submit, nonce, cookie, user data or API key is read. Nine reads are sequential and may take a couple of minutes. If a form is missing or a redirect happens, the audit stops with an error instead of guessing.
+
+Data emitted **only if form fields exist**:
+- Free Shipping: `requires` enum (`''`, `coupon`, `min_amount`, `either`, `both`), `minAmount`, `ignoreDiscounts` (checkbox).
+- Flat Rate: `cost`, `noClassCost`, `calculationType`, numeric-ID `classCosts`, max 40.
+- Numerical costs (including zero) and explicit blank are preserved. Complex Woo cost formulas or unexpected values become `null` / `partial=true`; never export raw form markup/labels, script, HTML or cookies.
+
+**Owner Dev-first UAT sequence after code review and exact-head CI:**
+
+1. Download the newly generated **BYL-Woo-Shipping-Readonly-A5-Instance-Details** artifact from the A5 PR's successful GitHub Actions run. Unzip to a distinct Owner-controlled folder. The previous A3/A4 extension remains unchanged.
+2. From normal Chrome `chrome://extensions` UI, explicitly **Load unpacked** the new extension and approve permission only for `Dev · dev.beyourlover.com`.
+3. Select `Shipping instance details · fixed 9 (read only)`; click **Grant access and read** once. The extension exports `BYL-shipping-readonly-DEV-instances-9-<timestamp>.json` only when all nine fixed, expected instance detail forms could be verified. If Dev IDs have drifted, it may stop safely; report the popup's exact error.
+4. Confirm Dev JSON with the formal signed China Mac DC `read_file`, check nine IDs, expected types, cost/threshold and `partial`. **Actual Owner Dev UAT PASS is required; source unit tests do not substitute.**
+5. Only afterwards use Owner UI to consent for `WWW` to audit the same nine fixed details, and compare with observed WWW Shipping Methods receipts. The extension also enforces completion of the Dev export before enabling its WWW batch operation. This *technical* gate is not a substitute for separate human Dev approval.
+
+**Known limits:** This is browser-mediated **read-only** navigation, not a new callable OAuth browser tool; signed DC reads only the downloaded local JSON. WordPress authenticated GET pages may trigger routine logging/cron/caching; do not claim literal zero DB writes. Do not change WWW Woo settings, discount/checkout hooks, payments, orders, installed Gateway/Agent, or READY machines in this task. Draft PRs #102 / #104 remain unmerged; A5 is a stacked Draft PR only. Existing A3/A4 Zones and Methods operations remain available.
+
+Technical evidence tests:
+
+```bash
+node --test scripts/byl-remote-mcp/wp-shipping-audit-extension/instance-guard.test.mjs
+node --test scripts/byl-remote-mcp/wp-shipping-audit-extension/instance-background.test.mjs
+```
