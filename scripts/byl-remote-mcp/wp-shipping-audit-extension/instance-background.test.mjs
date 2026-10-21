@@ -71,7 +71,7 @@ test('synthetic browser: Dev-first, nine guarded GETs, cleanup and local-only ex
         if(addRules){
           for(const rule of addRules){
             assert.deepEqual(rule.condition.requestMethods,
-              ['post','put','patch','delete','connect','other']);
+              ['post','put','patch','delete','head','options','connect','other']);
             assert.ok(rule.condition.resourceTypes.includes('main_frame'));
             const id=rule.condition.tabIds[0];
             activeRules.set(id,rule.id);events.push(['arm',id]);
