@@ -4,7 +4,7 @@
  */
 import {fixedShippingRequest} from './guard.mjs';
 import {fixedInstanceBatchRequest} from './instance-guard.mjs';
-import {DEV_A5_KEY,isDevReceiptAwaitingOwner,ownerApproveDevReceipt,
+import {DEV_A5_KEY,A5_VERSION,isDevReceiptAwaitingOwner,ownerApproveDevReceipt,
   hasFreshOwnerDevApproval} from './instance-approval.mjs';
 const environment=document.getElementById('environment');
 const operation=document.getElementById('operation');
@@ -16,6 +16,7 @@ const say=text=>{status.textContent=text;};
 
 const refreshDevApproval=async()=>{
   try{
+    if(chrome.runtime.getManifest().version!==A5_VERSION){approve.disabled=true;return;}
     const record=(await chrome.storage.local.get(DEV_A5_KEY))[DEV_A5_KEY];
     approve.disabled=!isDevReceiptAwaitingOwner(record);
   }catch{approve.disabled=true;}
@@ -25,6 +26,9 @@ approve.addEventListener('click',async()=>{
   if(approve.disabled)return;
   approve.disabled=true;
   try{
+    if(chrome.runtime.getManifest().version!==A5_VERSION){
+      say('This extension build does not match the A5 approval contract.');return;
+    }
     const record=(await chrome.storage.local.get(DEV_A5_KEY))[DEV_A5_KEY];
     const approved=ownerApproveDevReceipt(record);
     if(!approved){say('Dev export confirmation expired or unavailable.');return;}
