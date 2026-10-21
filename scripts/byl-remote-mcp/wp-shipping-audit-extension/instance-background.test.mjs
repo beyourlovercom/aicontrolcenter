@@ -143,7 +143,7 @@ test('synthetic browser: Dev-first, nine guarded GETs, cleanup and local-only ex
     assert.equal(tabCount,0);
     const dev=await send({environment:'DEV',operation:'instanceBatch'});
     assert.equal(dev.ok,true);assert.equal(dev.count,9);
-    assert.equal(dev.partial,true,'absence of no-class costs for free methods must not fake completeness');
+    assert.equal(dev.partial,false,'all required fixture fields are explicitly present');
     assert.equal(local.bylWpShippingA5DevBatchCompletedV1,true);
     assert.equal(tabCount,9);assert.equal(tabs.size,0);assert.equal(activeRules.size,0);
     assert.equal(sessions.bylWpShippingActiveAuditV1,undefined);
