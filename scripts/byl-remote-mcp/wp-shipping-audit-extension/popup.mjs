@@ -4,12 +4,38 @@
  */
 import {fixedShippingRequest} from './guard.mjs';
 import {fixedInstanceBatchRequest} from './instance-guard.mjs';
+import {DEV_A5_KEY,isDevReceiptAwaitingOwner,ownerApproveDevReceipt,
+  hasFreshOwnerDevApproval} from './instance-approval.mjs';
 const environment=document.getElementById('environment');
 const operation=document.getElementById('operation');
 const zoneId=document.getElementById('zoneId');
 const button=document.getElementById('audit');
+const approve=document.getElementById('approveDev');
 const status=document.getElementById('status');
 const say=text=>{status.textContent=text;};
+
+const refreshDevApproval=async()=>{
+  try{
+    const record=(await chrome.storage.local.get(DEV_A5_KEY))[DEV_A5_KEY];
+    approve.disabled=!isDevReceiptAwaitingOwner(record);
+  }catch{approve.disabled=true;}
+};
+void refreshDevApproval();
+approve.addEventListener('click',async()=>{
+  if(approve.disabled)return;
+  approve.disabled=true;
+  try{
+    const record=(await chrome.storage.local.get(DEV_A5_KEY))[DEV_A5_KEY];
+    const approved=ownerApproveDevReceipt(record);
+    if(!approved){say('Dev export confirmation expired or unavailable.');return;}
+    await chrome.storage.local.set({[DEV_A5_KEY]:approved});
+    if(hasFreshOwnerDevApproval(approved)){
+      say('Owner-confirmed Dev A5 audit recorded for this extension build (48h). WWW still requires a separate Chrome host permission and an explicit audit click.');
+    }else say('Could not verify the Owner Dev approval record.');
+  }catch{say('Owner confirmation unavailable. No WWW permission was changed.');}
+  finally{void refreshDevApproval();}
+});
+
 operation.addEventListener('change',()=>{
   zoneId.disabled=operation.value!=='methods';
 });
@@ -43,5 +69,5 @@ button.addEventListener('click',async()=>{
   }catch{
     say('Browser audit ended with an unavailable/closed permission or worker channel. '+
       'No WooCommerce form was submitted; check Downloads for a completed JSON receipt, if any.');
-  }finally{button.disabled=false;}
+  }finally{button.disabled=false;void refreshDevApproval();}
 });
