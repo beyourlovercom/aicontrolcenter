@@ -28,11 +28,14 @@ small{display:block;margin-top:8px;color:#555;line-height:1.5}
 <select id="operation">
 <option value="zones">Shipping Zones list</option>
 <option value="methods">Shipping Methods for one zone</option>
+<option value="instanceBatch">Shipping instance details · fixed 9 (read only)</option>
 </select>
 <label for="zoneId">Zone ID (Methods only)</label>
 <input id="zoneId" type="number" min="0" max="99999" step="1" value="0" disabled>
 <button id="audit" type="button">Grant access and read</button>
-<small>Only fixed Shipping Settings GET pages are opened. A temporary Chrome rule blocks POST/PUT/PATCH/DELETE during inspection. No WordPress forms are submitted. The new audit tab is closed afterward.</small>
+<button id="approveDev" type="button" disabled style="background:#fff;color:#111;border:1px solid #888;margin-top:8px">Confirm I reviewed the Dev A5 JSON</button>
+<small>Only click the second button after you have inspected and approved the actual Dev instance-details export. This enables a separately consented WWW batch for up to 48 hours.</small>
+<small>Only approved Shipping Settings GET pages are opened. The 9-instance audit is sequential and may take several minutes. A temporary Chrome rule blocks POST/PUT/PATCH/DELETE during inspection. No WordPress forms are submitted. The new audit tab is closed afterward.</small>
 <div id="status" role="status" aria-live="polite">Ready. Nothing has been read.</div>
 <script type="module" src="popup.mjs"></script>
 </body>
