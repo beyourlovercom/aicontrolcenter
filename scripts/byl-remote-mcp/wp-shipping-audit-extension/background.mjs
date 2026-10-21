@@ -36,28 +36,37 @@ const auditUrl=url=>{
 // The record is local to Chrome's browser session; never synced or exported.
 async function cleanupOrphan(){
   let state;
-  try{state=(await chrome.storage.session.get(ACTIVE_KEY))[ACTIVE_KEY];}catch{return;}
-  if(!state||state.owner!=='BYL_WP_SHIPPING'||!Number.isInteger(state.tabId))return;
-  try{
-    const tab=await chrome.tabs.get(state.tabId);
-    const bound=state.operation==='instanceBatch'
+  try{state=(await chrome.storage.session.get(ACTIVE_KEY))[ACTIVE_KEY];}
+  catch{return false;}
+  if(!state)return true;
+  if(state.owner!=='BYL_WP_SHIPPING'||!Number.isInteger(state.tabId))return false;
+  let tab;
+  try{tab=await chrome.tabs.get(state.tabId);}
+  catch{tab=null;} // Already closed: safe to remove owned rules.
+  if(tab){
+    const batch=state.operation==='instanceBatch'
       ?fixedInstanceBatchRequest({environment:state.environment,operation:'instanceBatch'})
-        .targets?.find(target=>target.instanceId===state.instanceId)
+      :null;
+    const bound=state.operation==='instanceBatch'
+      ?batch?.targets?.find(target=>target.instanceId===state.instanceId)
       :fixedShippingRequest({environment:state.environment,operation:state.operation,
         ...(state.operation==='methods'?{zoneId:state.zoneId}:{})});
-    if(tab.url==='about:blank'||
+    const owned=tab.url==='about:blank'||
       (state.operation==='instanceBatch'
-        ?exactInstancePage(tab.url,bound):exactAuditPage(tab.url,bound)))
-      await chrome.tabs.remove(state.tabId);
-  }catch{}
-  const ruleIds=state.operation==='instanceBatch'
-    ?(Array.isArray(state.ruleIds)&&state.ruleIds.length===INSTANCE_RULE_IDS.length&&
-      state.ruleIds.every((n,i)=>n===INSTANCE_RULE_IDS[i])?INSTANCE_RULE_IDS:[])
-    :(Number.isInteger(state.ruleId)&&state.ruleId>=10000?[state.ruleId]:[]);
-  if(ruleIds.length){
-    try{await chrome.declarativeNetRequest.updateSessionRules({removeRuleIds:[...ruleIds]});}catch{}
+        ?exactInstancePage(tab.url,bound):exactAuditPage(tab.url,bound));
+    if(!owned)return false; // Unexpected tab: do not close or lose recovery state.
+    try{await chrome.tabs.remove(state.tabId);}
+    catch{return false;}
   }
-  try{await chrome.storage.session.remove(ACTIVE_KEY);}catch{}
+  const ids=state.operation==='instanceBatch'
+    ?(Array.isArray(state.ruleIds)&&state.ruleIds.length===INSTANCE_RULE_IDS.length&&
+      state.ruleIds.every((n,i)=>n===INSTANCE_RULE_IDS[i])?[...INSTANCE_RULE_IDS]:null)
+    :(Number.isInteger(state.ruleId)&&state.ruleId>=10000?[state.ruleId]:null);
+  if(!ids)return false;
+  try{await chrome.declarativeNetRequest.updateSessionRules({removeRuleIds:ids});}
+  catch{return false;} // Keep ACTIVE_KEY, retry recovery on next allowed invocation.
+  try{await chrome.storage.session.remove(ACTIVE_KEY);return true;}
+  catch{return false;}
 }
 const recovery=cleanupOrphan();
 chrome.runtime.onStartup.addListener(()=>{void cleanupOrphan();});
@@ -301,7 +310,7 @@ chrome.runtime.onMessage.addListener((message,sender,sendResponse)=>{
   running=true;
   (async()=>{
     try{
-      await recovery;
+      if((await recovery)!==true)throw Error('AUDIT_CLEANUP_FAILED');
       sendResponse(await (isInstanceBatch?readInstanceBatchAndExport(request):readAndExport(request)));
     }catch(error){sendResponse({ok:false,errorCode:safeCode(error?.message)});}
     finally{running=false;}
