@@ -1,0 +1,48 @@
+name: DC Woo Shipping A5 Instance Readonly
+
+on:
+  pull_request:
+    paths:
+      - 'scripts/byl-remote-mcp/wp-shipping-audit-extension/**'
+      - 'scripts/byl-remote-mcp/wp-shipping-audit-readonly-a2.*'
+      - '.github/workflows/dc-wp-shipping-a5-instance-readonly.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  fixed-instance-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout PR source
+        uses: actions/checkout@v4
+      - name: Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Static JS syntax checks
+        run: |
+          for file in \
+            scripts/byl-remote-mcp/wp-shipping-audit-extension/guard.mjs \
+            scripts/byl-remote-mcp/wp-shipping-audit-extension/snapshot.mjs \
+            scripts/byl-remote-mcp/wp-shipping-audit-extension/instance-guard.mjs \
+            scripts/byl-remote-mcp/wp-shipping-audit-extension/instance-snapshot.mjs \
+            scripts/byl-remote-mcp/wp-shipping-audit-extension/popup.mjs \
+            scripts/byl-remote-mcp/wp-shipping-audit-extension/background.mjs \
+            scripts/byl-remote-mcp/wp-shipping-audit-readonly-a2.mjs
+          do node --check "$file"; done
+      - name: Deterministic A2-A5 security and synthetic browser UAT
+        run: |
+          node --test \
+            scripts/byl-remote-mcp/wp-shipping-audit-extension/guard.test.mjs \
+            scripts/byl-remote-mcp/wp-shipping-audit-extension/instance-guard.test.mjs \
+            scripts/byl-remote-mcp/wp-shipping-audit-extension/instance-background.test.mjs \
+            scripts/byl-remote-mcp/wp-shipping-audit-readonly-a2.test.mjs
+      - name: Package standalone unpacked extension for Owner Dev UAT
+        uses: actions/upload-artifact@v4
+        with:
+          name: BYL-Woo-Shipping-Readonly-A5-Instance-Details
+          path: scripts/byl-remote-mcp/wp-shipping-audit-extension/
+          if-no-files-found: error
+          retention-days: 7
