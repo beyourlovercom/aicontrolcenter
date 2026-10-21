@@ -8,11 +8,9 @@ import {readWooShippingDocument} from './snapshot.mjs';
 import {fixedInstanceBatchRequest,exactInstancePage,sanitizeInstanceDetail,
   aggregateInstanceBatch,safeBatchFilename} from './instance-guard.mjs';
 import {readWooShippingInstanceDocument} from './instance-snapshot.mjs';
+import {DEV_A5_KEY,A5_VERSION,newDevReceipt,hasFreshOwnerDevApproval} from './instance-approval.mjs';
 
 const ACTIVE_KEY='bylWpShippingActiveAuditV1';
-const DEV_A5_KEY='bylWpShippingA5OwnerGateV2';
-const A5_VERSION='0.2.1';
-const DEV_GATE_TTL_MS=48*60*60*1000;
 const INSTANCE_RULE_IDS=Object.freeze([1810001,1810002,1810003]);
 let running=false;
 const safeCode=value=>{
@@ -192,9 +190,12 @@ async function readInstanceBatchAndExport(request){
   const permitted=await chrome.permissions.contains({origins:[request.origin+'*']});
   if(permitted!==true)throw Error('HOST_PERMISSION_NOT_GRANTED');
   if(request.environment==='WWW'){
-    // A completed Dev export is a technical precondition, NOT Owner UAT PASS.
+    // Require recent, separate Owner confirmation of a complete redacted
+    // Dev export under the exact extension version. A prior export alone
+    // must NOT silently unlock WWW.
     const evidence=await chrome.storage.local.get(DEV_A5_KEY);
-    if(evidence?.[DEV_A5_KEY]!==true)throw Error('DEV_A5_REQUIRED');
+    if(!hasFreshOwnerDevApproval(evidence?.[DEV_A5_KEY]))
+      throw Error('DEV_OWNER_PASS_REQUIRED');
   }
   const details=[];
   for(const target of request.targets){
@@ -260,8 +261,14 @@ async function readInstanceBatchAndExport(request){
   if(!Number.isInteger(downloadId))throw Error('EXPORT_FAILED');
   const path=await awaitDownloaded(downloadId);
   if(request.environment==='DEV'){
-    // Only set after the exact nine-row redacted Dev export is completed.
-    await chrome.storage.local.set({[DEV_A5_KEY]:true});
+    // Record only after the redacted 9-instance download has actually
+    // completed. It remains LOCKED until the Owner explicitly confirms the
+    // reviewed Dev JSON through the extension's separate consent control.
+    const digest=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(json));
+    const sha256=[...new Uint8Array(digest)].map(x=>x.toString(16).padStart(2,'0')).join('');
+    const pending=newDevReceipt(sha256,observedAt);
+    if(!pending)throw Error('DATA_UNTRUSTED');
+    await chrome.storage.local.set({[DEV_A5_KEY]:pending});
   }
   return {ok:true,path,count:receipt.count,partial:receipt.partial};
 }
