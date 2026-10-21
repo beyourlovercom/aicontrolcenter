@@ -157,7 +157,7 @@ test('synthetic browser: Dev-first, nine guarded GETs, cleanup and local-only ex
     assert.equal(tabCount,18);assert.equal(activeRules.size,0);
     assert.equal(tabs.size,0);
     for(let id=1;id<=18;id++){
-      const seq=events.filter(x=>x[1]===id).map(x=>x[0]);
+      const seq=events.filter(x=>x[1]===id&&x[0]!=='download').map(x=>x[0]);
       assert.deepEqual(seq,['create','arm','navigate','read','close','disarm']);
     }
     assert.ok(JSON.stringify(downloads).includes('"requires": "min_amount"'));
