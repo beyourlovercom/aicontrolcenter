@@ -1,6 +1,6 @@
 # BYL WooCommerce Shipping — Read-only Chrome Audit (A3/A4)
 
-**Version:** 0.1.0 candidate · **Work Package:** [#101](https://github.com/beyourlovercom/aicontrolcenter/issues/101) · **Status: NOT INSTALLED / NOT CONNECTED TO PRODUCTION OAUTH MCP**
+**Version:** A3/A4 v0.1.0 baseline; A5 v0.2.1 Owner Dev-first candidate · **Work Package:** [#101](https://github.com/beyourlovercom/aicontrolcenter/issues/101) · **Status: NOT INSTALLED / NOT CONNECTED TO PRODUCTION OAUTH MCP**
 
 This is a *separate* Manifest V3 extension. It does not change the installed AICC ChatGPT Bridge or your live WordPress plugins.
 
@@ -39,7 +39,7 @@ The dedicated GitHub Actions workflow runs these tests with read-only repository
 
 A3/A4 browser source and scoped optional permissions are delivered as a stacked Draft PR on the A2 branch. **No AICC main merge, Production Gateway/Agent release, Chrome install, WWW mutation or READY device restart** is allowed in this work package. A5 still needs a real verified WWW shipping-config receipt, and Checkout B retains sole ownership of shipping calculation fixes.
 
-## A5 — fixed 9 shipping instance details (v0.2.0, isolated source candidate)
+## A5 — fixed 9 shipping instance details (v0.2.1, isolated source candidate)
 
 **Not installed, not production OAuth registered, not real Dev/WWW UAT PASS.**
 
@@ -59,8 +59,8 @@ Data emitted **only if form fields exist**:
 1. Download the newly generated **BYL-Woo-Shipping-Readonly-A5-Instance-Details** artifact from the A5 PR's successful GitHub Actions run. Unzip to a distinct Owner-controlled folder. The previous A3/A4 extension remains unchanged.
 2. From normal Chrome `chrome://extensions` UI, explicitly **Load unpacked** the new extension and approve permission only for `Dev · dev.beyourlover.com`.
 3. Select `Shipping instance details · fixed 9 (read only)`; click **Grant access and read** once. The extension exports `BYL-shipping-readonly-DEV-instances-9-<timestamp>.json` only when all nine fixed, expected instance detail forms could be verified. If Dev IDs have drifted, it may stop safely; report the popup's exact error.
-4. Confirm Dev JSON with the formal signed China Mac DC `read_file`, check nine IDs, expected types, cost/threshold and `partial`. **Actual Owner Dev UAT PASS is required; source unit tests do not substitute.**
-5. Only afterwards use Owner UI to consent for `WWW` to audit the same nine fixed details, and compare with observed WWW Shipping Methods receipts. The extension also enforces completion of the Dev export before enabling its WWW batch operation. This *technical* gate is not a substitute for separate human Dev approval.
+4. Confirm Dev JSON with the formal signed China Mac DC `read_file`, check nine IDs, expected types, cost/threshold and `partial`. **Actual Owner Dev UAT PASS is required; source unit tests do not substitute.** Once reviewed, open the A5 popup and explicitly click **Confirm I reviewed the Dev A5 JSON**. This records a SHA-256-bound, version-matched Owner approval valid for at most 48 hours. A completed Dev download alone does **not** unlock WWW.
+5. Only after the Dev receipt is independently reviewed and explicitly Owner-confirmed, use Owner UI to consent for `WWW` to audit the same nine fixed details, and compare with observed WWW Shipping Methods receipts. The extension also enforces completion of the Dev export before enabling its WWW batch operation. This *technical* gate is not a substitute for separate human Dev approval.
 
 **Known limits:** This is browser-mediated **read-only** navigation, not a new callable OAuth browser tool; signed DC reads only the downloaded local JSON. WordPress authenticated GET pages may trigger routine logging/cron/caching; do not claim literal zero DB writes. Do not change WWW Woo settings, discount/checkout hooks, payments, orders, installed Gateway/Agent, or READY machines in this task. Draft PRs #102 / #104 remain unmerged; A5 is a stacked Draft PR only. Existing A3/A4 Zones and Methods operations remain available.
 
@@ -70,3 +70,5 @@ Technical evidence tests:
 node --test scripts/byl-remote-mcp/wp-shipping-audit-extension/instance-guard.test.mjs
 node --test scripts/byl-remote-mcp/wp-shipping-audit-extension/instance-background.test.mjs
 ```
+
+**A5 hardening:** Chrome MV3 main-frame GET navigation uses a higher-priority `allow` rule for the one exact instance URL and a lower-priority `block` rule for all other HTTP(S) main-frame GETs; a separate rule blocks every Chrome-recognized non-GET request method, including HEAD and OPTIONS, before navigation. Static session rule IDs are collision-checked and removed after each tab. This prevents cross-host HTTP(S) main-frame redirects from loading through this extension. It is not a guarantee against incidental WordPress GET-side server effects or browser-specific behavior until real Chrome Dev UAT is completed.
