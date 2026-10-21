@@ -160,7 +160,7 @@ test('synthetic browser: Dev-first, nine guarded GETs, cleanup and local-only ex
       const seq=events.filter(x=>x[1]===id&&x[0]!=='download').map(x=>x[0]);
       assert.deepEqual(seq,['create','arm','navigate','read','close','disarm']);
     }
-    assert.ok(JSON.stringify(downloads).includes('"requires": "min_amount"'));
+    assert.ok(downloads[0].json.details.some(row=>row.requires==='min_amount'));
     assert.ok(!JSON.stringify(downloads).includes('wordpress_logged_in'));
   }finally{
     globalThis.chrome=original.chrome;
