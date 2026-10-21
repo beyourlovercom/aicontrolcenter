@@ -19,7 +19,7 @@ const safeCode=value=>{
     'EXPORT_FAILED','DATA_UNTRUSTED','AUDIT_BUSY','AUDIT_WORKER_FAILED',
     'INSTANCE_SOURCE_NOT_VERIFIED','INVALID_REQUIREMENT','INVALID_RATE_FIELD',
     'DEV_A5_REQUIRED','AUDIT_CLEANUP_FAILED',
-    'DEV_OWNER_PASS_REQUIRED','INSTANCE_RULE_COLLISION']);
+    'DEV_OWNER_PASS_REQUIRED','INSTANCE_RULE_COLLISION','A5_VERSION_MISMATCH']);
   return known.has(value)?value:'AUDIT_FAILED_CLOSED';
 };
 const auditUrl=url=>{
@@ -212,6 +212,10 @@ async function readAndExport(request){
  * sequentially, exact URL and bounded timeout. No arbitrary GET targets.
  */
 async function readInstanceBatchAndExport(request){
+  // The approval's declared build version must be the actual installed MV3
+  // manifest version. A future version bump cannot silently reuse older PASS.
+  if(chrome.runtime.getManifest().version!==A5_VERSION)
+    throw Error('A5_VERSION_MISMATCH');
   if(request.operation!=='instanceBatch'||request.targets.length!==9)
     throw Error('DATA_UNTRUSTED');
   const permitted=await chrome.permissions.contains({origins:[request.origin+'*']});
