@@ -24,6 +24,18 @@ All methods are enabled on Woo method-list screen, but that screen hides actual 
 7. Document that ordinary authenticated GET may trigger routine site logs/cache/cron; cannot guarantee zero DB writes. This mechanism must never intentionally submit order or Woo settings changes.
 8. Existing A3/A4 `zones` / `methods` operations remain backward-compatible; run A2+A3+A4+A5 deterministic tests. Isolated Draft PR, focused GitHub CI and exact-head provenance; no main merge or Gateway/Agent/READY restart.
 
+## Independent review and remediations
+
+US Mac independent read-only Codex code review identified (a) incomplete HEAD/OPTIONS blocking, (b) redirects only checked after navigation, (c) risk of session-rule ID collisions, (d) successful Dev export not amounting to Owner Dev UAT PASS, and (e) tests based only on synthetic DOM fixtures. Remediations are now in the isolated A5 branch:
+
+- Chrome DNR blocks **all non-GET methods** including HEAD and OPTIONS.
+- For every temporary instance tab, one higher-priority exact-URL `allow` GET main-frame rule overrides a lower-priority block of all other HTTP(S) main-frame GETs; cross-host redirects are blocked before the network request is sent. Still require final URL verification and fail closed.
+- Three static extension-owned instance-rule IDs are checked via `getSessionRules()` before installation. On collisions, STOP without navigating; orphan cleanup handles only explicitly tracked IDs.
+- DEV export stores **only** a SHA-256 receipt, creation timestamp, extension version and count, with approval null. The Owner must review the real redacted Dev JSON and explicitly press the separate confirmation button; WWW read requires version match, approvedAt and both ages less than 48h. A Dev export alone is insufficient.
+- All instance extraction targets are exact expected controls. Unknown / formula values are `null`. Real WooCommerce form compatibility and Chrome MV3 DNR behavior remain **pending Owner Dev real-browser UAT**; deterministic mock tests cannot certify them.
+
+**Release gate:** no Chrome extension installation, no live Dev/WWW navigation, no OAuth Gateway change or main merge from source compilation alone. Preserve prior #104 Owner PASS and the Checkout B ownership boundaries.
+
 ## Acceptance / stopping
 - Tests: fixed nine targets, WWW host spoof/redirect attempts denied, no arbitrary IDs/URLs, fixture extraction, malformed/secret values treated UNKNOWN, `ignore_discounts` meaning, $0 flat rate vs Free Shipping, class costs, partial/error handling and preservation of A3/A4.
 - Dev test receipt: correct page identity, per-instance field values or explicit UNKNOWN; no invented rate.
