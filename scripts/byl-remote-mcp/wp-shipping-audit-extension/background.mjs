@@ -73,7 +73,9 @@ function waitForExactTab(tabId,request,timeoutMs=23000){
       try{
         const tab=await chrome.tabs.get(tabId);
         if(tab.status!=='complete'||tab.url==='about:blank')return;
-        if(!exactAuditPage(tab.url,request))return finish(Error('AUTH_OR_URL_DENIED'));
+        const matches=request?.kind
+          ?exactInstancePage(tab.url,request):exactAuditPage(tab.url,request);
+        if(!matches)return finish(Error('AUTH_OR_URL_DENIED'));
         finish(null,tab);
       }catch{finish(Error('TAB_UNAVAILABLE'));}
     };
