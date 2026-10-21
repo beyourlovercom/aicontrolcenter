@@ -115,7 +115,24 @@ function blockingRule(tabId){
  * independent non-GET block matches a distinct method set.
  */
 function instanceRules(tabId,target){
-  const literalUrlRegex='^'+target.url.replaceAll('.','\\.').replaceAll('?','\\?')+'
+  const literalUrlRegex='^'+target.url.replaceAll('.','\\.').replaceAll('?','\\?')+
+    String.fromCharCode(36);
+  return [
+    {...blockingRule(tabId),id:INSTANCE_RULE_IDS[0]},
+    {id:INSTANCE_RULE_IDS[1],priority:110,action:{type:'block'},
+      condition:{regexFilter:'^https?://',requestMethods:['get'],
+        resourceTypes:['main_frame'],tabIds:[tabId]}},
+    {id:INSTANCE_RULE_IDS[2],priority:200,action:{type:'allow'},
+      condition:{regexFilter:literalUrlRegex,
+        requestMethods:['get'],resourceTypes:['main_frame'],tabIds:[tabId]}}
+  ];
+}
+async function assertInstanceRuleIdsFree(){
+  const current=await chrome.declarativeNetRequest.getSessionRules();
+  if(!Array.isArray(current)||current.some(x=>INSTANCE_RULE_IDS.includes(x.id)))
+    throw Error('INSTANCE_RULE_COLLISION');
+}
+async function awaitDownloaded(id,limitMs=9000){
   const stop=Date.now()+limitMs;
   while(Date.now()<stop){
     const matches=await chrome.downloads.search({id});
@@ -126,6 +143,7 @@ function instanceRules(tabId,target){
   }
   throw Error('EXPORT_FAILED');
 }
+
 async function readAndExport(request){
   let tab=null,rule=null,ruleArmed=false;
   try{
