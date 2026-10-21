@@ -5,13 +5,19 @@
 import {fixedShippingRequest,exactAuditPage,sanitizeBrowserSnapshot,safeExportName}
   from './guard.mjs';
 import {readWooShippingDocument} from './snapshot.mjs';
+import {fixedInstanceBatchRequest,exactInstancePage,sanitizeInstanceDetail,
+  aggregateInstanceBatch,safeBatchFilename} from './instance-guard.mjs';
+import {readWooShippingInstanceDocument} from './instance-snapshot.mjs';
 
 const ACTIVE_KEY='bylWpShippingActiveAuditV1';
+const DEV_A5_KEY='bylWpShippingA5DevBatchCompletedV1';
 let running=false;
 const safeCode=value=>{
   const known=new Set(['HOST_PERMISSION_NOT_GRANTED','TAB_UNAVAILABLE','AUTH_OR_URL_DENIED',
     'AUDIT_TIMEOUT','DOM_READ_FAILED','TAB_NAVIGATION_FAILED','AUDIT_RESPONSE_TOO_LARGE',
-    'EXPORT_FAILED','DATA_UNTRUSTED','AUDIT_BUSY','AUDIT_WORKER_FAILED']);
+    'EXPORT_FAILED','DATA_UNTRUSTED','AUDIT_BUSY','AUDIT_WORKER_FAILED',
+    'INSTANCE_SOURCE_NOT_VERIFIED','INVALID_REQUIREMENT','INVALID_RATE_FIELD',
+    'DEV_A5_REQUIRED','AUDIT_CLEANUP_FAILED']);
   return known.has(value)?value:'AUDIT_FAILED_CLOSED';
 };
 const auditUrl=url=>{
@@ -32,9 +38,15 @@ async function cleanupOrphan(){
   if(!state||state.owner!=='BYL_WP_SHIPPING'||!Number.isInteger(state.tabId))return;
   try{
     const tab=await chrome.tabs.get(state.tabId);
-    const bound=fixedShippingRequest({environment:state.environment,
-      operation:state.operation,...(state.operation==='methods'?{zoneId:state.zoneId}:{})});
-    if(tab.url==='about:blank'||exactAuditPage(tab.url,bound))await chrome.tabs.remove(state.tabId);
+    const bound=state.operation==='instanceBatch'
+      ?fixedInstanceBatchRequest({environment:state.environment,operation:'instanceBatch'})
+        .targets?.find(target=>target.instanceId===state.instanceId)
+      :fixedShippingRequest({environment:state.environment,operation:state.operation,
+        ...(state.operation==='methods'?{zoneId:state.zoneId}:{})});
+    if(tab.url==='about:blank'||
+      (state.operation==='instanceBatch'
+        ?exactInstancePage(tab.url,bound):exactAuditPage(tab.url,bound)))
+      await chrome.tabs.remove(state.tabId);
   }catch{}
   if(Number.isInteger(state.ruleId)&&state.ruleId>=10000){
     try{await chrome.declarativeNetRequest.updateSessionRules({removeRuleIds:[state.ruleId]});}catch{}
@@ -152,16 +164,99 @@ async function readAndExport(request){
     try{await chrome.storage.session.remove(ACTIVE_KEY);}catch{}
   }
 }
+
+/**
+ * A5 controlled nine-instance audit: one temporary tab per known instance,
+ * sequentially, exact URL and bounded timeout. No arbitrary GET targets.
+ */
+async function readInstanceBatchAndExport(request){
+  if(request.operation!=='instanceBatch'||request.targets.length!==9)
+    throw Error('DATA_UNTRUSTED');
+  const permitted=await chrome.permissions.contains({origins:[request.origin+'*']});
+  if(permitted!==true)throw Error('HOST_PERMISSION_NOT_GRANTED');
+  if(request.environment==='WWW'){
+    // A completed Dev export is a technical precondition, NOT Owner UAT PASS.
+    const evidence=await chrome.storage.local.get(DEV_A5_KEY);
+    if(evidence?.[DEV_A5_KEY]!==true)throw Error('DEV_A5_REQUIRED');
+  }
+  const details=[];
+  for(const target of request.targets){
+    let tab=null,rule=null,ruleArmed=false;
+    try{
+      tab=await chrome.tabs.create({url:'about:blank',active:false});
+      if(!Number.isInteger(tab.id))throw Error('TAB_UNAVAILABLE');
+      rule=blockingRule(tab.id);
+      await chrome.storage.session.set({[ACTIVE_KEY]:{
+        owner:'BYL_WP_SHIPPING',tabId:tab.id,ruleId:rule.id,
+        environment:request.environment,operation:'instanceBatch',
+        instanceId:target.instanceId
+      }});
+      // A tab-bound non-GET rule MUST be active before visiting Woo admin.
+      await chrome.declarativeNetRequest.updateSessionRules({addRules:[rule]});
+      ruleArmed=true;
+      await chrome.tabs.update(tab.id,{url:target.url,active:false});
+      await waitForExactTab(tab.id,target,15000);
+      const verified=await chrome.tabs.get(tab.id);
+      if(!exactInstancePage(verified.url,target))throw Error('AUTH_OR_URL_DENIED');
+      const returned=await chrome.scripting.executeScript({
+        target:{tabId:tab.id},world:'ISOLATED',
+        func:readWooShippingInstanceDocument,
+        args:[target.url,target.instanceId,target.kind]
+      });
+      if(returned.length!==1||!returned[0]?.result)throw Error('DOM_READ_FAILED');
+      const detail=sanitizeInstanceDetail(returned[0].result,target);
+      if(!detail.ok)throw Error(detail.errorCode||'DATA_UNTRUSTED');
+      details.push(detail);
+    }finally{
+      // Cleanup is independent per instance; never leave an unguarded tab
+      // open to continue after the popup was closed.
+      let tabClosed=true,ruleRemoved=true;
+      if(tab?.id)try{await chrome.tabs.remove(tab.id);}catch{tabClosed=false;}
+      if(ruleArmed&&rule?.id)try{
+        await chrome.declarativeNetRequest.updateSessionRules({removeRuleIds:[rule.id]});
+      }catch{ruleRemoved=false;}
+      if(tabClosed&&ruleRemoved){
+        try{await chrome.storage.session.remove(ACTIVE_KEY);}catch{}
+      }
+      if(!tabClosed||!ruleRemoved)throw Error('AUDIT_CLEANUP_FAILED');
+    }
+  }
+  const observedAt=new Date().toISOString();
+  const normalized=aggregateInstanceBatch(request,details,observedAt);
+  if(!normalized.ok)throw Error('DATA_UNTRUSTED');
+  const receipt={
+    ...normalized,protection:'sequential-9-tab-scoped-non-GET-rules',
+    note:'Each priorZoneId is from an earlier WWW method-list receipt; the instance detail page does not independently verify its zone. An authenticated GET may trigger routine site internals.'
+  };
+  const json=JSON.stringify(receipt,null,2);
+  if(json.length>65000)throw Error('AUDIT_RESPONSE_TOO_LARGE');
+  const filename=safeBatchFilename(request,new Date());
+  if(!filename)throw Error('EXPORT_FAILED');
+  const downloadId=await chrome.downloads.download({
+    url:'data:application/json;charset=utf-8,'+encodeURIComponent(json),
+    filename,saveAs:false,conflictAction:'uniquify'
+  });
+  if(!Number.isInteger(downloadId))throw Error('EXPORT_FAILED');
+  const path=await awaitDownloaded(downloadId);
+  if(request.environment==='DEV'){
+    // Only set after the exact nine-row redacted Dev export is completed.
+    await chrome.storage.local.set({[DEV_A5_KEY]:true});
+  }
+  return {ok:true,path,count:receipt.count,partial:receipt.partial};
+}
+
 chrome.runtime.onMessage.addListener((message,sender,sendResponse)=>{
   if(sender.id!==chrome.runtime.id||message?.type!=='BYL_WP_SHIPPING_AUDIT')return false;
   if(running){sendResponse({ok:false,errorCode:'AUDIT_BUSY'});return false;}
-  const request=fixedShippingRequest(message.request);
+  const isInstanceBatch=message?.request?.operation==='instanceBatch';
+  const request=isInstanceBatch?fixedInstanceBatchRequest(message.request):
+    fixedShippingRequest(message.request);
   if(!request.ok){sendResponse({ok:false,errorCode:request.errorCode});return false;}
   running=true;
   (async()=>{
     try{
       await recovery;
-      sendResponse(await readAndExport(request));
+      sendResponse(await (isInstanceBatch?readInstanceBatchAndExport(request):readAndExport(request)));
     }catch(error){sendResponse({ok:false,errorCode:safeCode(error?.message)});}
     finally{running=false;}
   })();
