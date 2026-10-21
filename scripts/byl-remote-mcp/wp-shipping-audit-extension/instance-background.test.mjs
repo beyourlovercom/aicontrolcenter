@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {fixedInstanceBatchRequest} from './instance-guard.mjs';
+import {DEV_A5_KEY,ownerApproveDevReceipt} from './instance-approval.mjs';
 
 test('synthetic browser: Dev-first, nine guarded GETs, cleanup and local-only export',async()=>{
   const original={chrome:globalThis.chrome,document:globalThis.document,location:globalThis.location};
@@ -51,7 +52,14 @@ test('synthetic browser: Dev-first, nine guarded GETs, cleanup and local-only ex
         assert.ok(activeRules.size>0,'navigation must be protected');
         const tab=tabs.get(id);
         assert.ok(tab);
-        assert.equal(activeRules.get(id)!==undefined,true);
+        const rules=[...activeRules.values()].filter(x=>x.tabId===id).map(x=>x.rule);
+        assert.equal(rules.length,3);
+        const permit=rules.find(x=>x.action.type==='allow');
+        const deny=rules.find(x=>x.action.type==='block'&&x.priority===110);
+        assert.ok(permit&&deny);
+        assert.ok(new RegExp(permit.condition.regexFilter).test(url));
+        assert.equal(new RegExp(permit.condition.regexFilter).test('https://evil.example/'),false);
+        assert.ok(new RegExp(deny.condition.regexFilter).test('https://evil.example/'));
         tab.url=url;tab.status='complete';events.push(['navigate',id,url]);
         return {...tab};
       },
@@ -67,21 +75,31 @@ test('synthetic browser: Dev-first, nine guarded GETs, cleanup and local-only ex
       }
     },
     declarativeNetRequest:{
+      async getSessionRules(){return [...activeRules.keys()].map(id=>({id}));},
       async updateSessionRules({addRules,removeRuleIds}){
         if(addRules){
+          assert.equal(addRules.length,3,'A5 requires triple DNR guard');
           for(const rule of addRules){
-            assert.deepEqual(rule.condition.requestMethods,
-              ['post','put','patch','delete','head','options','connect','other']);
-            assert.ok(rule.condition.resourceTypes.includes('main_frame'));
-            const id=rule.condition.tabIds[0];
-            activeRules.set(id,rule.id);events.push(['arm',id]);
+            const tabId=rule.condition.tabIds[0];
+            if(rule.priority===100){
+              assert.deepEqual(rule.condition.requestMethods,
+                ['post','put','patch','delete','head','options','connect','other']);
+            }else{
+              assert.deepEqual(rule.condition.requestMethods,['get']);
+              assert.deepEqual(rule.condition.resourceTypes,['main_frame']);
+            }
+            assert.ok(!activeRules.has(rule.id));
+            activeRules.set(rule.id,{tabId,rule});
+            events.push(['arm',tabId]);
           }
         }
         if(removeRuleIds){
+          assert.equal(removeRuleIds.length,3);
           for(const ruleId of removeRuleIds){
-            const entry=[...activeRules].find(([,id])=>id===ruleId);
-            assert.ok(entry,'must remove a previously armed rule');
-            activeRules.delete(entry[0]);events.push(['disarm',entry[0]]);
+            const item=activeRules.get(ruleId);
+            assert.ok(item,'only existing rules may be cleaned');
+            activeRules.delete(ruleId);
+            events.push(['disarm',item.tabId]);
           }
         }
       }
@@ -139,18 +157,25 @@ test('synthetic browser: Dev-first, nine guarded GETs, cleanup and local-only ex
       }catch(err){reject(err);}
     });
     const noDev=await send({environment:'WWW',operation:'instanceBatch'});
-    assert.equal(noDev.ok,false);assert.equal(noDev.errorCode,'DEV_A5_REQUIRED');
+    assert.equal(noDev.ok,false);assert.equal(noDev.errorCode,'DEV_OWNER_PASS_REQUIRED');
     assert.equal(tabCount,0);
     const dev=await send({environment:'DEV',operation:'instanceBatch'});
     assert.equal(dev.ok,true);assert.equal(dev.count,9);
     assert.equal(dev.partial,false,'all required fixture fields are explicitly present');
-    assert.equal(local.bylWpShippingA5DevBatchCompletedV1,true);
+    const pending=local[DEV_A5_KEY];
+    assert.equal(pending.version,'0.2.1');
+    assert.match(pending.sha256,/^[0-9a-f]{64}$/);
+    assert.equal(pending.ownerApprovedAt,null);
     assert.equal(tabCount,9);assert.equal(tabs.size,0);assert.equal(activeRules.size,0);
     assert.equal(sessions.bylWpShippingActiveAuditV1,undefined);
     assert.equal(downloads[0].json.environment,'DEV');
     assert.deepEqual(downloads[0].json.details.map(x=>x.instanceId),
       fixedInstanceBatchRequest({environment:'DEV',operation:'instanceBatch'})
         .targets.map(x=>x.instanceId));
+    const beforeOwner=await send({environment:'WWW',operation:'instanceBatch'});
+    assert.equal(beforeOwner.ok,false);
+    assert.equal(beforeOwner.errorCode,'DEV_OWNER_PASS_REQUIRED');
+    local[DEV_A5_KEY]=ownerApproveDevReceipt(pending);
     const www=await send({environment:'WWW',operation:'instanceBatch'});
     assert.equal(www.ok,true);assert.equal(www.count,9);
     assert.equal(downloads[1].json.environment,'WWW');
@@ -158,7 +183,8 @@ test('synthetic browser: Dev-first, nine guarded GETs, cleanup and local-only ex
     assert.equal(tabs.size,0);
     for(let id=1;id<=18;id++){
       const seq=events.filter(x=>x[1]===id&&x[0]!=='download').map(x=>x[0]);
-      assert.deepEqual(seq,['create','arm','navigate','read','close','disarm']);
+      assert.deepEqual(seq,['create','arm','arm','arm','navigate','read','close',
+        'disarm','disarm','disarm']);
     }
     assert.ok(downloads[0].json.details.some(row=>row.requires==='min_amount'));
     assert.ok(!JSON.stringify(downloads).includes('wordpress_logged_in'));
