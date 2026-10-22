@@ -8,6 +8,14 @@ OpenSpec, Codex sessions, runtime state, dashboards, local workspaces, caches, a
 
 No tool, agent, artifact, task checkbox, local session, or application state may authorize its own execution.
 
+## Owner policy — Andy-series WordPress admin is Desktop-only (2026-10-22)
+
+**Highest-priority UI scope rule for Andy-family plugin administration** (including Andy Core, Andy Commerce, and future Andy-series plugins):
+- All plugin **WordPress admin (`wp-admin`) interfaces**—settings, dashboards, lists, forms, metaboxes, management panels, previews and admin dialogs—are **Desktop-only / Desktop-first**. The Owner will operate these interfaces on a computer, not a phone.
+- Design, implement, review and perform visual/functional Owner UAT on **desktop browsers only** (use the approved desktop visual baseline, normally ~1280–1440px or wider). **Do not require mobile layouts, phone breakpoints, mobile mockups, M14 screenshots or mobile UI UAT for these admin interfaces.** Do not expand scope or delay releases solely for admin mobile adaptation.
+- This rule is limited to the **plugin admin UI**, not to the plugin's front-end output. Customer-visible pages, checkout/cart/drawers, product components, popups, shortcodes (including language/currency switchers), and other public-facing widgets **retain their site-specific responsive/mobile-first design and UAT requirements**.
+- This explicit Owner directive overrides earlier generic "all UI mobile-first / desktop-and-mobile" language **only for Andy-series WordPress admin pages**. It does not relax functionality, accessibility on desktop, security, QA evidence, PR review, or release/production Owner approval gates.
+
 ## Global Executor Governance V2
 
 Canonical contract: `docs/00_Governance/AI-EXECUTOR-GOVERNANCE-V2.md`.
