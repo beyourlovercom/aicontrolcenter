@@ -48,3 +48,12 @@ test('internal principal retains only names approved by its trusted policy',()=>
   {kind:'internal',canOperate:true});
  assert.deepEqual(x.tools.map(y=>y.name),['start_process']);
 });
+
+test('only filtered tools returned; no unrelated Agent metadata leaked',()=>{
+ const out=filtered('windows',()=>['read_file'],operator,{
+  tools:[{name:'read_file'},{name:'get_config'}],
+  privateCapabilityMetadata:'must-not-appear'
+ });
+ assert.deepEqual(out,{tools:[{name:'read_file'}]});
+ assert.equal(JSON.stringify(out).includes('must-not-appear'),false);
+});
