@@ -47,7 +47,8 @@ function fixture(){
   'endpoint-routing.mjs':{endpointRouting:()=>({port:8797,paths:['/oauth/mcp']})},
   'operator-policy.mjs':{
    canExposeRemoteCall:()=>true,
-   authorizeRemoteCall:(_p,_id,name,args)=>({name,arguments:args})
+   authorizeRemoteCall:(_p,_id,name,args)=>({name,arguments:args}),
+   listAuthorizedRemoteToolNames:()=>['get_file_info','start_process']
   }
  };
  const importPrivate=async path=>imported[path.split('/').at(-1)];
