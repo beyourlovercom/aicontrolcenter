@@ -29,7 +29,8 @@ function source({enabled=false,principal={kind:'cloudflare-access',canOperate:tr
   },
   auditLegacyOperation:record=>{audit.push(record);return auditAllowed;},
   auditOperation:record=>{audit.push(record);return auditAllowed;},
-  env:{BYL_MCP_PARITY_CORE_READ_ENABLED:enabled?'1':'0'}
+  env:{BYL_MCP_PARITY_CORE_READ_ENABLED:enabled?'1':'0',
+   BYL_MCP_OPERATOR_DISCOVERY_FILTER_ENABLED:'1'}
  };
  return {input,seen,audit};
 }
@@ -211,4 +212,14 @@ test('missing trusted discovery resolver denies construction, rather than leakin
  const f=source();delete f.input.listAuthorizedRemoteToolNames;
  assert.throws(()=>createCredentialFreeOAuthToolSurface(f.input),
   {message:'PARITY_RUNTIME_DEPENDENCIES_REQUIRED'});
+});
+test('default-OFF rollout requires no new private policy export and keeps legacy Agent inventory',async()=>{
+ const f=source();f.input.env.BYL_MCP_OPERATOR_DISCOVERY_FILTER_ENABLED='0';
+ delete f.input.listAuthorizedRemoteToolNames;
+ const surface=createCredentialFreeOAuthToolSurface(f.input);
+ const s=await session(surface.server);
+ try{
+  const out=await s.client.callTool({name:'remote_list_tools',arguments:{deviceId:'windows'}});
+  assert.deepEqual(JSON.parse(out.content[0].text),{tools:[{name:'get_file_info'}]});
+ }finally{await s.close();}
 });
