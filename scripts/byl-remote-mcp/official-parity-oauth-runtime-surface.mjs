@@ -61,7 +61,10 @@ export function createCredentialFreeOAuthToolSurface({
   const id=safeDevice(deviceId);
   // Default-OFF compatibility mode preserves preexisting discovery exactly.
   // Never enable filtering until private policy implements its name resolver.
-  if(!discoveryFilterEnabled)return reply(await agentGet(id,'/v1/tools'));
+  // Existing internal Bearer bypasses OAuth Operator authorization by design;
+  // preserve its historical Agent inventory when the OAuth filter is enabled.
+  if(!discoveryFilterEnabled||principal.kind==='internal')
+   return reply(await agentGet(id,'/v1/tools'));
   if(!legacyOperatorVisible||principal.canOperate!==true)return reply({tools:[]});
   const agentReply=await agentGet(id,'/v1/tools');
   return reply(filterDiscoveredAgentTools({agentReply,principal,deviceId:id,
