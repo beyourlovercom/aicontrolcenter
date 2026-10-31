@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {mkdtempSync,mkdirSync,writeFileSync,rmSync,chmodSync} from 'node:fs';
+import {mkdtempSync,mkdirSync,writeFileSync,rmSync,chmodSync,unlinkSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {createHash} from 'node:crypto';
@@ -107,4 +107,34 @@ test('CLI distinguishes a bad supplied manifest path from an unset environment',
   status:'UNVERIFIED',code:'POLICY_IDENTITY_MANIFEST_INVALID'
  });
  assert.equal(result.stderr,'');
+});
+
+test('CLI classifies non-existing absolute manifest without disclosing any private path',()=>{
+ const cli=new URL('./official-parity-a4-policy-identity-cli.mjs',import.meta.url);
+ const missing='/nonexistent-a4-identity-synthetic/no-manifest.json';
+ const result=spawnSync(process.execPath,[cli.pathname],{
+  encoding:'utf8',env:{
+   BYL_MCP_INSPECTED_POLICY_SHA256:'a'.repeat(64),
+   BYL_MCP_A4_PRIVATE_MANIFEST_FILE:missing
+  }
+ });
+ assert.equal(result.status,1);
+ assert.deepEqual(JSON.parse(result.stdout.trim()),{
+  status:'UNVERIFIED',code:'POLICY_IDENTITY_MANIFEST_NOT_FOUND'
+ });
+ assert.equal(result.stdout.includes(missing),false);
+ assert.equal(result.stderr,'');
+});
+test('missing runtime dir and missing policy produce separate sanitized errors',()=>{
+ const f=fixture();
+ try{
+  const missingRuntimeDir=join(f.runtimeDir,'unavailable');
+  writeFileSync(f.manifestFile,JSON.stringify({runtimeDir:missingRuntimeDir}),{mode:0o600});
+  assert.throws(()=>inspectA4PolicyIdentity(f),
+   {message:'POLICY_IDENTITY_RUNTIME_DIRECTORY_NOT_FOUND'});
+  writeFileSync(f.manifestFile,JSON.stringify({runtimeDir:f.runtimeDir}),{mode:0o600});
+  unlinkSync(f.file);
+  assert.throws(()=>inspectA4PolicyIdentity(f),
+   {message:'POLICY_IDENTITY_POLICY_NOT_FOUND'});
+ }finally{f.close();}
 });
