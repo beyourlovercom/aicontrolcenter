@@ -33,9 +33,14 @@ export function createCredentialFreeOAuthToolSurface({
     !principal||typeof principal!=='object'||
     typeof agentGet!=='function'||typeof agentCall!=='function'||
     typeof canExposeRemoteCall!=='function'||typeof authorizeRemoteCall!=='function'||
-    typeof listAuthorizedRemoteToolNames!=='function'||
+    (env?.BYL_MCP_OPERATOR_DISCOVERY_FILTER_ENABLED==='1'&&
+     typeof listAuthorizedRemoteToolNames!=='function')||
     typeof auditLegacyOperation!=='function')
   throw Error('PARITY_RUNTIME_DEPENDENCIES_REQUIRED');
+ if(env?.BYL_MCP_OPERATOR_DISCOVERY_FILTER_ENABLED!==undefined&&
+    !['0','1'].includes(env.BYL_MCP_OPERATOR_DISCOVERY_FILTER_ENABLED))
+  throw Error('OPERATOR_DISCOVERY_FLAG_INVALID');
+ const discoveryFilterEnabled=env?.BYL_MCP_OPERATOR_DISCOVERY_FILTER_ENABLED==='1';
  const devices=new Set(CANONICAL_DEVICE_IDS);
  const safeDevice=id=>{
   if(!devices.has(id))throw Error('DEVICE_UNKNOWN');
@@ -54,7 +59,9 @@ export function createCredentialFreeOAuthToolSurface({
   inputSchema:{deviceId:z.string().min(1).max(64)}
  },async({deviceId})=>{
   const id=safeDevice(deviceId);
-  // No metadata leakage for a nonoperator. Agent capability alone is not authority.
+  // Default-OFF compatibility mode preserves preexisting discovery exactly.
+  // Never enable filtering until private policy implements its name resolver.
+  if(!discoveryFilterEnabled)return reply(await agentGet(id,'/v1/tools'));
   if(!legacyOperatorVisible||principal.canOperate!==true)return reply({tools:[]});
   const agentReply=await agentGet(id,'/v1/tools');
   return reply(filterDiscoveredAgentTools({agentReply,principal,deviceId:id,
