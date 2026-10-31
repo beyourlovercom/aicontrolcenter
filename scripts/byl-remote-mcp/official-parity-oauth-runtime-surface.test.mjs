@@ -177,3 +177,38 @@ test('missing trusted transport/policy/audit fails before constructing a product
    {message:'PARITY_RUNTIME_DEPENDENCIES_REQUIRED'});
  }
 });
+
+test('legacy MCP discovery is per-device: denied get_config hidden, authorized 007 preserved',async()=>{
+ const f=source();
+ f.input.agentGet=async()=>({tools:[
+  {name:'get_config'},{name:'read_file'},{name:'start_process'}
+ ]});
+ f.input.listAuthorizedRemoteToolNames=(_p,id)=>id==='007windows'
+  ? ['get_config','read_file','start_process']
+  : ['read_file','start_process'];
+ f.input.authorizeRemoteCall=(_p,id,name,args)=>{
+  if(name==='get_config'&&id!=='007windows')throw Error('OPERATOR_TOOL_DENIED');
+  return {name,arguments:args};
+ };
+ const surface=createCredentialFreeOAuthToolSurface(f.input);
+ const s=await session(surface.server);
+ try{
+  const windows=await s.client.callTool({name:'remote_list_tools',arguments:{deviceId:'windows'}});
+  assert.deepEqual(JSON.parse(windows.content[0].text).tools.map(t=>t.name),
+   ['read_file','start_process']);
+  const seven=await s.client.callTool({name:'remote_list_tools',arguments:{deviceId:'007windows'}});
+  assert.deepEqual(JSON.parse(seven.content[0].text).tools.map(t=>t.name),
+   ['get_config','read_file','start_process']);
+  const denied=await s.client.callTool({name:'remote_call',arguments:{
+   deviceId:'windows',name:'get_config',arguments:{}
+  }});
+  assert.equal(denied.isError,true);
+  assert.equal(f.seen.some(x=>x[0]==='call'),false);
+  assert(f.audit.some(x=>x.operation==='get_config'&&x.decision==='deny'));
+ }finally{await s.close();}
+});
+test('missing trusted discovery resolver denies construction, rather than leaking upstream',()=>{
+ const f=source();delete f.input.listAuthorizedRemoteToolNames;
+ assert.throws(()=>createCredentialFreeOAuthToolSurface(f.input),
+  {message:'PARITY_RUNTIME_DEPENDENCIES_REQUIRED'});
+});
