@@ -63,7 +63,9 @@ export function createCredentialFreeOAuthHttpRuntime({
  if(typeof agentGet!=='function'||typeof agentCall!=='function'||
     typeof canExposeRemoteCall!=='function'||
     typeof authorizeRemoteCall!=='function'||
-    typeof listAuthorizedRemoteToolNames!=='function'||
+    (env.BYL_MCP_OPERATOR_DISCOVERY_FILTER_ENABLED==='1'&&
+     typeof listAuthorizedRemoteToolNames!=='function')||
+    ![undefined,'0','1'].includes(env.BYL_MCP_OPERATOR_DISCOVERY_FILTER_ENABLED)||
     typeof auditLegacyOperation!=='function'||
     (env.BYL_MCP_PARITY_CORE_READ_ENABLED==='1'&&typeof auditOperation!=='function')||
     typeof z?.string!=='function')
