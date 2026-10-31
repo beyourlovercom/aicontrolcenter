@@ -12,6 +12,14 @@ import {isAbsolute,join} from 'node:path';
 
 const SHA=/^[0-9a-f]{64}$/i;
 const fail=code=>{throw Error(code);};
+function safeFs(operation,stage){
+ try{return operation();}
+ catch(e){
+  if(e?.code==='ENOENT'||e?.code==='ENOTDIR')fail('POLICY_IDENTITY_'+stage+'_NOT_FOUND');
+  if(e?.code==='EACCES'||e?.code==='EPERM')fail('POLICY_IDENTITY_'+stage+'_NOT_ACCESSIBLE');
+  fail('POLICY_IDENTITY_UNAVAILABLE');
+ }
+}
 export function inspectA4PolicyIdentity({
  manifestFile,inspectedSha256,read=readFileSync,stat=statSync
 }={}){
@@ -22,7 +30,7 @@ export function inspectA4PolicyIdentity({
   fail('POLICY_IDENTITY_MANIFEST_INVALID');
  // Injections for synthetic tests; standard production reader must meet the
  // same manifest ownership/permissions check used by A4's actual launcher.
- const mstat=stat(manifestFile);
+ const mstat=safeFs(()=>stat(manifestFile),'MANIFEST');
  if(!mstat.isFile()||(mstat.mode&0o077)!==0||
     (typeof process.getuid==='function'&&mstat.uid!==process.getuid()))
   fail('POLICY_IDENTITY_MANIFEST_INSECURE');
@@ -33,16 +41,16 @@ export function inspectA4PolicyIdentity({
     typeof manifest.runtimeDir!=='string'||!isAbsolute(manifest.runtimeDir)||
     manifest.runtimeDir.length>1024)
   fail('POLICY_IDENTITY_MANIFEST_INVALID');
- const dirStat=stat(manifest.runtimeDir);
+ const dirStat=safeFs(()=>stat(manifest.runtimeDir),'RUNTIME_DIRECTORY');
  if(!dirStat.isDirectory()||(dirStat.mode&0o077)!==0||
     (typeof process.getuid==='function'&&dirStat.uid!==process.getuid()))
   fail('POLICY_IDENTITY_RUNTIME_DIRECTORY_INSECURE');
  const policyFile=join(manifest.runtimeDir,'operator-policy.mjs');
- const pstat=stat(policyFile);
+ const pstat=safeFs(()=>stat(policyFile),'POLICY');
  if(!pstat.isFile()||pstat.size>200000||
     (typeof process.getuid==='function'&&pstat.uid!==process.getuid()))
   fail('POLICY_IDENTITY_POLICY_INVALID');
- const source=read(policyFile,'utf8');
+ const source=safeFs(()=>read(policyFile,'utf8'),'POLICY');
  if(typeof source!=='string'||source.length>200000)
   fail('POLICY_IDENTITY_POLICY_INVALID');
  const sha=createHash('sha256').update(source).digest('hex');
