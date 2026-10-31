@@ -223,3 +223,17 @@ test('default-OFF rollout requires no new private policy export and keeps legacy
   assert.deepEqual(JSON.parse(out.content[0].text),{tools:[{name:'get_file_info'}]});
  }finally{await s.close();}
 });
+
+test('feature ON does not restrict historic internal Bearer agent inventory',async()=>{
+ const f=source({principal:{kind:'internal',canOperate:true}});
+ f.input.agentGet=async()=>({tools:[{name:'get_config'},{name:'start_process'}]});
+ f.input.listAuthorizedRemoteToolNames=()=>['read_file'];
+ const surface=createCredentialFreeOAuthToolSurface(f.input);
+ const s=await session(surface.server);
+ try{
+  const out=await s.client.callTool({name:'remote_list_tools',arguments:{deviceId:'windows'}});
+  assert.deepEqual(JSON.parse(out.content[0].text),{
+   tools:[{name:'get_config'},{name:'start_process'}]
+  });
+ }finally{await s.close();}
+});
