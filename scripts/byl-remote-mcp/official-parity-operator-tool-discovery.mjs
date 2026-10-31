@@ -42,5 +42,5 @@ export function filterDiscoveredAgentTools({
     if(allowed.has(item.name))visible.push(item);
   }
   // Do not invent authorized names that the Agent does not actually implement.
-  return {...agentReply,tools:visible};
+  return {tools:visible};
 }
