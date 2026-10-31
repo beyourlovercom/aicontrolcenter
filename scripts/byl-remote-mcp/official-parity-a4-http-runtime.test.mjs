@@ -46,6 +46,7 @@ function fixture({on=false,envOverride={},hosts=['localhost','127.0.0.1'],
   agentCall:async(...x)=>{agentCalls.push(x);return {result:'harmless'};},
   canExposeRemoteCall:p=>p.canOperate===true,
   authorizeRemoteCall:(_p,_d,name,args)=>({name,arguments:args}),
+  listAuthorizedRemoteToolNames:()=>['get_file_info'],
   auditLegacyOperation:e=>{audit.push(e);return true;},
   auditOperation:e=>{audit.push(e);return true;},
   logger:{error:message=>logs.push(message)}
