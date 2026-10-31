@@ -22,6 +22,7 @@ function source({enabled=false,principal={kind:'cloudflare-access',canOperate:tr
  const input={
   McpServer,z,principal,agentGet:provider,agentCall:invoke,
   canExposeRemoteCall:()=>legacyVisible,
+  listAuthorizedRemoteToolNames:(_p,_deviceId)=>['get_file_info'],
   authorizeRemoteCall:(p,id,name,args)=>{
    if(!operatorAllowed)throw Error('OPERATOR_DENIED');
    return {name,arguments:args};
@@ -83,6 +84,7 @@ test('nonoperator principal with feature on keeps three legacy tools, no new nam
   ]);
   const list=await s.client.callTool({name:'remote_list_tools',arguments:{deviceId:'china-mac'}});
   assert.notEqual(list.isError,true);
+  assert.deepEqual(JSON.parse(list.content[0].text),{tools:[]});
  }finally{await s.close();}
 });
 test('internal legacy principal remains usable but receives no direct tools',async()=>{
@@ -169,7 +171,7 @@ test('internal principal receives no terminal adapter',async()=>{
  }finally{await s.close();}
 });
 test('missing trusted transport/policy/audit fails before constructing a production-compatible surface',()=>{
- for(const name of ['agentGet','agentCall','canExposeRemoteCall','authorizeRemoteCall','auditLegacyOperation']){
+ for(const name of ['agentGet','agentCall','canExposeRemoteCall','authorizeRemoteCall','listAuthorizedRemoteToolNames','auditLegacyOperation']){
   const f=source();f.input[name]=null;
   assert.throws(()=>createCredentialFreeOAuthToolSurface(f.input),
    {message:'PARITY_RUNTIME_DEPENDENCIES_REQUIRED'});
