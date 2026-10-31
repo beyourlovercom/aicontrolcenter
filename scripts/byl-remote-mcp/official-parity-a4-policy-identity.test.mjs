@@ -4,6 +4,7 @@ import {mkdtempSync,mkdirSync,writeFileSync,rmSync,chmodSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {createHash} from 'node:crypto';
+import {spawnSync} from 'node:child_process';
 import {inspectA4PolicyIdentity} from './official-parity-a4-policy-identity.mjs';
 
 function fixture(source='export function authorizeRemoteCall() {}'){
@@ -78,4 +79,32 @@ test('malformed manifest or insecure runtime directory fails before reading priv
   assert.throws(()=>inspectA4PolicyIdentity(f),
    {message:'POLICY_IDENTITY_RUNTIME_DIRECTORY_INSECURE'});
  }finally{f.close();}
+});
+
+test('CLI reports missing manifest environment explicitly without exposing paths',()=>{
+ const cli=new URL('./official-parity-a4-policy-identity-cli.mjs',import.meta.url);
+ const result=spawnSync(process.execPath,[cli.pathname],{
+  encoding:'utf8',
+  env:{BYL_MCP_INSPECTED_POLICY_SHA256:'a'.repeat(64)}
+ });
+ assert.equal(result.status,1);
+ assert.deepEqual(JSON.parse(result.stdout.trim()),{
+  status:'UNVERIFIED',code:'POLICY_IDENTITY_MANIFEST_ENV_MISSING'
+ });
+ assert.equal(result.stderr,'');
+});
+test('CLI distinguishes a bad supplied manifest path from an unset environment',()=>{
+ const cli=new URL('./official-parity-a4-policy-identity-cli.mjs',import.meta.url);
+ const result=spawnSync(process.execPath,[cli.pathname],{
+  encoding:'utf8',
+  env:{
+   BYL_MCP_INSPECTED_POLICY_SHA256:'a'.repeat(64),
+   BYL_MCP_A4_PRIVATE_MANIFEST_FILE:'not-an-absolute-path'
+  }
+ });
+ assert.equal(result.status,1);
+ assert.deepEqual(JSON.parse(result.stdout.trim()),{
+  status:'UNVERIFIED',code:'POLICY_IDENTITY_MANIFEST_INVALID'
+ });
+ assert.equal(result.stderr,'');
 });
