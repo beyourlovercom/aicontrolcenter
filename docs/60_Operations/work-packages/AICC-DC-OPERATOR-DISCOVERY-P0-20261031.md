@@ -73,3 +73,36 @@ decisions with four-device policy-only fixtures.
 contract explicitly says not to revalidate an already confirmed private
 backup. Do not duplicate backups. Still preserve service-only rollback
 authorization and current known-good entrypoint.
+
+## Owner terminal check: missing manifest variable (2026-10-31)
+
+Observed `POLICY_IDENTITY_MANIFEST_INVALID` when the CLI was invoked with
+`BYL_MCP_INSPECTED_POLICY_SHA256` set but with no independently supplied
+`BYL_MCP_A4_PRIVATE_MANIFEST_FILE`. This is a **preflight input problem**,
+not evidence of a corrupted Operator Policy or of a failed SHA match.
+A normal macOS interactive shell does not inherit a service-specific
+launchd Manifest variable.
+
+The CLI now reports
+`POLICY_IDENTITY_MANIFEST_ENV_MISSING` when the variable is absent.
+Never guess a manifest filename or copy private paths into public GitHub.
+
+For authorized service owners operating locally only:
+1. Locate the existing approved A4 private manifest path in the service's
+   own launch configuration. Do not paste the path, environment dump, PEM
+   contents, policy bytes or target URLs into chat.
+2. In that local terminal, set
+   `BYL_MCP_A4_PRIVATE_MANIFEST_FILE` to the actual **absolute** private
+   Manifest path. The shell command should be one line, or use explicit
+   `export` for both variables; do not insert a blank line after a trailing
+   backslash.
+3. Run the opt-in CLI with
+   `BYL_MCP_INSPECTED_POLICY_SHA256` set to the already known inspected
+   hash. Only the sanitized JSON result should be shared.
+4. If `inspectedFileMatchesManifestPolicy=false`, STOP and reconcile
+   policy identity locally. If true, the result still does **not** attest the
+   live launchd process's loaded Manifest, nor permit filter-ON deployment.
+5. If `POLICY_IDENTITY_UNAVAILABLE`, file access or ownership failed; never
+   weaken private permissions to make the check pass.
+
+No backup renewal, production restart, OAuth reconnect or new privileges.
