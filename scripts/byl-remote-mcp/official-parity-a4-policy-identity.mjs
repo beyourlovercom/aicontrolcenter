@@ -12,14 +12,6 @@ import {isAbsolute,join} from 'node:path';
 
 const SHA=/^[0-9a-f]{64}$/i;
 const fail=code=>{throw Error(code);};
-function secureFile(path){
- if(typeof path!=='string'||!isAbsolute(path)||path.length>1024)
-  fail('POLICY_IDENTITY_MANIFEST_INVALID');
- const st=statSync(path);
- if(!st.isFile()||(st.mode&0o077)!==0||
-    (typeof process.getuid==='function'&&st.uid!==process.getuid()))
-  fail('POLICY_IDENTITY_MANIFEST_INSECURE');
-}
 export function inspectA4PolicyIdentity({
  manifestFile,inspectedSha256,read=readFileSync,stat=statSync
 }={}){
