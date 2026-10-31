@@ -106,7 +106,8 @@ export async function launchA4OAuthService({
     typeof routing.endpointRouting!=='function'||
     typeof policy.canExposeRemoteCall!=='function'||
     typeof policy.authorizeRemoteCall!=='function'||
-    typeof policy.listAuthorizedRemoteToolNames!=='function')
+    (env.BYL_MCP_OPERATOR_DISCOVERY_FILTER_ENABLED==='1'&&
+     typeof policy.listAuthorizedRemoteToolNames!=='function'))
   fail('A4_PRIVATE_POLICY_UNAVAILABLE');
  const token=readPrivate(v.bearerPath);
  const signingKey=readPrivate(v.signingKeyPath);
