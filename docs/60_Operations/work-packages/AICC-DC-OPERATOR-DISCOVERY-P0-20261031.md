@@ -27,3 +27,49 @@ Status: **GitHub isolated candidate only. No production deployment, no scope exp
 - Scope: isolated candidate discovery/filter library, unit/SDK tests and release contract; no source copied from private runtime.
 - User directive: begin repair, preserve current permissions and device state.
 - Provider routing note: isolated source-only typed GitHub changes; no governed private service executor or production shell action invoked. This is not a claim of runtime-authorized governed provider execution.
+
+## 2026-10-31 loaded-policy identity verification (pending Owner service provenance)
+
+Owner executed a prior private-file-only inspection and reported a SHA-256 and `DISCOVERY_EXPORT=false`. The inspected path may differ from the A4 Manifest's runtimeDir; do **not** assume the same loaded module.
+
+A small public **read-only local** verifier is included:
+`scripts/byl-remote-mcp/official-parity-a4-policy-identity-cli.mjs`. It takes
+`BYL_MCP_A4_PRIVATE_MANIFEST_FILE` and `BYL_MCP_INSPECTED_POLICY_SHA256`
+**from the authorized service-owner's local environment**, derives the
+`runtimeDir/operator-policy.mjs` selected by that manifest, and reports only:
+`scope`, `inspectedFileMatchesManifestPolicy`,
+`discoveryExportStaticHint`, `liveListenerManifestAttested`,
+`canEnableDiscoveryFilter`. It does **not** output paths, source bytes,
+private keys, target addresses, hashes or tokens, import private modules,
+bind ports, or mutate files. It always reports
+`liveListenerManifestAttested=false` / `canEnableDiscoveryFilter=false`
+because an arbitrary locally supplied Manifest is not proof that the running
+launchd process loaded that Manifest. The static export hint is not proof of
+runtime ESM export registration.
+
+**Interpreting results:**
+- Match `false`: the inspected file and supplied A4 manifest policy differ;
+  STOP until trusted service-owner reconciles which one is live.
+- Match `true` + export `false`: same file, still missing resolver; STOP.
+- Match `true` + export `true`: proceed to trusted service-owner loaded
+  process provenance and exact policy behavior review, **not** filter-ON.
+- Any error: `UNVERIFIED`. Never turn a failed check into an authorization.
+
+**Minimal private-policy implementation contract (not a generic pasted patch):**
+Extract existing full-exec and canary name decisions into one private,
+side-effect-free helper consumed by both `authorizeRemoteCall` and the
+new `listAuthorizedRemoteToolNames(principal,deviceId,env)`. The latter
+returns a synchronous `string[]` for an existing verified OAuth principal and
+fixed device; no client/Agent list input, no broadening of scope. Preserve
+`007windows` special-case `get_config` only when it is **already**
+permitted by that actual loaded policy; the same principle applies to the
+existing `hostname` / narrow canary permissions. Keep per-argument checks
+in `authorizeRemoteCall`. Without reading the authorized actual private
+policy, an automatically generated private patch would be unsafe and must not
+be attempted. First validate the exact loaded source and expected name
+decisions with four-device policy-only fixtures.
+
+**Preserve Owner backup decision:** the 2026-10-15 service operations
+contract explicitly says not to revalidate an already confirmed private
+backup. Do not duplicate backups. Still preserve service-only rollback
+authorization and current known-good entrypoint.
