@@ -37,6 +37,7 @@ function fixture(){
   BYL_MCP_OAUTH_COMPAT_CANDIDATE:'1',
   BYL_MCP_ACCESS_ENABLED:'1',
   BYL_MCP_PARITY_CORE_READ_ENABLED:'0',
+  BYL_MCP_OPERATOR_DISCOVERY_FILTER_ENABLED:'1',
   BYL_MCP_A4_PRIVATE_MANIFEST_FILE:manifest
  };
  const imported={
@@ -179,5 +180,36 @@ test('occupied-port error refuses cutover and does not kill any running service'
    logger:{error:s=>logs.push(s)}
   }),{message:'A4_OAUTH_LISTEN_FAILED'});
   assert.deepEqual(logs,['A4_OAUTH_LISTEN_FAILED']);
+ }finally{f.dispose();}
+});
+test('staged source-only OAuth launch with filter OFF requires no new private export',async()=>{
+ const f=fixture();
+ try{
+  f.env.BYL_MCP_OPERATOR_DISCOVERY_FILTER_ENABLED='0';
+  const old=f.importPrivate;
+  f.importPrivate=async path=>{
+   const mod=await old(path);
+   if(path.endsWith('operator-policy.mjs')){
+    const {listAuthorizedRemoteToolNames:_removed,...rest}=mod;return rest;
+   }
+   return mod;
+  };
+  const out=await launchA4OAuthService({env:f.env,listen:false,importPrivate:f.importPrivate});
+  assert.equal(out.status,'PREPARED_NOT_LISTENING');
+ }finally{f.dispose();}
+});
+test('filter ON stops before binding when private policy discovery export is missing',async()=>{
+ const f=fixture();
+ try{
+  const old=f.importPrivate;
+  f.importPrivate=async path=>{
+   const mod=await old(path);
+   if(path.endsWith('operator-policy.mjs')){
+    const {listAuthorizedRemoteToolNames:_removed,...rest}=mod;return rest;
+   }
+   return mod;
+  };
+  await assert.rejects(launchA4OAuthService({env:f.env,listen:false,
+   importPrivate:f.importPrivate}),{message:'A4_PRIVATE_POLICY_UNAVAILABLE'});
  }finally{f.dispose();}
 });
