@@ -11,6 +11,7 @@
  */
 import {registerOAuthParityCore} from './official-parity-oauth-hook.mjs';
 import {normalizeApprovedRemoteCall} from './official-parity-terminal-compat.mjs';
+import {filterDiscoveredAgentTools} from './official-parity-operator-tool-discovery.mjs';
 
 export const CANONICAL_DEVICE_IDS=Object.freeze([
  'us-macmini','china-mac','windows','007windows'
@@ -24,7 +25,7 @@ function reply(value){
 }
 export function createCredentialFreeOAuthToolSurface({
  McpServer,z,principal,agentGet,agentCall,
- canExposeRemoteCall,authorizeRemoteCall,
+ canExposeRemoteCall,authorizeRemoteCall,listAuthorizedRemoteToolNames,
  auditLegacyOperation,auditOperation,env={}
 }={}){
  if(typeof McpServer!=='function'||typeof z?.string!=='function'||
@@ -32,6 +33,7 @@ export function createCredentialFreeOAuthToolSurface({
     !principal||typeof principal!=='object'||
     typeof agentGet!=='function'||typeof agentCall!=='function'||
     typeof canExposeRemoteCall!=='function'||typeof authorizeRemoteCall!=='function'||
+    typeof listAuthorizedRemoteToolNames!=='function'||
     typeof auditLegacyOperation!=='function')
   throw Error('PARITY_RUNTIME_DEPENDENCIES_REQUIRED');
  const devices=new Set(CANONICAL_DEVICE_IDS);
@@ -50,7 +52,14 @@ export function createCredentialFreeOAuthToolSurface({
  server.registerTool('remote_list_tools',{
   description:'List allowed Desktop Commander tools on a device.',
   inputSchema:{deviceId:z.string().min(1).max(64)}
- },async({deviceId})=>reply(await agentGet(safeDevice(deviceId),'/v1/tools')));
+ },async({deviceId})=>{
+  const id=safeDevice(deviceId);
+  // No metadata leakage for a nonoperator. Agent capability alone is not authority.
+  if(!legacyOperatorVisible||principal.canOperate!==true)return reply({tools:[]});
+  const agentReply=await agentGet(id,'/v1/tools');
+  return reply(filterDiscoveredAgentTools({agentReply,principal,deviceId:id,
+   listAuthorizedRemoteToolNames}));
+ });
  if(legacyOperatorVisible)server.registerTool('remote_call',{
   description:'Call an allowed Desktop Commander tool on a selected device.',
   inputSchema:{
