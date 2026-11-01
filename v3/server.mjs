@@ -156,6 +156,9 @@ async function readJson(req,maxBytes=65536){
 
 export function createAiccV3Server(options={}){
   const env=options.env||process.env;
+  // Freeze the Dev governance mode at server creation; request payloads cannot change it.
+  const v3DevMode=env.AICC_EXECUTOR_GOVERNANCE_V3_ENABLED==='1';
+  const v3DevPolicy=v3DevMode?{governance:{mode:'DC_PRIMARY_V3_DEV',directRun:'STOP',automaticDcDispatch:'STOP'}}:{};
   const storeOptions=options.workStoreOptions||{};
   const executorOptions=options.executorOptions||{};
   const prDeliveryOptions=options.prDeliveryOptions||{};
@@ -200,8 +203,8 @@ export function createAiccV3Server(options={}){
     if(req.method==='GET'&&url.pathname==='/api/health'){
       try{
         const context=loadProjectContext(env);
-        return json(res,200,{schema:'aicc.v3.health.v1',ok:true,service:'AICC_V3',project:{available:true,id:context.project.id}});
-      }catch(error){return json(res,200,{schema:'aicc.v3.health.v1',ok:true,service:'AICC_V3',project:projectError(error)});}
+        return json(res,200,{schema:'aicc.v3.health.v1',ok:true,service:'AICC_V3',project:{available:true,id:context.project.id},...v3DevPolicy});
+      }catch(error){return json(res,200,{schema:'aicc.v3.health.v1',ok:true,service:'AICC_V3',project:projectError(error),...v3DevPolicy});}
     }
 
     if(req.method==='GET'&&url.pathname==='/api/project'){
@@ -381,11 +384,14 @@ export function createAiccV3Server(options={}){
           try{const s=await remoteRunner.status();remoteClaudeReadiness={available:true,ready:true,...s};}
           catch(error){remoteClaudeReadiness={available:false,errorCode:error?.code||'REMOTE_RUNNER_UNAVAILABLE'};}
         }
-        return json(res,200,{available:true,executor,remoteClaudeReadiness});
+        return json(res,200,{available:true,executor,remoteClaudeReadiness,...v3DevPolicy});
       }
       catch(error){return executorError(res,error);}
     }
     if(req.method==='POST'&&url.pathname==='/api/runs'){
+      // V3's supervised DC pathway is NOT the legacy direct Codex execution API.
+      // No separate authorized direct-run adapter exists: reject before JSON, state or spawn.
+      if(v3DevMode)return json(res,403,{ok:false,errorCode:'EXECUTOR_V3_DIRECT_RUN_NOT_AUTHORIZED'});
       try{
         const input=await readJson(req);const context=loadProjectContext(env);
         if(remoteRunner){
