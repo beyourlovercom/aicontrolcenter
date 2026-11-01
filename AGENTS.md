@@ -8,6 +8,18 @@ OpenSpec, Codex sessions, runtime state, dashboards, local workspaces, caches, a
 
 No tool, agent, artifact, task checkbox, local session, or application state may authorize its own execution.
 
+## DC Primary Executor Governance V3 — isolated Dev candidate ONLY
+
+Owner-approved scoped Work Package: `AICC-EXECUTOR-DC-PRIMARY-V3`.
+Candidate: `docs/00_Governance/AI-EXECUTOR-GOVERNANCE-V3.md`.
+Not active in GitHub main or production until separate exact-head Owner approval and independently verified runtime adoption.
+
+In V3 opt-in Dev only, supervised formal OAuth BYL DC is the ordinary engineering route;
+Codex requires an explicit security-review rationale; Claude is retired.
+AICC automatic DC dispatch is **STOP** until an independently approved typed adapter exists.
+Do not treat this candidate note as replacing the currently effective V2 contract.
+The historical V2 provider/runner must not be auto-converted, and STOP gates remain.
+
 ## Global Executor Governance V2
 
 Canonical contract: `docs/00_Governance/AI-EXECUTOR-GOVERNANCE-V2.md`.

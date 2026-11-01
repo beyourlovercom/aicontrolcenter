@@ -24,6 +24,19 @@ PR creation and merge require explicit Owner authorization.
 Human UAT PASS may only be claimed from explicit Owner confirmation.
 Production cutover to port 1420 is a separate gate.
 
+## DC Primary V3 routing candidate (Dev-only)
+
+Owner Work Package: `AICC-EXECUTOR-DC-PRIMARY-V3`.
+Candidate policy: `docs/00_Governance/AI-EXECUTOR-GOVERNANCE-V3.md`.
+`AICC_EXECUTOR_GOVERNANCE_V3_ENABLED=1` is an isolated Dev opt-in,
+**NOT** a live production setting or authorization. New V3 supervised work
+uses formal OAuth DC as the ordinary channel and requires a separate
+reasoned security review for Codex. Claude is retired in V3. An automatic
+DC dispatch intent must STOP until independently attested Owner authority
+and a separately reviewed typed adapter exist. This does not change the
+existing Codex sandbox, Writer Lock, source authority, PR or Owner gates.
+Existing V2 history stays intact and readable.
+
 ## V3.5 executor boundaries
 
 `ONE_ACTIVE_EXECUTOR_LEASE_PER_PROJECT = REQUIRED`

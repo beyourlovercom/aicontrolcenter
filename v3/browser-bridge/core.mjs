@@ -81,11 +81,12 @@ export async function settleWithTimeout(promise,timeoutMs,fallback){
   }finally{if(timer)clearTimeout(timer);}
 }
 
-export function parseNextStepDecision(value){
+export function parseNextStepDecision(value,options={}){
+  const v3=options.v3Enabled===true||/^AICC_EXECUTOR_GOVERNANCE:\s*V3\s*$/mi.test(value||'');
   if(typeof value!=='string'||!value.includes('AICC_NEXT_STEP_V1'))fail('NEXT_STEP_DECISION_INVALID');
   const decision=value.match(/^AICC_DECISION:\s*(EXECUTE|STOP_GATE)\s*$/mi)?.[1]||null;
   const actionClass=value.match(/^AICC_ACTION_CLASS:\s*(CODE_CHANGE|TEST_ONLY|STOP_GATE)\s*$/mi)?.[1]||null;
-  const provider=value.match(/^AICC_PROVIDER:\s*(CLAUDE_CODE|CODEX)\s*$/mi)?.[1]||null;
+  const provider=value.match(/^AICC_PROVIDER:\s*(CLAUDE_CODE|SELF_HOSTED_DC|CODEX)\s*$/mi)?.[1]||null;
   const providerRoutingReason=value.match(/^AICC_PROVIDER_ROUTING_REASON:\s*(.*?)\s*$/mi)?.[1]?.trim()||'';
   const workPackage=value.match(/^AICC_WORK_PACKAGE:\s*(.*?)\s*$/mi)?.[1]?.trim()||'';
   const taskTitle=value.match(/^AICC_TASK:\s*(.*?)\s*$/mi)?.[1]?.trim()||'';
@@ -97,12 +98,30 @@ export function parseNextStepDecision(value){
   }
   if(decision!=='EXECUTE'||!['CODE_CHANGE','TEST_ONLY'].includes(actionClass)||!workPackage||!taskTitle||!instruction.trim())fail('NEXT_STEP_DECISION_INVALID');
   if(!provider||!providerRoutingReason)fail('NEXT_STEP_DECISION_INVALID');
+  if(provider==='SELF_HOSTED_DC')return {decision:'STOP_GATE',gateReason:'NEXT_STEP_DC_AUTO_DISPATCH_NOT_AUTHORIZED'};
+  if(v3&&provider==='CLAUDE_CODE')return {decision:'STOP_GATE',gateReason:'NEXT_STEP_CLAUDE_RETIRED'};
+  if(v3&&provider==='CODEX'&&!/^SECURITY_REVIEW:\s*\S/i.test(providerRoutingReason))
+    return {decision:'STOP_GATE',gateReason:'NEXT_STEP_CODEX_SECURITY_REASON_REQUIRED'};
   if(workPackage.length>240||taskTitle.length>240||new TextEncoder().encode(instruction).length>60000)fail('NEXT_STEP_DECISION_INVALID');
   const forbidden=/(?:\bgit\s+merge\b|\bgh\s+pr\s+merge\b|\bmerge\s+(?:pr|pull request)\b|\bdeploy(?:ment)?\b|\bproduction\s+(?:apply|write|data|deploy)\b|(?:^|\s)--apply(?:\s|$)|\bdata\s+write\b)/i;
   const negatedConstraint=/^\s*(?:[-*]\s*)?(?:\d+[.)]\s*)?(?:do\s+not|don't|must\s+not|never|no\b)/i;
   const actionableInstruction=instruction.split(/\r?\n/).filter(line=>!negatedConstraint.test(line)).join('\n');
   if(forbidden.test(actionableInstruction))return {decision:'STOP_GATE',gateReason:'NEXT_STEP_FORBIDDEN_OPERATION'};
   return {decision:'EXECUTE',actionClass,provider,providerRoutingReason,workPackageTitle:workPackage,taskTitle,instruction};
+}
+
+/**
+ * Trust the persisted server request mode, NOT the assistant's response marker.
+ * A stripped V3 marker must never revive a legacy Claude EXECUTE decision.
+ */
+export function parseNextStepForRequest(request,assistantText){
+  if(request?.v3Enabled!==undefined&&request.v3Enabled!==true&&request.v3Enabled!==false)
+    fail('NEXT_STEP_REQUEST_MODE_INVALID');
+  const trustedV3=request?.v3Enabled===true;
+  if(trustedV3&&(typeof request.prompt!=='string'||
+    !request.prompt.includes('AICC_EXECUTOR_GOVERNANCE: V3')))
+    return {decision:'STOP_GATE',gateReason:'NEXT_STEP_V3_REQUEST_BINDING_INVALID'};
+  return parseNextStepDecision(assistantText,{v3Enabled:trustedV3});
 }
 
 export function recoveryAction(projection,ledger){

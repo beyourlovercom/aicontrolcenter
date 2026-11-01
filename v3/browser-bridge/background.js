@@ -1,4 +1,4 @@
-import {conversationFromUrl,parseNextStepDecision,sameConversation,settleWithTimeout} from './core.mjs';
+import {conversationFromUrl,parseNextStepForRequest,sameConversation,settleWithTimeout} from './core.mjs';
 import {createCoordinator} from './coordinator.mjs';
 
 const BASE='http://127.0.0.1:1420';
@@ -252,7 +252,7 @@ async function processNextStepClaim(claimed){
     const planned=await planningDestination.plan(requestValue);
     if(planned?.outcome==='ABORTED_BEFORE_SEND'){await finishNextStep(requestId,{claimId,outcome:'ABORTED_BEFORE_SEND',errorCode:planned.reason||'NEXT_STEP_ABORTED_BEFORE_SEND'});return;}
     if(planned?.outcome!=='DELIVERED'||typeof planned.assistantText!=='string'){await finishNextStep(requestId,{claimId,outcome:'UNCERTAIN',errorCode:planned?.reason||'NEXT_STEP_DECISION_UNCERTAIN'});return;}
-    let decision;try{decision=parseNextStepDecision(planned.assistantText);}catch{await finishNextStep(requestId,{claimId,outcome:'UNCERTAIN',errorCode:'NEXT_STEP_DECISION_INVALID'});return;}
+    let decision;try{decision=parseNextStepForRequest(requestValue,planned.assistantText);}catch{await finishNextStep(requestId,{claimId,outcome:'UNCERTAIN',errorCode:'NEXT_STEP_DECISION_INVALID'});return;}
     if(decision.decision==='STOP_GATE'){await finishNextStep(requestId,{claimId,outcome:'STOP_GATE',decision});return;}
     const queued=await coordinator.enqueueAction({url:planned.conversationUrl,tabId:null,workPackageTitle:decision.workPackageTitle,taskTitle:decision.taskTitle,instruction:decision.instruction,roomId:requestValue.roomId,workstreamId:requestValue.workstreamId,runtimeBinding:{projectId:requestValue.projectId,projectName:requestValue.projectName||requestValue.projectId,repositoryIdentity:requestValue.repositoryIdentity,repositoryPath:requestValue.worktree,branch:requestValue.branch,head:requestValue.head},executionProvider:{executionClass:decision.actionClass,provider:decision.provider,providerRoutingReason:decision.providerRoutingReason}});
     await finishNextStep(requestId,{claimId,outcome:'EXECUTION_QUEUED',bridgeRequestId:queued.ledger.requestId,decision});

@@ -7,6 +7,15 @@ import {appendBridgeEvent,createBridgeRequest,createDelivery,createProviderExecu
 import {validateProviderDecision} from './provider-routing.mjs';
 
 function fail(code,detail=''){const error=new Error(detail?`${code}: ${detail}`:code);error.code=code;throw error;}
+function enforceV3ProviderGate(input,env){
+  if(env?.AICC_EXECUTOR_GOVERNANCE_V3_ENABLED!=='1')return;
+  const provider=input?.executionProvider?.provider;
+  if(provider==='CLAUDE_CODE')fail('BRIDGE_CLAUDE_RETIRED');
+  if(provider==='SELF_HOSTED_DC')fail('BRIDGE_DC_AUTO_DISPATCH_NOT_AUTHORIZED');
+  if(!provider)fail('BRIDGE_V3_PROVIDER_REQUIRED');
+  try{validateProviderDecision(input.executionProvider,{v3Enabled:true});}
+  catch{fail('BRIDGE_V3_PROVIDER_DECISION_INVALID');}
+}
 function text(value,code,max=4096){if(typeof value!=='string'||!value.trim()||value.length>max)fail(code);return value;}
 function uuid(value){if(typeof value!=='string'||!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value))fail('BRIDGE_REQUEST_INVALID');return value;}
 function exactInstruction(value){if(typeof value!=='string'||!value.trim()||Buffer.byteLength(value,'utf8')>60000)fail('BRIDGE_REQUEST_INVALID');return value;}
@@ -70,10 +79,11 @@ function startExactRun(context,request,instruction,env,options){
   catch(error){if(error?.code==='RUN_TASK_NOT_FOUND')fail('BRIDGE_TASK_NOT_FOUND');const next=new Error('BRIDGE_RUN_BINDING_FAILED');next.code='BRIDGE_RUN_BINDING_FAILED';next.causeCode=error?.code||null;throw next;}
 }
 export function submitBridgeRequest(context,input,env=process.env,options={}){
+  enforceV3ProviderGate(input,env);
   if(input?.provider!=='chatgpt-web')fail('BRIDGE_REQUEST_INVALID');uuid(input?.requestId);const instruction=exactInstruction(input?.instruction);const binding=taskBinding(context,input,env,options);
   let executionProvider=null;
   if(input?.executionProvider!=null){
-    try{executionProvider=validateProviderDecision(input.executionProvider);}
+    try{executionProvider=validateProviderDecision(input.executionProvider,{v3Enabled:env?.AICC_EXECUTOR_GOVERNANCE_V3_ENABLED==='1'});}
     catch{fail('BRIDGE_EXECUTION_PROVIDER_INVALID');}
   }
   let request;let created=false;
@@ -93,10 +103,11 @@ export function submitBridgeRequest(context,input,env=process.env,options={}){
   return {created,request,run,state:readBridgeState(context,request.requestId,env)};
 }
 export async function submitBridgeRequestAsync(context,input,env=process.env,options={}){
+  enforceV3ProviderGate(input,env);
   if(input?.executionProvider?.provider!=='CLAUDE_CODE')return submitBridgeRequest(context,input,env,options);
   if(input?.provider!=='chatgpt-web')fail('BRIDGE_REQUEST_INVALID');
   uuid(input?.requestId);const instruction=exactInstruction(input?.instruction);const binding=taskBinding(context,input,env,options);
-  let executionProvider;try{executionProvider=validateProviderDecision(input.executionProvider);}catch{fail('BRIDGE_EXECUTION_PROVIDER_INVALID');}
+  let executionProvider;try{executionProvider=validateProviderDecision(input.executionProvider,{v3Enabled:env?.AICC_EXECUTOR_GOVERNANCE_V3_ENABLED==='1'});}catch{fail('BRIDGE_EXECUTION_PROVIDER_INVALID');}
   if(executionProvider.provider!=='CLAUDE_CODE')return submitBridgeRequest(context,input,env,options);
   let request;let created=false;
   try{request=readBridgeRequest(context,input.requestId,env);}catch(error){if(error?.code!=='BRIDGE_REQUEST_INVALID')throw error;}
