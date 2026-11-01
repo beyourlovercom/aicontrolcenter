@@ -174,6 +174,9 @@ function canonicalBinding(rec){
 function sameBinding(rec,candidate){return canonicalBinding(rec).every((value,index)=>value===canonicalBinding(candidate)[index]);}
 
 export function createRemoteRunnerService(allowedRoot,options={}){
+  // Bind policy mode once at service creation, never from request fields.
+  const governedEnv=options.env||process.env;
+  const v3Mode=options.v3Enabled===true||governedEnv?.AICC_EXECUTOR_GOVERNANCE_V3_ENABLED==='1'||process.env.AICC_EXECUTOR_GOVERNANCE_V3_ENABLED==='1';
   const spawn_=options.spawn||nodeSpawn;
   const executions=new Map();
   const leases=new Map();
@@ -240,6 +243,9 @@ export function createRemoteRunnerService(allowedRoot,options={}){
   }
 
   function submit(input){
+    // Never launch the retired Claude runner in an explicitly opted-in V3 process.
+    if(v3Mode)
+      fail('REMOTE_RUNNER_CLAUDE_RETIRED');
     const decision=validateProviderDecision({executionClass:input?.executionClass,provider:input?.provider||'CLAUDE_CODE',providerRoutingReason:input?.providerRoutingReason});
     if(decision.provider!=='CLAUDE_CODE')fail('REMOTE_RUNNER_PROVIDER_INVALID');
     if(typeof input?.workPackageId!=='string'||!input.workPackageId.trim())fail('REMOTE_RUNNER_ENVELOPE_INVALID');
