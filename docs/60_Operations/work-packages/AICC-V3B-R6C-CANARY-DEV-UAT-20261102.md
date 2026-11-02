@@ -38,3 +38,24 @@ Require root npm test, V3 suite, Codex read-only security review, Draft PR CI. O
 - Codex read-only SECURITY_REVIEW on seven files: **PASS_FOR_DEV_CANDIDATE only**. Its sandbox \`mkdtemp('/private/tmp')\` yielded EPERM so local host tests, not Codex sandbox, establish the 231/231 result.
 - Codex expressly identified that local synthetic receipt is unsigned, Owner/service/health fixture signatures do not independently bind requestId/branch/expiry, local ledger has same-UID TOCTOU and multi-writer races, and no transactional fsync or remote receipt trust exists. **All are hard STOP for real automatic dispatch.**
 - Current synthetic-only source is safe to submit as Draft PR after GitHub CI. No Owner Ready/main or Production approval is inferred.
+## R6-C H2 cooperating-writer ledger hardening (2026-11-02)
+
+- The Dev-only local ledger now uses a single per-root atomic exclusive mutation lock across reserve, stage, record, revoke and reconcile. Active or crash-stale locks **fail closed**; they are never automatically stolen.
+- Synthetic nonce, lease and record writes use file-descriptor fsync where applicable; directory-entry crash persistence remains unproven. This is NOT a production transactional store.
+- Reconciliation only removes a leftover lease if its requestId and planDigest match a SYNTHETIC_COMPLETED record with valid receiptDigest and exactly one synthetic attempt. Uncertain outcomes keep quarantine; no retry.
+- New negative tests: stale mutation lock, terminal lease cleanup without replay, uncertain lease quarantine. Focused total 23/23.
+- Remaining real-readiness blockers: independently issued Owner grant, AICC service OAuth, trusted Agent signed health, signed remote receipt with remote nonce, external revocation and same-UID threat review. Cooperating-writer lock is NOT hostile same-UID protection.
+- The Draft PR #114 HEAD will change on this amendment; old head cannot be reused for merge approval.
+## R6-C H2 supervised recovery policy (after initial Codex STOP)
+
+Initial H2 Codex review returned STOP for a crash-stale mutation lock and a lease-created-before-INFLIGHT window. Current Dev-only resolution:
+
+- New inspectDevMutationLock(root) is **read-only**, requires a private trusted Dev root and returns STOP regardless of whether a lock is present. It never steals, deletes or grants permission.
+- An existing dev-ledger-mutation.lock blocks both mutations and automated reconciliation. This is deliberate: a stale lock cannot safely be distinguished from a live writer using local flags or PID alone.
+- **Separate Owner-supervised, Dev-only incident protocol:** (1) stop initiating new Dev work; (2) independently inspect process liveness, all current open descriptors and the exact isolated worktree; (3) record lock path, SHA-256, file owner and time; (4) only with a distinct Owner incident authorization, archive the stale lock **inside the isolated private root** without deleting its evidence; (5) immediately run reconcileDevLedger; (6) quarantine all uncertain work; never auto-retry or reuse a nonce. If the active process cannot be conclusively excluded, STOP and leave the lock untouched. No real Agent/Gateway or running Production process may be touched.
+- Reconciliation now recognizes an exact matching active lease with PREPARED_DEV_ONLY and zero attempts (crash between lease creation and INFLIGHT). It marks the record UNCERTAIN_STOP / R6B4_CRASH_AFTER_LEASE_CREATION, leaves its lease in place and never retries.
+- It cleans only a matching terminal synthetic completion lease, and never reuses the nonce.
+- The current worktree tests simulate archiving a stale **synthetic fixture lock** inside a disposable temp directory. They do not exercise actual operator authorization or Production recovery.
+- File fsync does not guarantee durable rename/directory entry; same-UID file replacement and multiresource crash atomicity remain **hard STOP for real automatic dispatch**. No production-ready transactional guarantee is claimed.
+
+This is a governed offline Dev recovery design, **not** an automated crash unlock. Real R6-C remains STOP pending independent Owner authorizer, service-delegated OAuth, trusted signed Agent health, remote nonce/receipt and transactionally hardened ledger.

@@ -1,12 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {generateKeyPairSync,sign} from 'node:crypto';
-import {mkdtempSync,realpathSync,chmodSync,symlinkSync,unlinkSync,mkdirSync} from 'node:fs';
+import {mkdtempSync,realpathSync,chmodSync,symlinkSync,unlinkSync,mkdirSync,existsSync,writeFileSync,renameSync} from 'node:fs';
 import {join} from 'node:path';
 import {SERVICE_PROOF_SCHEMA,SERVICE_PROOF_DOMAIN,verifySyntheticServiceEvidence,
   evaluateDevProofSeparation,validateR6BTypedSelftestIntent} from '../lib/dc-r6b-service-proof-dev.mjs';
 import {reserveDevRequest,readDevRequest,stageSyntheticAttempt,
-  recordSyntheticReceipt,revokeDevRequest,reconcileDevLedger,devLedgerStatus}
+  recordSyntheticReceipt,revokeDevRequest,reconcileDevLedger,devLedgerStatus,inspectDevMutationLock}
   from '../lib/dc-r6b-ledger-dev.mjs';
 
 const NOW=1793592000000;
@@ -166,4 +166,69 @@ test('R6-B4 symlinked top-level root and nonce directory are fail-closed',()=>{
  const external=mkdtempSync(join(tmp,'aicc-v3b-external-'));
  symlinkSync(external,join(g.root,'nonces'),'dir');
  denied(()=>reserveDevRequest(g.root,g.plan,NOW),'R6B4_PRIVATE_ROOT_REQUIRED');
+});
+
+test('R6-B4 cooperating writers are denied while mutation lock exists',()=>{
+ const f=setup(),lock=join(f.root,'dev-ledger-mutation.lock');
+ writeFileSync(lock,'crash-marker',{flag:'wx',mode:0o600});
+ denied(()=>reserveDevRequest(f.root,f.plan,NOW),'R6B4_MUTATION_LOCKED');
+ assert.equal(existsSync(lock),true);
+ unlinkSync(lock);
+ assert.equal(reserveDevRequest(f.root,f.plan,NOW).state,'PREPARED_DEV_ONLY');
+});
+test('R6-B4 terminal completed lease is recovered without any replay',()=>{
+ const f=setup();reserveDevRequest(f.root,f.plan,NOW);
+ const inflight=stageSyntheticAttempt(f.root,f.plan.requestId,NOW);
+ const done=recordSyntheticReceipt(f.root,f.plan.requestId,
+   {...f.receipt,planDigest:inflight.planDigest},NOW+1000);
+ assert.equal(done.state,'SYNTHETIC_COMPLETED');
+ const lease=join(f.root,'active-dev-lease.json');
+ writeFileSync(lease,JSON.stringify({requestId:f.plan.requestId,
+   planDigest:inflight.planDigest}),{flag:'wx',mode:0o600});
+ assert.deepEqual(reconcileDevLedger(f.root),[]);
+ assert.equal(existsSync(lease),false);
+ denied(()=>stageSyntheticAttempt(f.root,f.plan.requestId,NOW+2000),'R6B4_STAGE_DENIED');
+ const other={...f.plan,requestId:'request_after_123',nonce:'nonce_after_123'};
+ reserveDevRequest(f.root,other,NOW);
+ assert.equal(stageSyntheticAttempt(f.root,other.requestId,NOW).state,'SYNTHETIC_INFLIGHT');
+});
+test('R6-B4 uncertain crash outcome retains quarantine lease and blocks subsequent work',()=>{
+ const f=setup();reserveDevRequest(f.root,f.plan,NOW);
+ stageSyntheticAttempt(f.root,f.plan.requestId,NOW);
+ assert.deepEqual(reconcileDevLedger(f.root),[f.plan.requestId]);
+ const lease=join(f.root,'active-dev-lease.json');
+ assert.equal(existsSync(lease),true);
+ assert.deepEqual(reconcileDevLedger(f.root),[]);
+ assert.equal(existsSync(lease),true);
+ const other={...f.plan,requestId:'request_blocked_123',nonce:'nonce_blocked_123'};
+ reserveDevRequest(f.root,other,NOW);
+ denied(()=>stageSyntheticAttempt(f.root,other.requestId,NOW),'R6B4_PROJECT_BUSY');
+});
+
+test('R6-B4 crash after lease creation quarantines PREPARED record without replay',()=>{
+ const f=setup();const prepared=reserveDevRequest(f.root,f.plan,NOW);
+ const lease=join(f.root,'active-dev-lease.json');
+ writeFileSync(lease,JSON.stringify({requestId:f.plan.requestId,
+   planDigest:prepared.planDigest}),{flag:'wx',mode:0o600});
+ assert.deepEqual(reconcileDevLedger(f.root),[f.plan.requestId]);
+ assert.equal(readDevRequest(f.root,f.plan.requestId).state,'UNCERTAIN_STOP');
+ assert.equal(readDevRequest(f.root,f.plan.requestId).errorCode,'R6B4_CRASH_AFTER_LEASE_CREATION');
+ assert.equal(existsSync(lease),true);
+ denied(()=>stageSyntheticAttempt(f.root,f.plan.requestId,NOW),'R6B4_STAGE_DENIED');
+ assert.deepEqual(reconcileDevLedger(f.root),[]);
+});
+test('R6-B4 stale mutation lock needs simulated supervised quarantine, never auto-recovered',()=>{
+ const f=setup(),lock=join(f.root,'dev-ledger-mutation.lock');
+ assert.equal(inspectDevMutationLock(f.root).lockPresent,false);
+ writeFileSync(lock,'stale synthetic lock',{flag:'wx',mode:0o600});
+ const status=inspectDevMutationLock(f.root);
+ assert.equal(status.lockPresent,true);
+ assert.equal(status.decision,'STOP');
+ denied(()=>reconcileDevLedger(f.root),'R6B4_MUTATION_LOCKED');
+ assert.equal(existsSync(lock),true);
+ // Simulated manual operator action performed only on this isolated temp fixture:
+ // an actual incident requires independent process-liveness/Owner review.
+ renameSync(lock,join(f.root,'supervised-quarantine-lock-evidence'));
+ assert.equal(inspectDevMutationLock(f.root).lockPresent,false);
+ assert.deepEqual(reconcileDevLedger(f.root),[]);
 });

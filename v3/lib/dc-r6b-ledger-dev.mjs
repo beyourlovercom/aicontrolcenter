@@ -7,7 +7,7 @@
  */
 import {createHash,randomUUID} from 'node:crypto';
 import {realpathSync,lstatSync,mkdirSync,openSync,writeFileSync,readFileSync,
- closeSync,renameSync,unlinkSync,existsSync,readdirSync} from 'node:fs';
+ closeSync,fsyncSync,renameSync,unlinkSync,existsSync,readdirSync} from 'node:fs';
 import {resolve,join,sep} from 'node:path';
 const REF=/^[a-zA-Z0-9_-]{8,80}$/;
 const SHA=/^[0-9a-f]{40}$/;
@@ -54,9 +54,31 @@ function read(file){
 function save(file,data){
  const tmp=file+'.'+randomUUID()+'.tmp';
  const fd=openSync(tmp,'wx',0o600);
- try{writeFileSync(fd,JSON.stringify(data)+'\n');}finally{closeSync(fd);}
+ try{writeFileSync(fd,JSON.stringify(data)+'\n');fsyncSync(fd);}finally{closeSync(fd);}
  renameSync(tmp,file);
 }
+/**
+ * Single cooperating-writer lock for synthetic Dev state transitions.
+ * Stale locks fail closed; they are NEVER automatically stolen on restart.
+ * This does not defend against hostile processes sharing the same OS UID
+ * and must never be used as real authorization or remote idempotency.
+ */
+function withDevMutationLock(root,action){
+ const {base}=layout(root),lock=join(base,'dev-ledger-mutation.lock');
+ let fd;
+ try{fd=openSync(lock,'wx',0o600);}
+ catch{stop('R6B4_MUTATION_LOCKED');}
+ try{
+  writeFileSync(fd,JSON.stringify({mode:'DEV_ONLY',version:1})+'\n');
+  fsyncSync(fd);
+  return action();
+ }finally{
+  closeSync(fd);
+  // A crash before here leaves a lock; no automatic lock stealing.
+  unlinkSync(lock);
+ }
+}
+
 function authorizedSyntheticPlan(p,now){
  if(!exact(p,['requestId','nonce','projectId','workPackageId','taskId',
  'repositoryIdentity','branch','head','deviceId','operation','scopeDigest','expiresAtMs'])||
@@ -70,6 +92,7 @@ function authorizedSyntheticPlan(p,now){
 }
 /** Reserve exactly once; does not grant real execution, even with valid proofs. */
 export function reserveDevRequest(root,plan,nowMs){
+ return withDevMutationLock(root,()=>{
  authorizedSyntheticPlan(plan,nowMs);
  const {file,base}=location(root,plan.requestId);
  // Project-wide nonce consumption survives revocation/crash; never reissue.
@@ -80,7 +103,7 @@ export function reserveDevRequest(root,plan,nowMs){
  try{nonceFd=openSync(nonceFile,'wx',0o600);}catch(e){
   if(e.code==='EEXIST')stop('R6B4_NONCE_REPLAY_STOP');throw e;
  }
- try{writeFileSync(nonceFd,JSON.stringify({nonce:plan.nonce,requestId:plan.requestId})+'\n');}
+ try{writeFileSync(nonceFd,JSON.stringify({nonce:plan.nonce,requestId:plan.requestId})+'\n');fsyncSync(nonceFd);}
  finally{closeSync(nonceFd);}
  const record={schema:'aicc.v3b.synthetic-request.v1',...plan,
   planDigest:sha(plan),state:'PREPARED_DEV_ONLY',syntheticAttempts:0,
@@ -90,13 +113,15 @@ export function reserveDevRequest(root,plan,nowMs){
  try{fd=openSync(file,'wx',0o600);}catch(e){
   if(e.code==='EEXIST')stop('R6B4_DUPLICATE_REQUEST_STOP');throw e;
  }
- try{writeFileSync(fd,JSON.stringify(record)+'\n');}finally{closeSync(fd);}
+ try{writeFileSync(fd,JSON.stringify(record)+'\n');fsyncSync(fd);}finally{closeSync(fd);}
  return Object.freeze({...record});
+ });
 }
 export function readDevRequest(root,id){
  const {file}=location(root,id);return Object.freeze({...read(file)});
 }
 export function stageSyntheticAttempt(root,id,nowMs){
+ return withDevMutationLock(root,()=>{
  const {file,lease}=location(root,id),r=read(file);
  if(r.state!=='PREPARED_DEV_ONLY'||r.syntheticAttempts!==0||
   !Number.isSafeInteger(nowMs)||nowMs>=r.expiresAtMs)stop('R6B4_STAGE_DENIED');
@@ -104,12 +129,13 @@ export function stageSyntheticAttempt(root,id,nowMs){
  try{fd=openSync(lease,'wx',0o600);}catch(e){
   if(e.code==='EEXIST')stop('R6B4_PROJECT_BUSY');throw e;
  }
- try{writeFileSync(fd,JSON.stringify({requestId:id,planDigest:r.planDigest})+'\n');}
+ try{writeFileSync(fd,JSON.stringify({requestId:id,planDigest:r.planDigest})+'\n');fsyncSync(fd);}
  finally{closeSync(fd);}
  // No actual device or mock transport is called. This models an uncertain send window.
  const next={...r,state:'SYNTHETIC_INFLIGHT',syntheticAttempts:1};
  try{save(file,next);}catch(e){stop('R6B4_QUARANTINE_REQUIRED');}
  return Object.freeze({...next});
+ });
 }
 function verifyLease(lease,r){
  if(!existsSync(lease)||lstatSync(lease).isSymbolicLink())stop('R6B4_LEASE_MISMATCH');
@@ -117,6 +143,7 @@ function verifyLease(lease,r){
  if(v.requestId!==r.requestId||v.planDigest!==r.planDigest)stop('R6B4_LEASE_MISMATCH');
 }
 export function recordSyntheticReceipt(root,id,receipt,nowMs){
+ return withDevMutationLock(root,()=>{
  const {file,lease}=location(root,id),r=read(file);
  if(r.state!=='SYNTHETIC_INFLIGHT')stop('R6B4_TERMINAL_STOP');
  verifyLease(lease,r);
@@ -133,8 +160,10 @@ export function recordSyntheticReceipt(root,id,receipt,nowMs){
  save(file,next);
  unlinkSync(lease);
  return Object.freeze({...next});
+ });
 }
 export function revokeDevRequest(root,id){
+ return withDevMutationLock(root,()=>{
  const {file}=location(root,id),r=read(file);
  if(r.state==='PREPARED_DEV_ONLY'){
   const next={...r,state:'REVOKED_STOP',errorCode:'R6B4_SYNTHETIC_REVOKED'};
@@ -145,9 +174,11 @@ export function revokeDevRequest(root,id){
   save(file,next);return Object.freeze({...next});
  }
  stop('R6B4_TERMINAL_STOP');
+ });
 }
 /** Startup recovery intentionally quarantines all interrupted synthetic attempts. */
 export function reconcileDevLedger(root){
+ return withDevMutationLock(root,()=>{
  const {dir}=layout(root),changed=[];
  for(const name of readdirSync(dir)){
   if(!/^[A-Za-z0-9_-]{8,80}\.json$/.test(name))stop('R6B4_RECORD_UNTRUSTED');
@@ -158,8 +189,51 @@ export function reconcileDevLedger(root){
    save(file,next);changed.push(next.requestId);
   }
  }
+ // A crash between final record rename and lease unlink can
+ // leave a matching completed synthetic record with a stale lease.
+ // Only matching terminal completion qualifies for cleanup.
+ const lease=join(rootPath(root),'active-dev-lease.json');
+ if(existsSync(lease)){
+  if(lstatSync(lease).isSymbolicLink())stop('R6B4_LEASE_MISMATCH');
+  let v;
+  try{v=JSON.parse(readFileSync(lease,'utf8'));}
+  catch{stop('R6B4_LEASE_MISMATCH');}
+  if(!REF.test(v.requestId||'')||!DIGEST.test(v.planDigest||''))
+   stop('R6B4_LEASE_MISMATCH');
+  const {file}=location(root,v.requestId),r=read(file);
+  if(r.planDigest!==v.planDigest)stop('R6B4_LEASE_MISMATCH');
+  // Lease could be persisted before INFLIGHT record write: uncertainty
+  // is quarantined, even though no synthetic completion was recorded.
+  if(r.state==='PREPARED_DEV_ONLY'&&r.syntheticAttempts===0){
+   const stopped={...r,state:'UNCERTAIN_STOP',
+    errorCode:'R6B4_CRASH_AFTER_LEASE_CREATION'};
+   save(file,stopped);changed.push(r.requestId);
+  }
+  if(r.state==='SYNTHETIC_COMPLETED'&&r.syntheticAttempts===1&&
+     DIGEST.test(r.receiptDigest||''))unlinkSync(lease);
+ }
  return Object.freeze(changed);
+ });
 }
+/**
+ * Read-only status for an explicit Dev operator lock recovery decision.
+ * NEVER steals/removes a lock; a failed write or crashed owner requires
+ * independent operator liveness and audit review before any quarantine.
+ */
+export function inspectDevMutationLock(root){
+ const base=rootPath(root),lock=join(base,'dev-ledger-mutation.lock');
+ if(!existsSync(lock))
+  return Object.freeze({mode:'DEV_ONLY',lockPresent:false,
+   decision:'STOP',automaticDispatchAllowed:false});
+ const stat=lstatSync(lock);
+ if(!stat.isFile()||stat.isSymbolicLink()||(stat.mode&0o077)!==0||
+    (typeof process.getuid==='function'&&stat.uid!==process.getuid()))
+  stop('R6B4_MUTATION_LOCK_UNTRUSTED');
+ return Object.freeze({mode:'DEV_ONLY',lockPresent:true,
+  decision:'STOP',automaticDispatchAllowed:false,
+  nextAction:'SUPERVISED_OPERATOR_LIVENESS_CHECK_AND_LOCK_QUARANTINE'});
+}
+
 export function devLedgerStatus(){
  return Object.freeze({schema:'aicc.v3b.dev-ledger-status.v1',
   mode:'LOCAL_SYNTHETIC_SIMULATOR',decision:'STOP',automaticDispatchAllowed:false,
