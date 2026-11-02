@@ -11,6 +11,7 @@
  */
 import {registerOAuthParityCore} from './official-parity-oauth-hook.mjs';
 import {normalizeApprovedRemoteCall} from './official-parity-terminal-compat.mjs';
+import {registeredOnlyDeviceList} from './official-parity-operational-device-status.mjs';
 
 export const CANONICAL_DEVICE_IDS=Object.freeze([
  'us-macmini','china-mac','windows','007windows'
@@ -25,7 +26,7 @@ function reply(value){
 export function createCredentialFreeOAuthToolSurface({
  McpServer,z,principal,agentGet,agentCall,
  canExposeRemoteCall,authorizeRemoteCall,
- auditLegacyOperation,auditOperation,env={}
+ auditLegacyOperation,auditOperation,deviceStatusReader,env={}
 }={}){
  if(typeof McpServer!=='function'||typeof z?.string!=='function'||
     typeof z?.record!=='function'||typeof z?.unknown!=='function'||
@@ -44,9 +45,18 @@ export function createCredentialFreeOAuthToolSurface({
  let legacyOperatorVisible=false;
  try{legacyOperatorVisible=canExposeRemoteCall(principal)===true;}catch{}
  const server=new McpServer({name:'byl-remote-mcp',version:'1.0.0'});
+ // Live operational status requires BOTH explicit feature authorization and an
+ // approved operator principal; other callers see only safe registration state.
+ const operationalStatusEnabled=env.BYL_MCP_OPERATIONAL_DEVICE_STATUS_V1==='1';
+ if(operationalStatusEnabled&&typeof deviceStatusReader?.list!=='function')
+  throw Error('DEVICE_STATUS_READER_REQUIRED');
  server.registerTool('remote_list_devices',{
-  description:'List BYL remote Desktop Commander devices.'
- },async()=>reply(CANONICAL_DEVICE_IDS.map(id=>({id,state:'READY'}))));
+  description:'List BYL remote Desktop Commander devices (registration is not proof of online health).'
+ },async()=>{
+  const rows=operationalStatusEnabled&&legacyOperatorVisible
+   ?await deviceStatusReader.list():registeredOnlyDeviceList();
+  return reply(rows);
+ });
  server.registerTool('remote_list_tools',{
   description:'List allowed Desktop Commander tools on a device.',
   inputSchema:{deviceId:z.string().min(1).max(64)}
