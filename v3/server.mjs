@@ -18,6 +18,7 @@ import {createHumanChatRequest,claimHumanChat,readHumanChatRequest,reconcileHuma
 import {RemoteRunnerClient,remoteRunnerBaseUrl,remoteRepositoryRoot} from './lib/remote-runner-client.mjs';
 import {externalProjectCatalog} from './lib/external-project-registry.mjs';
 import {dcAdapterDevStatus,reconcileAllDcMocks} from './lib/dc-auto-adapter-dev.mjs';
+import {readDcRealCanaryReadiness} from './lib/dc-canary-readiness-v3.mjs';
 
 const root=dirname(fileURLToPath(import.meta.url));
 const publicRoot=join(root,'public');
@@ -215,6 +216,10 @@ export function createAiccV3Server(options={}){
 
     if(req.method==='GET'&&url.pathname==='/api/dc-adapter/status'){
       return json(res,200,dcAdapterDevStatus(env));
+    }
+
+    if(req.method==='GET'&&url.pathname==='/api/dc-adapter/canary-readiness'){
+      return json(res,200,readDcRealCanaryReadiness());
     }
 
     if(req.method==='GET'&&url.pathname==='/api/project'){
