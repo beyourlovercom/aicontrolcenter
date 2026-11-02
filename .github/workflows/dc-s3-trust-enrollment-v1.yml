@@ -1,0 +1,44 @@
+name: DC S3 Four Device Owner Trust Enrollment Offline V1
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'scripts/byl-remote-mcp/remote-v3-trust-enrollment.mjs'
+      - 'scripts/byl-remote-mcp/remote-v3-trust-enrollment.test.mjs'
+      - '.github/workflows/dc-s3-trust-enrollment-v1.yml'
+      - 'docs/60_Operations/work-packages/AICC-DC-S3-TRUST-ENROLLMENT-V1.md'
+permissions:
+  contents: read
+jobs:
+  offline-enrollment-and-reused-signed-health:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Syntax and 4-device signed trust enrollment regression
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --check scripts/byl-remote-mcp/remote-v3-trust-enrollment.mjs
+          node --check scripts/byl-remote-mcp/remote-v3-trust-enrollment.test.mjs
+          node --test \
+            scripts/byl-remote-mcp/remote-v3-trust-enrollment.test.mjs \
+            scripts/byl-remote-mcp/remote-v2-verified-availability.test.mjs \
+            scripts/byl-remote-mcp/remote-v2-live-health.test.mjs \
+            scripts/byl-remote-mcp/remote-v2-signed-health.test.mjs
+      - name: Strict nondeployment, no runtime networking or private key access
+        shell: bash
+        run: |
+          set -euo pipefail
+          target=scripts/byl-remote-mcp/remote-v3-trust-enrollment.mjs
+          if grep -En 'node:fs|node:net|node:http|node:child_process|fetch\(|launchctl|process\.kill|spawn\(|exec\(|listen\(|readFile|writeFile|privateKey|\.env|gateway\.token' "$target"; then
+            echo 'Forbidden runtime operation or secret lookup'; exit 1
+          fi
+          grep -q 'eligibleForRuntime:false' "$target"
+          grep -q 'externalIssuerEnrollment:' "$target"
+          grep -q 'EPOCH_REPLAY_OR_CHAIN_MISMATCH' "$target"
