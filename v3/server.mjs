@@ -17,6 +17,7 @@ import {assertNextStepLocal,cancelPendingNextStepForRoom,claimNextStep,createNex
 import {createHumanChatRequest,claimHumanChat,readHumanChatRequest,reconcileHumanChatStartup,recordHumanChatReceipt} from './lib/human-chat-runtime.mjs';
 import {RemoteRunnerClient,remoteRunnerBaseUrl,remoteRepositoryRoot} from './lib/remote-runner-client.mjs';
 import {externalProjectCatalog} from './lib/external-project-registry.mjs';
+import {dcAdapterDevStatus,reconcileAllDcMocks} from './lib/dc-auto-adapter-dev.mjs';
 
 const root=dirname(fileURLToPath(import.meta.url));
 const publicRoot=join(root,'public');
@@ -182,6 +183,11 @@ export function createAiccV3Server(options={}){
     remoteRepositoryRoot:options.bridgeOptions?.remoteRepositoryRoot||options.remoteRepositoryRoot||remoteRepositoryRoot(env)
   };
   const chatgptProjection=options.chatgptProjectionStore||createChatgptProjectionStore();
+  if(dcAdapterDevStatus(env).adapterMode==='ISOLATED_DEV_MOCK'){
+    // Recover every project-keyed synthetic queue, even if it is not the active project.
+    // Any corrupt state or orphaned lease fails startup closed.
+    reconcileAllDcMocks(env);
+  }
   try{
     const seen=new Set();
     for(const requestId of listBridgeRequestIds(null,env)){
@@ -205,6 +211,10 @@ export function createAiccV3Server(options={}){
         const context=loadProjectContext(env);
         return json(res,200,{schema:'aicc.v3.health.v1',ok:true,service:'AICC_V3',project:{available:true,id:context.project.id},...v3DevPolicy});
       }catch(error){return json(res,200,{schema:'aicc.v3.health.v1',ok:true,service:'AICC_V3',project:projectError(error),...v3DevPolicy});}
+    }
+
+    if(req.method==='GET'&&url.pathname==='/api/dc-adapter/status'){
+      return json(res,200,dcAdapterDevStatus(env));
     }
 
     if(req.method==='GET'&&url.pathname==='/api/project'){
