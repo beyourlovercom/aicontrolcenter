@@ -1,0 +1,22 @@
+# AICC DC G1 — Non-Apple signed control-plane operational availability
+
+**2026-10-19, Owner scope:** NO Apple Developer membership, Team ID or Apple Development certificate. Improve honest self-hosted DC device visibility with existing **Gateway-to-Agent authenticated read-only `GET /v1/tools`** path. No new macOS helper, no Agent installation, no protected file access, no service restart, no OAuth account changes.
+
+## Exact source reconciled
+GitHub main `581ff4300d401e2d7baa6d490d01b91fb7b212ef`: `official-parity-oauth-runtime-surface.mjs` returned `CANONICAL_DEVICE_IDS.map(id=>({id,state:'READY'}))`, without any I/O. This is **A4 credential-free OAuth runtime source candidate**, explicitly not confirmed to be the actual running deployed Gateway. The existing `official-parity-a4-signed-agent-client.mjs` exposes approved `agentGet(deviceId,'/v1/tools')`, fixed targets, signed outbound Gateway requests and finite transport timeout. No arbitrary user-supplied probe path.
+
+## Changed contract (code-only, NOT deployed)
+- Feature disabled/default: `remote_list_devices` returns `state:'REGISTERED'`, `controlPlane:'UNKNOWN'`, `signedHealth:'NOT_VERIFIED'`; NEVER fabricates `READY`. This is an intentional **legacy schema/consumer compatibility change** and must undergo Owner Dev UAT before any real Gateway deployment.
+- Feature enabled ONLY with `BYL_MCP_OPERATIONAL_DEVICE_STATUS_V1=1`, with an existing **authorized operator principal** and a trusted shared `deviceStatusReader`: query each of the *four fixed canonical IDs* through the existing signed `/v1/tools` transport; the returned structural tool inventory may establish only `controlPlane:'OPERABLE'` and `state:'OPERABLE'`, **NOT authenticated Ed25519 Agent health**. Concrete `PARITY_AGENT_UNREACHABLE` produces `UNREACHABLE`; other failures/invalid responses/timeout produce `UNKNOWN` without raw backend errors.
+- Feature enabled with missing reader: fails closed during tool registration. Nonoperator principals always receive registered-only views, never trigger probes or get expanded operator permissions.
+- At most **two** new read operations in parallel; 3.5s per probe timeout, 10s TTL cached with in-flight coalescing; a stale cache or probe timeout never claims ONLINE. Cache is per HTTP app construction, and carries **no targets, passwords, private key exports, Agent private source or raw transport errors**.
+- No installed Agent-side change is necessary to *propose* the control-plane fix: existing `agentGet` is already a signed Gateway client operation. A successful Agent GET does **not** prove Ed25519 Agent response authenticity; truly signed health remains an independent S2–S6, Owner-gated goal.
+- Verified earlier actual running self-hosted OAuth: registered `READY` all four, while `remote_list_tools` listed 24 tools US/CN/ordinary Windows but responded `PARITY_AGENT_UNREACHABLE` for **007windows**. After an approved Gateway runtime integration, G1 should show 007 unreachable/unknown rather than static READY. **This PR itself does not change that production output.**
+
+## Gates before any runtime action
+1. Automated existing **Official Parity** contract CI (including actual SDK in-memory end-to-end), plus the G1 bounded reader tests and entire repository CI; US Mac DEV-TMP exact-head tests if available.
+2. Owner **Dev-only code + response schema UAT**. If consumers require old `READY`, use a reviewed migration plan; do not silently retain a misleading status.
+3. Independently determine **actual deployed OAuth Gateway source version and owner service authority**; A4 candidate source may not match production. Only integrate into genuine production tree in a separately reviewed Dev environment. Owner must approve exact-head GitHub main merge and a **separate Gateway-only deployment**. No Apple Developer Team, no Agent install/restart, no actual credentials in git/chat.
+4. Observe real 007 state transitions through approved existing account without platform safety-block routing or commercial old DC retry; keep real Ed25519 status `NOT_VERIFIED` until S2/S3/S4 installed trusted signers genuinely pass four-device UAT. R2-A protected legacy Agent recoverable backup still NO, R2B/Canary STOP.
+
+**Current:** G1 CODE_ONLY, `ACTUAL_GATEWAY_LINEAGE=NOT_VERIFIED`, `G1_DEPLOYMENT=NO`, `REAL_FOUR_DEVICE_SIGNED_HEALTH=NO`, `PR91–95=UNMERGED`, `APPLE_DEVELOPER_ACCOUNT=EXCLUDED`, `TEAM_ID=EXCLUDED`.

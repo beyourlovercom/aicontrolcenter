@@ -175,3 +175,55 @@ test('missing trusted transport/policy/audit fails before constructing a product
    {message:'PARITY_RUNTIME_DEPENDENCIES_REQUIRED'});
  }
 });
+
+// G1 operational status opt-in permissions regression
+
+test('G1 operational status opt-in is operator-only and never fake READY',async()=>{
+ const f=source();
+ f.input.env.BYL_MCP_OPERATIONAL_DEVICE_STATUS_V1='1';
+ let probes=0;
+ f.input.deviceStatusReader={list:async()=>{
+   probes++;
+   return CANONICAL_DEVICE_IDS.map(id=>({
+     id,registered:true,state:id==='007windows'?'UNREACHABLE':'OPERABLE',
+     controlPlane:id==='007windows'?'UNREACHABLE':'OPERABLE',
+     signedHealth:'NOT_VERIFIED'
+   }));
+ }};
+ const surface=createCredentialFreeOAuthToolSurface(f.input);
+ const s=await session(surface.server);
+ try{
+  const response=await s.client.callTool({name:'remote_list_devices',arguments:{}});
+  const items=JSON.parse(response.content[0].text);
+  assert.equal(items.length,4);
+  assert.equal(items[3].state,'UNREACHABLE');
+  assert(items.every(x=>x.signedHealth==='NOT_VERIFIED'));
+  assert.equal(probes,1);
+  assert.equal(f.seen.length,0,'no extra arbitrary shell/Agent calls');
+ }finally{await s.close();}
+});
+test('G1 default-off and nonoperator return REGISTERED without ANY probe',async()=>{
+ for(const flags of [
+  {enabled:false,operator:true},{enabled:true,operator:false}
+ ]){
+  const f=source({legacyVisible:flags.operator});
+  let called=0;
+  f.input.env.BYL_MCP_OPERATIONAL_DEVICE_STATUS_V1=flags.enabled?'1':'0';
+  f.input.deviceStatusReader={list:async()=>{called++;throw Error('not allowed');}};
+  const surface=createCredentialFreeOAuthToolSurface(f.input);
+  const s=await session(surface.server);
+  try{
+    const out=await s.client.callTool({name:'remote_list_devices',arguments:{}});
+    assert.notEqual(out.isError,true);
+    const d=JSON.parse(out.content[0].text);
+    assert(d.every(x=>x.state==='REGISTERED'&&x.controlPlane==='UNKNOWN'));
+    assert.equal(called,0);
+  }finally{await s.close();}
+ }
+});
+test('G1 feature cannot be enabled without actual read-only status reader',()=>{
+ const f=source();
+ f.input.env.BYL_MCP_OPERATIONAL_DEVICE_STATUS_V1='1';
+ assert.throws(()=>createCredentialFreeOAuthToolSurface(f.input),
+  /DEVICE_STATUS_READER_REQUIRED/);
+});
