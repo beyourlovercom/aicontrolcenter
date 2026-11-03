@@ -37,7 +37,7 @@ export function createCredentialFreeOAuthHttpRuntime({
  bearerToken,allowedHosts,
  createMcpExpressApp,StreamableHTTPServerTransport,McpServer,z,
  agentGet,agentCall,canExposeRemoteCall,authorizeRemoteCall,
- listAuthorizedRemoteToolNames,auditLegacyOperation,auditOperation,logger
+ listAuthorizedRemoteToolNames,getDeviceStatuses,auditLegacyOperation,auditOperation,logger
 }={}){
  if(!env||typeof env!=='object'||Array.isArray(env)||
     env.BYL_MCP_STAGING!=='0'||env.BYL_MCP_OAUTH_COMPAT_CANDIDATE!=='1'||
@@ -66,6 +66,9 @@ export function createCredentialFreeOAuthHttpRuntime({
     (env.BYL_MCP_OPERATOR_DISCOVERY_FILTER_ENABLED==='1'&&
      typeof listAuthorizedRemoteToolNames!=='function')||
     ![undefined,'0','1'].includes(env.BYL_MCP_OPERATOR_DISCOVERY_FILTER_ENABLED)||
+    (env.BYL_MCP_DEVICE_LIVE_STATUS_ENABLED==='1'&&
+     typeof getDeviceStatuses!=='function')||
+    ![undefined,'0','1'].includes(env.BYL_MCP_DEVICE_LIVE_STATUS_ENABLED)||
     typeof auditLegacyOperation!=='function'||
     (env.BYL_MCP_PARITY_CORE_READ_ENABLED==='1'&&typeof auditOperation!=='function')||
     typeof z?.string!=='function')
@@ -107,7 +110,7 @@ export function createCredentialFreeOAuthHttpRuntime({
    ({server}=createCredentialFreeOAuthToolSurface({
     McpServer,z,principal:req.bylPrincipal,
     agentGet,agentCall,canExposeRemoteCall,authorizeRemoteCall,
-    listAuthorizedRemoteToolNames,auditLegacyOperation,auditOperation,env
+    listAuthorizedRemoteToolNames,getDeviceStatuses,auditLegacyOperation,auditOperation,env
    }));
    transport=new StreamableHTTPServerTransport({
     sessionIdGenerator:undefined,enableJsonResponse:true
