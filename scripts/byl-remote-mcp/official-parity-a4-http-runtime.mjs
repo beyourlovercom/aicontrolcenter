@@ -37,7 +37,7 @@ export function createCredentialFreeOAuthHttpRuntime({
  bearerToken,allowedHosts,
  createMcpExpressApp,StreamableHTTPServerTransport,McpServer,z,
  agentGet,agentCall,canExposeRemoteCall,authorizeRemoteCall,
- auditLegacyOperation,auditOperation,logger
+ listAuthorizedRemoteToolNames,auditLegacyOperation,auditOperation,logger
 }={}){
  if(!env||typeof env!=='object'||Array.isArray(env)||
     env.BYL_MCP_STAGING!=='0'||env.BYL_MCP_OAUTH_COMPAT_CANDIDATE!=='1'||
@@ -62,7 +62,11 @@ export function createCredentialFreeOAuthHttpRuntime({
  // Fail all external bindings before creating routes or opening any server.
  if(typeof agentGet!=='function'||typeof agentCall!=='function'||
     typeof canExposeRemoteCall!=='function'||
-    typeof authorizeRemoteCall!=='function'||typeof auditLegacyOperation!=='function'||
+    typeof authorizeRemoteCall!=='function'||
+    (env.BYL_MCP_OPERATOR_DISCOVERY_FILTER_ENABLED==='1'&&
+     typeof listAuthorizedRemoteToolNames!=='function')||
+    ![undefined,'0','1'].includes(env.BYL_MCP_OPERATOR_DISCOVERY_FILTER_ENABLED)||
+    typeof auditLegacyOperation!=='function'||
     (env.BYL_MCP_PARITY_CORE_READ_ENABLED==='1'&&typeof auditOperation!=='function')||
     typeof z?.string!=='function')
   reject('PARITY_RUNTIME_POLICY_INCOMPLETE');
@@ -103,7 +107,7 @@ export function createCredentialFreeOAuthHttpRuntime({
    ({server}=createCredentialFreeOAuthToolSurface({
     McpServer,z,principal:req.bylPrincipal,
     agentGet,agentCall,canExposeRemoteCall,authorizeRemoteCall,
-    auditLegacyOperation,auditOperation,env
+    listAuthorizedRemoteToolNames,auditLegacyOperation,auditOperation,env
    }));
    transport=new StreamableHTTPServerTransport({
     sessionIdGenerator:undefined,enableJsonResponse:true

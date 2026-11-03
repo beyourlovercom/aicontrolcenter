@@ -11,6 +11,7 @@
  */
 import {registerOAuthParityCore} from './official-parity-oauth-hook.mjs';
 import {normalizeApprovedRemoteCall} from './official-parity-terminal-compat.mjs';
+import {filterDiscoveredAgentTools} from './official-parity-operator-tool-discovery.mjs';
 
 export const CANONICAL_DEVICE_IDS=Object.freeze([
  'us-macmini','china-mac','windows','007windows'
@@ -24,7 +25,7 @@ function reply(value){
 }
 export function createCredentialFreeOAuthToolSurface({
  McpServer,z,principal,agentGet,agentCall,
- canExposeRemoteCall,authorizeRemoteCall,
+ canExposeRemoteCall,authorizeRemoteCall,listAuthorizedRemoteToolNames,
  auditLegacyOperation,auditOperation,env={}
 }={}){
  if(typeof McpServer!=='function'||typeof z?.string!=='function'||
@@ -32,8 +33,14 @@ export function createCredentialFreeOAuthToolSurface({
     !principal||typeof principal!=='object'||
     typeof agentGet!=='function'||typeof agentCall!=='function'||
     typeof canExposeRemoteCall!=='function'||typeof authorizeRemoteCall!=='function'||
+    (env?.BYL_MCP_OPERATOR_DISCOVERY_FILTER_ENABLED==='1'&&
+     typeof listAuthorizedRemoteToolNames!=='function')||
     typeof auditLegacyOperation!=='function')
   throw Error('PARITY_RUNTIME_DEPENDENCIES_REQUIRED');
+ if(env?.BYL_MCP_OPERATOR_DISCOVERY_FILTER_ENABLED!==undefined&&
+    !['0','1'].includes(env.BYL_MCP_OPERATOR_DISCOVERY_FILTER_ENABLED))
+  throw Error('OPERATOR_DISCOVERY_FLAG_INVALID');
+ const discoveryFilterEnabled=env?.BYL_MCP_OPERATOR_DISCOVERY_FILTER_ENABLED==='1';
  const devices=new Set(CANONICAL_DEVICE_IDS);
  const safeDevice=id=>{
   if(!devices.has(id))throw Error('DEVICE_UNKNOWN');
@@ -50,7 +57,19 @@ export function createCredentialFreeOAuthToolSurface({
  server.registerTool('remote_list_tools',{
   description:'List allowed Desktop Commander tools on a device.',
   inputSchema:{deviceId:z.string().min(1).max(64)}
- },async({deviceId})=>reply(await agentGet(safeDevice(deviceId),'/v1/tools')));
+ },async({deviceId})=>{
+  const id=safeDevice(deviceId);
+  // Default-OFF compatibility mode preserves preexisting discovery exactly.
+  // Never enable filtering until private policy implements its name resolver.
+  // Existing internal Bearer bypasses OAuth Operator authorization by design;
+  // preserve its historical Agent inventory when the OAuth filter is enabled.
+  if(!discoveryFilterEnabled||principal.kind==='internal')
+   return reply(await agentGet(id,'/v1/tools'));
+  if(!legacyOperatorVisible||principal.canOperate!==true)return reply({tools:[]});
+  const agentReply=await agentGet(id,'/v1/tools');
+  return reply(filterDiscoveredAgentTools({agentReply,principal,deviceId:id,
+   listAuthorizedRemoteToolNames}));
+ });
  if(legacyOperatorVisible)server.registerTool('remote_call',{
   description:'Call an allowed Desktop Commander tool on a selected device.',
   inputSchema:{
