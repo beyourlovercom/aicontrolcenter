@@ -30,7 +30,7 @@ function fixture({on=false,envOverride={},hosts=['localhost','127.0.0.1'],
  const env={
   BYL_MCP_STAGING:'0',BYL_MCP_OAUTH_COMPAT_CANDIDATE:'1',
   BYL_MCP_PRODUCTION_OAUTH_ENABLED:'1',BYL_MCP_ACCESS_ENABLED:'1',
-  [FLAG]:on?'1':'0',...envOverride
+  [FLAG]:on?'1':'0',BYL_MCP_OPERATOR_DISCOVERY_FILTER_ENABLED:'1',...envOverride
  };
  const args={env,endpointRouting:()=>({port:8797,paths:['/oauth/mcp']}),
   getAccessConfig:()=>({enabled:true,issuer:'synthetic'}),
@@ -46,6 +46,7 @@ function fixture({on=false,envOverride={},hosts=['localhost','127.0.0.1'],
   agentCall:async(...x)=>{agentCalls.push(x);return {result:'harmless'};},
   canExposeRemoteCall:p=>p.canOperate===true,
   authorizeRemoteCall:(_p,_d,name,args)=>({name,arguments:args}),
+  listAuthorizedRemoteToolNames:()=>['get_file_info'],
   auditLegacyOperation:e=>{audit.push(e);return true;},
   auditOperation:e=>{audit.push(e);return true;},
   logger:{error:message=>logs.push(message)}
@@ -223,4 +224,15 @@ test('client abort before response completes closes MCP session exactly once',as
  await new Promise(resolve=>setImmediate(resolve));
  assert.equal(servers[0].closed,1);
  assert.equal(transports[0].closed,1);
+});
+test('staged OAuth flag OFF remains constructible without new private discovery export',()=>{
+ const f=fixture({envOverride:{BYL_MCP_OPERATOR_DISCOVERY_FILTER_ENABLED:'0'}});
+ delete f.args.listAuthorizedRemoteToolNames;
+ assert.equal(createCredentialFreeOAuthHttpRuntime(f.args).listens,false);
+});
+test('flag ON requires trusted resolver and fails before opening routes',()=>{
+ const f=fixture();delete f.args.listAuthorizedRemoteToolNames;
+ assert.throws(()=>createCredentialFreeOAuthHttpRuntime(f.args),
+  {message:'PARITY_RUNTIME_POLICY_INCOMPLETE'});
+ assert.equal(f.routes.size,0);
 });
