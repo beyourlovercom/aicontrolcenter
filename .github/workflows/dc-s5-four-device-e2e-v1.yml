@@ -1,0 +1,39 @@
+name: DC S5 Fixed SHA Four Device E2E Simulation V1
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'scripts/byl-remote-mcp/stage-s5-pinned-e2e-test.sh'
+      - 'scripts/byl-remote-mcp/remote-v5-four-device-e2e.test.mjs'
+      - '.github/workflows/dc-s5-four-device-e2e-v1.yml'
+      - 'docs/60_Operations/work-packages/AICC-DC-S5-PINNED-FOUR-DEVICE-E2E-V1.md'
+permissions:
+  contents: read
+jobs:
+  synthetic-signed-four-device-e2e:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Syntax check S5 synthetic end-to-end harness
+        shell: bash
+        run: node --check scripts/byl-remote-mcp/remote-v5-four-device-e2e.test.mjs
+      - name: Verify pinned still-UNMERGED PR #91/#92/#93 sources and test loopback-only signed Agent pipeline
+        shell: bash
+        run: bash scripts/byl-remote-mcp/stage-s5-pinned-e2e-test.sh
+      - name: Assert NO network or server operations in production modules
+        shell: bash
+        run: |
+          set -euo pipefail
+          # S5 adds tests, staging and docs ONLY; it may not introduce a prod runtime adaptor.
+          if git diff --name-only '581ff4300d401e2d7baa6d490d01b91fb7b212ef' HEAD |
+             grep -Ev '^scripts/byl-remote-mcp/(stage-s5-pinned-e2e-test[.]sh|remote-v5-four-device-e2e[.]test[.]mjs)$|^[.]github/workflows/dc-s5-four-device-e2e-v1[.]yml$|^docs/60_Operations/work-packages/AICC-DC-S5-PINNED-FOUR-DEVICE-E2E-V1[.]md$'; then
+            echo 'S5 has unapproved shipping files'; exit 1
+          fi
+          grep -q 'S5_PRODUCTION_AGENT_DEPLOYED=NO' scripts/byl-remote-mcp/stage-s5-pinned-e2e-test.sh
+          grep -q 'S5_REAL_TRUST_ENROLLED=NO' scripts/byl-remote-mcp/stage-s5-pinned-e2e-test.sh
