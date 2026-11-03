@@ -1,0 +1,44 @@
+name: DC S4 Agent Signed Health Handler Dev-only V1
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'scripts/byl-remote-mcp/remote-v4-agent-signed-health-handler.mjs'
+      - 'scripts/byl-remote-mcp/remote-v4-agent-signed-health-handler.test.mjs'
+      - '.github/workflows/dc-s4-agent-signed-health-handler-v1.yml'
+      - 'docs/60_Operations/work-packages/AICC-DC-S4-AGENT-SIGNED-HEALTH-HANDLER-V1.md'
+permissions:
+  contents: read
+jobs:
+  isolated-authenticated-agent-proof:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Syntax and signed challenge/nonce auth regression
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --check scripts/byl-remote-mcp/remote-v4-agent-signed-health-handler.mjs
+          node --check scripts/byl-remote-mcp/remote-v4-agent-signed-health-handler.test.mjs
+          node --test \
+            scripts/byl-remote-mcp/remote-v4-agent-signed-health-handler.test.mjs \
+            scripts/byl-remote-mcp/remote-v2-signed-health.test.mjs \
+            scripts/byl-remote-mcp/remote-v2-live-health.test.mjs \
+            scripts/byl-remote-mcp/remote-v2-verified-availability.test.mjs
+      - name: No direct installed runtime, network or secret loading in handler
+        shell: bash
+        run: |
+          set -euo pipefail
+          target=scripts/byl-remote-mcp/remote-v4-agent-signed-health-handler.mjs
+          if grep -En 'node:fs|node:http|node:net|node:child_process|fetch\(|launchctl|process\.kill|spawn\(|exec\(|listen\(|readFile|writeFile|gateway\.token|\.env' "$target"; then
+            echo 'Unauthorized direct side effect in future signed Agent handler'; exit 1
+          fi
+          grep -q 'GATEWAY_AUTH_VERIFIER_REQUIRED' "$target"
+          grep -q 'LOCAL_HEALTH_MEASUREMENT_REQUIRED' "$target"
+          grep -q 'REPLAY_DENIED' "$target"
