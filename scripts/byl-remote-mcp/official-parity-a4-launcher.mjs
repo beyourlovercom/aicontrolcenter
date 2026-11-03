@@ -17,6 +17,7 @@ import {createMcpExpressApp} from '@modelcontextprotocol/sdk/server/express.js';
 import * as z from 'zod';
 import {createCredentialFreeOAuthHttpRuntime} from './official-parity-a4-http-runtime.mjs';
 import {createCredentialFreeSignedAgentClient} from './official-parity-a4-signed-agent-client.mjs';
+import {createDeviceReachabilityView} from './official-parity-device-reachability.mjs';
 
 const LABEL='com.byl.remote-mcp-oauth-compat';
 const ALLOWED=['us-macmini','china-mac','windows','007windows'];
@@ -115,6 +116,8 @@ export async function launchA4OAuthService({
  const agent=createCredentialFreeSignedAgentClient({
   targets:v.targets,signingKey,fetchImpl:fetch
  });
+ const reachability=env.BYL_MCP_DEVICE_LIVE_STATUS_ENABLED==='1'
+  ?createDeviceReachabilityView({agentGet:agent.agentGet}):null;
  const runtime=createCredentialFreeOAuthHttpRuntime({
   env,endpointRouting:routing.endpointRouting,
   getAccessConfig:auth.getAccessConfig,
@@ -125,6 +128,7 @@ export async function launchA4OAuthService({
   canExposeRemoteCall:policy.canExposeRemoteCall,
   authorizeRemoteCall:policy.authorizeRemoteCall,
   listAuthorizedRemoteToolNames:policy.listAuthorizedRemoteToolNames,
+  getDeviceStatuses:reachability?.list,
   auditLegacyOperation:auditor,auditOperation:auditor,
   logger:{error:()=>logger.error?.('A4_OAUTH_RUNTIME_REQUEST_FAILED')}
  });
