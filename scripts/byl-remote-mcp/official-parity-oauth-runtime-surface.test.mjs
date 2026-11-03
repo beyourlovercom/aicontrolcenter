@@ -244,3 +244,56 @@ test('feature ON does not restrict historic internal Bearer agent inventory',asy
   });
  }finally{await s.close();}
 });
+
+
+test('S2 flag OFF retains legacy static READY and needs no live adapter',async()=>{
+ const f=source();f.input.env.BYL_MCP_DEVICE_LIVE_STATUS_ENABLED='0';
+ const surface=createCredentialFreeOAuthToolSurface(f.input),s=await session(surface.server);
+ try{
+  const out=await s.client.callTool({name:'remote_list_devices',arguments:{}});
+  assert.deepEqual(JSON.parse(out.content[0].text),CANONICAL_DEVICE_IDS.map(id=>({id,state:'READY'})));
+  assert.equal(f.seen.length,0);
+ }finally{await s.close();}
+});
+test('S2 flag ON uses trusted reachability with no false READY and no payload expansion',async()=>{
+ const f=source(),proof=CANONICAL_DEVICE_IDS.map(id=>({
+  id,registered:true,state:id==='china-mac'?'unreachable':'reachable',
+  verified:false,reason:id==='china-mac'?'AGENT_PROBE_FAILED':'AGENT_TOOLS_RESPONDED',
+  checkedAt:'2026-11-03T08:00:00.000Z',probe:'SIGNED_REQUEST_NOT_HEALTH_ATTESTED'
+ }));
+ let calls=0;
+ f.input.env.BYL_MCP_DEVICE_LIVE_STATUS_ENABLED='1';
+ f.input.getDeviceStatuses=async()=>{calls++;return proof;};
+ const surface=createCredentialFreeOAuthToolSurface(f.input),s=await session(surface.server);
+ try{
+  const out=await s.client.callTool({name:'remote_list_devices',arguments:{}});
+  assert.deepEqual(JSON.parse(out.content[0].text),proof);
+  assert.equal(calls,1);
+  assert.equal(f.seen.length,0);
+ }finally{await s.close();}
+});
+test('S2 ON denies missing trusted status binding or invalid flag before any MCP surface',()=>{
+ const f=source();f.input.env.BYL_MCP_DEVICE_LIVE_STATUS_ENABLED='1';
+ assert.throws(()=>createCredentialFreeOAuthToolSurface(f.input),
+  {message:'PARITY_RUNTIME_DEPENDENCIES_REQUIRED'});
+ f.input.getDeviceStatuses=async()=>[];
+ f.input.env.BYL_MCP_DEVICE_LIVE_STATUS_ENABLED='invalid';
+ assert.throws(()=>createCredentialFreeOAuthToolSurface(f.input),
+  {message:'DEVICE_LIVE_STATUS_FLAG_INVALID'});
+});
+test('S2 nonoperator sees unknown with no transport calls; internal Bearer retains legacy registry',async()=>{
+ for(const principal of [{kind:'cloudflare-access',canOperate:false},{kind:'internal',canOperate:true}]){
+  const f=source({principal,legacyVisible:principal.kind==='internal'});
+  f.input.env.BYL_MCP_DEVICE_LIVE_STATUS_ENABLED='1';
+  let queried=0;
+  f.input.getDeviceStatuses=async()=>{queried++;return [];};
+  const surface=createCredentialFreeOAuthToolSurface(f.input),s=await session(surface.server);
+  try{
+   const out=await s.client.callTool({name:'remote_list_devices',arguments:{}});
+   const entries=JSON.parse(out.content[0].text);
+   assert.equal(entries.length,4);
+   assert(entries.every(item=>item.state===(principal.kind==='internal'?'READY':'unknown')));
+   assert.equal(queried,0);
+  }finally{await s.close();}
+ }
+});

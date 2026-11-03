@@ -27,7 +27,7 @@ function reply(value){
 export function createCredentialFreeOAuthToolSurface({
  McpServer,z,principal,agentGet,agentCall,
  canExposeRemoteCall,authorizeRemoteCall,listAuthorizedRemoteToolNames,
- auditLegacyOperation,auditOperation,env={}
+ getDeviceStatuses,auditLegacyOperation,auditOperation,env={}
 }={}){
  if(typeof McpServer!=='function'||typeof z?.string!=='function'||
     typeof z?.record!=='function'||typeof z?.unknown!=='function'||
@@ -36,11 +36,17 @@ export function createCredentialFreeOAuthToolSurface({
     typeof canExposeRemoteCall!=='function'||typeof authorizeRemoteCall!=='function'||
     (env?.BYL_MCP_OPERATOR_DISCOVERY_FILTER_ENABLED==='1'&&
      typeof listAuthorizedRemoteToolNames!=='function')||
+    (env?.BYL_MCP_DEVICE_LIVE_STATUS_ENABLED==='1'&&
+     typeof getDeviceStatuses!=='function')||
     typeof auditLegacyOperation!=='function')
   throw Error('PARITY_RUNTIME_DEPENDENCIES_REQUIRED');
  if(env?.BYL_MCP_OPERATOR_DISCOVERY_FILTER_ENABLED!==undefined&&
     !['0','1'].includes(env.BYL_MCP_OPERATOR_DISCOVERY_FILTER_ENABLED))
   throw Error('OPERATOR_DISCOVERY_FLAG_INVALID');
+ if(env?.BYL_MCP_DEVICE_LIVE_STATUS_ENABLED!==undefined&&
+    !['0','1'].includes(env.BYL_MCP_DEVICE_LIVE_STATUS_ENABLED))
+  throw Error('DEVICE_LIVE_STATUS_FLAG_INVALID');
+ const liveStatusEnabled=env?.BYL_MCP_DEVICE_LIVE_STATUS_ENABLED==='1';
  const discoveryFilterEnabled=env?.BYL_MCP_OPERATOR_DISCOVERY_FILTER_ENABLED==='1';
  const devices=new Set(CANONICAL_DEVICE_IDS);
  const safeDevice=id=>{
@@ -54,7 +60,18 @@ export function createCredentialFreeOAuthToolSurface({
  const server=new McpServer({name:'byl-remote-mcp',version:'1.0.0'});
  server.registerTool('remote_list_devices',{
   description:'List BYL remote Desktop Commander devices.'
- },async()=>reply(CANONICAL_DEVICE_IDS.map(id=>({id,state:'READY'}))));
+ },async()=>{
+  // OFF or internal Bearer: byte-compatible legacy static registry.
+  if(!liveStatusEnabled||principal.kind==='internal')
+   return reply(CANONICAL_DEVICE_IDS.map(id=>({id,state:'READY'})));
+  // No network probing for identities lacking Operator visibility.
+  if(!legacyOperatorVisible||principal.canOperate!==true)
+   return reply(CANONICAL_DEVICE_IDS.map(id=>({
+    id,registered:true,state:'unknown',verified:false,
+    reason:'NOT_AUTHORIZED',checkedAt:null,probe:'not_performed'
+   })));
+  return reply(await getDeviceStatuses());
+ });
  server.registerTool('remote_list_tools',{
   description:'List allowed Desktop Commander tools on a device.',
   inputSchema:{deviceId:z.string().min(1).max(64)}

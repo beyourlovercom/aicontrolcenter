@@ -236,3 +236,21 @@ test('flag ON requires trusted resolver and fails before opening routes',()=>{
   {message:'PARITY_RUNTIME_POLICY_INCOMPLETE'});
  assert.equal(f.routes.size,0);
 });
+
+
+test('S2 live-status ON requires trusted device status provider before routes',()=>{
+ const f=fixture({envOverride:{BYL_MCP_DEVICE_LIVE_STATUS_ENABLED:'1'}});
+ assert.throws(()=>createCredentialFreeOAuthHttpRuntime(f.args),
+  {message:'PARITY_RUNTIME_POLICY_INCOMPLETE'});
+ assert.equal(f.routes.size,0);
+ f.args.getDeviceStatuses=async()=>[];
+ assert.equal(createCredentialFreeOAuthHttpRuntime(f.args).listens,false);
+});
+test('S2 OFF remains source-compatible without new provider and invalid flag fails closed',()=>{
+ const f=fixture({envOverride:{BYL_MCP_DEVICE_LIVE_STATUS_ENABLED:'0'}});
+ assert.equal(createCredentialFreeOAuthHttpRuntime(f.args).listens,false);
+ const bad=fixture({envOverride:{BYL_MCP_DEVICE_LIVE_STATUS_ENABLED:'true'}});
+ assert.throws(()=>createCredentialFreeOAuthHttpRuntime(bad.args),
+  {message:'PARITY_RUNTIME_POLICY_INCOMPLETE'});
+ assert.equal(bad.routes.size,0);
+});
