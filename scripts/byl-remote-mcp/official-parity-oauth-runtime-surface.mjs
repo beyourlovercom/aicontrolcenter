@@ -18,6 +18,7 @@ export const CANONICAL_DEVICE_IDS=Object.freeze([
 export const CANONICAL_LEGACY_TOOLS=Object.freeze([
  'remote_list_devices','remote_list_tools','remote_call','remote_process_selftest'
 ]);
+const WINDOWS_HOSTNAME_COMMAND='[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; $OutputEncoding = [System.Text.Encoding]::UTF8; [System.Net.Dns]::GetHostName()';
 function reply(value){
  const text=typeof value==='string'?value:JSON.stringify(value,null,2);
  return {content:[{type:'text',text}]};
@@ -83,8 +84,9 @@ export function createCredentialFreeOAuthToolSurface({
   description:'Run a fixed read-only hostname process self-test on a selected device.',
   inputSchema:{deviceId:z.string().min(1).max(64)}
  },async({deviceId})=>{
-  const out=await agentCall(safeDevice(deviceId),'start_process',
-   {command:'hostname',timeout_ms:8000});
+  const id=safeDevice(deviceId);
+  const command=id==='windows'||id==='007windows'?WINDOWS_HOSTNAME_COMMAND:'hostname';
+  const out=await agentCall(id,'start_process',{command,timeout_ms:8000});
   return reply(out?.result??out);
  });
  const parity=registerOAuthParityCore({
