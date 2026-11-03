@@ -105,7 +105,9 @@ export async function launchA4OAuthService({
     typeof auth.resolveAccessPrincipal!=='function'||
     typeof routing.endpointRouting!=='function'||
     typeof policy.canExposeRemoteCall!=='function'||
-    typeof policy.authorizeRemoteCall!=='function')
+    typeof policy.authorizeRemoteCall!=='function'||
+    (env.BYL_MCP_OPERATOR_DISCOVERY_FILTER_ENABLED==='1'&&
+     typeof policy.listAuthorizedRemoteToolNames!=='function'))
   fail('A4_PRIVATE_POLICY_UNAVAILABLE');
  const token=readPrivate(v.bearerPath);
  const signingKey=readPrivate(v.signingKeyPath);
@@ -122,6 +124,7 @@ export async function launchA4OAuthService({
   agentGet:agent.agentGet,agentCall:agent.agentCall,
   canExposeRemoteCall:policy.canExposeRemoteCall,
   authorizeRemoteCall:policy.authorizeRemoteCall,
+  listAuthorizedRemoteToolNames:policy.listAuthorizedRemoteToolNames,
   auditLegacyOperation:auditor,auditOperation:auditor,
   logger:{error:()=>logger.error?.('A4_OAUTH_RUNTIME_REQUEST_FAILED')}
  });
