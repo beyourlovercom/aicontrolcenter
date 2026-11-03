@@ -213,3 +213,15 @@ test('filter ON stops before binding when private policy discovery export is mis
    importPrivate:f.importPrivate}),{message:'A4_PRIVATE_POLICY_UNAVAILABLE'});
  }finally{f.dispose();}
 });
+
+
+test('S2 optional live-status wiring prepares without probing any target',async()=>{
+ const f=fixture();
+ try{
+  f.env.BYL_MCP_DEVICE_LIVE_STATUS_ENABLED='1';
+  const out=await launchA4OAuthService({env:f.env,listen:false,importPrivate:f.importPrivate});
+  assert.equal(out.status,'PREPARED_NOT_LISTENING');
+  assert.equal(out.port,8797);
+  assert.equal(readFileSync(f.audit,'utf8'),'');
+ }finally{f.dispose();}
+});
