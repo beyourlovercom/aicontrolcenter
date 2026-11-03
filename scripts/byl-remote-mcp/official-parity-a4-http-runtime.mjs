@@ -71,18 +71,29 @@ export function createCredentialFreeOAuthHttpRuntime({
     typeof app?.delete!=='function')
   reject('PARITY_RUNTIME_APP_INVALID');
  async function auth(req,res,next){
+  const assertion=req?.headers?.['cf-access-jwt-assertion'];
+  // A verified Cloudflare Access identity takes precedence over a matching
+  // internal bearer. Otherwise a client supplying both credentials is silently
+  // downgraded to 'internal', hiding all five operator-gated direct tools.
+  //
+  // If an assertion header is supplied but invalid, fail closed even when a
+  // bearer also matches. Never turn an unverified assertion into an operator.
+  if(assertion!==undefined){
+   let principal;
+   if(typeof assertion==='string'&&assertion.length>0&&assertion.length<=8192){
+    try{principal=await resolveAccessPrincipal(assertion,access);}catch{}
+   }
+   if(principal?.kind==='cloudflare-access'&&
+      typeof principal.canOperate==='boolean'){
+    req.bylPrincipal=principal;
+    return next();
+   }
+   return responseError(res,401,-32001,'Unauthorized');
+  }
+  // Preserve the pre-existing internal service bearer as legacy-only.
+  // An internal principal is intentionally ineligible for Core-5 registration.
   if(secureBearer(req?.headers?.authorization,digest)){
    req.bylPrincipal=Object.freeze({kind:'internal',canOperate:true});
-   return next();
-  }
-  let principal;
-  try{
-   principal=await resolveAccessPrincipal(
-    req?.headers?.['cf-access-jwt-assertion'],access
-   );
-  }catch{}
-  if(principal?.kind==='cloudflare-access'&&typeof principal.canOperate==='boolean'){
-   req.bylPrincipal=principal;
    return next();
   }
   return responseError(res,401,-32001,'Unauthorized');
