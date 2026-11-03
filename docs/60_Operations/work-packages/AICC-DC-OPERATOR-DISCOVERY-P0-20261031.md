@@ -106,3 +106,29 @@ For authorized service owners operating locally only:
    weaken private permissions to make the check pass.
 
 No backup renewal, production restart, OAuth reconnect or new privileges.
+
+
+## 2026-11-03 release-preparation evidence (supersedes historical unknowns above)
+
+Status: **Dev-only R9 integrated candidate in Draft PR #118; no release approval or feature enablement.** The 2026-10-31 sections above retain their historical meaning and must not be treated as a current private-policy unreadability claim.
+
+### Authorized read-only production provenance
+
+- Owner explicitly approved service-owner read-only checks through the formally connected OAuth DC. The registered launchd service and PID were reconciled to the loopback listener, the declared private manifest, the approved public launcher and the manifest-selected private Operator Policy. Ownership/mode and file modification-before-process-start checks passed. This establishes trustworthy **service-launch binding evidence**, but not a byte-level in-process ESM module attestation.
+- Inspected real private policy has `canExposeRemoteCall` and `authorizeRemoteCall` but did **not** export `listAuthorizedRemoteToolNames`. Its currently configured Full Exec tool-name rule contains 21 common names, plus an existing 007windows-only `get_config` exception. Do not expand the allowlist or log private source/configuration to public GitHub.
+
+### Dev-only private candidate and tests
+
+- A protected, service-user-owned **separate local Dev directory** (`0700`) holds an original local comparison copy and a Dev candidate (`0600` each). The Production private policy was unchanged on subsequent readback. Never upload the private files to GitHub.
+- Candidate adds the synchronous, trusted name resolver and shares both the existing Full Exec **feature gate** and the existing Full Exec **name allowlist** with `authorizeRemoteCall`. Existing argument validation remains in the execution authorizer. No new grants, device registrations, routes, principals, or feature flags were installed in Production.
+- **15,120** deterministic original-vs-candidate authorization decision comparisons across five device IDs (four known, one invalid), three principals, seven feature-gate configurations and six argument shapes: **0 differences**.
+- A clean isolated worktree at initial PR #118 head passed **58/58** targeted public Node SDK/source tests. A separate actual-SDK in-memory integration of the same public HEAD with the local protected Dev candidate and the four genuine read-only Agent capability lists passed **31 checks**. Expected advertised tool counts: `21 / 21 / 21 / 22`. Windows `get_config` was denied; 007windows retained its original exception through a **stubbed call only** (no actual configuration retrieval); nonoperators saw zero privileged tool metadata; internal Bearer kept legacy full Agent tool discovery; Windows hostname UTF-8 behavior from R12 was retained. These are Dev-only isolated results, **not** Production feature-ON UAT.
+
+### Merge and release gates
+
+1. PR #118 must remain Draft until explicit Owner review. Final **exact-head** CI must be successful after any further Dev-only documentation or code commit; verify exactly the intended public diff and no R10/other workstream files. Do not merge main without separate Owner approval. Original PR #108 remains Draft and must not be merged over the R12 baseline.
+2. Before any later Production deployment, independently compare current live service PID, code and private Policy identity against the reviewed release candidate (no assumptions based solely on old GitHub hashes). Preserve the known-good rollback. Never restart a READY computer/Agent; only a separately approved, controlled OAuth service-level release may alter its listener.
+3. Public R9 code may be deployed in a separately authorized compatibility stage with the discovery feature **OFF** and the original private Policy unchanged. The new private Policy candidate must undergo separate service-owner-controlled review and install; **then** the real loaded module, effective principal/device list and audit behavior must be attested before enabling the feature in an independently authorized release.
+4. No change to Cloudflare Access, production secrets, Hostinger, production user accounts, policy grants or remote execution argument rules is in scope. Any failed provenance, policy identity, health, authentication or permission test is a **STOP** and must preserve/restore the pre-release state.
+
+As of this evidence update: Production filter remains OFF; service and live private policy were unchanged; main is not merged with R9. No release is implied by Dev UAT or CI.
