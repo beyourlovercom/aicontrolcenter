@@ -1,0 +1,33 @@
+name: DC R2-A1 macOS Native Backup Registration V1
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'scripts/byl-remote-mcp/r2a1-native/**'
+      - '.github/workflows/dc-r2a1-native-registrar-v1.yml'
+      - 'docs/60_Operations/work-packages/AICC-DC-R2A1-NATIVE-REGISTRATION-V1.md'
+permissions:
+  contents: read
+jobs:
+  macos-compile-and-no-export-gate:
+    runs-on: macos-15
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Compile macOS SMAppService app and audit registration-only invariants
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd scripts/byl-remote-mcp/r2a1-native
+          bash ./check-safety.sh
+          bash ./build-app.sh --dev
+      - name: Fail closed if production signing identity is absent
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd scripts/byl-remote-mcp/r2a1-native
+          if AICC_R2A1_SIGNING_IDENTITY='' bash ./build-app.sh --release; then
+            echo 'Unsigned release must be denied'; exit 1
+          fi
