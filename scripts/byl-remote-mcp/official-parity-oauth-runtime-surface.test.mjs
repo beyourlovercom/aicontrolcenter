@@ -104,11 +104,18 @@ test('legacy existing fixed selftest runs hostname only and refuses unregistered
  const surface=createCredentialFreeOAuthToolSurface(f.input);
  const s=await session(surface.server);
  try{
-  const ok=await s.client.callTool({name:'remote_process_selftest',arguments:{deviceId:'007windows'}});
-  assert.notEqual(ok.isError,true);
-  assert.deepEqual(f.seen,[['call','007windows','start_process',{command:'hostname',timeout_ms:8000}]]);
+  for(const [deviceId,command] of [
+   ['windows','[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; $OutputEncoding = [System.Text.Encoding]::UTF8; [System.Net.Dns]::GetHostName()'],
+   ['007windows','[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; $OutputEncoding = [System.Text.Encoding]::UTF8; [System.Net.Dns]::GetHostName()'],
+   ['us-macmini','hostname'],
+   ['china-mac','hostname']
+  ]){
+   const ok=await s.client.callTool({name:'remote_process_selftest',arguments:{deviceId}});
+   assert.notEqual(ok.isError,true);
+   assert.deepEqual(f.seen.at(-1),['call',deviceId,'start_process',{command,timeout_ms:8000}]);
+  }
   const error=await s.client.callTool({name:'remote_process_selftest',arguments:{deviceId:'unknown'}});
-  assert.equal(error.isError,true);assert.equal(f.seen.length,1);
+  assert.equal(error.isError,true);assert.equal(f.seen.length,4);
  }finally{await s.close();}
 });
 test('legacy operator denial or audit refusal blocks delegated call',async()=>{
